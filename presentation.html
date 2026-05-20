@@ -267,7 +267,48 @@
     line-height: 1.4;
   }
 
-  /* ── SLIDE 3 ── */
+  /* ── SLIDE 3 (Gap Analysis) ── */
+  .gap-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    align-items: start;
+  }
+  .gap-col-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.35);
+    margin-bottom: 16px;
+  }
+  .gap-item {
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 12px;
+    border-left: 3px solid transparent;
+  }
+  .gap-change { background: rgba(46,116,181,0.12); border-left-color: #2E74B5; }
+  .gap-add    { background: rgba(80,180,100,0.12); border-left-color: #50B464; }
+  .gap-remove { background: rgba(200,60,60,0.10);  border-left-color: #C83C3C; }
+  .gap-item-tag {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .gap-change .gap-item-tag { color: #5BA3F5; }
+  .gap-add    .gap-item-tag { color: #50B464; }
+  .gap-remove .gap-item-tag { color: #E05C5C; }
+  .gap-item-text {
+    font-size: 14px;
+    color: rgba(255,255,255,0.72);
+    line-height: 1.55;
+  }
+  .gap-item-text strong { color: #fff; }
+
+  /* ── SLIDE 3 (old arch, kept for ref) ── */
   .three-col {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
@@ -431,38 +472,43 @@
 
   <!-- ── SLIDE 3 ── -->
   <div class="slide" id="s3">
-    <div class="s-header">AI konkret — und warum kein Backend</div>
-    <div class="three-col">
-      <div class="arch-card">
-        <div class="arch-card-label">Was die AI macht</div>
-        <div class="arch-card-title">On-demand Progressions&shy;empfehlung</div>
-        <div class="arch-card-body">
-          <strong>Input:</strong> strukturierte 90-Tage-Daten (Volumen, Frequenz, Muskelgruppen)<br><br>
-          <strong>Output:</strong> 1 Satz Lage · 1 konkrete Aktion · 1 optionaler Hinweis<br><br>
-          <strong>Kein AI:</strong> Datenabruf, Aggregation, Visualisierung — klassische App-Logik
+    <div class="s-header">Was hat AI gefunden das wir vergessen hatten?</div>
+    <div class="gap-grid">
+
+      <div class="gap-col">
+        <div class="gap-col-label">Änderungen an User Stories</div>
+        <div class="gap-item gap-change">
+          <div class="gap-item-tag">US-4 Onboarding</div>
+          <div class="gap-item-text">Consent-Screen ergänzt: Datenschutzklauseln, Einwilligung zur externen Datenverarbeitung (Anthropic) und Eigenverantwortung für umgesetzte Empfehlungen.</div>
         </div>
-        <div class="highlight-box">Feedback «Helpful / Not helpful» lokal gespeichert — validiert ob das Konzept trägt</div>
-      </div>
-      <div class="arch-card">
-        <div class="arch-card-label">Architektur-Entscheid</div>
-        <div class="arch-card-title">Kein Backend — Privacy First</div>
-        <div class="arch-card-body">
-          API-Keys ausschliesslich im <strong>iOS Keychain</strong><br><br>
-          Direkter Call zu Hevy &amp; Claude — keine eigenen Server<br><br>
-          Trainingsdaten verlassen Gerät <strong>nur für den AI-Call</strong>
+        <div class="gap-item gap-change">
+          <div class="gap-item-tag">US-3 Ladezeit</div>
+          <div class="gap-item-text">«10s Garantie» gestrichen — Claude-Antwort kann &gt;10s dauern. Ersetzt durch: Spinner sofort sichtbar, Cancel-Button nach 30s.</div>
         </div>
-        <div class="highlight-box">Bewusster PoC-Entscheid — Revisit vor v1.0 obligatorisch</div>
-      </div>
-      <div class="arch-card">
-        <div class="arch-card-label">Strategische Absicherung</div>
-        <div class="arch-card-title">Connector-Interface von Beginn an</div>
-        <div class="arch-card-body">
-          Hevy = erster Connector, <strong>nicht der einzige</strong><br><br>
-          Strava / Apple Health ohne Refactor integrierbar<br><br>
-          Normalisiertes Activity-Modell vor US-2 &amp; US-3
+        <div class="gap-item gap-change">
+          <div class="gap-item-tag">US-2 Datenzeitraum</div>
+          <div class="gap-item-text">30 Tage → <strong>90 Tage</strong>. Progression ist erst über 8–12 Wochen sinnvoll messbar.</div>
         </div>
-        <div class="highlight-box">Absicherung gegen Hevy API-Wegfall — kein Single Point of Failure</div>
       </div>
+
+      <div class="gap-col">
+        <div class="gap-col-label">Neu hinzugefügt</div>
+        <div class="gap-item gap-add">
+          <div class="gap-item-tag">US-3 AC9</div>
+          <div class="gap-item-text">Feedback-Mechanismus pro AI-Empfehlung — «Helpful / Not helpful» lokal gespeichert. Validiert ob das Konzept echten Mehrwert liefert.</div>
+        </div>
+
+        <div class="gap-col-label" style="margin-top:28px;">Gestrichen / verschoben</div>
+        <div class="gap-item gap-remove">
+          <div class="gap-item-tag">Won't · US-11</div>
+          <div class="gap-item-text">Wochenübersicht als Push-Notification — eigenes Sub-System, zu gross für PoC.</div>
+        </div>
+        <div class="gap-item gap-remove">
+          <div class="gap-item-tag">Won't · US-12</div>
+          <div class="gap-item-text">Trainingsvorschlag zurück in Hevy schreiben — erfordert Hevy PRO, Haftungsrisiko bei falscher Empfehlung.</div>
+        </div>
+      </div>
+
     </div>
     <div class="slide-num">03 / 04</div>
   </div>
