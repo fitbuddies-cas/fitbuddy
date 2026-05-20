@@ -280,11 +280,14 @@ risks = [
      "Strava hat 2020 den API-Zugang bereits massiv eingeschränkt.",
      "Hevy ToS auf kommerzielle API-Nutzung sofort prüfen. Connector-Interface so bauen, dass ein zweiter Datenlieferant "
      "ohne Refactor integrierbar ist. Ein Mock-File mit Beispiel-Response committen, gegen das im Notfall entwickelt werden kann."),
-    ("R2 — Onboarding-Hürde für Nicht-Techniker (Persona Jana)",
-     "Das Onboarding verlangt zwei API-Keys (Hevy + Claude). Für Jana bedeutet das: Anthropic-Konto erstellen, "
-     "Kreditkarte hinterlegen, API-Key aus der Console kopieren. Conversion-Rate realistisch nahe Null ohne geführten Flow.",
-     "US-4 als Must-have mit 5 Acceptance Criteria. Onboarding mit Screenshots und direktem Link zur Key-Seite. "
-     "Claude-Key im ersten Schritt überspringbar (US-4 AC2) — AI-Feature nachrüstbar."),
+    ("R2 — Datenschutz & DSGVO",
+     "Trainingsdaten sind in der EU potenziell Gesundheitsdaten (DSGVO Art. 9 — besondere Kategorie). "
+     "Jeder AI-Analyse-Call überträgt diese Daten an Anthropic (USA). Offene Punkte: "
+     "Auftragsverarbeitungsvertrag (AVV) mit Anthropic noch nicht geprüft; «Alle Daten löschen»-Funktion "
+     "(DSGVO Art. 17, Keychain-Wipe) fehlt noch; Datenexport (Art. 20) nicht implementiert.",
+     "Für den PoC (TestFlight / Sideload, keine öffentliche Veröffentlichung) ist der Consent-Screen im Onboarding "
+     "(US-4 AC4/AC5) ausreichend: User bestätigt explizit die Übertragung an Anthropic und übernimmt Eigenverantwortung. "
+     "Vor v1.0-Launch obligatorisch: AVV mit Anthropic abschliessen, Keychain-Wipe als «Delete all data»-Funktion implementieren."),
     ("R3 — Qualität der AI-Empfehlungen ist der eigentliche Kern-Moat",
      "US-3 hat 9 Acceptance Criteria die gleichzeitig erfüllt sein müssen (Recovery, Dysbalance, konkrete Werte, "
      "verständliche Sprache, kein Fachjargon). Das ist Prompt Engineering + Output-Validierung + Retry-Logik — "
