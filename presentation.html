@@ -117,6 +117,20 @@
     font-style: normal;
     font-weight: 600;
   }
+  .s1-vision-label, .s1-poc-label {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 4px;
+    margin-right: 10px;
+    vertical-align: middle;
+  }
+  .s1-vision-label { background: #2E74B5; color: #fff; }
+  .s1-poc-label    { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.15); }
+
   .s1-meta {
     margin-top: 48px;
     display: flex;
@@ -318,9 +332,12 @@
     <div class="s1-eyebrow">CAS ADAI 2026 · BFH Biel · PoC</div>
     <div class="s1-title">Fit<span>Buddy</span></div>
     <div class="s1-tagline">
-      <em>Hevy-Trainingsdaten + Claude API</em> —<br>
-      ein iOS-Dashboard mit on-demand AI-Progressionsempfehlungen.<br>
-      Keine fremden Server. Kein Backend.
+      <span class="s1-vision-label">Vision</span>
+      Trainingsdaten aus verschiedenen Fitness-Apps über APIs aggregiert — ein Dashboard, ein AI-Agent (Claude), konkrete Progressions&shy;empfehlungen in Alltagssprache.
+    </div>
+    <div class="s1-tagline" style="margin-top:16px; font-size:17px; color:rgba(255,255,255,0.5);">
+      <span class="s1-poc-label">PoC</span>
+      Hevy als erster Kraft-Daten-Lieferant. Connector-Interface von Beginn an — weitere Quellen ohne Refactor integrierbar.
     </div>
     <div class="s1-meta">
       <div class="s1-badge">iOS Native · Swift</div>
