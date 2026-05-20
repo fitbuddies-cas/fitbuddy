@@ -79,7 +79,7 @@ Basierend auf `fitbuddy_user_stories_v5.xlsx` und Modul 2 Selbststudium (MoSCoW 
 | AC1 | Jana öffnet FitBuddy zum ersten Mal | Onboarding-Flow startet | Jeder Schritt erklärt mit Screenshot wo in Hevy der API-Key zu finden ist |
 | AC2 | Hevy API-Key wurde eingegeben und gespeichert | Jana tippt auf «Next» | Claude API-Key kann eingegeben oder vorerst übersprungen werden |
 | AC3 | Jana gibt ungültigen Key ein | Sie tippt auf «Verbinden» | Fehlermeldung erscheint mit direktem Link zur Hevy API-Key-Seite |
-| AC4 | Onboarding-Flow startet | Consent-Screen wird angezeigt | User sieht und bestätigt explizit: (1) Trainingsdaten werden für die AI-Analyse an Anthropic (USA) übertragen, (2) FitBuddy ist kein medizinisches Produkt — der User trägt selbst die Verantwortung für umgesetzte Empfehlungen und Steigerungen. Ohne Bestätigung kein Zugang zur App. |
+| AC4 | Onboarding-Flow startet | Consent-Screen wird angezeigt | User sieht und bestätigt explizit: (1) Trainingsdaten (Gesundheitsdaten nach nDSG Art. 5 lit. c) werden für die AI-Analyse an Anthropic Inc., USA übertragen — die USA bietet kein dem Schweizer Recht gleichwertiges Datenschutzniveau; die Übertragung stützt sich auf den von FitBuddy abgeschlossenen Auftragsverarbeitungsvertrag (AVV/DPA) mit Anthropic. (2) FitBuddy ist kein medizinisches Produkt — der User trägt selbst die Verantwortung für umgesetzte Empfehlungen und Steigerungen. (3) Ein Link zur Datenschutzerklärung ist sichtbar. Ohne Bestätigung kein Zugang zur App. |
 | AC5 | User hat Consent gegeben | Consent wird gespeichert | Datum und Consent-Version werden lokal im Keychain gespeichert — kein erneutes Anzeigen bei App-Updates sofern Consent-Version identisch |
 
 ---
@@ -182,6 +182,9 @@ Basierend auf `fitbuddy_user_stories_v5.xlsx` und Modul 2 Selbststudium (MoSCoW 
 | Sprache | English-only (alle UI-Strings, Fehlermeldungen, System-Prompt) — kein i18n-Framework |
 | Datenschutz | Nur Daten des eingeloggten Users im LLM-Prompt (keine Benchmarks fremder Nutzer) |
 | Datenschutz | Consent (Datenübertragung an Anthropic + Eigenverantwortung) wird beim Onboarding eingeholt und lokal gespeichert (US-4 AC4/AC5) |
+| Datenschutz (nDSG) | Trainingsdaten sind Gesundheitsdaten nach Art. 5 lit. c nDSG — explizite Einwilligung ist Pflicht. Übertragung an Anthropic (USA) stützt sich auf AVV/DPA, den das FitBuddy-Team einmalig bei Anthropic abschliesst (nicht der Enduser). |
+| Datenschutz (nDSG) | Die App enthält einen statischen Datenschutzerklärung-Screen (erreichbar aus Onboarding + Einstellungen) mit: Verantwortlichem, bearbeiteten Daten, Zweck, Drittempfängern (Hevy/Anthropic), Drittland USA, Rechten der betroffenen Person (Auskunft, Löschung). |
+| Datenschutz (nDSG) | User kann jederzeit alle lokal gespeicherten Daten löschen (Keychain-Einträge + Cache) über «Daten löschen / Account zurücksetzen» in den Einstellungen — App kehrt in den Onboarding-Zustand zurück. |
 | LLM-Kosten | Max. 1 AI-Analyse pro User alle 6 Stunden — Cooldown mit sichtbarem Timer («Next analysis available in Xh Ym») |
 | LLM-Kosten | Analyse-Button disabled während laufendem Call — kein Doppel-Submit möglich |
 
