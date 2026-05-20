@@ -23,7 +23,7 @@ Trainingsdaten (Kraft, Ausdauer) sind auf mehrere Apps verteilt (Hevy, Strava, A
 Native iOS-App, die:
 
 1. Hevy-Trainingsdaten via API aggregiert (PoC: Hevy only)
-2. Ein Dashboard mit 30-Tage-Übersicht liefert
+2. Ein Dashboard mit 90-Tage-Übersicht liefert
 3. On-demand AI-Progressionsempfehlungen generiert (Claude API)
 4. API-Keys lokal im iOS Keychain speichert — keine fremden Server
 
@@ -82,7 +82,7 @@ Native iOS-App, die:
 | Woche | Sprint-Fokus | User Story |
 |---|---|---|
 | 1 | iOS Keychain-Integration + Hevy API-Verbindungstest (401, Timeout, Rate Limit) | US-1 |
-| 2 | Dashboard mit 30-Tage-Aggregation, Empty States, Partial-Data-Fälle | US-2 |
+| 2 | Dashboard mit 90-Tage-Aggregation, Empty States, Partial-Data-Fälle | US-2 |
 | 3 | AI-Analyse-Button, Prompt-Entwicklung mit echten Testdaten, Disclaimer | US-3 |
 | 4 | End-to-End-Test, Onboarding polieren, Präsentation vorbereiten | US-1–4 |
 

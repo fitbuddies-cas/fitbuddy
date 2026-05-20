@@ -7,7 +7,7 @@ Basierend auf `fitbuddy_user_stories_v5.xlsx` und Modul 2 Selbststudium (MoSCoW 
 | ID | Titel | Persona | MoSCoW |
 |---|---|---|---|
 | US-1 | API-Key sicher speichern | Marcus | Must |
-| US-2 | 30 Tage Trainingsdaten im Dashboard | Marcus | Must |
+| US-2 | 90 Tage Trainingsdaten im Dashboard | Marcus | Must |
 | US-3 | AI-Analyse auf Knopfdruck | Jana | Must |
 | US-4 | Onboarding in 3 Schritten | Jana | Must |
 | US-5 | Zweite Datenquelle verbinden | Marcus | Should |
@@ -37,16 +37,16 @@ Basierend auf `fitbuddy_user_stories_v5.xlsx` und Modul 2 Selbststudium (MoSCoW 
 
 ---
 
-### US-2 · 30 Tage Trainingsdaten im Dashboard
-**Als** Power-User mit Kraft- und Ausdauerdaten **möchte ich** meine letzten 30 Tage Hevy-Trainings in einem einzigen Dashboard sehen, **damit** ich meine Gesamtbelastung auf einen Blick beurteilen kann.
+### US-2 · 90 Tage Trainingsdaten im Dashboard
+**Als** Power-User mit Kraft- und Ausdauerdaten **möchte ich** meine letzten 90 Tage Hevy-Trainings in einem einzigen Dashboard sehen, **damit** ich meine Gesamtbelastung und Progression auf einen Blick beurteilen kann.
 
-**Begründung:** Dashboard ist die Datenbasis für AI-Analyse (US-3) und alle weiteren Visualisierungen.
+**Begründung:** Dashboard ist die Datenbasis für AI-Analyse (US-3) und alle weiteren Visualisierungen. 90 Tage statt 30: Progression ist erst über 8–12 Wochen sinnvoll messbar.
 
 | # | Given | When | Then |
 |---|---|---|---|
-| AC1 | Gültiger API-Key ist hinterlegt | User öffnet das Dashboard | Angezeigt werden: Tabelle mit Sessions pro Datum, Gesamtvolumen in kg (Gewicht × Reps × Sets), Ø Trainingstage/Woche, Diagramm zur Muskelbelastungsverteilung |
+| AC1 | Gültiger API-Key ist hinterlegt | User öffnet das Dashboard | Angezeigt werden: Tabelle mit Sessions pro Datum, Gesamtvolumen in kg (Gewicht × Reps × Sets), Ø Trainingstage/Woche, Diagramm zur Muskelbelastungsverteilung — Zeitraum: letzte 90 Tage |
 | AC2 | Hevy API ist nicht erreichbar | Dashboard wird geladen | Gecachte Daten werden angezeigt mit sichtbarem Hinweis auf letzten Sync-Zeitstempel |
-| AC3 | User ist neu in Hevy oder hat >30 Tage nicht trainiert | User öffnet das Dashboard | Text: «Keine Trainingsdaten vorhanden von den letzten 30 Tagen» |
+| AC3 | User ist neu in Hevy oder hat >90 Tage nicht trainiert | User öffnet das Dashboard | Text: «No training data for the last 90 days» |
 
 ---
 
@@ -57,7 +57,7 @@ Basierend auf `fitbuddy_user_stories_v5.xlsx` und Modul 2 Selbststudium (MoSCoW 
 
 | # | Given | When | Then |
 |---|---|---|---|
-| AC1 | Mindestens 2 Wochen Trainingsdaten vorhanden | Jana tippt auf «Analysieren» | Innerhalb von 10s erscheint eine Empfehlung, die von 5/5 Nicht-Sportlern ohne Nachfrage verstanden wird (verbotene Termini-Liste im Prompt) |
+| AC1 | Mindestens 2 Wochen Trainingsdaten vorhanden | Jana tippt auf «Analysieren» | Spinner erscheint sofort; Empfehlung wird angezeigt sobald Claude antwortet; nach 30s ohne Antwort erscheint Cancel-Button mit Meldung «Analysis is taking longer than expected — tap to cancel» |
 | AC2 | Analyse ist abgeschlossen | Jana liest die Empfehlung | Empfehlung enthält eine konkrete Handlung («Erhöhe Kniebeuge-Gewicht um 2.5 kg»), nicht nur allgemeine Aussagen |
 | AC3 | Analyse wird ausgeführt | LLM-Prompt wird zusammengestellt | Prompt enthält ausschliesslich Daten des eingeloggten Users — keine Benchmarks oder Normwerte fremder Nutzer |
 | AC4 | User hat in 4 Wochen Beine, Oberkörper und Rücken trainiert | Empfehlung wird angezeigt | Geht auf mindestens 2 verschiedene Muskelgruppen ein |
@@ -65,6 +65,7 @@ Basierend auf `fitbuddy_user_stories_v5.xlsx` und Modul 2 Selbststudium (MoSCoW 
 | AC6 | User hat in den letzten 7 Tagen an ≥6 Tagen trainiert | Analyse wird ausgeführt | Empfehlung enthält expliziten Hinweis auf Recovery-Bedarf — keine Steigerungsempfehlung ohne diesen Hinweis |
 | AC7 | Analyse ist abgeschlossen | Empfehlung wird angezeigt | Nennt mindestens eine konkrete Übung mit konkretem Wert («Erhöhe Bankdrücken von 60 kg auf 62.5 kg») |
 | AC8 | User trainiert Brust 3×/Woche, Beine nur 1×/Woche | Empfehlung wird generiert | AI weist auf Muskelgruppen-Dysbalance hin |
+| AC9 | Empfehlung wurde angezeigt | — | Unter der Empfehlung erscheinen zwei Buttons: «Helpful» / «Not helpful» — Tap wird lokal gespeichert; kein Backend-Call |
 
 ---
 
@@ -78,6 +79,8 @@ Basierend auf `fitbuddy_user_stories_v5.xlsx` und Modul 2 Selbststudium (MoSCoW 
 | AC1 | Jana öffnet FitBuddy zum ersten Mal | Onboarding-Flow startet | Jeder Schritt erklärt mit Screenshot wo in Hevy der API-Key zu finden ist |
 | AC2 | Hevy API-Key wurde eingegeben und gespeichert | Jana tippt auf «Next» | Claude API-Key kann eingegeben oder vorerst übersprungen werden |
 | AC3 | Jana gibt ungültigen Key ein | Sie tippt auf «Verbinden» | Fehlermeldung erscheint mit direktem Link zur Hevy API-Key-Seite |
+| AC4 | Onboarding-Flow startet | Consent-Screen wird angezeigt | User sieht und bestätigt explizit: (1) Trainingsdaten werden für die AI-Analyse an Anthropic (USA) übertragen, (2) FitBuddy ist kein medizinisches Produkt — der User trägt selbst die Verantwortung für umgesetzte Empfehlungen und Steigerungen. Ohne Bestätigung kein Zugang zur App. |
+| AC5 | User hat Consent gegeben | Consent wird gespeichert | Datum und Consent-Version werden lokal im Keychain gespeichert — kein erneutes Anzeigen bei App-Updates sofern Consent-Version identisch |
 
 ---
 
@@ -172,12 +175,15 @@ Basierend auf `fitbuddy_user_stories_v5.xlsx` und Modul 2 Selbststudium (MoSCoW 
 
 | Bereich | Anforderung |
 |---|---|
-| Performance | AI-Analyse erscheint innerhalb von 10 Sekunden (US-3 AC1) |
+| Performance | Spinner erscheint sofort nach Tap auf «Analysieren»; Cancel-Button nach 30s ohne Antwort (US-3 AC1) |
 | Performance | Dashboard-Load innerhalb von 3 Sekunden nach Kaltstart (US-1 AC2) |
 | Sicherheit | API-Keys ausschliesslich im iOS Keychain (`kSecAttrAccessibleWhenUnlockedThisDeviceOnly`) |
 | Privacy | Keine User-Daten auf externen Servern (ausser direktem API-Call zu Hevy/Claude) |
 | Sprache | English-only (alle UI-Strings, Fehlermeldungen, System-Prompt) — kein i18n-Framework |
 | Datenschutz | Nur Daten des eingeloggten Users im LLM-Prompt (keine Benchmarks fremder Nutzer) |
+| Datenschutz | Consent (Datenübertragung an Anthropic + Eigenverantwortung) wird beim Onboarding eingeholt und lokal gespeichert (US-4 AC4/AC5) |
+| LLM-Kosten | Max. 1 AI-Analyse pro User alle 6 Stunden — Cooldown mit sichtbarem Timer («Next analysis available in Xh Ym») |
+| LLM-Kosten | Analyse-Button disabled während laufendem Call — kein Doppel-Submit möglich |
 
 ---
 
