@@ -351,7 +351,61 @@
     color: #5BA3F5;
   }
 
-  /* ── SLIDE 4 (Plan B) ── */
+  /* ── SLIDE 4 (3 Risks) ── */
+  .r3-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 24px;
+  }
+  .r3-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 24px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .r3-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .r3-red    { color: #E05C5C; }
+  .r3-orange { color: #F0A500; }
+  .r3-blue   { color: #5BA3F5; }
+  .r3-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.3;
+  }
+  .r3-problem {
+    font-size: 13px;
+    color: rgba(255,255,255,0.55);
+    line-height: 1.6;
+    flex: 1;
+  }
+  .r3-mitigation {
+    background: rgba(255,255,255,0.05);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    color: rgba(255,255,255,0.65);
+    line-height: 1.55;
+    border-top: 2px solid rgba(255,255,255,0.08);
+  }
+  .r3-mit-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.3);
+    margin-bottom: 6px;
+  }
+
+  /* ── SLIDE 4 (Plan B, unused) ── */
   .planb-layout {
     display: grid;
     grid-template-columns: 1fr 48px 1fr;
@@ -580,30 +634,39 @@
 
   <!-- ── SLIDE 4 ── -->
   <div class="slide" id="s4">
-    <div class="s-header">Grösstes Risiko — und unser Plan B</div>
-    <div class="planb-layout">
-      <div class="planb-risk">
-        <div class="planb-risk-label">Grösstes Risiko</div>
-        <div class="planb-risk-title">Plattform-Abhängigkeit</div>
-        <div class="planb-risk-quote">«No guarantees — we might abandon this entirely.»</div>
-        <div class="planb-risk-body">
-          Hevy hat explizit keine API-Garantien gegeben. Strava hat 2020 den API-Zugang für Drittanbieter bereits massiv eingeschränkt.
-          Wir bauen auf einer Plattform, die wir nicht kontrollieren — wenn die API wegfällt oder hinter eine Paywall wandert, steht das Produkt über Nacht still.
+    <div class="s-header">Top 3 Risiken &amp; Plan B</div>
+    <div class="r3-grid">
+
+      <div class="r3-card">
+        <div class="r3-label r3-red">R1 · Plattform</div>
+        <div class="r3-title">Plattform-Abhängigkeit</div>
+        <div class="r3-problem">«No guarantees — we might abandon this entirely.» Strava hat 2020 den API-Zugang bereits massiv eingeschränkt.</div>
+        <div class="r3-mitigation">
+          <div class="r3-mit-label">Plan B</div>
+          Hevy ToS sofort prüfen. Connector-Interface so bauen, dass zweiter Datenlieferant ohne Refactor integrierbar ist. Mock-File mit Beispiel-Response committen.
         </div>
       </div>
-      <div class="planb-arrow">→</div>
-      <div class="planb-b">
-        <div class="planb-b-label">Plan B</div>
-        <div class="planb-b-title">Connector-Interface von Beginn an</div>
-        <div class="planb-b-body">
-          Hevy ist der erste Connector — nicht der einzige. Das Interface ist so designed, dass Strava, Apple Health oder jede andere Quelle ohne Refactor integrierbar ist.
-        </div>
-        <div class="planb-actions">
-          <div class="planb-action">Hevy ToS auf kommerzielle API-Nutzung prüfen — Woche 1</div>
-          <div class="planb-action">Mock-File mit Hevy-Beispiel-Response committen — Fallback bei API-Ausfall</div>
-          <div class="planb-action">Zweite Datenquelle architektonisch vorbereitet (US-5 · Should)</div>
+
+      <div class="r3-card">
+        <div class="r3-label r3-orange">R2 · Datenschutz</div>
+        <div class="r3-title">Datenschutz &amp; DSGVO</div>
+        <div class="r3-problem">Trainingsdaten potenziell Gesundheitsdaten (DSGVO Art. 9). Jeder AI-Call überträgt diese an Anthropic (USA). AVV nicht geprüft, Keychain-Wipe fehlt.</div>
+        <div class="r3-mitigation">
+          <div class="r3-mit-label">Plan B</div>
+          PoC: Consent-Screen im Onboarding (US-4 AC4/5) reicht für TestFlight. Vor v1.0: AVV mit Anthropic + «Delete all data»-Funktion obligatorisch.
         </div>
       </div>
+
+      <div class="r3-card">
+        <div class="r3-label r3-blue">R3 · AI-Qualität</div>
+        <div class="r3-title">Prompt Engineering ist die eigentliche Arbeit</div>
+        <div class="r3-problem">US-3 hat 9 ACs gleichzeitig: Recovery, Dysbalance, konkrete Werte, Alltagssprache, kein Fachjargon. Das ist kein einfacher API-Call.</div>
+        <div class="r3-mitigation">
+          <div class="r3-mit-label">Plan B</div>
+          Explizite Eval-Woche: 20 realistische Test-Cases mit echten Userdaten durch jeden Prompt-Change. Prompt-Iteration ist die Arbeit — nicht der iOS-Code.
+        </div>
+      </div>
+
     </div>
     <div class="slide-num">04 / 04</div>
   </div>
