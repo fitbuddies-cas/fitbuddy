@@ -351,7 +351,72 @@
     color: #5BA3F5;
   }
 
-  /* ── SLIDE 4 ── */
+  /* ── SLIDE 4 (Plan B) ── */
+  .planb-layout {
+    display: grid;
+    grid-template-columns: 1fr 48px 1fr;
+    gap: 0 24px;
+    align-items: center;
+  }
+  .planb-arrow {
+    font-size: 36px;
+    color: rgba(255,255,255,0.2);
+    text-align: center;
+  }
+  .planb-risk-label, .planb-b-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  .planb-risk-label { color: #E05C5C; }
+  .planb-b-label    { color: #50B464; }
+  .planb-risk-title, .planb-b-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 16px;
+    line-height: 1.2;
+  }
+  .planb-risk-quote {
+    font-size: 16px;
+    font-style: italic;
+    color: #E05C5C;
+    margin-bottom: 16px;
+    padding-left: 14px;
+    border-left: 3px solid #E05C5C;
+    line-height: 1.5;
+  }
+  .planb-risk-body {
+    font-size: 15px;
+    color: rgba(255,255,255,0.6);
+    line-height: 1.65;
+  }
+  .planb-b {
+    background: rgba(80,180,100,0.08);
+    border: 1px solid rgba(80,180,100,0.2);
+    border-radius: 16px;
+    padding: 36px 32px;
+  }
+  .planb-b-body {
+    font-size: 15px;
+    color: rgba(255,255,255,0.7);
+    line-height: 1.65;
+    margin-bottom: 24px;
+  }
+  .planb-actions { display: flex; flex-direction: column; gap: 10px; }
+  .planb-action {
+    font-size: 14px;
+    color: rgba(255,255,255,0.6);
+    padding: 10px 14px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 8px;
+    border-left: 3px solid #50B464;
+    line-height: 1.4;
+  }
+
+  /* ── SLIDE 4 (old, unused) ── */
   .risk-grid {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
@@ -515,33 +580,30 @@
 
   <!-- ── SLIDE 4 ── -->
   <div class="slide" id="s4">
-    <div class="s-header">Risiken &amp; offene Entscheide</div>
-    <div class="risk-grid">
-      <div class="risk-card risk-r1">
-        <div class="risk-label">R1 · Plattform</div>
-        <div class="risk-title">Hevy API ohne Garantien</div>
-        <div class="risk-body">«No guarantees — we might abandon this entirely.» Strava hat 2020 den API-Zugang bereits massiv eingeschränkt.</div>
-        <div class="risk-mitigation"><strong>Plan B:</strong> Connector-Interface + Mock-File committen. ToS sofort prüfen.</div>
+    <div class="s-header">Grösstes Risiko — und unser Plan B</div>
+    <div class="planb-layout">
+      <div class="planb-risk">
+        <div class="planb-risk-label">Grösstes Risiko</div>
+        <div class="planb-risk-title">Plattform-Abhängigkeit</div>
+        <div class="planb-risk-quote">«No guarantees — we might abandon this entirely.»</div>
+        <div class="planb-risk-body">
+          Hevy hat explizit keine API-Garantien gegeben. Strava hat 2020 den API-Zugang für Drittanbieter bereits massiv eingeschränkt.
+          Wir bauen auf einer Plattform, die wir nicht kontrollieren — wenn die API wegfällt oder hinter eine Paywall wandert, steht das Produkt über Nacht still.
+        </div>
       </div>
-      <div class="risk-card risk-r2">
-        <div class="risk-label">R2 · Datenschutz</div>
-        <div class="risk-title">Trainingsdaten → Anthropic (USA)</div>
-        <div class="risk-body">Potenziell DSGVO Art. 9 (Gesundheitsdaten). AVV mit Anthropic noch nicht geprüft. Lösch- &amp; Exportfunktion fehlen.</div>
-        <div class="risk-mitigation"><strong>PoC:</strong> Consent-Screen im Onboarding (US-4 AC4/5) reicht für TestFlight. <strong>Vor v1.0:</strong> AVV + Keychain-Wipe.</div>
+      <div class="planb-arrow">→</div>
+      <div class="planb-b">
+        <div class="planb-b-label">Plan B</div>
+        <div class="planb-b-title">Connector-Interface von Beginn an</div>
+        <div class="planb-b-body">
+          Hevy ist der erste Connector — nicht der einzige. Das Interface ist so designed, dass Strava, Apple Health oder jede andere Quelle ohne Refactor integrierbar ist.
+        </div>
+        <div class="planb-actions">
+          <div class="planb-action">Hevy ToS auf kommerzielle API-Nutzung prüfen — Woche 1</div>
+          <div class="planb-action">Mock-File mit Hevy-Beispiel-Response committen — Fallback bei API-Ausfall</div>
+          <div class="planb-action">Zweite Datenquelle architektonisch vorbereitet (US-5 · Should)</div>
+        </div>
       </div>
-      <div class="risk-card risk-r3">
-        <div class="risk-label">R3 · AI-Qualität</div>
-        <div class="risk-title">Prompt Engineering ist die eigentliche Arbeit</div>
-        <div class="risk-body">US-3 hat 9 ACs gleichzeitig (Recovery, Dysbalance, konkrete Werte, Alltagssprache). Das ist kein einfacher API-Call.</div>
-        <div class="risk-mitigation"><strong>Massnahme:</strong> Explizite Eval-Woche — 20 Test-Cases mit echten Userdaten durch jeden Prompt-Change.</div>
-      </div>
-    </div>
-    <div class="col-title" style="margin-bottom:14px;">Noch offen — Entscheid vor Modul 3</div>
-    <div class="open-row">
-      <div class="open-item">Apple Health IN oder OUT of Scope?</div>
-      <div class="open-item">401-Handling: harter Logout oder weicher Banner?</div>
-      <div class="open-item">US-3 Epic in Child Stories aufteilen</div>
-      <div class="open-item">Hevy ToS auf kommerzielle Nutzung prüfen</div>
     </div>
     <div class="slide-num">04 / 04</div>
   </div>
