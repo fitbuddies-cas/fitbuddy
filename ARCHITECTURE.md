@@ -170,6 +170,21 @@ Sobald Strava eingebunden: Cross-Source-Analyse (Kraft + Ausdauer kombiniert). A
 - **Entscheidung:** Alle UI-Strings, Fehlermeldungen und der System-Prompt sind auf Englisch
 - **Begründung:** Kein i18n-Framework im PoC. Wird als DoD-Kriterium geführt, nicht als Feature.
 
+### ADR-5: AI-Inference-Region — PoC vs. v1.0
+- **Kontext:** Trainingsdaten sind Gesundheitsdaten nach nDSG Art. 5 lit. c. Die Claude API (Anthropic) ist in den USA gehostet. Die Schweiz hat für die USA **keinen Angemessenheitsbeschluss** — eine Drittlandübermittlung erfordert eine zusätzliche Schutzgrundlage.
+- **PoC-Entscheidung:** Direkter Call zum Claude API (USA). Schutzgrundlage: AVV/DPA mit Anthropic (vom FitBuddy-Team abgeschlossen) + explizite informierte Einwilligung im Onboarding (US-4 AC4). Zulässig für akademischen PoC / TestFlight-Distribution.
+- **v1.0-Entscheidung (geplant):** Wechsel auf **AWS Bedrock + Claude in Region `eu-central-1` (Frankfurt)**. Die Schweiz hat für EU/EWR eine Angemessenheitsfeststellung getroffen — Daten verlassen damit die CH/EU-Rechtszone nicht. Das eliminiert die Drittlandübermittlung in die USA vollständig.
+- **Architektur v1.0:**
+  ```
+  iOS App → AWS Bedrock API (Frankfurt, eu-central-1) → Claude-Modell
+  ```
+  Alternativ: schlanker Proxy (AWS Lambda / Azure Function) in der Schweiz oder Deutschland, der den Bedrock-Call kapselt und den iOS-Client vom AWS-SDK entkoppelt.
+- **Alternativen geprüft:**
+  - Azure Switzerland North (Zürich): Claude **nicht verfügbar** — nur OpenAI-Modelle.
+  - Direkter Bedrock-Call vom iOS-Client: möglich (AWS Signature V4), erhöht aber Client-Komplexität erheblich.
+  - Eigener Proxy-Server in CH: löst USA-Problem nicht, wenn Proxy seinerseits an Anthropic direkt weiterleitet.
+- **Risiko PoC:** Vertretbar mit AVV + Consent. Muss vor kommerziellem Launch auf Bedrock EU migriert werden.
+
 ## Offene Architektur-Fragen
 
 | Frage | Priorität |
