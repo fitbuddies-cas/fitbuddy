@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FitBuddy — Präsentation</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+    background: #1a1a2e;
+    color: #fff;
+    height: 100vh;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .slides { width: 100%; height: 100vh; }
+
+  .slide {
+    display: none;
+    width: 100%;
+    height: 100vh;
+    padding: 60px 80px;
+    flex-direction: column;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .slide.active { display: flex; }
+
+  /* Accent bar top */
+  .slide::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 6px;
+    background: linear-gradient(90deg, #2E74B5, #5BA3F5);
+  }
+
+  /* Slide number */
+  .slide-num {
+    position: absolute;
+    bottom: 28px; right: 48px;
+    font-size: 13px;
+    color: rgba(255,255,255,0.3);
+    letter-spacing: 2px;
+  }
+
+  /* Nav arrows */
+  .nav {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 12px;
+    z-index: 100;
+  }
+  .nav button {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: #fff;
+    padding: 8px 22px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s;
+  }
+  .nav button:hover { background: rgba(255,255,255,0.2); }
+
+  /* Progress dots */
+  .dots {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    margin-top: -36px;
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.25);
+    transition: background 0.3s;
+  }
+  .dot.active { background: #5BA3F5; }
+
+  /* ── SLIDE 1 ── */
+  .s1-eyebrow {
+    font-size: 15px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #5BA3F5;
+    margin-bottom: 20px;
+    font-weight: 400;
+  }
+  .s1-title {
+    font-size: 82px;
+    font-weight: 700;
+    line-height: 1;
+    color: #fff;
+    letter-spacing: -2px;
+  }
+  .s1-title span { color: #5BA3F5; }
+  .s1-tagline {
+    margin-top: 28px;
+    font-size: 22px;
+    color: rgba(255,255,255,0.75);
+    max-width: 800px;
+    line-height: 1.5;
+  }
+  .s1-tagline em {
+    color: #fff;
+    font-style: normal;
+    font-weight: 600;
+  }
+  .s1-meta {
+    margin-top: 48px;
+    display: flex;
+    gap: 40px;
+  }
+  .s1-badge {
+    padding: 8px 20px;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 20px;
+    font-size: 13px;
+    color: rgba(255,255,255,0.6);
+    letter-spacing: 1px;
+  }
+
+  /* ── SLIDE 2 ── */
+  .s-header {
+    font-size: 13px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #5BA3F5;
+    margin-bottom: 36px;
+  }
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+    align-items: start;
+  }
+  .col-title {
+    font-size: 13px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.4);
+    margin-bottom: 20px;
+  }
+  .persona-card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+  .persona-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 6px;
+  }
+  .persona-type {
+    font-size: 13px;
+    color: #5BA3F5;
+    margin-bottom: 12px;
+  }
+  .persona-row {
+    font-size: 14px;
+    color: rgba(255,255,255,0.7);
+    margin-bottom: 6px;
+    line-height: 1.4;
+  }
+  .persona-row strong { color: rgba(255,255,255,0.95); }
+
+  .must-list { list-style: none; }
+  .must-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    font-size: 15px;
+    color: rgba(255,255,255,0.85);
+    line-height: 1.4;
+  }
+  .must-item:last-child { border-bottom: none; }
+  .must-id {
+    font-size: 11px;
+    background: #2E74B5;
+    color: #fff;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-weight: 700;
+    white-space: nowrap;
+    margin-top: 1px;
+    flex-shrink: 0;
+  }
+
+  /* ── SLIDE 3 ── */
+  .three-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 28px;
+    margin-top: 8px;
+  }
+  .arch-card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 28px 24px;
+  }
+  .arch-card-label {
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #5BA3F5;
+    margin-bottom: 14px;
+  }
+  .arch-card-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 12px;
+    line-height: 1.3;
+  }
+  .arch-card-body {
+    font-size: 14px;
+    color: rgba(255,255,255,0.65);
+    line-height: 1.6;
+  }
+  .arch-card-body strong { color: rgba(255,255,255,0.9); }
+  .highlight-box {
+    background: rgba(46,116,181,0.2);
+    border: 1px solid rgba(91,163,245,0.3);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-top: 14px;
+    font-size: 13px;
+    color: #5BA3F5;
+  }
+
+  /* ── SLIDE 4 ── */
+  .risk-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 36px;
+  }
+  .risk-card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 24px;
+  }
+  .risk-label {
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .risk-r1 .risk-label { color: #E05C5C; }
+  .risk-r2 .risk-label { color: #F0A500; }
+  .risk-r3 .risk-label { color: #5BA3F5; }
+  .risk-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 10px;
+    line-height: 1.3;
+  }
+  .risk-body {
+    font-size: 13px;
+    color: rgba(255,255,255,0.6);
+    line-height: 1.5;
+  }
+  .risk-mitigation {
+    font-size: 12px;
+    color: rgba(255,255,255,0.4);
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    line-height: 1.4;
+  }
+  .risk-mitigation strong { color: rgba(255,255,255,0.7); }
+
+  .open-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .open-item {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 14px;
+    color: rgba(255,255,255,0.7);
+  }
+  .open-item::before {
+    content: '? ';
+    color: #5BA3F5;
+    font-weight: 700;
+  }
+</style>
+</head>
+<body>
+
+<div class="slides">
+
+  <!-- ── SLIDE 1 ── -->
+  <div class="slide active" id="s1">
+    <div class="s1-eyebrow">CAS ADAI 2026 · BFH Biel · PoC</div>
+    <div class="s1-title">Fit<span>Buddy</span></div>
+    <div class="s1-tagline">
+      <em>Hevy-Trainingsdaten + Claude API</em> —<br>
+      ein iOS-Dashboard mit on-demand AI-Progressionsempfehlungen.<br>
+      Keine fremden Server. Kein Backend.
+    </div>
+    <div class="s1-meta">
+      <div class="s1-badge">iOS Native · Swift</div>
+      <div class="s1-badge">Hevy API · Claude API</div>
+      <div class="s1-badge">3-Monats PoC</div>
+      <div class="s1-badge">TestFlight</div>
+    </div>
+    <div class="slide-num">01 / 04</div>
+  </div>
+
+  <!-- ── SLIDE 2 ── -->
+  <div class="slide" id="s2">
+    <div class="s-header">Für wen — und was wir bauen</div>
+    <div class="two-col">
+      <div>
+        <div class="col-title">Personas</div>
+        <div class="persona-card">
+          <div class="persona-name">Marcus Huber</div>
+          <div class="persona-type">Technikaffiner Power-User</div>
+          <div class="persona-row"><strong>Problem:</strong> Kraft- und Ausdauerdaten liegen in verschiedenen Apps — kein ganzheitlicher Überblick.</div>
+          <div class="persona-row"><strong>Ziel:</strong> Gesamtbelastung auf einen Blick beurteilen und datenbasiert steigern.</div>
+        </div>
+        <div class="persona-card">
+          <div class="persona-name">Jana Vogel</div>
+          <div class="persona-type">Krafttraining-Einsteigerin</div>
+          <div class="persona-row"><strong>Problem:</strong> Weiss nicht ob sie richtig trainiert — fehlendes Feedback aus Rohdaten.</div>
+          <div class="persona-row"><strong>Ziel:</strong> Konkrete Empfehlung ohne Selbstinterpretation.</div>
+        </div>
+      </div>
+      <div>
+        <div class="col-title">Must-Have Stories (MVP)</div>
+        <ul class="must-list">
+          <li class="must-item">
+            <span class="must-id">US-1</span>
+            API-Key sicher speichern — ausschliesslich iOS Keychain, kein Server
+          </li>
+          <li class="must-item">
+            <span class="must-id">US-2</span>
+            90 Tage Trainingsdaten im Dashboard — Volumen, Frequenz, Muskelverteilung
+          </li>
+          <li class="must-item">
+            <span class="must-id">US-3</span>
+            AI-Analyse auf Knopfdruck — konkrete Empfehlung in Alltagssprache via Claude
+          </li>
+          <li class="must-item">
+            <span class="must-id">US-4</span>
+            Onboarding in 3 Schritten — inkl. Consent für Datentransfer &amp; Eigenverantwortung
+          </li>
+        </ul>
+      </div>
+    </div>
+    <div class="slide-num">02 / 04</div>
+  </div>
+
+  <!-- ── SLIDE 3 ── -->
+  <div class="slide" id="s3">
+    <div class="s-header">AI konkret — und warum kein Backend</div>
+    <div class="three-col">
+      <div class="arch-card">
+        <div class="arch-card-label">Was die AI macht</div>
+        <div class="arch-card-title">On-demand Progressions&shy;empfehlung</div>
+        <div class="arch-card-body">
+          <strong>Input:</strong> strukturierte 90-Tage-Daten (Volumen, Frequenz, Muskelgruppen)<br><br>
+          <strong>Output:</strong> 1 Satz Lage · 1 konkrete Aktion · 1 optionaler Hinweis<br><br>
+          <strong>Kein AI:</strong> Datenabruf, Aggregation, Visualisierung — klassische App-Logik
+        </div>
+        <div class="highlight-box">Feedback «Helpful / Not helpful» lokal gespeichert — validiert ob das Konzept trägt</div>
+      </div>
+      <div class="arch-card">
+        <div class="arch-card-label">Architektur-Entscheid</div>
+        <div class="arch-card-title">Kein Backend — Privacy First</div>
+        <div class="arch-card-body">
+          API-Keys ausschliesslich im <strong>iOS Keychain</strong><br><br>
+          Direkter Call zu Hevy &amp; Claude — keine eigenen Server<br><br>
+          Trainingsdaten verlassen Gerät <strong>nur für den AI-Call</strong>
+        </div>
+        <div class="highlight-box">Bewusster PoC-Entscheid — Revisit vor v1.0 obligatorisch</div>
+      </div>
+      <div class="arch-card">
+        <div class="arch-card-label">Strategische Absicherung</div>
+        <div class="arch-card-title">Connector-Interface von Beginn an</div>
+        <div class="arch-card-body">
+          Hevy = erster Connector, <strong>nicht der einzige</strong><br><br>
+          Strava / Apple Health ohne Refactor integrierbar<br><br>
+          Normalisiertes Activity-Modell vor US-2 &amp; US-3
+        </div>
+        <div class="highlight-box">Absicherung gegen Hevy API-Wegfall — kein Single Point of Failure</div>
+      </div>
+    </div>
+    <div class="slide-num">03 / 04</div>
+  </div>
+
+  <!-- ── SLIDE 4 ── -->
+  <div class="slide" id="s4">
+    <div class="s-header">Risiken &amp; offene Entscheide</div>
+    <div class="risk-grid">
+      <div class="risk-card risk-r1">
+        <div class="risk-label">R1 · Plattform</div>
+        <div class="risk-title">Hevy API ohne Garantien</div>
+        <div class="risk-body">«No guarantees — we might abandon this entirely.» Strava hat 2020 den API-Zugang bereits massiv eingeschränkt.</div>
+        <div class="risk-mitigation"><strong>Plan B:</strong> Connector-Interface + Mock-File committen. ToS sofort prüfen.</div>
+      </div>
+      <div class="risk-card risk-r2">
+        <div class="risk-label">R2 · Datenschutz</div>
+        <div class="risk-title">Trainingsdaten → Anthropic (USA)</div>
+        <div class="risk-body">Potenziell DSGVO Art. 9 (Gesundheitsdaten). AVV mit Anthropic noch nicht geprüft. Lösch- &amp; Exportfunktion fehlen.</div>
+        <div class="risk-mitigation"><strong>PoC:</strong> Consent-Screen im Onboarding (US-4 AC4/5) reicht für TestFlight. <strong>Vor v1.0:</strong> AVV + Keychain-Wipe.</div>
+      </div>
+      <div class="risk-card risk-r3">
+        <div class="risk-label">R3 · AI-Qualität</div>
+        <div class="risk-title">Prompt Engineering ist die eigentliche Arbeit</div>
+        <div class="risk-body">US-3 hat 9 ACs gleichzeitig (Recovery, Dysbalance, konkrete Werte, Alltagssprache). Das ist kein einfacher API-Call.</div>
+        <div class="risk-mitigation"><strong>Massnahme:</strong> Explizite Eval-Woche — 20 Test-Cases mit echten Userdaten durch jeden Prompt-Change.</div>
+      </div>
+    </div>
+    <div class="col-title" style="margin-bottom:14px;">Noch offen — Entscheid vor Modul 3</div>
+    <div class="open-row">
+      <div class="open-item">Apple Health IN oder OUT of Scope?</div>
+      <div class="open-item">401-Handling: harter Logout oder weicher Banner?</div>
+      <div class="open-item">US-3 Epic in Child Stories aufteilen</div>
+      <div class="open-item">Hevy ToS auf kommerzielle Nutzung prüfen</div>
+    </div>
+    <div class="slide-num">04 / 04</div>
+  </div>
+
+</div>
+
+<!-- Navigation -->
+<div class="nav">
+  <button onclick="changeSlide(-1)">← zurück</button>
+  <button onclick="changeSlide(1)">weiter →</button>
+</div>
+<div class="dots" style="bottom:64px;">
+  <div class="dot active" id="d0"></div>
+  <div class="dot" id="d1"></div>
+  <div class="dot" id="d2"></div>
+  <div class="dot" id="d3"></div>
+</div>
+
+<script>
+  let current = 0;
+  const slides = document.querySelectorAll('.slide');
+  const dots = document.querySelectorAll('.dot');
+
+  function goTo(n) {
+    slides[current].classList.remove('active');
+    dots[current].classList.remove('active');
+    current = (n + slides.length) % slides.length;
+    slides[current].classList.add('active');
+    dots[current].classList.add('active');
+  }
+
+  function changeSlide(dir) { goTo(current + dir); }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') changeSlide(1);
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')                     changeSlide(-1);
+  });
+</script>
+</body>
+</html>
