@@ -1,4 +1,4 @@
-# FitBuddy — Requirements (v5)
+# FitBuddy — Requirements
 
 Basierend auf `fitbuddy_user_stories_v5.xlsx` und Modul 2 Selbststudium (MoSCoW & Requirements).
 

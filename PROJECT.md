@@ -9,8 +9,6 @@
 | | |
 |---|---|
 | Kurs | CAS Application Development with AI (ADAI) 2026 |
-| Institution | BFH Biel |
-| Dozent | Ilja Rasin |
 | Team | 2–3 Personen |
 | Abgabe | Präsentation Modul 3 |
 
