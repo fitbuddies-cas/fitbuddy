@@ -358,6 +358,13 @@
     gap: 32px;
     align-items: start;
   }
+  .open5-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 28px;
+    align-items: start;
+    margin-top: 12px;
+  }
   .open-group-label {
     font-size: 10px;
     font-weight: 700;
@@ -652,38 +659,21 @@
   <!-- ── SLIDE 5 ── -->
   <div class="slide" id="s5">
     <div class="s-header">Was bleibt offen — was klären wir bis Modul 3?</div>
-    <div class="open-layout">
+    <div class="open5-grid">
 
-      <div class="open-group">
-        <div class="open-group-label open-now">Sofort · Woche 1</div>
-        <div class="open-card open-card-hot">
-          <div class="open-card-title">Hevy ToS auf kommerzielle API-Nutzung prüfen</div>
-          <div class="open-card-body">Ohne grünes Licht hier baut ihr 12 Wochen auf unsicherem Fundament. Existenziell für den PoC.</div>
-        </div>
+      <div class="open-card open-card-warn">
+        <div class="open-card-title">Apple Health — IN oder OUT of Scope?</div>
+        <div class="open-card-body">Wenn IN: passiver HealthKit-Zugriff, kein Connector nötig — beeinflusst das Architektur-Design direkt. Entscheid nötig bevor Modul 3 (Architektur) beginnt.</div>
       </div>
 
-      <div class="open-group">
-        <div class="open-group-label open-m3">Vor Modul 3 · Architektur</div>
-        <div class="open-card open-card-warn">
-          <div class="open-card-title">Apple Health — IN oder OUT of Scope?</div>
-          <div class="open-card-body">Wenn IN: passiver HealthKit-Zugriff, kein Connector nötig — beeinflusst das Architektur-Design direkt.</div>
-        </div>
-        <div class="open-card open-card-warn">
-          <div class="open-card-title">US-3 Epic in Child Stories aufteilen</div>
-          <div class="open-card-body">AI-Analyse ist zu gross für einen Sprint. Aufteilen in: Prompt-Design · UI · Error-Handling · Disclaimer.</div>
-        </div>
-        <div class="open-card open-card-warn">
-          <div class="open-card-title">401-Handling: harter Logout oder weicher Banner?</div>
-          <div class="open-card-body">US-1 AC3 und US-8 AC2 definieren denselben Trigger unterschiedlich. Empfehlung: harter Logout im PoC.</div>
-        </div>
+      <div class="open-card open-card-warn">
+        <div class="open-card-title">AI-Analyse auf Knopfdruck als Epic in Child Stories aufteilen</div>
+        <div class="open-card-body">Die Story ist zu gross für einen Sprint. Aufteilen in: Prompt-Design · UI · Error-Handling · Disclaimer — vor der Sprint-Planung.</div>
       </div>
 
-      <div class="open-group">
-        <div class="open-group-label open-v1">Vor v1.0-Launch</div>
-        <div class="open-card open-card-later">
-          <div class="open-card-title">AVV mit Anthropic + «Delete all data»-Funktion</div>
-          <div class="open-card-body">DSGVO Art. 9 / Art. 17. Für TestFlight reicht der Consent-Screen — für öffentliche Veröffentlichung nicht.</div>
-        </div>
+      <div class="open-card open-card-warn">
+        <div class="open-card-title">Akzeptanzkriterien weiter verfeinern</div>
+        <div class="open-card-body">Bestehende Acceptance Criteria auf Testbarkeit prüfen: jedes AC muss eine klare Ja/Nein-Frage beantworten. Offene Widersprüche zwischen Stories auflösen.</div>
       </div>
 
     </div>
