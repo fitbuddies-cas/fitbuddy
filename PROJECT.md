@@ -63,6 +63,7 @@ Native iOS-App, die:
 - Push-Notifications mit wöchentlicher Zusammenfassung (US-11)
 - Trainingsvorschlag zurück in Hevy schreiben (US-12 — erfordert Hevy PRO, UX-Klärung)
 - i18n / Lokalisierungsframework
+- App Store Veröffentlichung — Distribution im PoC ausschliesslich via TestFlight / Sideload
 
 ### Offen — Entscheid vor Architektur nötig
 
