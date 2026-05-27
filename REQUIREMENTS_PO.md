@@ -236,4 +236,86 @@ Bewusst ausgeschlossen für den PoC. Dokumentiert, damit später kein Scope-Cree
 | **Plateau-Detection als eigenständiges Feature** | Teil von US-9 (Could), kein eigenes Item. Wenn US-9 nicht in den Sprint passt, fällt es ersatzlos weg. |
 
 
+## 7. Quality Attributes — Top 3 Architektur-Treiber
+
+*Analysiert aus den Requirements und Projektdokumentation. Direkter Input für ADR-Entscheide und Sprint-Planung.*
+
+---
+
+### QA-1 — Security / Privacy *(kritischster Treiber)*
+
+**Warum für FitBuddy besonders wichtig:**
+
+Das Kernversprechen der App *ist* Security: «API-Keys verbleiben im iOS Keychain — alle API-Calls laufen direkt vom Gerät.» Trainingsdaten sind Gesundheitsdaten nach nDSG Art. 5 lit. c — rechtlich eine der höchstgeschützten Datenkategorien. Jeder Claude-API-Call überträgt diese Daten an Anthropic (USA) ohne Angemessenheitsbeschluss der Schweiz. Die einzige Rechtsgrundlage ist der AVV/DPA mit Anthropic — der noch nicht geprüft wurde. Wenn der Claude-API-Key auf dem Gerät kompromittiert wird, gibt es keinen server-seitigen Kill-Switch: der User muss ihn manuell neu eingeben.
+
+**Konkrete architektonische Massnahmen:**
+
+| Massnahme | Begründung |
+|---|---|
+| `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` (US-1 AC1) | Verhindert iCloud-Sync des Keys und Zugriff bei gesperrtem Gerät — falsches Attribut = Key landet in iCloud-Backup |
+| Certificate Pinning für Hevy + Claude API | Einziger verbleibender Angriffsvektor bei kompromittiertem Netzwerk — **fehlt noch als NFR, muss ergänzt werden** |
+| AVV/DPA mit Anthropic **vor erstem TestFlight-Build** | Ohne AVV keine legale Rechtsgrundlage für Drittlandübermittlung — Consent-Screen (US-4 AC4) wäre sonst inhaltlich falsch |
+| Consent mit Version + Timestamp im Keychain (US-4 AC5) | Versionierter Consent ist Pflicht: bei Änderung der Datenverarbeitung muss erneut eingeholt werden |
+| Kein Logging von Key-Material | Eine einzige Log-Zeile mit API-Key in einem Crash-Report reicht für eine Kompromittierung |
+
+**Wenn ignoriert:**
+
+Rechtliche Haftung nach nDSG, Apple-Review-Ablehnung wegen fehlendem Privacy-Manifest, öffentlicher Trust-Verlust. Konkret: falsches Keychain-Attribut = Keys landen in iCloud-Backup; kein Certificate Pinning = MITM-Angriff im WLAN liest Keys mit; kein AVV = jeder Claude-Call ist rechtswidrig.
+
+---
+
+### QA-2 — Reliability *(Kernvoraussetzung für Nutzbarkeit)*
+
+**Warum für FitBuddy besonders wichtig:**
+
+Beide externen Abhängigkeiten sind instabil — dokumentiert: Hevy hat «no guarantees — we might abandon this entirely» geschrieben (R1). Claude API kann 10–30 Sekunden dauern, Rate-Limit-Fehler werfen oder bei schlechtem Netz ausfallen. Das Dashboard ist der einzige Einstiegspunkt in den gesamten Produktwert — ein leerer Screen beim Öffnen führt zur Deinstallation. US-3 (AI-Analyse) hängt vollständig von gecachten Dashboard-Daten ab: keine Reliability im Cache = keine AI-Analyse.
+
+**Konkrete architektonische Massnahmen:**
+
+| Massnahme | Begründung |
+|---|---|
+| CoreData für Activity-Cache (nicht UserDefaults) | Relationales Modell für `Activity → Exercise → ExerciseSet`; Migration-Support für Strava-Daten in v1.1; Queries ohne alles in-memory laden |
+| `lastSyncTimestamp` persistent in UserDefaults | Überlebt App-Kills; immer als Banner im Dashboard sichtbar (US-2 AC2) |
+| HTTP 401 → harter Logout (US-1 AC3) | Kein stilles Weiterlaufen mit gecachten Daten die der User für aktuell hält → falsche AI-Empfehlung auf Basis veralteter Daten |
+| Claude-Timeout 30 s + Cancel-Button (US-3 AC1) | Ohne Cancel-Button: User sieht hängenden Spinner, kill-swipet die App, glaubt sie ist kaputt |
+| Cooldown-Timer (6 h) in UserDefaults, **nicht in-memory** | Überlebt App-Kill; verhindert versehentliche Mehrfach-Calls nach Neustart |
+
+**Wenn ignoriert:**
+
+Hevy hat einen Ausfall → leerer Screen (Cache war in-memory, App wurde über Nacht gecleaned) → Deinstallation. Claude-Call läuft > 30 s → kein Cancel-Button → App muss neu gestartet werden. Stiller 401-Fehler → User erhält AI-Empfehlung auf Basis veralteter Daten.
+
+---
+
+### QA-3 — Maintainability *(Voraussetzung für geplante Roadmap)*
+
+**Warum für FitBuddy besonders wichtig:**
+
+Zwei dokumentierte Roadmap-Items blockieren ohne saubere Abstraktion: Strava (v1.1, in MoSCoW als Should gelistet) und die Bedrock-Migration (v1.0, ADR-5: «obligatorisch vor kommerziellem Launch»). Wenn HevyConnector-Code in Dashboard-Logik und AI-Prompt-Builder verwächst, muss bei jedem neuen Connector alles angefasst werden. Der Entscheid muss vor Sprint 1 getroffen sein — «Im PoC wird nur das `FitnessConnector`-Interface verankert» bedeutet: die Architektur muss jetzt stimmen.
+
+**Konkrete architektonische Massnahmen:**
+
+| Massnahme | Begründung |
+|---|---|
+| `FitnessConnector`-Protocol **vor** HevyConnector implementieren (ADR-3) | Verhindert, dass Hevy-spezifische Typen in UI und AI Engine eindringen |
+| `StravaConnector`-Stub im PoC committen (kompiliert, wirft `NotImplemented`) | Verhindert Protocol-Drift zwischen Sprint 1 und v1.1 — Interface bleibt stabil |
+| AI Analysis Engine liest **nur** aus dem Activity-Cache, nie direkt vom Connector | Claude-Prompt-Builder bleibt unverändert wenn Strava dazukommt |
+| Claude-API-Call in eigene `InferenceService`-Klasse kapseln | Bedrock-Migration = eine Klasse austauschen, nicht jeden Call im Codebase |
+| ADRs 1–5 im Code verlinkt | Neue Teammitglieder verstehen warum Entscheidungen so sind — verhindert «versehentliches Rückgängigmachen» |
+
+**Wenn ignoriert:**
+
+Strava-Integration in v1.1 erfordert Refactor von HevyConnector + Dashboard + AI Engine statt nur eines neuen Connectors. Bedrock-Migration (gesetzliche Pflicht für nDSG-Konformität vor v1.0) berührt jeden Claude-Call statt einer `InferenceService`-Klasse. Das Team schätzt 2 Tage — es werden 2 Wochen mit Regressionen.
+
+---
+
+### Zusammenfassung
+
+| QA | Wenn ignoriert bricht | Risiko-Horizont |
+|---|---|---|
+| Security / Privacy | Rechtliche Haftung + App-Store-Ablehnung | Vor erstem TestFlight-Build |
+| Reliability | App wirkt kaputt beim ersten Hevy-Ausfall | Sprint 2 (Dashboard) |
+| Maintainability | Strava v1.1 und Bedrock v1.0 werden zu Refactors statt Features | Grundlage muss in Sprint 1 gelegt werden |
+
+---
+
 *Stand: 27.05.2026 · Quellen: `PROJECT.md`, `REQUIREMENTS.md` v5, `ARCHITECTURE.md`*
