@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FitBuddy · iOS Screens & Prototype</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: #f0eee9; height: 100%; }
+    body { font-family: -apple-system, system-ui, sans-serif; }
+    #root { height: 100vh; }
+  </style>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" src="ios-frame.jsx"></script>
+  <script type="text/babel" src="design-canvas.jsx"></script>
+  <script type="text/babel" src="fb-atoms.jsx"></script>
+  <script type="text/babel" src="fb-screens.jsx"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // ─── Reusable device wrapper ───────────────────────────────────
+    // Renders a FitBuddy screen inside an iOS device frame.
+    function Phone({ children, keyboard = false, dark = false }) {
+      return (
+        <div style={{ position: 'relative' }}>
+          <IOSDevice keyboard={keyboard} dark={dark}>{children}</IOSDevice>
+        </div>
+      );
+    }
+
+    // ─── Static screen registry ────────────────────────────────────
+    // Each entry: id, label, render(). Used in static rows + the
+    // interactive prototype.
+
+    const SCREENS = {
+      welcome:        { label: '1.1 Welcome',          render: () => <Phone><FBWelcomeScreen /></Phone> },
+      keyEmpty:       { label: '1.2 Enter API key',    render: () => <Phone keyboard><FBKeyEntryScreen stage="empty" /></Phone> },
+      keyTyped:       { label: '1.3 Key typed',        render: () => <Phone keyboard><FBKeyEntryScreen stage="typed" /></Phone> },
+      keyValidating:  { label: '1.4 Verifying',        render: () => <Phone><FBKeyEntryScreen stage="validating" /></Phone> },
+      keyInvalid:     { label: '1.5 Invalid (HTTP 401)', render: () => <Phone><FBKeyEntryScreen stage="invalid" /></Phone> },
+
+      dashData:       { label: '2.1 Dashboard · 90 days', render: () => <Phone><FBDashboardScreen variant="data" /></Phone> },
+      dashOffline:    { label: '2.2 Cached / offline',    render: () => <Phone><FBDashboardScreen variant="offline" /></Phone> },
+      dashEmpty:      { label: '2.3 Empty state',         render: () => <Phone><FBDashboardScreen variant="empty" /></Phone> },
+
+      analyzePre:     { label: '3.1 Pre-analysis CTA',  render: () => <Phone><FBDashboardScreen variant="data" /></Phone> },
+      analyzeLoading: { label: '3.2 Loading · 0–30 s',   render: () => <Phone><FBAnalyzeLoadingScreen /></Phone> },
+      analyzeLong:    { label: '3.3 Long wait · cancel', render: () => <Phone><FBAnalyzeLoadingScreen longWait /></Phone> },
+      resultProg:     { label: '3.4 Result · progression', render: () => <Phone><FBAnalysisResultScreen variant="progression" /></Phone> },
+      resultRec:      { label: '3.5 Result · recovery',  render: () => <Phone><FBAnalysisResultScreen variant="recovery" /></Phone> },
+      cooldown:       { label: '3.6 Feedback + cooldown', render: () => <Phone><FBAnalysisResultScreen variant="progression" feedback="yes" cooldown /></Phone> },
+    };
+
+    // ─── Interactive prototype controller ──────────────────────────
+    // Walks through the entire FitBuddy flow inside ONE device, with
+    // step indicator + prev/next + reset, plus real tap-handlers on
+    // the buttons inside each screen.
+    function Prototype() {
+      const flow = [
+        { id: 'welcome',       lane: 'US-1', label: 'Welcome' },
+        { id: 'keyEmpty',      lane: 'US-1', label: 'Enter API key' },
+        { id: 'keyTyped',      lane: 'US-1', label: 'Key pasted' },
+        { id: 'keyValidating', lane: 'US-1', label: 'Verifying with Hevy' },
+        { id: 'keyInvalid',    lane: 'US-1', label: 'Invalid key (401)' },
+        { id: 'keyTyped2',     lane: 'US-1', label: 'Re-paste valid key' },
+        { id: 'dashData',      lane: 'US-2', label: 'Dashboard · 90 days' },
+        { id: 'dashOffline',   lane: 'US-2', label: 'Cached data banner' },
+        { id: 'dashEmpty',     lane: 'US-2', label: 'Empty (no workouts)' },
+        { id: 'dashData2',     lane: 'US-2', label: 'Back to data' },
+        { id: 'analyzeLoading',lane: 'US-3', label: 'Analyzing · 0–30 s' },
+        { id: 'analyzeLong',   lane: 'US-3', label: 'Long wait · cancel' },
+        { id: 'resultProg',    lane: 'US-3', label: 'Result · progression' },
+        { id: 'resultRec',     lane: 'US-3', label: 'Result · recovery' },
+        { id: 'cooldown',      lane: 'US-3', label: 'Feedback + cooldown' },
+      ];
+
+      const [i, setI] = useState(0);
+      const step = flow[i];
+      const next = () => setI(v => Math.min(v + 1, flow.length - 1));
+      const prev = () => setI(v => Math.max(v - 1, 0));
+      const reset = () => setI(0);
+
+      // Render the screen for current step, with handlers that advance.
+      const screen = (() => {
+        const id = step.id;
+        if (id === 'welcome')        return <FBWelcomeScreen onStart={next} />;
+        if (id === 'keyEmpty')       return <FBKeyEntryScreen stage="empty" />;
+        if (id === 'keyTyped' || id === 'keyTyped2') return <FBKeyEntryScreen stage="typed" onVerify={next} />;
+        if (id === 'keyValidating')  return <FBKeyEntryScreen stage="validating" />;
+        if (id === 'keyInvalid')     return <FBKeyEntryScreen stage="invalid" onRetry={next} />;
+        if (id === 'dashData' || id === 'dashData2') return <FBDashboardScreen variant="data" onAnalyze={() => setI(flow.findIndex(f => f.id === 'analyzeLoading'))} />;
+        if (id === 'dashOffline')    return <FBDashboardScreen variant="offline" />;
+        if (id === 'dashEmpty')      return <FBDashboardScreen variant="empty" />;
+        if (id === 'analyzeLoading') return <FBAnalyzeLoadingScreen />;
+        if (id === 'analyzeLong')    return <FBAnalyzeLoadingScreen longWait onCancel={() => setI(flow.findIndex(f => f.id === 'dashData2'))} />;
+        if (id === 'resultProg')     return <FBAnalysisResultScreen variant="progression" onFeedback={() => setI(flow.findIndex(f => f.id === 'cooldown'))} onClose={() => setI(flow.findIndex(f => f.id === 'dashData2'))} />;
+        if (id === 'resultRec')      return <FBAnalysisResultScreen variant="recovery" onFeedback={() => setI(flow.findIndex(f => f.id === 'cooldown'))} onClose={() => setI(flow.findIndex(f => f.id === 'dashData2'))} />;
+        if (id === 'cooldown')       return <FBAnalysisResultScreen variant="progression" feedback="yes" cooldown onClose={() => setI(flow.findIndex(f => f.id === 'dashData2'))} />;
+        return null;
+      })();
+
+      const keyboardOn = ['keyEmpty','keyTyped','keyTyped2'].includes(step.id);
+
+      return (
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18,
+          fontFamily: '-apple-system, system-ui, sans-serif',
+        }}>
+          {/* Step ribbon */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '8px 14px', background: '#fff', borderRadius: 14,
+            boxShadow: '0 0 0 1px rgba(0,0,0,0.06), 0 6px 14px rgba(0,0,0,0.04)',
+          }}>
+            <div style={{
+              padding: '3px 8px', borderRadius: 6,
+              background: step.lane === 'US-1' ? '#0E0E0E' : step.lane === 'US-2' ? 'oklch(0.62 0.14 150)' : 'oklch(0.66 0.16 55)',
+              color: '#fff', fontSize: 10, fontWeight: 700, letterSpacing: 0.4,
+            }}>{step.lane}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: -0.2 }}>{step.label}</div>
+            <div style={{
+              fontSize: 11, color: 'rgba(0,0,0,0.4)', fontVariantNumeric: 'tabular-nums',
+              marginLeft: 4, paddingLeft: 10, borderLeft: '1px solid rgba(0,0,0,0.08)',
+            }}>{i + 1} / {flow.length}</div>
+          </div>
+
+          {/* Phone */}
+          <div style={{ filter: 'drop-shadow(0 28px 60px rgba(0,0,0,0.18))' }}>
+            <IOSDevice keyboard={keyboardOn}>{screen}</IOSDevice>
+          </div>
+
+          {/* Controls */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <ProtoBtn onClick={prev} disabled={i === 0}>← Prev</ProtoBtn>
+            <ProtoBtn onClick={reset} kind="ghost">↺ Reset</ProtoBtn>
+            <ProtoBtn onClick={next} disabled={i === flow.length - 1} kind="primary">Next →</ProtoBtn>
+          </div>
+
+          {/* Hint */}
+          <div style={{
+            fontSize: 11, color: 'rgba(0,0,0,0.45)', maxWidth: 360, textAlign: 'center',
+            lineHeight: 1.45,
+          }}>
+            Tip · the on-screen buttons in the phone are wired too: tap{' '}
+            <strong style={{ color: '#0E0E0E' }}>Get started</strong>,{' '}
+            <strong style={{ color: '#0E0E0E' }}>Verify</strong>,{' '}
+            <strong style={{ color: '#0E0E0E' }}>Analyze with AI</strong>,{' '}
+            <strong style={{ color: '#0E0E0E' }}>Helpful</strong> to walk the flow.
+          </div>
+        </div>
+      );
+    }
+
+    function ProtoBtn({ children, onClick, disabled, kind = 'secondary' }) {
+      const styles = {
+        primary:   { background: '#0E0E0E', color: '#fff', boxShadow: 'none' },
+        secondary: { background: '#fff', color: '#0E0E0E', boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' },
+        ghost:     { background: 'transparent', color: 'rgba(0,0,0,0.6)', boxShadow: '0 0 0 1px rgba(0,0,0,0.08)' },
+      }[kind];
+      return (
+        <button onClick={disabled ? undefined : onClick} disabled={disabled} style={{
+          height: 40, padding: '0 16px', borderRadius: 10, border: 'none',
+          fontFamily: 'inherit', fontSize: 13, fontWeight: 600, letterSpacing: -0.1,
+          cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.35 : 1,
+          ...styles,
+        }}>{children}</button>
+      );
+    }
+
+    // ─── Section helper ────────────────────────────────────────────
+    // DCSection identifies children by element-type equality against
+    // DCArtboard — so this MUST return a real <DCArtboard>, not a
+    // wrapper component. Call it as a function inside the section.
+    function screenArtboard(id, screenId) {
+      const s = SCREENS[screenId];
+      return (
+        <DCArtboard key={id} id={id} label={s.label} width={420} height={920}>
+          <div style={{
+            width: '100%', height: '100%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: '#f7f6f1',
+          }}>
+            {s.render()}
+          </div>
+        </DCArtboard>
+      );
+    }
+
+    // ─── Root ──────────────────────────────────────────────────────
+    function App() {
+      return (
+        <DesignCanvas
+          title="FitBuddy · iOS Screens & Interactive Prototype"
+          subtitle="User Stories 1–3 (Must) · CAS ADAI 2026 · Modul 3"
+        >
+          <DCSection
+            id="us1"
+            title="US-1 · API-Key sicher speichern"
+            subtitle="Hevy-Key landet ausschliesslich im iOS Keychain. Validation, Error-Handling, Re-Auth-Loop."
+          >
+            {screenArtboard('us1-1', 'welcome')}
+            {screenArtboard('us1-2', 'keyEmpty')}
+            {screenArtboard('us1-3', 'keyTyped')}
+            {screenArtboard('us1-4', 'keyValidating')}
+            {screenArtboard('us1-5', 'keyInvalid')}
+          </DCSection>
+
+          <DCSection
+            id="us2"
+            title="US-2 · 90 Tage Trainingsdaten im Dashboard"
+            subtitle="Eine Übersicht: Volumen, Trainingstage, Muskelverteilung, Sessions. Plus Offline-Fallback und Empty State."
+          >
+            {screenArtboard('us2-1', 'dashData')}
+            {screenArtboard('us2-2', 'dashOffline')}
+            {screenArtboard('us2-3', 'dashEmpty')}
+          </DCSection>
+
+          <DCSection
+            id="us3"
+            title="US-3 · AI-Analyse auf Knopfdruck"
+            subtitle="Spinner sofort, Cancel nach 30 s, konkrete Empfehlung mit Werten, Recovery-Variante, Feedback + Cooldown."
+          >
+            {screenArtboard('us3-1', 'analyzePre')}
+            {screenArtboard('us3-2', 'analyzeLoading')}
+            {screenArtboard('us3-3', 'analyzeLong')}
+            {screenArtboard('us3-4', 'resultProg')}
+            {screenArtboard('us3-5', 'resultRec')}
+            {screenArtboard('us3-6', 'cooldown')}
+          </DCSection>
+
+          <DCSection
+            id="proto"
+            title="Interaktiver Prototyp"
+            subtitle="Klick dich durch den gesamten Flow. Buttons im Telefon sind wired — oder nutze Prev/Next."
+          >
+            <DCArtboard id="proto-main" label="Full flow walkthrough" width={520} height={1060}>
+              <div style={{
+                width: '100%', height: '100%', boxSizing: 'border-box',
+                padding: '24px 0', background: '#f7f6f1',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Prototype />
+              </div>
+            </DCArtboard>
+          </DCSection>
+        </DesignCanvas>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
