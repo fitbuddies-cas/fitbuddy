@@ -23,6 +23,11 @@
 │  └──────┬──────┘  └─────────────┘                  │
 │         │                                           │
 │  ┌──────▼──────────────────────────┐               │
+│  │   ExerciseTemplateCache (lokal) │               │
+│  │   primary_muscle_group etc.     │               │
+│  └──────┬──────────────────────────┘               │
+│         │                                           │
+│  ┌──────▼──────────────────────────┐               │
 │  │       Normalized Activity       │               │
 │  │       Data Model (lokal)        │               │
 │  └──────┬──────────────────────────┘               │
@@ -36,7 +41,9 @@
 │  │      iOS Keychain               │               │
 │  │  fitbuddy.hevy.apikey           │               │
 │  │  fitbuddy.claude.apikey         │               │
-│  │  fitbuddy.strava.token          │               │
+│  │  fitbuddy.strava.access_token   │               │
+│  │  fitbuddy.strava.refresh_token  │               │
+│  │  fitbuddy.strava.token_expiry   │               │
 │  └─────────────────────────────────┘               │
 └────────────────────────┬────────────────────────────┘
                          │ direkte API-Calls (kein Proxy)
@@ -58,6 +65,10 @@
 
 **Kein Backend / kein Server:** API-Keys bleiben lokal im iOS Keychain. Alle API-Calls (Hevy, Claude) laufen direkt vom Gerät. Kein serverseitiger Proxy im PoC.
 
+> **Hevy API-Key:** Nur für Hevy **Pro**-User verfügbar. Key wird unter `https://hevy.com/settings?developer` generiert und im Header `api-key: <uuid>` mitgesendet.
+>
+> **Strava OAuth:** Strava verwendet OAuth 2.0 (Authorization Code Flow). Access Tokens laufen ab und müssen via Refresh Token erneuert werden — daher drei getrennte Keychain-Einträge statt einem.
+
 > **Architekturentscheid:** Obwohl ein Backend-Proxy für AI-Calls grundsätzlich Best Practice wäre, wird im PoC der Claude API-Key direkt im Keychain gespeichert. Begründung: Zielgruppe sind technikaffine Hevy-Pro-User, die bereits gewohnt sind, API-Keys zu verwalten. Vereinfacht den PoC erheblich. Revisit vor v1.0-Launch.
 
 ## Connector-Interface
@@ -67,16 +78,25 @@ Alle Datenquellen implementieren dasselbe Interface. Hevy ist der erste Connecto
 ```swift
 protocol FitnessConnector {
     func connect(credentials: ConnectorCredentials) async throws
-    func validate() async throws -> Bool
+    func validate() async throws -> Bool            // Hevy: GET /v1/user/info
     func fetchActivities(since: Date) async throws -> [Activity]
     func disconnect()
+}
+
+/// Polymorphe Credentials — Hevy braucht einen API-Key,
+/// Strava braucht OAuth-Tokens mit Ablaufdatum.
+enum ConnectorCredentials {
+    case apiKey(String)
+    case oauthTokens(accessToken: String, refreshToken: String, expiresAt: Date)
 }
 ```
 
 **Keychain-Keys (je eigener Eintrag, nie gemischt):**
 - `fitbuddy.hevy.apikey`
 - `fitbuddy.claude.apikey`
-- `fitbuddy.strava.token`
+- `fitbuddy.strava.access_token`
+- `fitbuddy.strava.refresh_token`
+- `fitbuddy.strava.token_expiry`  ← ISO-8601-String
 
 ## Normalisiertes Datenmodell
 
@@ -95,13 +115,34 @@ struct Activity {
 
 struct Exercise {
     let name: String
-    let muscleGroup: String
+    let exerciseTemplateId: String  // Hevy-ID → Lookup im ExerciseTemplateCache
+    let primaryMuscleGroup: MuscleGroup
+    let secondaryMuscleGroups: [MuscleGroup]
     let sets: [ExerciseSet]
 }
 
 struct ExerciseSet {
-    let weightKg: Double
-    let reps: Int
+    let weightKg: Double?
+    let reps: Int?
+    let setType: SetType            // .warmup, .normal, .failure, .dropset
+    let rpe: Double?                // 6–10; wertvoll für AI-Analyse (US-3)
+    let distanceMeters: Double?     // für Cardio-Sets (Rudern etc.)
+    let durationSeconds: Int?
+}
+
+enum SetType { case warmup, normal, failure, dropset }
+```
+
+### ExerciseTemplateCache
+
+Muskelgruppen-Daten stehen in Hevy **nicht im Workout**, sondern im Exercise Template (`GET /v1/exercise_templates`). Der Cache ist Voraussetzung für das Muskelgruppen-Dashboard (US-2).
+
+```swift
+/// Wird beim ersten connect() befüllt (pageSize: 100, alle Seiten laden).
+/// Persistent in SwiftData/CoreData, kein erneuter Fetch bei jedem App-Start.
+class ExerciseTemplateCache {
+    func muscleGroup(for templateId: String) -> MuscleGroup?
+    func refresh() async throws   // manuell oder beim Onboarding
 }
 ```
 
@@ -119,7 +160,9 @@ struct ExerciseSet {
 
 ### Prompt-Engineering (US-3)
 
-**Eingabe an LLM:** Strukturierte Trainingsdaten der letzten 4 Wochen (Volumen, Frequenz, Übungshistorie).
+**Eingabe an LLM:** Strukturierte Trainingsdaten der letzten 4 Wochen (Volumen, Frequenz, Übungshistorie, Set-Typen, RPE-Werte).
+
+> **RPE-Kontextnutzung:** `ExerciseSet.rpe` (6–10) gibt Claude Aufschluss über subjektive Anstrengung — ermöglicht Empfehlungen wie "Your RPE has been consistently at 9+ for squats — consider a deload week."
 
 **System-Prompt definiert:**
 - Verbotene Termini (Fachjargon, der Nicht-Sportler verwirrt)
@@ -143,10 +186,15 @@ Sobald Strava eingebunden: Cross-Source-Analyse (Kraft + Ausdauer kombiniert). A
 
 | Szenario | Verhalten |
 |---|---|
-| API erreichbar | Frische Daten laden, Cache aktualisieren, Sync-Zeitstempel setzen |
+| Erster Start / connect() | Vollständiger Load via `GET /v1/workouts` (alle Seiten paginiert, max 10/Page) + Template-Cache befüllen |
+| Folge-Syncs | Delta-Sync via `GET /v1/workouts/events?since=<lastSyncTimestamp>` — liefert nur `"updated"` und `"deleted"` Events |
+| Event-Typ `"deleted"` | Workout lokal aus Cache entfernen |
 | API nicht erreichbar | Gecachte Daten anzeigen mit Hinweis auf letzten Sync (US-2 AC2) |
-| Pull-to-Refresh (US-10) | Neuer API-Call erzwingen, bei Fehler Cache behalten |
+| Pull-to-Refresh (US-10) | Delta-Sync erzwingen; bei Fehler Cache behalten |
 | HTTP 401 | Key aus Keychain löschen, Onboarding-Flow starten (US-1 AC3) |
+| Strava Token abgelaufen | Automatischer Token-Refresh vor API-Call (via `fitbuddy.strava.refresh_token`) |
+
+> **Pagination:** Hevy erlaubt max. 10 Workouts pro Page. Für 90 Tage (~65 Workouts bei 5×/Woche) sind ~7 API-Calls nötig. Der `HevyConnector` kapselt die Pagination-Loop intern — `fetchActivities(since:)` gibt immer eine vollständige Liste zurück.
 
 ## Architektur-Entscheide (ADRs)
 
@@ -165,6 +213,19 @@ Sobald Strava eingebunden: Cross-Source-Analyse (Kraft + Ausdauer kombiniert). A
 ### ADR-3: Connector-Interface von Beginn an
 - **Entscheidung:** Generisches `FitnessConnector`-Protocol vor erstem Hevy-Connector implementieren
 - **Begründung:** Strava als zweite Quelle ist strategische Absicherung (R1 in PROJECT.md). Später ohne Refactor einbindbar.
+- **Konkretisierung:** `ConnectorCredentials` ist ein Enum mit `.apiKey` (Hevy) und `.oauthTokens` (Strava) — damit bleibt das Interface stabil, obwohl die Auth-Mechanismen grundverschieden sind.
+
+### ADR-6: Delta-Sync via Hevy Workout Events
+- **Entscheidung:** Nach dem initialen vollständigen Load (`GET /v1/workouts`) werden Folge-Syncs ausschliesslich über `GET /v1/workouts/events?since=<timestamp>` durchgeführt.
+- **Begründung:** Hevy erlaubt max. 10 Workouts pro Page — ein vollständiger Reload wäre bei jedem App-Start kostspielig. Der Events-Endpoint liefert nur Änderungen (created/updated/deleted) seit dem letzten Sync.
+- **Letzter-Sync-Zeitstempel:** Wird lokal in `UserDefaults` (kein sensitiver Wert) gespeichert.
+- **Risiko:** Events-Endpoint ist als "early development" markiert — Breaking Changes möglich.
+
+### ADR-7: Strava Token Refresh im Connector kapseln
+- **Entscheidung:** Der `StravaConnector` prüft vor jedem API-Call ob `expiresAt < now + 60s` und führt bei Bedarf automatisch einen Token-Refresh durch (POST `https://www.strava.com/api/v3/oauth/token`).
+- **Begründung:** Strava Access Tokens laufen ab. Die iOS-App hat keinen Hintergrund-Service — der Refresh muss inline im Connector passieren, transparent für den Aufrufer.
+- **Keychain:** Drei getrennte Einträge (`access_token`, `refresh_token`, `token_expiry`) statt einem, damit der Refresh-Token nie unnötig gelesen wird.
+- **Scope:** Minimum-Scope `activity:read_all` für `fetchActivities(since:)`.
 
 ### ADR-4: English-only UI (Definition of Done)
 - **Entscheidung:** Alle UI-Strings, Fehlermeldungen und der System-Prompt sind auf Englisch
@@ -192,3 +253,6 @@ Sobald Strava eingebunden: Cross-Source-Analyse (Kraft + Ausdauer kombiniert). A
 | Apple Health: Schlaf, HRV, Ruheherzrate — IN oder OUT? Wenn IN: passiver HealthKit-Zugriff, kein Connector nötig | Hoch — vor Architektur-Story entscheiden |
 | Fehlerzustand 401: harter Logout vs. weicher Banner | Mittel — Empfehlung: harter Logout im PoC |
 | US-3 (AI-Analyse) Epic: in Child Stories aufteilen (Prompt-Design, UI, Error-Handling, Disclaimer) | Hoch — vor Sprint-Planung |
+| Body Measurements (`GET /v1/body_measurements`) als optionaler AI-Kontext für US-3? Liefert Gewicht, Körperfett, Umfänge — ermöglicht Kraft-zu-Gewicht-Verhältnis-Empfehlungen | Mittel |
+| `ExerciseTemplateCache`: SwiftData oder CoreData? Oder genügt ein In-Memory-Dictionary mit UserDefaults-Persistenz? | Mittel — vor US-2 entscheiden |
+| Hevy Events-Endpoint ist als "early development" markiert — Fallback-Strategie bei Breaking Change definieren | Niedrig — beobachten |
