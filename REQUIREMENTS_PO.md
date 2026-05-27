@@ -1,17 +1,16 @@
 # FitBuddy — Requirements Document
-
 *Strukturierte Zusammenfassung für CAS ADAI 2026, Modul 3.
 Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 
----
 
-## 1. Projektzusammenfassung
+
+# 1. Projektzusammenfassung
 
 FitBuddy ist eine native iOS-App, die Trainingsdaten aus Hevy (PoC) und perspektivisch Strava (v1.1) auf einem gemeinsamen Datenmodell normalisiert und in einem 90-Tage-Dashboard zusammenführt. Auf Knopfdruck generiert die Claude API daraus eine personalisierte Progressionsempfehlung mit konkreten Werten (z. B. Gewicht, Übung, Recovery-Hinweis). API-Keys verbleiben im iOS Keychain — die App hat kein Backend, alle API-Calls laufen direkt vom Gerät.
 
----
 
-## 2. Personas
+
+# 2. Personas
 
 ### Marcus Huber — Technikaffiner Power-User
 
@@ -31,13 +30,13 @@ FitBuddy ist eine native iOS-App, die Trainingsdaten aus Hevy (PoC) und perspekt
 | **Ziel** | Eine konkrete Handlungsempfehlung pro Trainingswoche ("Erhöhe Kniebeuge um 2.5 kg"), ohne Fachjargon. |
 | **Risiko-Trigger** | Bricht bei zu technischem Onboarding ab — API-Key-Setup ist hier echtes Produktrisiko (R4). |
 
----
 
-## 3. User Stories mit Acceptance Criteria
 
-### Must Have
+# 3. User Stories mit Acceptance Criteria
 
-#### US-1 · API-Key sicher speichern (Marcus)
+## 3.1 Must Have — Zwingend für MVP
+
+### 3.1.1 US-1 · API-Key sicher speichern 
 **Als** technikaffiner Multi-App-Nutzer **möchte ich** meinen Hevy API-Key lokal auf meinem iPhone speichern, **damit** meine Trainingsdaten nie einen fremden Server verlassen.
 
 | # | Given | When | Then |
@@ -47,7 +46,7 @@ FitBuddy ist eine native iOS-App, die Trainingsdaten aus Hevy (PoC) und perspekt
 | AC3 | Gespeicherter Key wurde in Hevy widerrufen | Ein API-Call gibt HTTP 401 zurück | Key wird aus Keychain gelöscht, User landet auf Onboarding mit Meldung «Dein API-Key ist ungültig. Bitte gib einen neuen Key ein.» |
 | AC4 | Gerät ist beim App-Start noch nicht entsperrt | App versucht, den Key zu lesen | Kein API-Call, kein Absturz — App wartet auf nächsten manuellen Start im entsperrten Zustand |
 
-#### US-2 · 90 Tage Trainingsdaten im Dashboard (Marcus)
+### 3.1.2 US-2 · 90 Tage Trainingsdaten im Dashboard
 **Als** Power-User mit Kraft- und Ausdauerdaten **möchte ich** meine letzten 90 Tage Hevy-Trainings in einem einzigen Dashboard sehen, **damit** ich meine Gesamtbelastung und Progression auf einen Blick beurteilen kann.
 
 | # | Given | When | Then |
@@ -56,7 +55,7 @@ FitBuddy ist eine native iOS-App, die Trainingsdaten aus Hevy (PoC) und perspekt
 | AC2 | Hevy API ist nicht erreichbar | Dashboard wird geladen | Gecachte Daten werden angezeigt mit sichtbarem Hinweis auf letzten Sync-Zeitstempel |
 | AC3 | User ist neu in Hevy oder hat >90 Tage nicht trainiert | User öffnet das Dashboard | Text: «No training data for the last 90 days» |
 
-#### US-3 · AI-Analyse auf Knopfdruck (Jana)
+### 3.1.3 US-3 · AI-Analyse auf Knopfdruck
 **Als** Krafttraining-Einsteigerin **möchte ich** auf Knopfdruck eine AI-Analyse meiner Trainingslast abrufen, **damit** ich ohne Selbstinterpretation weiss, ob ich diese Woche steigern kann.
 
 | # | Given | When | Then |
@@ -73,7 +72,7 @@ FitBuddy ist eine native iOS-App, die Trainingsdaten aus Hevy (PoC) und perspekt
 
 > **Hinweis:** US-3 ist als Epic geführt und vor Sprint-Planung in Child Stories aufzuteilen (Prompt-Design, UI, Error-Handling, Disclaimer).
 
-#### US-4 · Onboarding in 3 Schritten (Jana)
+### 3.1.4 US-4 · Onboarding in 3 Schritten
 **Als** Nutzerin ohne technischen Hintergrund **möchte ich** den Hevy und Claude API-Key in maximal 3 verständlichen Schritten einrichten, **damit** ich die App nutzen kann, ohne eine Dokumentation lesen zu müssen.
 
 | # | Given | When | Then |
@@ -86,9 +85,9 @@ FitBuddy ist eine native iOS-App, die Trainingsdaten aus Hevy (PoC) und perspekt
 
 ---
 
-### Should Have
+## 3.2 Should Have — Wichtig, MVP funktioniert auch ohne
 
-#### US-5 · Zweite Datenquelle verbinden (Marcus)
+### 3.2.1 US-5 · Zweite Datenquelle verbinden
 **Als** Nutzer **möchte ich** einen zweiten Trainings-Account verbinden (z. B. Strava), **damit** FitBuddy auch meine Ausdauerdaten abruft.
 
 | # | Given | When | Then |
@@ -98,7 +97,7 @@ FitBuddy ist eine native iOS-App, die Trainingsdaten aus Hevy (PoC) und perspekt
 
 > **Hinweis:** Im PoC wird nur das `FitnessConnector`-Interface verankert; der Strava-Connector selbst erst in v1.1.
 
-#### US-6 · Analyse-Kontext transparent machen (Marcus & Jana)
+### 3.2.2 US-6 · Analyse-Kontext transparent machen
 **Als** Nutzer **möchte ich** sehen, auf welcher Datenbasis die AI-Empfehlung generiert wurde, **damit** ich die Empfehlung einordnen und ihr vertrauen oder sie hinterfragen kann.
 
 | # | Given | When | Then |
@@ -106,7 +105,7 @@ FitBuddy ist eine native iOS-App, die Trainingsdaten aus Hevy (PoC) und perspekt
 | AC1 | AI-Analyse wurde abgeschlossen | Empfehlung wird angezeigt | Kompakte Zusammenfassung: welche Quellen einbezogen, welcher Zeitraum, wie viele Trainings («Basierend auf 12 Hevy-Trainings der letzten 30 Tage») |
 | AC2 | Weniger als 5 Trainings lagen im Analysezeitraum | Empfehlung wird angezeigt | Kontext-Hinweis enthält explizite Warnung, dass Datenbasis dünn ist |
 
-#### US-7 · Übungssuche & Filter (Marcus)
+### 3.2.3 US-7 · Übungssuche & Filter 
 **Als** datengetriebener Nutzer **möchte ich** Übungen in meiner Trainingshistorie suchen und nach Muskelgruppe filtern, **damit** ich bei 50+ Übungen schnell die richtige für die Progressionskurve finde.
 
 | # | Given | When | Then |
@@ -114,11 +113,11 @@ FitBuddy ist eine native iOS-App, die Trainingsdaten aus Hevy (PoC) und perspekt
 | AC1 | Marcus öffnet die Übungsübersicht mit ≥10 Einträgen | Er tippt in das Suchfeld | Liste filtert in Echtzeit (case-insensitive). Keine Ergebnisse → Hinweis «Keine Übungen gefunden». |
 | AC2 | Marcus öffnet den Muskelgruppen-Filter | Er wählt «Beine» | Nur Übungen, die Hevy der Kategorie Beine zuordnet, werden angezeigt. Mehrfachauswahl möglich. |
 
----
 
-### Could Have
 
-#### US-8 · Datenquelle-Status sichtbar (Marcus & Jana)
+## 3.3 Could Have — Nice-to-have, wenn Sprint Luft hat
+
+### 3.3.1 US-8 · Datenquelle-Status sichtbar
 **Als** Nutzer **möchte ich** auf einen Blick sehen, welche Datenquellen verbunden und aktuell sind, **damit** ich weiss, ob die AI-Analyse auf vollständigen oder veralteten Daten basiert.
 
 | # | Given | When | Then |
@@ -126,16 +125,16 @@ FitBuddy ist eine native iOS-App, die Trainingsdaten aus Hevy (PoC) und perspekt
 | AC1 | User öffnet das Dashboard | Eine Datenquelle wurde seit >24 h nicht synchronisiert | Sichtbarer Indikator mit Zeitstempel des letzten erfolgreichen Syncs und Retry-Button |
 | AC2 | Gespeicherter API-Key wurde in Quell-App widerrufen | FitBuddy macht Sync-Versuch | User wird aktiv benachrichtigt — kein stilles Weiterlaufen mit gecachten Daten |
 
-#### US-9 · Progressionskurven pro Übung (Marcus)
+### 3.3.2 US-9 · Progressionskurven pro Übung
 **Als** datengetriebener Nutzer **möchte ich** Progressionskurven pro Übung über Zeit sehen, **damit** ich Plateaus früh erkenne und meinen Plan gezielt anpassen kann.
 
 | # | Given | When | Then |
 |---|---|---|---|
-| AC1 | Übung hat ≥2 Sessions mit Gewicht+Reps in 12 Wochen | Marcus öffnet Detailansicht | Liniendiagramm mit 1RM-Schätzwert pro Session (Epley: `weight × (1 + reps/30)`), X=Datum, Y=kg |
+| AC1 | Übung hat ≥2 Sessions mit Gewicht+Reps in 12 Wochen | User öffnet Detailansicht | Liniendiagramm mit 1RM-Schätzwert pro Session (Epley: `weight × (1 + reps/30)`), X=Datum, Y=kg |
 | AC2 | Übung hat in 3 aufeinanderfolgenden Sessions keinen höheren 1RM erreicht | Dashboard oder Detailansicht lädt | Übung wird visuell als «Plateau» markiert (gelbes Label) |
 | AC3 | Übung hat <2 Sessions mit verwertbaren Daten in 12 Wochen | Detailansicht öffnet | Kein Diagramm — Hinweis: «Noch zu wenig Daten — mindestens 2 Sessions nötig» |
 
-#### US-10 · Daten manuell neu laden / Pull-to-Refresh (Marcus)
+### 3.3.3 US-10 · Daten manuell neu laden / Pull-to-Refresh
 **Als** Nutzer **möchte ich** die Trainingsdaten manuell neu laden können, **damit** ich nach einem kurzen API-Ausfall sofort aktuelle Daten sehe, ohne die App neu zu starten.
 
 | # | Given | When | Then |
@@ -143,17 +142,16 @@ FitBuddy ist eine native iOS-App, die Trainingsdaten aus Hevy (PoC) und perspekt
 | AC1 | Dashboard zeigt gecachte Daten (API war down) | User zieht Liste nach unten | Neuer API-Call zu `GET /workouts` wird ausgelöst. Bei Erfolg: Daten aktualisiert, Sync-Zeitstempel erneuert. |
 | AC2 | Pull-to-Refresh wurde ausgelöst | API gibt erneut einen Fehler zurück | Fehlermeldung erscheint, gecachte Daten bleiben sichtbar, Spinner verschwindet. |
 
----
 
-### Won't Have (für diesen PoC)
+## 3.4 Won't Have — Bewusst ausgeschlossen für diesen PoC
 
-#### US-11 · Wochenübersicht als Push-Notification (Jana)
-Out of Scope — siehe Abschnitt 6.
+### 3.4.1 US-11 · Wochenübersicht als Push-Notification 
+Out of Scope — siehe Abschnitt 7.
 
-#### US-12 · Trainingsvorschlag zurück in Hevy schreiben (Marcus)
-Out of Scope — siehe Abschnitt 6.
+### 3.4.2 US-12 · Trainingsvorschlag zurück in Hevy schreiben 
+Out of Scope — siehe Abschnitt 7.
 
----
+
 
 ## 4. MoSCoW-Priorisierung mit Begründungen
 
@@ -172,7 +170,7 @@ Out of Scope — siehe Abschnitt 6.
 | US-11 | Wochenübersicht als Push-Notification | Jana | **Won't** | iOS-Permission-Flow + Background-Scheduling + LLM-Call-Fallback ist eigenes Sub-System. Relevant ab v1.2. |
 | US-12 | Trainingsvorschlag zurück in Hevy schreiben | Marcus | **Won't** | Setzt Hevy PRO voraus, erfordert UX-Klärung (Write-Target, Undo). Risiko: Empfehlung falsch übernommen. Relevant ab v1.2. |
 
----
+
 
 ## 5. Offene Risiken — vor Sprint-Planung zu klären
 
@@ -202,9 +200,25 @@ Die vier in `PROJECT.md` dokumentierten Risiken (R1–R4) — alle relevant für
 - **Was noch offen ist:** «3 Schritte» ist nicht messbar. Es gibt keinen definierten Abbruchs-Schwellenwert und keinen UX-Test mit einer Jana-ähnlichen Testperson. Der Consent-Screen (US-4 AC4) ist juristisch notwendig, aber inhaltlich anspruchsvoll — eine Hürde, die in den 3 Schritten *zusätzlich* untergebracht werden muss.
 - **Klärungsbedarf:** Vor Sprint 4 (Onboarding-Polish): Usability-Test mit mind. einer nicht-technischen Testperson. Definition, was «Erfolg» beim Onboarding heisst (Completion-Rate als beobachtbare Metrik, auch im PoC).
 
----
+## 6. Nicht-funktionale Anforderungen
 
-## 6. Out of Scope
+| Bereich | Anforderung |
+|---|---|
+| Performance | Spinner erscheint sofort nach Tap auf «Analysieren»; Cancel-Button nach 30s ohne Antwort (US-3 AC1) |
+| Performance | Dashboard-Load innerhalb von 3 Sekunden nach Kaltstart (US-1 AC2) |
+| Sicherheit | API-Keys ausschliesslich im iOS Keychain (`kSecAttrAccessibleWhenUnlockedThisDeviceOnly`) |
+| Privacy | Keine User-Daten auf externen Servern (ausser direktem API-Call zu Hevy/Claude) |
+| Sprache | English-only (alle UI-Strings, Fehlermeldungen, System-Prompt) — kein i18n-Framework |
+| Datenschutz | Nur Daten des eingeloggten Users im LLM-Prompt (keine Benchmarks fremder Nutzer) |
+| Datenschutz | Consent (Datenübertragung an Anthropic + Eigenverantwortung) wird beim Onboarding eingeholt und lokal gespeichert (US-4 AC4/AC5) |
+| Datenschutz (nDSG) | Trainingsdaten sind Gesundheitsdaten nach Art. 5 lit. c nDSG — explizite Einwilligung ist Pflicht. Übertragung an Anthropic (USA) stützt sich auf AVV/DPA, den das FitBuddy-Team einmalig bei Anthropic abschliesst (nicht der Enduser). |
+| Datenschutz (nDSG) | Die App enthält einen statischen Datenschutzerklärung-Screen (erreichbar aus Onboarding + Einstellungen) mit: Verantwortlichem, bearbeiteten Daten, Zweck, Drittempfängern (Hevy/Anthropic), Drittland USA, Rechten der betroffenen Person (Auskunft, Löschung). |
+| Datenschutz (nDSG) | User kann jederzeit alle lokal gespeicherten Daten löschen (Keychain-Einträge + Cache) über «Daten löschen / Account zurücksetzen» in den Einstellungen — App kehrt in den Onboarding-Zustand zurück. |
+| LLM-Kosten | Max. 1 AI-Analyse pro User alle 6 Stunden — Cooldown mit sichtbarem Timer («Next analysis available in Xh Ym») |
+| LLM-Kosten | Analyse-Button disabled während laufendem Call — kein Doppel-Submit möglich |
+
+
+## 7. Out of Scope
 
 Bewusst ausgeschlossen für den PoC. Dokumentiert, damit später kein Scope-Creep entsteht.
 
@@ -221,6 +235,5 @@ Bewusst ausgeschlossen für den PoC. Dokumentiert, damit später kein Scope-Cree
 | **Eigenes Tracking / Analytics** | Kein Mixpanel, kein Amplitude, kein Crashlytics im PoC. Würde Datenschutz-Erklärung verkomplizieren und Consent verändern. |
 | **Plateau-Detection als eigenständiges Feature** | Teil von US-9 (Could), kein eigenes Item. Wenn US-9 nicht in den Sprint passt, fällt es ersatzlos weg. |
 
----
 
 *Stand: 27.05.2026 · Quellen: `PROJECT.md`, `REQUIREMENTS.md` v5, `ARCHITECTURE.md`*
