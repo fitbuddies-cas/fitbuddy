@@ -86,10 +86,3 @@ Native iOS-App, die:
 | 3 | AI-Analyse-Button, Prompt-Entwicklung mit echten Testdaten, Disclaimer | US-3 |
 | 4 | End-to-End-Test, Onboarding polieren, Präsentation vorbereiten | US-1–4 |
 
-## Präsentation (Modul 3)
-
-1. Projektname & Idee in einem Satz
-2. Die 3 Must-have User Stories — warum genau diese?
-3. Was hat AI gefunden, das wir vergessen hatten?
-4. Grösstes Risiko und Plan B
-5. Was bleibt noch offen — was klären wir bis Modul 3?
