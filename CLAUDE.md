@@ -15,17 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `REQUIREMENTS.md` | 12 user stories with acceptance criteria (MoSCoW v5) |
 | `ARCHITECTURE.md` | System design, Swift data model, Connector interface, ADRs |
 | `presentation.html` | HTML slide deck (keyboard-navigable, open in browser) |
-| `gen_docx.py` | Generates `FitBuddy_Requirements.docx` — no external dependencies |
-
 `Kursdokumente/` is git-ignored (course materials).
-
-## Generating the Requirements Document
-
-```bash
-python3 gen_docx.py
-```
-
-Outputs `FitBuddy_Requirements.docx` directly (no pip installs needed — uses only stdlib `zipfile` and `xml`).
 
 ## Key Architecture Decisions (from ARCHITECTURE.md)
 
