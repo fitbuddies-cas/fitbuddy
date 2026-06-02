@@ -300,32 +300,19 @@ Das gewählte Architektur-Pattern ist ein **On-Device Layered Monolith** mit vie
 
 ---
 
-### ADR-Überblick (alle bestätigten Entscheide)
-
-| ADR | Entscheid | Status | Grösstes Risiko |
-|---|---|---|---|
-| ADR-001 | SwiftData als lokale Persistenz, iOS 17+, `NSFileProtectionComplete` | Proposed | Migration löscht Store still bei fehlendem `VersionedSchema` |
-| ADR-002 | Native iOS / SwiftUI — Vorbehalt: Skill-Audit Sprint 1 | Proposed | Team-Skill ungeklärt; UIKit als Fallback wenn Audit negativ |
-| ADR-003 | `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` für alle Keys | Proposed | Silent Downgrade durch Debug-Attribut-Änderung |
-| ADR-004 | Kein Backend-Proxy im PoC — AUP-Gate vor Sprint 3 | Proposed | **AUP-Verstos kann Account-Sperrung auslösen, unabhängig vom DPA** |
-| ADR-005 | Claude API USA im PoC; Bedrock EU vor v1.0; DSFA vor TestFlight | Proposed | Controller-Pflichten liegen vollständig bei FitBuddy ab erster Nutzerdaten-Verarbeitung |
-| ADR-006 | `FitnessConnector`-Protocol vor erstem `HevyConnector` | Proposed | HealthKit passt nicht ins Protocol — Entscheid ausstehend |
-
----
-
 ## Widersprüche & Unklarheiten
 
 *Spannungen, die beim Abgleich der Dokumente sichtbar wurden. Vor Sprint 1 auflösen.*
 
 | # | Widerspruch / Unklarheit | Betroffene Dokumente | Handlungsbedarf |
 |---|---|---|---|
-| W-1 | **30 Tage vs. 90 Tage Cache.** README.md schreibt «30-day training dashboard». ADR-001, C2-Container und AI-Integration-Abschnitt sagen durchgängig «90 Tage». | `README.md`, `ADR-001`, `C2-Container.md`, `ARCHITECTURE.md` | Definition of Done klären und in beiden Dokumenten angleichen — vor Sprint 2. |
-| W-2 | **ADR-Nummerierung inkonsistent.** Die ARCHITECTURE.md-internen ADR-1 bis ADR-7 stimmen nicht mit den Dateinamen ADR-001 bis ADR-006 überein. ADR-6 (Delta-Sync) und ADR-7 (Strava Token Refresh) existieren nur in ARCHITECTURE.md, nicht als eigene Dateien. | `ARCHITECTURE.md`, `ADRs/` | ADR-Nummerierung in ARCHITECTURE.md auf Dateinamen angleichen; Delta-Sync und Strava-Refresh als ADR-007 und ADR-008 auslagern. |
-| W-3 | **Controller-Konflikt BYO-Claude-Key.** ADR-005 sagt: DPA deckt die Drittland-Übermittlung ab. C1-System-Context stellt fest: Der User nutzt seinen eigenen Anthropic-Account mit eigener Kreditkarte — die Calls laufen unter *seinem* Vertrag. Wer ist Controller? Das FitBuddy-Team-DPA greift möglicherweise gar nicht. | `ADR-005`, `C1-System-Context.md` | Rechtliche Klärung vor TestFlight-Beta: Team-Account oder BYO-Modell? Consent-Text (US-4 AC4) und DSFA hängen von dieser Antwort ab. |
-| W-4 | **Certificate Pinning: dokumentiert als vorhanden, aber nicht implementiert.** C2-Container.md schreibt «Alle externen Verbindungen über TLS, mit Certificate Pinning (QA-1)». ADR-004 markiert es als «Pflicht in Sprint 2» — also noch nicht umgesetzt. | `C2-Container.md`, `ADR-004` | Formulierung in C2-Container auf «geplant, Sprint 2» korrigieren. |
-| W-5 | **6h-Cooldown-Speicherort undefiniert.** ADR-004 nennt «6h via UserDefaults». ADR-001 reserviert UserDefaults nur für den Sync-Zeitstempel. Kein Dokument definiert den UserDefaults-Key oder schützt vor Kollision. | `ADR-004`, `ADR-001` | UserDefaults-Key-Konvention (`fitbuddy.analysis.lastCooldownTimestamp`) in ADR-001 oder ADR-004 dokumentieren. |
-| W-6 | **HealthKit: Entscheid «vor Sprint 1» gefordert, aber nirgends getroffen.** ADR-006 markiert den HealthKit-Entscheid als «Kritisch, vor Sprint 1». C1-System-Context zeigt ihn als «(?) offene Entscheidung». Kein ADR hat entschieden. | `ADR-006`, `C1-System-Context.md` | **Muss auf Tag 2 entschieden werden** — blockiert Protocol-Design und Activity-Modell. |
-| W-7 | **Strava OAuth-Secret ohne Backend unlösbar, aber Architektur sagt «kein Backend».** C1-System-Context benennt das Problem explizit. ADR-004 nennt als Plan-B Cloudflare AI Gateway (für AI), aber keinen Plan für OAuth-Secret-Handling. ADR-006 stubbt Strava einfach aus. | `C1-System-Context.md`, `ADR-004`, `ADR-006` | Für v1.1 muss vor der Strava-Implementierung ein Entscheid stehen: Secret in App einbetten (exponiert) oder Backend-Proxy akzeptieren. Jetzt als Risiko in ADR-004 ergänzen. |
+| W-1 | **30 Tage vs. 90 Tage Cache.** `README.md` schreibt «30-day training dashboard». `ADR-001`, `C2-Container.md` und dieser Abschnitt sagen durchgängig «90 Tage». | `README.md`, `ADR-001`, `C2-Container.md` | Cache-Horizont als verbindliche Grösse festlegen und überall angleichen — vor Sprint 2. |
+| W-2 | **«4 Wochen» im Prompt vs. «90 Tage» im Cache.** Der Prompt-Engineering-Abschnitt definiert die LLM-Eingabe als «letzten 4 Wochen», während der SwiftData-Store 90 Tage hält. Was erhält Claude tatsächlich — 28 Tage, 30 Tage oder 90 Tage? | `ARCHITECTURE.md` (Prompt-Abschnitt), `ADR-001`, `C2-Container.md` | Prompt-Fenster explizit definieren und vom Cache-Horizont trennen. Beide Werte im Prompt-Builder-Code als Konstanten führen. |
+| W-3 | **Certificate Pinning: im Diagramm als aktiv dargestellt, laut ADR aber noch nicht implementiert.** `C2-Container.md` schreibt «Alle externen Verbindungen über TLS, mit Certificate Pinning (QA-1)» als Gegenwart. `ADR-004` markiert es als «Pflicht in Sprint 2». | `C2-Container.md`, `ADR-004` | Formulierung in `C2-Container.md` auf «geplant, Sprint 2» korrigieren, damit die Sicherheitsaussage nicht irreführend ist. |
+| W-4 | **6h-Cooldown-Speicherort undefiniert.** `ADR-004` nennt «6h via UserDefaults». `ADR-001` reserviert UserDefaults nur für den Sync-Zeitstempel. Kein Dokument definiert den konkreten Key oder schützt vor Kollision zwischen beiden Werten. | `ADR-004`, `ADR-001` | UserDefaults-Key-Konvention (`fitbuddy.analysis.lastCooldownTimestamp`) in `ADR-001` oder `ADR-004` ergänzen. |
+| W-5 | **HealthKit: Entscheid «vor Sprint 1» gefordert, aber nirgends getroffen.** `ADR-006` markiert den HealthKit-Scope als «Kritisch, vor Sprint 1». `C1-System-Context.md` zeigt ihn als «(?) offene Entscheidung». Kein ADR hat entschieden — das `Activity`-Modell ist deshalb noch nicht finalisierbar. | `ADR-006`, `C1-System-Context.md` | Muss auf Tag 2 entschieden werden — blockiert Protocol-Design und Datenmodell (→ Frage 1). |
+| W-6 | **Strava OAuth-Secret ohne Backend strukturell unlösbar.** `C1-System-Context.md` benennt das Problem explizit. `ADR-004` plant als Plan-B Cloudflare AI Gateway (für AI-Calls), aber benennt keinen Plan für das OAuth-Secret. `ADR-006` stubbt Strava aus ohne diesen Konflikt zu lösen. | `C1-System-Context.md`, `ADR-004`, `ADR-006` | Vor der Strava-Implementierung (v1.1) muss ein Entscheid stehen: Secret in App einbetten (exponiert, nicht akzeptabel) oder Backend-Proxy akzeptieren — damit fällt das «kein Backend»-Versprechen für v1.1. |
+| W-7 | **ADR-Querverweise im Caching-Abschnitt referenzieren nicht-existierende Nummern.** Der Caching-Abschnitt nennt «ADR-6: Delta-Sync» und «ADR-7: Strava Token Refresh» — diese Nummern existieren als Dateien nicht. Die korrekten Dateien sind `ADR-001` bis `ADR-006`. | `ARCHITECTURE.md` (Caching-Abschnitt), `ADRs/` | Querverweise auf `ADR-001` bis `ADR-006` korrigieren; Delta-Sync und Strava-Refresh als `ADR-007` und `ADR-008` auslagern. |
 
 ---
 
@@ -358,6 +345,19 @@ Das gewählte Architektur-Pattern ist ein **On-Device Layered Monolith** mit vie
 - Ob der Consent-Text (US-4 AC4) Cloudflare als Empfänger nennen muss
 
 **Entscheidungsgrundlage:** Support-Anfrage an Anthropic mit Beschreibung des PoC-Szenarios (TestFlight, akademisch, keine öffentliche Distribution). Bei Ablehnung: Cloudflare AI Gateway sofort als Plan-B konfigurieren.
+
+---
+
+### Frage 3 — Skill-Audit: Kann das Team produktiv in SwiftUI + Swift Concurrency entwickeln?
+
+**Warum jetzt?** ADR-002 nennt dies explizit als «Kritisch, Sprint 1, Woche 1» mit einem Go/No-Go-Entscheid und UIKit als Fallback. Die gesamte Technologiewahl (SwiftUI, SwiftData, `ModelActor`, async/await) steht unter diesem Vorbehalt. Ohne Audit wird in Sprint 2 realisiert, dass ein Umbau nötig ist — dann ist die Hälfte des PoC-Fensters verbraucht.
+
+**Was hängt daran:**
+- ADR-002 bleibt in Status «Proposed» bis der Audit abgeschlossen ist — alle nachgelagerten Architekturentscheide (SwiftData-Integration, `@Query`, `ModelActor`) erben diesen Vorbehalt
+- Swift Concurrency (`async/await`, `@MainActor`, `ModelActor`) ist die grösste Lernkurve; ohne Erfahrung damit entstehen Actor-Isolation-Bugs, die erst zur Laufzeit sichtbar werden
+- Privacy Manifest (`PrivacyInfo.xcprivacy`) und Xcode-Projekt-Setup erfordern macOS 14 Sonoma + Xcode 15 auf allen Dev-Maschinen — Hardware-Voraussetzung, die vor Sprint 1 geklärt sein muss
+
+**Entscheidungsgrundlage:** Audit-Fragen: Wer hat bereits eine App mit SwiftUI + async/await gebaut? Kann jemand `ModelActor` erklären? Gibt es macOS 14 auf allen Geräten? Bei negativem Ergebnis: UIKit als Basis mit SwiftUI nur für einfache Views (Hybrid-Ansatz gemäss ADR-002). Empfehlung: **Scaffold-Workshop in Woche 1**, bevor der erste Feature-Branch geöffnet wird.
 
 ---
 
