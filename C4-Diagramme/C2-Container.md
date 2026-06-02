@@ -182,3 +182,95 @@ Schwächste Stelle: Schritt 4 → 6 (externer Call + Write nicht atomar)
 | Kein App-Backgrounding-Handling (Schritt 4) | iOS beendet URLSession-Task nach ~30s im Background — Analyse verloren, kein User-Feedback |
 
 *Stand: 2026-06-02*
+
+---
+
+## Architektur-Pattern-Wahl — 4 Fragen für FitBuddy
+
+*Kontext: 2–3 Devs, gemischter Background, 3 Monate, iOS-only PoC, QA-1 Security/Privacy · QA-2 Reliability · QA-3 Maintainability.*
+
+---
+
+### Frage 1 — Welches Pattern empfehlen wir — und warum?
+
+**Empfehlung: On-Device Layered Monolith mit MVVM**
+
+Das ist kein Kompromiss — es ist die einzig vertretbare Wahl für diesen Kontext. FitBuddy hat eine einzige Deployment-Einheit (die iOS-App) und keinen Server-Tier im PoC. Die relevante Pattern-Entscheidung ist deshalb nicht Monolith vs. Microservices, sondern wie die Schichten *innerhalb* der App strukturiert sind.
+
+```
+┌─────────────────────────────────┐
+│  Presentation Layer             │  SwiftUI Views, @State, @Binding
+│  (was der User sieht)           │
+├─────────────────────────────────┤
+│  ViewModel Layer                │  @Observable ViewModels, @MainActor
+│  (Zustand + Logik)              │  Business-Rules, UI-State-Mapping
+├─────────────────────────────────┤
+│  Service / Domain Layer         │  InferenceService, ConnectorLayer
+│  (Use Cases)                    │  Prompt-Build, Cooldown-Logik
+├─────────────────────────────────┤
+│  Data Layer                     │  SwiftData (ModelActor), Keychain
+│  (Persistenz + externe APIs)    │  HevyConnector, ClaudeConnector
+└─────────────────────────────────┘
+```
+
+**Warum dieses Pattern für unsere QAs:**
+
+| QA | Fit | Begründung |
+|---|---|---|
+| QA-1 Security/Privacy | ✓ | Klare Layer-Grenze: API-Keys berühren nur den Data Layer. Kein Key-Material wandert in den ViewModel- oder View-Layer. |
+| QA-2 Reliability | ✓ | Jede Schicht ist isoliert testbar. SwiftData-Fehler bleiben im Data Layer — sie propagieren als `Result`/Error nach oben, crashen nicht die UI. |
+| QA-3 Maintainability | ✓ | Neuer Connector (Strava, v1.1) = neues Objekt im Data Layer, kein Umbau der ViewModel- oder View-Schicht. |
+
+---
+
+### Frage 2 — Was würde für Microservices in UNSEREM Fall sprechen?
+
+**Direkte Antwort: Nichts, das jetzt zutrifft.**
+
+Microservices lösen genau die Probleme, die FitBuddy im PoC nicht hat:
+
+| Microservice-Argument | Realität bei FitBuddy |
+|---|---|
+| Unabhängige Skalierung einzelner Dienste | Single-Device-App, kein Server-Traffic |
+| Mehrere Teams arbeiten an unterschiedlichen Services | 2–3 Devs, ein Codebase |
+| Polyglot Persistence (jeder Service eigene DB) | Eine SQLite-Datei, on-device |
+| Unabhängige Deployments pro Service | Eine App, ein TestFlight-Build |
+| Technologie-Heterogenität | Apple-Stack durchgängig |
+
+**Das einzige Microservice-ähnliche Element** ist der geplante Backend/Proxy (v1.0/v1.1) als Lambda-Funktion — eine Single-Responsibility-Serverless-Funktion. Das ist aber kein Microservice-System, sondern ein Adapter. Microservices würden bedeuten: separater Auth-Service, separater AI-Service, separater Sync-Service — je mit eigener DB, Netzwerk, Monitoring. Das würde das Team in 3 Monaten zuverlässig blockieren.
+
+---
+
+### Frage 3 — Was wäre der grösste Fehler?
+
+**Es gibt zwei gleichwertige Fehler in entgegengesetzte Richtungen:**
+
+**Fehler A — Zu wenig Struktur (alles in Views)**
+SwiftUI macht es einfach, `@State`, Netzwerk-Calls und Persistenz-Logik direkt in `View`-Structs zu schreiben. Das funktioniert für Tutorials. Für FitBuddy bedeutet es:
+- Business-Logik (Cooldown, Prompt-Build, Consent-Check) ist nicht testbar
+- Jede Änderung am Claude-Prompt erfordert View-Code zu öffnen
+- QA-3 (Maintainability) kollabiert nach Woche 4
+
+**Fehler B — Zu viel Struktur (Clean Architecture à la Uncle Bob)**
+Repository-Pattern, Use-Case-Klassen, DTOs, Mapper, Abstrakte Interfaces für jede Dependency — das ist korrekt für eine Enterprise-App mit 10+ Devs und 2-Jahres-Horizon. Für FitBuddy bedeutet es:
+- Woche 1–2 werden mit Boilerplate verbracht
+- Jede Feature-Änderung erfordert Anpassungen in 5 Schichten
+- Das Team verliert das PoC-Zeitfenster
+
+**Der goldene Mittelweg:** 4 Schichten (oben), kein Interface für jede Klasse, kein Repository-Pattern, kein DTO-Mapping — solange es nur eine Datenquelle gibt.
+
+---
+
+### Frage 4 — Wie verändert sich die C2-Struktur mit jedem Pattern?
+
+| Pattern | Neue Container? | C2-Auswirkung | Realistisch für unser Team? |
+|---|---|---|---|
+| **Layered Monolith + MVVM** *(Empfehlung)* | Keine. Schichten sind intern im iOS-App-Container. | C2 bleibt unverändert: iOS App + SwiftData + Keychain. Schichten werden erst in C3 sichtbar. | Ja — das ist der aktuelle Stand. |
+| **Clean Architecture** (Repository, UseCase, Entity) | Keine neuen Container, aber der iOS-App-Container splittert intern in 5+ Schichten. | C2 unverändert, C3 wird deutlich komplexer. Mehr Klassen, mehr Interfaces, mehr Boilerplate. | Bedingt — nur wenn ein Teammitglied Clean Architecture kennt. Sonst: Overhead ohne Nutzen. |
+| **The Composable Architecture (TCA)** | Keine. TCA ist ein in-process State-Machine-Framework. | C2 unverändert. Intern: ein globaler Store, Effects, Reducers. | Nein. TCA hat eine steile Lernkurve, viel Boilerplate, und ist mit SwiftData in frühen Versionen problematisch. Falsche Wahl für 3 Monate. |
+| **Microservices** | Ja — massiv. Auth-Service, AI-Service, Sync-Service, API-Gateway, Service-Mesh, je eigene Datenbank. | C2 würde 6–8 neue Server-Container bekommen. Kein on-device Privacy-Versprechen mehr haltbar (QA-1). | Nein. Würde das PoC-Fenster sprengen und QA-1 zerstören. |
+| **Event-Driven** (Combine / async Streams) | Keine neuen Container. Kommunikation zwischen Layern über Publishers statt direkter Aufrufe. | C2 unverändert. Intern: reaktive Chains statt imperativer Calls. | Bedingt — Combine ist bereits in SwiftUI/SwiftData integriert. Sinnvoll für die Hevy-Sync-Logik, aber nicht als Gesamt-Pattern. |
+
+**Fazit:** Kein Pattern verändert unsere C2-Container — weil FitBuddy bewusst single-tier ist. Die Pattern-Entscheidung betrifft ausschliesslich die C3-Ebene (Komponenten innerhalb der iOS App). Wer C2 verändern will, muss zuerst ADR-004 (kein Backend im PoC) revidieren.
+
+*Stand: 2026-06-02*
