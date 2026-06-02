@@ -114,4 +114,71 @@ Die Auswahl ist bewusst **Apple-nativ und mainstream**, mit **null Drittanbieter
 | **iOS Keychain** (Keychain Services, `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`) | "Null Drittanbieter-Abhängigkeiten" zwingt zur rohen C-API (`SecItemAdd`, `SecItemCopyMatching`, `CFTypeRef`, `OSStatus`). Das ist die richtige Wahl für was, aber eine vermeidbare Schwierigkeit im wie — ein Swift-Wrapper wäre ~200 Zeilen, kein Framework-Risiko. | QA-1 ✓ (Secure Enclave-backed, richtiges Accessibility-Level). QA-2 **Risiko**: nach Deinstallation + Neuinstallation bleibt der Entry erhalten — aber nur wenn `kSecAttrService` und `kSecAttrAccount` identisch sind. Tippfehler = stiller zweiter Entry, alter Key "verloren". QA-3 ✗ (rohe API erschwert Lesbarkeit). | Einfaches Read/Write ja. `errSecDuplicateItem`-Handling (Update-statt-Add-Logik), Verhalten bei gesperrtem Gerät und Testing (Simulator ≠ Gerät) kosten unerwartet Zeit. | Kein Recovery-Pfad bei verlorenem oder korrumpiertem Key. Wenn die App den Claude-API-Key nicht mehr liest, ist der User blockiert — ohne erklärende Fehlermeldung. `REQUIREMENTS.md` erwähnt "Daten löschen", aber kein gezieltes Key-Recovery. |
 | **Backend/Proxy** *(v1.0/v1.1)* (AWS Lambda + API Gateway · eu-central-1) | Nicht begründet. Für einen OAuth-Token-Exchange-Proxy wäre ein Cloudflare Worker billiger (kein Cold Start, $0 bis ~10K Requests/Tag, kein IAM-Wissen). Lambda + API Gateway ist die komplexeste Option für diesen Use Case. Warum eu-central-1 für einen Proxy der US-seitige Anthropic-API aufruft, steht nirgends. | QA-1 **Neuer Attack Vector**: der Endpoint muss selbst authentifiziert sein — sonst kann jeder den Proxy nutzen. API Gateway + Lambda Auth ist nicht trivial. QA-2 **Cold Starts** (500ms–2s) stehen im Widerspruch zu "Spinner sofort nach Tap". QA-3 ✗: AWS-Know-how (IAM, CDK/SAM, CloudWatch) — wer im Team hat das? | Wahrscheinlich nicht im 3-Monats-Fenster zusätzlich zum iOS-Projekt. IAM-Rollen, API-Gateway-Routes, Deployment-Pipeline, Monitoring — das ist ein eigenes Teilprojekt, kein Add-on. | Der Übergang PoC → v1.0 ist ein Umbau, kein Plugin. Auth-Flow, URL-Konfiguration und Error-Handling der iOS-App müssen angepasst werden. Dieser Gap ist aktuell als Fussnote behandelt, nicht als Risiko. |
 
+
+---
+
+## Kommunikationsanalyse — 3 Fragen pro Verbindung
+
+| Verbindung | 1. Synchron oder Asynchron? | 2. Was passiert bei Ausfall? | 3. Bottleneck bei Last? |
+|---|---|---|---|
+| **User → iOS App** (Touch / SwiftUI) | Synchron auf dem Main Thread. SwiftUI-State-Change triggert Re-render. | App-Crash = User weg. Kein Fallback. | Kein Bottleneck — Single User, Single Device. |
+| **iOS App → SwiftData Store** (ModelContext in-process) | Gemischt. Lesen: synchron auf `@MainActor`. Schreiben: sollte async via `ModelActor` laufen — in PoC-Code landet aber oft alles auf dem Main Thread. | Store-Korruption oder fehlgeschlagene Migration: App startet ohne Daten oder crasht. Kein Recovery dokumentiert. | `#Predicate`-Queries auf dem Main Thread blockieren den UI-Thread bei 90 Tagen × mehreren Workouts/Woche. Kein Pagination-Mechanismus vorgesehen. |
+| **iOS App → iOS Keychain** (Security API in-process) | Synchron und blockierend — `SecItemCopyMatching` wartet auf den Keychain-Daemon. | Gerät gesperrt oder Keychain-Daemon-Fehler: API-Key nicht lesbar. Kein Graceful Fallback dokumentiert — App würde mit leerem Key einen 401 produzieren. | Kein Bottleneck. Keychain-Reads dauern <1ms. |
+| **iOS App → Hevy API** (HTTPS/JSON REST) | Synchron im Request-Response-Sinne, ausgeführt auf einem async Task (blockiert nicht den Main Thread). | API down: kein frisches Daten-Refresh. Mit gefülltem SwiftData-Cache funktioniert die App im Offline-Modus. Bei leerem Cache (Erststart) sieht der User keine Daten — kein Empty-State dokumentiert. | Hevy gibt keine öffentlichen Rate-Limits an. Ein vollständiger 90-Tage-Sync über `GET /workouts` kann viele paginierte Requests erfordern — sequenziell und langsam. Kein paralleles Fetching dokumentiert. |
+| **iOS App → Claude API** (HTTPS/JSON Messages API) | Synchron (Request-Response, 5–30s Wartezeit). Streaming (SSE) wäre möglich und würde erste Tokens nach ~1–2s liefern — ist aber nicht dokumentiert. | API down oder Rate Limit: Analyse scheitert, kein Fallback (kein lokales LLM). Unklar: läuft der 6h-Cooldown-Timer bei einem gescheiterten Call trotzdem? | **Grösster Bottleneck im System.** Latenz 5–30s. Prompt-Grösse nicht begrenzt: 90 Tage Trainingsdaten können das Token-Limit sprengen. Kein Truncation- oder Summarization-Mechanismus dokumentiert. |
+| **iOS App ⇢ Strava API** (OAuth 2.0, v1.1) | Synchron (REST). OAuth-Token-Refresh ist ein zusätzlicher synchroner Schritt vor jedem Call. | Token abgelaufen und Refresh scheitert: User muss sich neu authorisieren. Ohne Backend-Proxy (ADR-004) muss das Client Secret im App-Bundle liegen — sicherheitskritisch. | Nicht im PoC. Kein Impact jetzt. |
+
+---
+
+## Kritischer Datenfluss — Nutzer tippt auf «Analysieren» (US-3)
+
+```
+User
+ │  tippt «Analysieren»
+ ▼
+iOS App — ViewModel.requestAnalysis() [@MainActor]
+ │
+ ├─[1] Keychain Read ──────────────────────────────────── synchron, <1ms
+ │      SecItemCopyMatching → Claude API-Key
+ │      ⚠ Fehler hier: 401 bei leerem Key, keine erklärende UI
+ │
+ ├─[2] SwiftData Query ────────────────────────────────── sollte async sein
+ │      Lade Workouts der letzten 90 Tage
+ │      ⚠ Auf @MainActor = UI-Freeze bei grossen Datensätzen
+ │
+ ├─[3] Prompt-Build ───────────────────────────────────── in-process, CPU
+ │      Serialisiere Workout-Daten → Text/JSON für Claude
+ │      ⚠ Keine Token-Begrenzung: 90 Tage × 5 Sets × 3 Felder = potenziell
+ │        >100k Tokens → API-Fehler oder hohe Kosten
+ │
+ ├─[4] HTTPS POST → Claude API ───────────────────────── 5–30s, externes Netz
+ │      api.anthropic.com/v1/messages
+ │      ⚠ Kein Streaming dokumentiert → UI zeigt Spinner bis Antwort komplett
+ │      ⚠ Kein Retry bei Timeout; kein Handling bei Netzwechsel WiFi → LTE
+ │      ⚠ App geht in Background während Call → Task wird gecancelt? Unklar
+ │
+ ├─[5] Response parsen ────────────────────────────────── in-process
+ │      Extrahiere AI-Empfehlung aus JSON
+ │
+ ├─[6] SwiftData Write ────────────────────────────────── sollte async sein
+ │      Speichere Empfehlung + Timestamp (für 6h-Cooldown)
+ │      ⚠ Race Condition: App-Crash zwischen Schritt 4 und 6 →
+ │        Cooldown-State verloren → User kann sofort neu analysieren →
+ │        doppelte API-Kosten
+ │
+ └─[7] @MainActor State-Update ───────────────────────── synchron
+        SwiftUI re-rendert Empfehlungs-View
+
+Gesamtlatenz: 5–30s (dominiert durch Schritt 4)
+Schwächste Stelle: Schritt 4 → 6 (externer Call + Write nicht atomar)
+```
+
+**Die drei undokumentierten Lücken im kritischen Pfad:**
+
+| Lücke | Konsequenz |
+|---|---|
+| Kein Token-Limit für den Prompt (Schritt 3) | Claude-API gibt `400 context_length_exceeded` zurück — App zeigt generischen Fehler |
+| Kein Cooldown-Write vor dem API-Call (Schritt 6 kommt nach Schritt 4) | Crash-Window ermöglicht doppelte Analyse-Kosten |
+| Kein App-Backgrounding-Handling (Schritt 4) | iOS beendet URLSession-Task nach ~30s im Background — Analyse verloren, kein User-Feedback |
+
 *Stand: 2026-06-02*
