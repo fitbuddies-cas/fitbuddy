@@ -6,6 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 * Be brief, concise, and specific.
 * Do not mention personas in any other Document else than README.md
 * Always use the term "PoC" (Proof of Concept) — never "MVP" — when referring to the project scope.
+* If you want to mention a Version (e.g. v1 or v0) - always use v0 for our PoC. Anything beyond our PoC is v1. Do not use v1.1!
 
 ## Project
 **FitBuddy** is a CAS (ADAI 2026, BFH Biel) Proof of Concept Project. The app to be built is a native iOS (SwiftUI) training assistant aggregating Hevy API data and delivering on-demand AI recommendations via Claude API.
