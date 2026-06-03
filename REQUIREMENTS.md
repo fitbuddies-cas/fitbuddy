@@ -5,7 +5,7 @@ Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 
 # 1. User Stories mit Acceptance Criteria
 
-## 1.1 Must Have — Zwingend für MVP
+## 1.1 Must Have — Zwingend für PoC
 
 ### 1.1.1 US-1 · API-Key sicher speichern 
 **Als** technikaffiner Multi-App-Nutzer **möchte ich** meinen Hevy API-Key lokal auf meinem iPhone speichern, **damit** meine Trainingsdaten nie einen fremden Server verlassen.
@@ -56,7 +56,7 @@ Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 
 ---
 
-## 1.2 Should Have — Wichtig, MVP funktioniert auch ohne
+## 1.2 Should Have — Wichtig, PoC funktioniert auch ohne
 
 ### 1.2.1 US-5 · Zweite Datenquelle verbinden
 **Als** Nutzer **möchte ich** einen zweiten Trainings-Account verbinden (z. B. Strava), **damit** FitBuddy auch meine Ausdauerdaten abruft.
@@ -132,7 +132,7 @@ Out of Scope — siehe Abschnitt 4.
 | US-2 | 90 Tage Trainingsdaten im Dashboard | **Must** | Datenbasis für AI-Analyse (US-3) und alle Visualisierungen. 90 Tage statt 30, da Progression erst über 8–12 Wochen messbar ist. |
 | US-3 | AI-Analyse auf Knopfdruck | **Must** | Die AI-Empfehlung *ist* das Produkt — ohne sie wird FitBuddy zum reinen Hevy-Viewer. |
 | US-4 | Onboarding in 3 Schritten | **Must** | Zwei API-Keys (Hevy + Claude) sind für nicht-technische User echtes Produktrisiko (R4). Onboarding muss ohne Doku machbar sein. |
-| US-5 | Zweite Datenquelle verbinden | **Should** | Differenzierung durch zweite Quelle ist Produktargument. Connector-Interface wird im MVP architektonisch verankert, Strava-Connector erst v1.1 (OAuth + Normalisierung + kombinierte Analyse ≈ 1.5–2 Sprints). |
+| US-5 | Zweite Datenquelle verbinden | **Should** | Differenzierung durch zweite Quelle ist Produktargument. Connector-Interface wird im PoC architektonisch verankert, Strava-Connector erst v1.1 (OAuth + Normalisierung + kombinierte Analyse ≈ 1.5–2 Sprints). |
 | US-6 | Analyse-Kontext transparent machen | **Should** | AC1 könnte als AC in US-3 wandern; eigenständige Story v. a. wegen AC2 (Warnung bei dünner Datenbasis). |
 | US-7 | Übungssuche & Filter | **Should** | Wird notwendig, sobald User-Historie >20 Übungen erreicht. Für PoC-Demos mit wenigen Sessions verzichtbar. |
 | US-8 | Datenquelle-Status sichtbar | **Could** | Bei nur einer Quelle (Hevy) reicht im PoC der Sync-Zeitstempel aus US-2 AC2. Vollwertig relevant ab v1.1. |
