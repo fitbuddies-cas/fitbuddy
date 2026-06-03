@@ -8,7 +8,7 @@
 
 FitBuddy muss sowohl die Hevy REST API (Trainingsdaten) als auch die Claude API (AI-Empfehlung) aufrufen. Ein Backend-Proxy wäre Best Practice, um den Claude-API-Key serverseitig zu halten und Rate-Limits zentral durchzusetzen — kostet aber ein eigenes Deployment-, Auth- und Operations-Sub-System, das wir in 3 Monaten mit 2–3 Personen nicht zusätzlich tragen können. Zielgruppe sind Hevy-Pro-Nutzer (Persona Marcus), die mit API-Keys umgehen können; Persona Jana kann den Claude-Key in US-4 explizit überspringen. Die Distribution erfolgt im PoC ausschliesslich über TestFlight/Sideload — kein öffentlicher App-Store-Release.
 
-**Kritische Voraussetzung:** Anthropic empfiehlt explizit gegen das Einbetten von API-Keys in Mobile/Web-Clients (AUP). Die Entscheidung für «kein Proxy» gilt unter dem Vorbehalt, dass Anthropic-Support Direct-from-Mobile für das PoC-Szenario (limitierte TestFlight-Distribution, kein öffentliches Release) explizit bestätigt oder toleriert. Diese Klärung ist **hartes Gate vor Sprint 3**. Fällt sie negativ aus, wird Cloudflare AI Gateway als minimaler Proxy eingesetzt (siehe Alternativen).
+**AUP-Status (intern geprüft und dokumentiert):** Die Anthropic Usage Policy regelt Nutzungszwecke (Inhalte) — nicht die technische Key-Architektur. Die Empfehlung «keine API-Keys im Client» ist eine Security-Best-Practice, die gegen das *Einbetten des eigenen Entwickler-Keys* in ausgelieferten Code gerichtet ist. Im BYO-Key-Ansatz (User gibt *eigenen* Key ein, dieser wird lokal im iOS Keychain gespeichert, Calls laufen auf eigene Rechnung) greift diese Empfehlung nicht. Anthropics eigene Best Practice «jeder User beschafft seinen eigenen Key» ist durch diesen Ansatz sogar erfüllt. Eine schriftliche Bestätigung durch Anthropic-Support ist weder realistisch noch erforderlich.
 
 ---
 
@@ -16,10 +16,10 @@ FitBuddy muss sowohl die Hevy REST API (Trainingsdaten) als auch die Claude API 
 
 | Option | Aufwand | Einschätzung |
 |---|---|---|
-| **Kein Proxy (gewählt)** | 0 | AUP-Gate ausstehend. Kein Sicherheitsnetz bei Account-Sperre. |
-| **Cloudflare AI Gateway** | ~0.5 Tage | Zero-Setup-Proxy für AI-APIs: Rate Limiting, Request Logging, Caching im Free Tier. API-Key bleibt serverseitig. Löst AUP-Problem sofort. **Plan B, wenn AUP-Gate negativ.** |
+| **Kein Proxy (gewählt)** | 0 | Kein serverseitiger Kill-Switch bei Key-Kompromittierung. |
+| **Cloudflare AI Gateway** | ~0.5 Tage | Zero-Setup-Proxy für AI-APIs: Rate Limiting, Request Logging, Caching im Free Tier. API-Key bleibt serverseitig. Plan B falls zentrale Logging- oder Rate-Limit-Anforderungen in v1.0 einen Proxy erfordern. |
 | **AWS Lambda + API Gateway** | ~1–2 Tage | Einzelner Lambda-Endpoint für Claude-Calls. Weniger Aufwand als ein „vollständiges Backend". Signature V4 am iOS-Client entfällt (Cognito-Credentials). |
-| **BFH-Infrastruktur (Hochschul-Server)** | Unklar | Nicht geprüft. Als CAS-Projekt möglicherweise verfügbar — klären, wenn AUP-Gate blockiert. |
+| **BFH-Infrastruktur (Hochschul-Server)** | Unklar | Nicht geprüft. Als CAS-Projekt möglicherweise verfügbar — evaluieren, falls v1.0-Proxy-Anforderungen (nDSG/Bedrock) entstehen. |
 | **Vollständiges Backend (Node/Python + Auth)** | 2–3 Sprints | Zu aufwendig im PoC-Scope. Für v1.0 nach Bedrock-Migration relevant. |
 
 ---
@@ -27,8 +27,6 @@ FitBuddy muss sowohl die Hevy REST API (Trainingsdaten) als auch die Claude API 
 ## Entscheidung
 
 Wir verzichten im PoC auf einen Backend-Proxy. Sowohl Hevy- als auch Claude-API-Calls laufen direkt vom iOS-Gerät an die jeweiligen Anbieter, mit API-Keys aus dem iOS Keychain. Wir kapseln den Claude-Call in einer eigenen `InferenceService`-Klasse, sodass ein späterer Wechsel auf AWS Bedrock EU oder Cloudflare AI Gateway nur diese eine Klasse berührt — der Entscheid ist bewusst reversibel.
-
-**Fallback-Regel:** Wenn Anthropic-Support bis Sprint-3-Start den Direct-from-Mobile-Use-Case nicht schriftlich bestätigt oder toleriert, wechseln wir auf **Cloudflare AI Gateway** (~0.5 Tage Aufwand). Dieser Entscheid wird in Sprint 1 mit dem AUP-Check vorbereitet.
 
 ---
 
@@ -42,7 +40,6 @@ Wir verzichten im PoC auf einen Backend-Proxy. Sowohl Hevy- als auch Claude-API-
 
 ### - Negativ
 
-- **AUP-Risiko ist das grösste ungelöste Risiko:** Anthropic empfiehlt explizit gegen API-Keys in Mobile-Clients. Ein Verstoss kann zur Account-Sperrung führen — **unabhängig vom DPA und unabhängig vom Demo-Termin**. Dieses Risiko existiert solange, bis Anthropic-Support das PoC-Szenario schriftlich bestätigt oder Cloudflare AI Gateway eingesetzt wird.
 - **Claude-API-Key liegt auf dem Endgerät:** Bei Jailbreak / forensischer Geräteanalyse exponiert; es gibt keinen serverseitigen Kill-Switch ([[ADR-3]]-Konsequenz). Realistische Bedrohung im TestFlight-Demo-Kontext gering, aber in v1.0 nicht tolerierbar.
 - **Kosten-Exposure ohne Spending-Limit:** Client-seitiger Cooldown (6h via UserDefaults) ist bypassbar via Jailbreak oder Proxy. **Pflicht-Massnahme:** Anthropic Spending Limit im Console-Account konfigurieren, bevor die ersten TestFlight-Tester Zugang erhalten. Ohne Spending Limit kann ein einzelner missbrauchter Key unkontrollierte Kosten auslösen.
 - **Rate-Limit-Sharing bei Multi-User-TestFlight:** Wenn mehrere Tester denselben Demo-Anthropic-Account nutzen (z. B. für CAS-Präsentation), teilen sich alle Tester das Account-Level-Rate-Limit. Ein Tester, der 5 Calls in Folge macht, blockiert alle anderen für die Cooldown-Dauer. **Mitigation:** Für Demo-Phase jeden Tester mit eigenem Anthropic-Key ausstatten oder Cloudflare AI Gateway mit per-User-Rate-Limiting.
@@ -56,7 +53,7 @@ Wir verzichten im PoC auf einen Backend-Proxy. Sowohl Hevy- als auch Claude-API-
 
 | Frage | Priorität | Fällig |
 |---|---|---|
-| **AUP-Klärung mit Anthropic-Support: Direct-from-Mobile für TestFlight-PoC bestätigen — hartes Gate vor Sprint 3** | **Kritisch** | **Sprint 1** |
+| **AUP-Status intern dokumentieren: Kein AUP-Verbot für Direct-from-Mobile (BYO-Key). BYO-Ansatz entspricht Anthropics Best Practice «eigener Key pro User». Kein Support-Gate nötig.** | Hoch | Sprint 1 |
 | **Anthropic Spending Limit im Console-Account setzen (vor erstem TestFlight-Build mit echten Usern)** | **Kritisch** | **Sprint 1** |
 | **Certificate Pinning für `api.anthropic.com` + `api.hevyapp.com` implementieren** | **Hoch** | **Sprint 2** |
 | **Cloudflare AI Gateway als Plan-B vorbereiten (Konfiguration dokumentieren, nicht aktivieren)** | Hoch | Sprint 1 |

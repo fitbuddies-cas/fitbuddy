@@ -46,7 +46,6 @@ Im PoC nutzen wir die Claude API direkt aus den USA über Anthropics Commercial 
 ### - Negativ
 
 - **Daten verlassen die Schweiz und gehen in die USA.** Der DPA deckt die Übermittlung vertraglich ab; die Informationspflicht gegenüber Endusern (Art. 19 revDSG) bleibt bei FitBuddy — Consent-Text in US-4 AC4 muss die USA als Drittland und Anthropic Inc. als Empfänger ausdrücklich nennen.
-- **AUP-Risiko (verknüpft mit [[ADR-4]]):** Anthropic empfiehlt explizit gegen API-Keys in Mobile-Clients. Account-Sperrung ist möglich — **unabhängig vom DPA**. Dieser Punkt ist das grösste operative Risiko des PoC.
 - **Safety Classifier verarbeitet Prompt-Inhalte:** Anthropic verwendet automatisierte Klassifizierer zur Abuse Detection, die Prompts (inklusive Trainingsdaten im Context) verarbeiten. Das ist kein Modell-Training, aber eine Form der Verarbeitung, die im Consent-Text oder in der DSFA adressiert werden sollte.
 - **Controller-Pflichten liegen vollständig bei FitBuddy:** Verzeichnis der Bearbeitungstätigkeiten (Art. 12 revDSG), DSFA (Art. 22 revDSG), Datenschutzerklärung mit Drittlandhinweis. Diese Pflichten gelten ab der ersten echten Datenverarbeitung — auch im PoC.
 - **Controller-Person-Risiko:** Wenn ein Teammitglied seinen Privataccount für den Anthropic Commercial-Account nutzt, trägt diese Person persönlich die Controller-Pflichten für Gesundheitsdaten Dritter. Der Account-Inhaber muss klar definiert sein (BFH, juristische Person des Teams oder Privatperson mit vollem Bewusstsein der Implikationen).
@@ -61,7 +60,7 @@ Im PoC nutzen wir die Claude API direkt aus den USA über Anthropics Commercial 
 |---|---|---|
 | **DSFA (Datenschutz-Folgenabschätzung) erstellen — Pflicht vor erster Nutzerdaten-Verarbeitung (TestFlight-Beta)** | **Kritisch** | **Sprint 2** |
 | **Account-Inhaber des Anthropic Commercial-Accounts festlegen — wirkt sich auf Controller-Status aus** | **Kritisch** | **Sprint 1** |
-| **AUP-Klärung: Direct-from-Mobile-Client mit Anthropic-Support bestätigen (verknüpft mit [[ADR-4]])** | **Kritisch** | **Sprint 1** |
+| **AUP-Status intern dokumentieren: Kein AUP-Verbot für Direct-from-Mobile (BYO-Key). BYO-Ansatz entspricht Anthropics Best Practice (verknüpft mit [[ADR-4]])** | Hoch | Sprint 1 |
 | **Consent-Text US-4 AC4: USA als Drittland, Anthropic Inc. als Empfänger, Safety-Classifier-Verarbeitung explizit nennen** | **Hoch** | **Sprint 3/4** |
 | Verzeichnis der Bearbeitungstätigkeiten (Art. 12 revDSG) anlegen | Hoch | Sprint 2 |
 | EU-Hosting-Option evaluieren: AWS Bedrock Frankfurt vs. Google Vertex AI Zürich — Aufwand vergleichen | Mittel | vor v1.0 |

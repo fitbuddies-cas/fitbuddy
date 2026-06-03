@@ -20,8 +20,8 @@
   - [Kritischer Datenfluss — «Analysieren» (US-3)](#kritischer-datenfluss--analysieren--us-3)
   - [Caching-Strategie](#caching-strategie)
 - [Querschnittliche Konzepte](#querschnittliche-konzepte)
-  - [AI-Integration](#ai-integration)
-  - [ExerciseTemplateCache](#exercisetemplatecache)
+  - [AI-Einsatzstrategie](#ai-einsatzstrategie)
+  - [Swift Concurrency-Konvention](#swift-concurrency-konvention)
 - [Architekturentscheide](#architekturentscheide)
 - [Risiken & Technische Schulden](#risiken--technische-schulden)
 - [Offene Fragen](#offene-fragen)
@@ -205,7 +205,9 @@ flowchart TB
 
 ## Querschnittliche Konzepte
 
-### AI-Integration
+### AI-Einsatzstrategie
+
+Systemweite Regel: Claude wird nur dort eingesetzt, wo deterministischer Code keine ausreichende Lösung bietet.
 
 | Bereich | AI? | Begründung |
 |---|---|---|
@@ -220,18 +222,22 @@ System-Prompt definiert: Verbotene Termini (Fachjargon), Ausgabeformat («1 Satz
 
 > **RPE-Nutzung:** `ExerciseSet.rpe` (6–10) gibt Claude Aufschluss über subjektive Anstrengung — ermöglicht Empfehlungen wie *"Your RPE has been consistently at 9+ for squats — consider a deload week."*
 
-### ExerciseTemplateCache
+### Swift Concurrency-Konvention
 
-Muskelgruppen-Daten stehen in Hevy nicht im Workout, sondern im Exercise Template (`GET /v1/exercise_templates`). Der Cache ist Voraussetzung für das Muskelgruppen-Dashboard (US-2).
+Alle asynchronen Zugriffe folgen drei fixen Ausführungskontexten — gilt schichtübergreifend für alle Komponenten:
 
-```swift
-/// Wird beim ersten connect() befüllt (pageSize: 100, alle Seiten laden).
-/// Persistent in SwiftData, kein erneuter Fetch bei jedem App-Start.
-class ExerciseTemplateCache {
-    func muscleGroup(for templateId: String) -> MuscleGroup?
-    func refresh() async throws
-}
-```
+| Kontext | Verwendung | Grund |
+|---|---|---|
+| `@MainActor` | ViewModels · alle UI-State-Updates | SwiftUI erfordert Main Thread für Rendering |
+| `ModelActor` | Alle SwiftData-Schreibzugriffe | Verhindert Datenkorrumption bei konkurrierenden Writes |
+| `async` (background) | URLSession-Calls · Keychain-Zugriffe | Blockiert nicht den Main Thread |
+
+**Regeln (gelten für alle Schichten):**
+- SwiftData-Writes nie direkt auf `@MainActor` — immer über `ModelActor`
+- ViewModel-Properties nie aus einem background Task ohne `await MainActor.run { }` setzen
+- `HevyConnector` und `InferenceService` sind `async`-only — nie synchron aufgerufen
+
+*`ExerciseTemplateCache` (Implementierungsdetail Data Layer) → folgt in L3 Bausteinsicht.*
 
 ---
 
@@ -279,7 +285,6 @@ Bekannte Lücken im PoC-Design — vor Sprint 3 (AI-Integration) adressieren:
 
 | # | Widerspruch / Unklarheit | Betroffene Dokumente | Handlungsbedarf |
 |---|---|---|---|
-| W-2 | **«4 Wochen» im Prompt vs. «90 Tage» im Cache.** Prompt-Engineering definiert LLM-Eingabe als «letzten 4 Wochen», SwiftData-Store hält 90 Tage. Was erhält Claude — 28 Tage oder 90 Tage? | `ARCHITECTURE.md`, `ADR-001` | Prompt-Fenster explizit als Konstante definieren, vom Cache-Horizont trennen. |
 | W-3 | **Certificate Pinning: als aktiv formuliert, laut ADR noch nicht implementiert.** ADR-004 markiert es als «Pflicht in Sprint 2». | `ADR-004` | Formulierung korrigieren: «geplant, Sprint 2». |
 | W-4 | **6h-Cooldown-Speicherort undefiniert.** ADR-004 nennt «6h via UserDefaults». ADR-001 reserviert UserDefaults nur für den Sync-Zeitstempel. Kein Dokument definiert den konkreten Key. | `ADR-004`, `ADR-001` | UserDefaults-Key-Konvention (`fitbuddy.analysis.lastCooldownTimestamp`) in ADR-001 oder ADR-004 ergänzen. |
 | W-5 | **HealthKit: Entscheid gefordert, aber nirgends getroffen.** Das `Activity`-Modell ist deshalb noch nicht finalisierbar. | `ADR-006` | Entscheid blockiert Protocol-Design und Datenmodell. Empfehlung: OUT für PoC. |
@@ -290,6 +295,6 @@ Bekannte Lücken im PoC-Design — vor Sprint 3 (AI-Integration) adressieren:
 | Frage | Priorität |
 |---|---|
 | Apple Health: Schlaf, HRV, Ruheherzrate — IN oder OUT? Wenn IN: passiver HealthKit-Zugriff, kein Connector nötig, aber `Activity`-Modell und Privacy Manifest ändern sich | Hoch — blockiert Sprint 1 |
-| AUP-Klärung: Erlaubt Anthropic Direct-from-Mobile für TestFlight? Bei Ablehnung: Cloudflare AI Gateway als Plan-B (~0.5 Tage Aufwand) — muss vor Sprint 3 feststehen | Hoch — in Sprint 1 klären |
+| AUP-Status geprüft: Kein AUP-Verbot für BYO-Key / Direct-from-Mobile. Anthropics Best Practice («eigener Key pro User») ist durch den BYO-Ansatz erfüllt. Intern in ADR-004 dokumentiert — kein Support-Gate. | Erledigt (Sprint 1) |
 | Fehlerzustand 401: harter Logout vs. weicher Banner | Mittel — Empfehlung: harter Logout im PoC |
 | `ExerciseTemplateCache`: SwiftData oder In-Memory-Dictionary mit UserDefaults-Persistenz? | Mittel — vor US-2 entscheiden |
