@@ -25,4 +25,84 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `ADRs/`           | Architecture Decision Records | &bull; Architecture decisions are stored in this directory.<br>&bull; Create and edit ADRs using the Nygard format (Title, Status, Context, Decision, Consequences). <br>&bull; When adding/removing text in this file, use the German language.                                                                         |
 
 ## Code Conventions
-- To be defined (MVVM etc.)
+
+### Architecture: MVVM
+- **View** — SwiftUI only, no business logic. Binds to ViewModel via `@StateObject` / `@ObservedObject`.
+- **ViewModel** — `@MainActor final class`, conforms to `ObservableObject`. Owns state (`@Published`) and calls Services.
+- **Service** — pure Swift `actor` or `struct`. Handles API calls, Keychain, persistence. No SwiftUI imports.
+- **Model** — plain `struct`, `Codable`, value semantics.
+
+### Naming
+| Layer     | Suffix       | Example                  |
+|-----------|--------------|--------------------------|
+| View | `View` | `WorkoutDetailView` |
+| ViewModel | `ViewModel` | `WorkoutDetailViewModel` |
+| Service | `Service` | `HevyService` |
+| Model | _(none)_ | `Workout`, `Exercise` |
+
+### File Structure
+```
+FitBuddy/
+├── Views/
+│   └── Workout/
+│       └── WorkoutDetailView.swift
+├── ViewModels/
+│   └── WorkoutDetailViewModel.swift
+├── Services/
+│   ├── HevyService.swift
+│   └── ClaudeService.swift
+└── Models/
+    └── Workout.swift
+```
+
+### Example
+```swift
+// Model
+struct Workout: Codable, Identifiable {
+    let id: String
+    let title: String
+    let startTime: Date
+}
+
+// Service
+actor HevyService {
+    func fetchWorkouts() async throws -> [Workout] { … }
+}
+
+// ViewModel
+@MainActor
+final class WorkoutListViewModel: ObservableObject {
+    @Published var workouts: [Workout] = []
+    @Published var isLoading = false
+
+    private let hevyService: HevyService
+
+    init(hevyService: HevyService = HevyService()) {
+        self.hevyService = hevyService
+    }
+
+    func load() async {
+        isLoading = true
+        defer { isLoading = false }
+        workouts = (try? await hevyService.fetchWorkouts()) ?? []
+    }
+}
+
+// View
+struct WorkoutListView: View {
+    @StateObject private var viewModel = WorkoutListViewModel()
+
+    var body: some View {
+        List(viewModel.workouts) { workout in
+            Text(workout.title)
+        }
+        .task { await viewModel.load() }
+    }
+}
+```
+
+### Rules
+- No force-unwrap (`!`) — use `guard let` or `try?`.
+- Async/await over Combine for networking.
+- Keychain access only inside a `Service`, never in a View or ViewModel.
+- One type per file.
