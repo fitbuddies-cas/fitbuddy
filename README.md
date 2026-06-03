@@ -2,54 +2,76 @@
 
 > "Ein AI-gestützter Trainingsassistent für Kraft- und Ausdauersportler, der Hevy-Kraftdaten und Strava-Cardio-Daten zusammenführt und daraus personalisierte Übersichten und Progressions-Empfehlungen generiert."
 
-FitBuddy is a native iOS app that aggregates training data from fitness apps into a single dashboard and delivers on-demand AI-powered progression recommendations.
+FitBuddy ist eine native iOS-App, die Trainingsdaten aus mehreren Fitness-Apps in einem einzigen Dashboard aggregiert und auf Knopfdruck AI-gestützte Progressions-Empfehlungen liefert.
 
-**Status:** Proof of Concept — CAS Application Development with AI (ADAI) 2026, BFH Biel
+| | |
+|---|---|
+| Kurs | CAS Application Development with AI (ADAI) 2026 |
+| Hochschule | BFH Biel |
+| Dozent | Ilja Rasin |
+| Team | 2–3 Personen |
+| Abgabe | Präsentation Modul 3 |
+| Status | Proof of Concept |
 
 ---
 
-## Features (PoC)
+## Problem
 
-- **Secure API-Key storage** — Hevy and Claude API keys stored exclusively in iOS Keychain
-- **30-day training dashboard** — session overview, total volume, muscle load distribution
-- **AI analysis on demand** — one tap to get a concrete, plain-language progression recommendation via Claude API
-- **3-step onboarding** — designed for non-technical users (no documentation needed)
+Trainingsdaten (Kraft, Ausdauer) sind auf mehrere Apps verteilt (Hevy, Strava, Apple Health). Eine ganzheitliche Sicht fehlt, Fortschritte müssen manuell verfolgt werden. AI-gestützte Progression existiert isoliert (Hevy Coach via CSV-Import), aber ohne Aggregation aus mehreren Quellen und ohne nahtlose Nutzererfahrung.
 
-## Data Sources
+**Heute löst man das so:** Manuell über mehrere Apps und Blatt Papier.
 
-| Source | Status |
+## Lösung (PoC)
+
+Native iOS-App (SwiftUI), die:
+
+1. **Hevy-Trainingsdaten via API aggregiert** (PoC: Hevy only)
+2. **Ein Dashboard liefert** — Sessions, Gesamtvolumen, Muskelbelastungsverteilung
+3. **On-demand AI-Progressionsempfehlungen generiert** — ein Tap für eine konkrete, verständliche Empfehlung via Claude API
+4. **API-Keys lokal im iOS Keychain speichert** — keine fremden Server
+5. **Onboarding in 3 Schritten** bietet — für nicht-technische Nutzer, ohne Dokumentation bedienbar
+
+## Personas
+
+### Marcus Huber — Technikaffiner Power-User
+- Nutzt mehrere Fitness-Apps gleichzeitig (Hevy + Strava oder ähnliches)
+- Will seine Gesamtbelastung (Kraft + Ausdauer) auf einen Blick beurteilen
+- Hat einen Hevy Pro Account mit API-Key
+- Frustration heute: Daten liegen in Silos, kein ganzheitliches Bild
+- Könnte abgehalten werden durch: Onboarding-Komplexität (API-Keys)
+
+### Jana Vogel — Krafttraining-Einsteigerin
+- Trainiert regelmässig, aber ohne tiefes Datenwissen
+- Will ohne Selbstinterpretation wissen, ob sie steigern kann
+- Kein technischer Hintergrund
+- Frustration heute: Weiss nicht, ob sie richtig trainiert oder ob sie mehr leisten könnte
+- Könnte abgehalten werden durch: Zu technisches Onboarding (API-Key-Einrichtung)
+
+## Datenquellen
+
+| Quelle | Status |
 |---|---|
-| Hevy (strength) | PoC |
-| Strava (cardio) | Planned v1.1 |
-| Apple Health | Under evaluation |
+| Hevy (Kraft) | PoC |
+| Strava (Cardio) | Geplant v1.1 |
+| Apple Health | In Abklärung |
 
-## Documentation
+## Anforderungen
 
-| File | Content |
-|---|---|
-| [PROJECT.md](PROJECT.md) | Project scope, personas, risks, sprint plan |
-| [REQUIREMENTS.md](REQUIREMENTS.md) | All 12 user stories with acceptance criteria (MoSCoW v5) |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | System design, tech stack, ADRs, data model |
+Der PoC umfasst vier **Must-Have**-User-Stories: API-Key sicher speichern (US-1), Trainingsdaten im Dashboard (US-2), AI-Analyse auf Knopfdruck (US-3) und Onboarding in 3 Schritten (US-4).
 
-## Architecture
+Alle 12 User Stories mit Akzeptanzkriterien, MoSCoW-Priorisierung und Out of Scope: siehe [REQUIREMENTS.md](REQUIREMENTS.md).
 
-Native iOS (SwiftUI) — all API keys stay on-device in the iOS Keychain. No backend. Direct calls to Hevy and Claude APIs.
+## Architektur
 
-```
-iOS App → Connector Layer → Hevy API
-                         → Claude API (AI analysis)
-                         → Strava API (v1.1)
-```
+Native iOS (SwiftUI), kein Backend: Alle API-Keys verbleiben auf dem Gerät im iOS Keychain, die Aufrufe an Hevy- und Claude-API laufen direkt vom Gerät. Ein `FitnessConnector`-Interface kapselt die Datenquellen, damit Strava (v1.1) ohne Umbau ergänzt werden kann.
 
-## MoSCoW — Must Have (MVP)
+Systemdesign, Tech-Stack, Datenmodell, ADRs und offene Architektur-Fragen: siehe [ARCHITECTURE.md](ARCHITECTURE.md).
 
-| ID | User Story |
-|---|---|
-| US-1 | API-Key sicher speichern |
-| US-2 | 30 Tage Trainingsdaten im Dashboard |
-| US-3 | AI-Analyse auf Knopfdruck |
-| US-4 | Onboarding in 3 Schritten |
+## Risiken
 
-## Team
-
-CAS ADAI 2026 · BFH Biel · Dozent: Ilja Rasin
+| # | Risiko | Massnahme |
+|---|---|---|
+| R1 | **Plattform-Abhängigkeit**: Hevy API ohne Garantien ("no guarantees — we might abandon this entirely"). Strava hat 2020 die API bereits massiv eingeschränkt. | Connector-Interface so bauen, dass ein zweiter Datenlieferant ohne Umbau integrierbar ist. Hevy ToS auf kommerzielle API-Nutzung prüfen. |
+| R2 | **Markt-Differenzierung**: Hevy könnte eine native Strava-Integration ankündigen → Kern-Value für Hevy-only-Nutzer obsolet. | Echter Moat ist die AI-Qualität der Empfehlungen, nicht die Datenaggregation allein. |
+| R3 | **Write-back-Risiko**: AI-generierte Pläne direkt in Hevy schreiben → falsche Progression, überschriebener Plan. | Im PoC bewusst als Won't priorisiert (US-12). |
+| R4 | **Onboarding-Hürde**: Zwei API-Keys (Hevy + Claude) sind für Nicht-Techniker (Persona Jana) echtes Produktrisiko. | US-4 als Must-have: Onboarding in max. 3 verständlichen Schritten. |
