@@ -105,7 +105,7 @@ FitBuddy ist eine **on-device iOS-App ohne Server-Tier**: alle Daten bleiben auf
 
 ## Bausteinsicht
 
-### L1 — Gesamtsystem (Container)
+### C2 Container Diagram
 
 FitBuddy besteht aus drei on-device-Bausteinen (iOS App, SwiftData Store, iOS Keychain) und kommuniziert direkt mit zwei externen APIs — kein Backend.
 
