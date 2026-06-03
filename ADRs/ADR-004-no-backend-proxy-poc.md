@@ -46,6 +46,7 @@ Wir verzichten im PoC auf einen Backend-Proxy. Sowohl Hevy- als auch Claude-API-
 - **Certificate Pinning nicht optional:** Ohne Certificate Pinning genügt ein MITM-Proxy (Charles, mitmproxy) im CAS-Kursraum-WLAN, um API-Keys im Klartext abzugreifen. **Implementierungs-Pflicht in Sprint 2:** Public-Key-Pinning für `api.anthropic.com` und `api.hevyapp.com` via `URLAuthenticationChallenge`. Bei Zertifikats-Rotation Backup-Pin vorsehen.
 - **Keine Betriebsübersicht:** Ohne Proxy gibt es keine zentrale Log-Übersicht. Fehler (API-Down, Rate-Limit, 401) sind nur im Xcode-Debugger oder via On-Device-Logging sichtbar.
 - **Vor v1.0 ist die Migration auf Bedrock oder einen Proxy zwingend** — Aufwand ist verschoben, nicht eingespart. Die Bedrock-Migration (AWS Bedrock `eu-central-1`) ist in [[ADR-5]] spezifiziert und kostet realistisch 2–3 Sprints.
+- **KEIN gemeinsamer Team-Key für externe Tester (Architekturpflicht):** Stellt das Team einen eigenen Anthropic-Key für Demos oder externe CAS-Tester bereit, wird das Team zum Anthropic-«Customer» — es trägt die Kosten und muss die Gesundheitsdaten Dritter vertraglich absichern (DPA, DSFA, Controller-Pflichten kommen vollständig zurück). Diese Pflichten sind für einen 3-Monats-PoC nicht tragbar und werden durch das BYO-Key-Modell bewusst vermieden. **Regel:** Jeder Tester beschafft und finanziert seinen eigenen Anthropic-Account.
 
 ---
 
@@ -53,9 +54,13 @@ Wir verzichten im PoC auf einen Backend-Proxy. Sowohl Hevy- als auch Claude-API-
 
 | Frage | Priorität | Fällig |
 |---|---|---|
-| **AUP-Status intern dokumentieren: Kein AUP-Verbot für Direct-from-Mobile (BYO-Key). BYO-Ansatz entspricht Anthropics Best Practice «eigener Key pro User». Kein Support-Gate nötig.** | Hoch | Sprint 1 |
+| ~~AUP-Status dokumentieren~~ — in Kontext dieses ADR dokumentiert; kein Support-Gate erforderlich. **(geschlossen)** | — | — |
 | **Anthropic Spending Limit im Console-Account setzen (vor erstem TestFlight-Build mit echten Usern)** | **Kritisch** | **Sprint 1** |
 | **Certificate Pinning für `api.anthropic.com` + `api.hevyapp.com` implementieren** | **Hoch** | **Sprint 2** |
 | **Cloudflare AI Gateway als Plan-B vorbereiten (Konfiguration dokumentieren, nicht aktivieren)** | Hoch | Sprint 1 |
 | Account-Inhaber des Anthropic Commercial-Accounts festlegen (BFH, Privatperson, Team-Mitglied) — wirkt sich auf Controller-Status aus ([[ADR-5]]) | Hoch | Sprint 1 |
 | Demo-Strategie für Rate-Limits klären: eigene Keys pro Tester oder Cloudflare Gateway mit User-Isolation | Mittel | Sprint 3 |
+
+---
+
+*Korrektur 2026-06-03: AUP-Offener-Punkt als geschlossen markiert (im Kontext dokumentiert); «Kein Team-Key für externe Tester» als Architekturpflicht ergänzt (BYO-Key-Konsistenz mit ADR-5).*

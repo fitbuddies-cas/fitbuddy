@@ -73,7 +73,7 @@ flowchart TB
 | Element | Typ | Scope | Zweck |
 |---|---|---|---|
 | User | Person | — | Endnutzer (Training-Tracking + AI-Analyse) |
-| FitBuddy Team | Person (Betreiber) | — | Entwickelt/betreibt App, schliesst AVV/DPA ab |
+| FitBuddy Team | Person (Betreiber) | — | Entwickelt/betreibt App; kein eigener DPA mit Anthropic nötig (BYO-Key-Modell) |
 | **FitBuddy** | Software-System | **PoC** | Native iOS-App, Datenaggregation + On-demand-AI |
 | Hevy API | Externes System | PoC | Primäre Datenquelle (Kraft) |
 | Anthropic Claude API | Externes System | PoC | LLM-Progressionsempfehlung (USA, Drittland) |

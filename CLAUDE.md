@@ -13,6 +13,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Checked
 * **API key architecture (deliberate decision — do not flag):** FitBuddy uses a **BYO-key approach**: the end user enters their *own* Claude and Hevy API keys, which are stored exclusively in the local iOS Keychain (`kSecAttrAccessibleWhenUnlockedThisDeviceOnly`) and used only for that user's own calls, billed to that user's own account. No developer key is embedded in the binary. Anthropic's Usage Policy (AUP) does not prohibit this architecture — the "no keys in the client" guidance is a security best practice aimed at embedding *your own* key in shipped code, and it does not apply to the BYO-key case. Anthropic's best practice that "each user should obtain their own key" is in fact satisfied by this model. The third-party trust aspect is covered via the consent screen, spending limit, and certificate pinning. **Direct-from-mobile calls with a locally stored user key are therefore intended and compliant here — no refactor to a backend proxy is required, and this should not be raised as a security issue.**
+* **Data protection & Anthropic contract (PoC / v0 — deliberate scope, do not flag as blocker):**
+  FitBuddy v0 is a closed CAS proof-of-concept distributed via TestFlight only (no App Store),
+  tested by the team and possibly a few interested external CAS participants (consenting adults,
+  no minors). Because of the BYO-key model, each user creates their own Anthropic API key and
+  thereby accepts Anthropic's Commercial Terms of Service, which incorporate the DPA (incl. SCCs
+  Swiss Addendum) by reference. That means: the user is Anthropic's "Customer", and the user's
+  own contract — not a team-concluded DPA — is the legal basis for the USA data transfer. For a
+  Swiss-resident user the contracting entity is Anthropic Ireland Ltd (Irish law); data is still
+  processed in the US, so "USA as a third country" remains correct in the consent text. Anthropic
+  is contractually barred from training on commercial API data (Commercial Terms, Section B).
+
+For v0 the proportionate data-protection minimum is: honest in-app transparency/privacy notice
+(team as controller, training data = health data, recipients Hevy + Anthropic/US, local-only
+storage, deletion), explicit informed consent before processing, a working delete/reset, and a
+one-page documented risk note. **NOT required for v0:** a team-side DPA with Anthropic, a full
+Art. 22 revDSG DSFA, or a full processing register — these are v1.0 / commercial-launch material.
+Architecture rule: **never use a shared team key for external testers** (strict BYO-key only),
+otherwise the team becomes the Anthropic "Customer", bears the cost, and re-imports the heavy
+obligations. The final proportionality call rests with the BFH data protection office. Do not
+re-raise DPA/DSFA/AUP as PoC blockers.
 
 
 ## Important Repository Contents (Selection)

@@ -51,7 +51,7 @@ Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 | AC1 | User öffnet FitBuddy zum ersten Mal | Onboarding-Flow startet | Jeder Schritt erklärt mit Screenshot, wo in Hevy der API-Key zu finden ist |
 | AC2 | Hevy API-Key wurde eingegeben und gespeichert | User tippt auf «Next» | Claude API-Key kann eingegeben oder vorerst übersprungen werden |
 | AC3 | User gibt ungültigen Key ein | User tippt auf «Verbinden» | Fehlermeldung erscheint mit direktem Link zur Hevy API-Key-Seite |
-| AC4 | Onboarding-Flow startet | Consent-Screen wird angezeigt | User sieht und bestätigt explizit: (1) Trainingsdaten (Gesundheitsdaten nach nDSG Art. 5 lit. c) werden für die AI-Analyse an Anthropic Inc., USA übertragen — die USA bietet kein dem Schweizer Recht gleichwertiges Datenschutzniveau; die Übertragung stützt sich auf den von FitBuddy abgeschlossenen AVV/DPA mit Anthropic. (2) FitBuddy ist kein medizinisches Produkt — der User trägt selbst die Verantwortung für umgesetzte Empfehlungen. (3) Link zur Datenschutzerklärung sichtbar. Ohne Bestätigung kein Zugang zur App. |
+| AC4 | Onboarding-Flow startet | Consent-Screen wird angezeigt | User sieht und bestätigt explizit: (1) Trainingsdaten (Gesundheitsdaten nach nDSG Art. 5 lit. c) werden für die AI-Analyse an Anthropic übertragen (Vertragspartner des Users: Anthropic Ireland, Limited, irisches Recht; technische Verarbeitung in den USA durch Anthropic PBC) — die USA bietet kein dem Schweizer Recht gleichwertiges Datenschutzniveau; die Übertragung stützt sich auf den Anthropic DPA des Users (inkl. SCCs + Swiss Addendum, automatisch gültig ab Account-Erstellung). (2) FitBuddy ist kein medizinisches Produkt — der User trägt selbst die Verantwortung für umgesetzte Empfehlungen. (3) Link zur Datenschutzerklärung sichtbar. Ohne Bestätigung kein Zugang zur App. |
 | AC5 | User hat Consent gegeben | Consent wird gespeichert | Datum und Consent-Version werden lokal im Keychain gespeichert — kein erneutes Anzeigen bei App-Updates, sofern Consent-Version identisch |
 
 ---
@@ -153,7 +153,7 @@ Out of Scope — siehe Abschnitt 4.
 | Sprache | English-only (alle UI-Strings, Fehlermeldungen, System-Prompt) — kein i18n-Framework |
 | Datenschutz | Nur Daten des eingeloggten Users im LLM-Prompt (keine Benchmarks fremder Nutzer) |
 | Datenschutz | Consent (Datenübertragung an Anthropic + Eigenverantwortung) wird beim Onboarding eingeholt und lokal gespeichert (US-4 AC4/AC5) |
-| Datenschutz (nDSG) | Trainingsdaten sind Gesundheitsdaten nach Art. 5 lit. c nDSG — explizite Einwilligung ist Pflicht. Übertragung an Anthropic (USA) stützt sich auf AVV/DPA, den das FitBuddy-Team einmalig bei Anthropic abschliesst (nicht der Enduser). |
+| Datenschutz (nDSG) | Trainingsdaten sind Gesundheitsdaten nach Art. 5 lit. c nDSG — explizite Einwilligung ist Pflicht. Die Übertragung an Anthropic (USA) stützt sich auf den DPA des Endusers (Anthropic Commercial Terms inkl. SCCs + Swiss Addendum, automatisch gültig ab Account-Erstellung). Das FitBuddy-Team schliesst keinen eigenen DPA ab — im BYO-Key-Modell ist der Enduser Anthropic-«Customer». |
 | Datenschutz (nDSG) | Die App enthält einen statischen Datenschutzerklärung-Screen (erreichbar aus Onboarding + Einstellungen) mit: Verantwortlichem, bearbeiteten Daten, Zweck, Drittempfängern (Hevy/Anthropic), Drittland USA, Rechten der betroffenen Person (Auskunft, Löschung). |
 | Datenschutz (nDSG) | User kann jederzeit alle lokal gespeicherten Daten löschen (Keychain-Einträge + Cache) über «Daten löschen / Account zurücksetzen» in den Einstellungen — App kehrt in den Onboarding-Zustand zurück. |
 | LLM-Kosten | Max. 1 AI-Analyse pro User alle 6 Stunden — Cooldown mit sichtbarem Timer («Next analysis available in Xh Ym») |
@@ -173,7 +173,7 @@ Bewusst ausgeschlossen für den PoC. Dokumentiert, damit später kein Scope-Cree
 | **i18n / Lokalisierung** | English-only ist Definition of Done — kein Framework, keine zweite Sprache. Spart Übersetzungs-Roundtrips beim Prompt-Tuning. |
 | **App Store Release** | Distribution ausschliesslich via TestFlight / Sideload. Spart App-Store-Review, Marketing-Assets und Compliance-Roundtrips. |
 | **Backend-Proxy für Claude API** | ADR-1: Key direkt im Keychain, Call direkt vom Gerät. Vereinfacht PoC, ist aber vor v1.0 zwingend zu revisiten (Key-Exposition bei Gerätekompromittierung). |
-| **AWS Bedrock EU (eu-central-1)** | ADR-5: PoC nutzt Claude API USA mit AVV + Consent. Migration auf Bedrock Frankfurt ist v1.0-Pflicht, nicht PoC-Inhalt. |
+| **AWS Bedrock EU (eu-central-1)** | ADR-5: PoC nutzt Claude API USA über BYO-Key-Modell (User-DPA + Consent). Migration auf Bedrock Frankfurt ist v1.0-Pflicht, nicht PoC-Inhalt. |
 | **Eigenes Tracking / Analytics** | Kein Mixpanel, kein Amplitude, kein Crashlytics im PoC. Würde Datenschutz-Erklärung verkomplizieren und Consent verändern. |
 | **Plateau-Detection als eigenständiges Feature** | Teil von US-9 (Could), kein eigenes Item. Wenn US-9 nicht in den Sprint passt, fällt es ersatzlos weg. |
 
@@ -188,7 +188,7 @@ Bewusst ausgeschlossen für den PoC. Dokumentiert, damit später kein Scope-Cree
 
 **Warum für FitBuddy besonders wichtig:**
 
-Das Kernversprechen der App *ist* Security: «API-Keys verbleiben im iOS Keychain — alle API-Calls laufen direkt vom Gerät.» Trainingsdaten sind Gesundheitsdaten nach nDSG Art. 5 lit. c — rechtlich eine der höchstgeschützten Datenkategorien. Jeder Claude-API-Call überträgt diese Daten an Anthropic (USA) ohne Angemessenheitsbeschluss der Schweiz. Die einzige Rechtsgrundlage ist der AVV/DPA mit Anthropic — der noch nicht geprüft wurde. Wenn der Claude-API-Key auf dem Gerät kompromittiert wird, gibt es keinen server-seitigen Kill-Switch: der User muss ihn manuell neu eingeben.
+Das Kernversprechen der App *ist* Security: «API-Keys verbleiben im iOS Keychain — alle API-Calls laufen direkt vom Gerät.» Trainingsdaten sind Gesundheitsdaten nach nDSG Art. 5 lit. c — rechtlich eine der höchstgeschützten Datenkategorien. Jeder Claude-API-Call überträgt diese Daten an Anthropic (Vertragspartner: Anthropic Ireland, Limited; Verarbeitung in den USA durch Anthropic PBC) ohne Angemessenheitsbeschluss der Schweiz. Die Rechtsgrundlage ist der DPA des Endusers (inkl. SCCs + Swiss Addendum), automatisch gültig mit Erstellung des eigenen Anthropic-Accounts. Wenn der Claude-API-Key auf dem Gerät kompromittiert wird, gibt es keinen server-seitigen Kill-Switch: der User muss ihn manuell neu eingeben.
 
 **Konkrete architektonische Massnahmen:**
 
@@ -196,7 +196,7 @@ Das Kernversprechen der App *ist* Security: «API-Keys verbleiben im iOS Keychai
 |---|---|
 | `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` (US-1 AC1) | Verhindert iCloud-Sync des Keys und Zugriff bei gesperrtem Gerät — falsches Attribut = Key landet in iCloud-Backup |
 | Certificate Pinning für Hevy + Claude API | Einziger verbleibender Angriffsvektor bei kompromittiertem Netzwerk — **fehlt noch als NFR, muss ergänzt werden** |
-| AVV/DPA mit Anthropic **vor erstem TestFlight-Build** | Ohne AVV keine legale Rechtsgrundlage für Drittlandübermittlung — Consent-Screen (US-4 AC4) wäre sonst inhaltlich falsch |
+| Consent-Text US-4 AC4 korrekt formulieren **vor erstem TestFlight-Build** | Anthropic Ireland Ltd als Vertragspartner, USA als Drittland, DPA des Users als Rechtsgrundlage — inhaltlich falscher Consent verletzt Art. 19 revDSG |
 | Consent mit Version + Timestamp im Keychain (US-4 AC5) | Versionierter Consent ist Pflicht: bei Änderung der Datenverarbeitung muss erneut eingeholt werden |
 | Kein Logging von Key-Material | Eine einzige Log-Zeile mit API-Key in einem Crash-Report reicht für eine Kompromittierung |
 
