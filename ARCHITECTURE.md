@@ -6,7 +6,6 @@
 
 ## Inhalt
 
-- [Qualitätsziele](#qualitätsziele)
 - [Kontextabgrenzung](#kontextabgrenzung)
   - [Akteure & externe Systeme](#akteure--externe-systeme)
   - [Bewusste Leerstellen](#bewusste-leerstellen)
