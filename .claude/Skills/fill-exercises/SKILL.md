@@ -1,6 +1,6 @@
 ---
 name: fill-exercises
-description: Fill out a course exercise worksheet (.docx) for the FitBuddy project. Extracts the exercise structure, answers all questions using project documentation (ARCHITECTURE.md, REQUIREMENTS.md, PROJECT.md), and writes a new filled .docx back to the same path. Use when given a Word document with blank exercise fields to complete.
+description: Fill out a course exercise worksheet (.docx) for the FitBuddy project. Extracts the exercise structure, answers all questions using project documentation (ARCHITECTURE.md, REQUIREMENTS.md, README.md), and writes a new filled .docx back to the same path. Use when given a Word document with blank exercise fields to complete.
 argument-hint: <path/to/exercise.docx>
 disable-model-invocation: true
 allowed-tools: Bash Read Write
@@ -43,8 +43,7 @@ Always read these files before writing a single answer:
 |---|---|
 | `ARCHITECTURE.md` | Tech stack, ADRs (ADR-1–5), Connector interface, data model, C1/C2 topology |
 | `REQUIREMENTS.md` | All 12 user stories with ACs, NFRs, MoSCoW table |
-| `PROJECT.md` | Personas (Marcus, Jana), risks, sprint plan, scope boundaries |
-| `README.md` | One-line summary, feature list, data sources |
+| `README.md` | One-line summary, feature list, data sources, personas (Marcus, Jana), risks, sprint plan, scope boundaries |
 
 ### 3 — Draft all answers
 
