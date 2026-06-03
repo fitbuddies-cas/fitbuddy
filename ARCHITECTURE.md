@@ -10,41 +10,41 @@
 │  │  Onboarding  │    │  Dashboard   │               │
 │  │  (US-4)      │    │  (US-2)      │               │
 │  └──────┬───────┘    └──────┬───────┘               │
-│         │                  │                        │
-│  ┌──────▼──────────────────▼───────┐               │
+│         │                   │                       │
+│  ┌──────▼───────────────────▼───────┐               │
 │  │         Connector Layer          │               │
 │  │  (Interface: connect / validate  │               │
 │  │   fetchActivities / disconnect)  │               │
-│  └──────┬───────────────┬──────────┘               │
+│  └──────┬───────────────┬───────────┘               │
 │         │               │                           │
-│  ┌──────▼──────┐  ┌─────▼───────┐                  │
+│  ┌──────▼──────┐  ┌─────▼───────┐                   │
 │  │    Hevy     │  │   Strava    │  ← v1.1           │
 │  │  Connector  │  │  Connector  │                   │
-│  └──────┬──────┘  └─────────────┘                  │
+│  └──────┬──────┘  └─────────────┘                   │
 │         │                                           │
-│  ┌──────▼──────────────────────────┐               │
-│  │   ExerciseTemplateCache (lokal) │               │
-│  │   primary_muscle_group etc.     │               │
-│  └──────┬──────────────────────────┘               │
+│  ┌──────▼──────────────────────────┐                │
+│  │   ExerciseTemplateCache (lokal) │                │
+│  │   primary_muscle_group etc.     │                │
+│  └──────┬──────────────────────────┘                │
 │         │                                           │
-│  ┌──────▼──────────────────────────┐               │
-│  │       Normalized Activity       │               │
-│  │       Data Model (lokal)        │               │
-│  └──────┬──────────────────────────┘               │
+│  ┌──────▼──────────────────────────┐                │
+│  │       Normalized Activity       │                │
+│  │       Data Model (lokal)        │                │
+│  └──────┬──────────────────────────┘                │
 │         │                                           │
-│  ┌──────▼──────────────────────────┐               │
-│  │     AI Analysis Engine (US-3)   │               │
-│  │     On-demand, user-triggered   │               │
-│  └──────┬──────────────────────────┘               │
+│  ┌──────▼──────────────────────────┐                │
+│  │     AI Analysis Engine (US-3)   │                │
+│  │     On-demand, user-triggered   │                │
+│  └──────┬──────────────────────────┘                │
 │         │                                           │
-│  ┌──────▼──────────────────────────┐               │
-│  │      iOS Keychain               │               │
-│  │  fitbuddy.hevy.apikey           │               │
-│  │  fitbuddy.claude.apikey         │               │
-│  │  fitbuddy.strava.access_token   │               │
-│  │  fitbuddy.strava.refresh_token  │               │
-│  │  fitbuddy.strava.token_expiry   │               │
-│  └─────────────────────────────────┘               │
+│  ┌──────▼──────────────────────────┐                │
+│  │      iOS Keychain               │                │
+│  │  fitbuddy.hevy.apikey           │                │
+│  │  fitbuddy.claude.apikey         │                │
+│  │  fitbuddy.strava.access_token   │                │
+│  │  fitbuddy.strava.refresh_token  │                │
+│  │  fitbuddy.strava.token_expiry   │                │
+│  └─────────────────────────────────┘                │
 └────────────────────────┬────────────────────────────┘
                          │ direkte API-Calls (kein Proxy)
          ┌───────────────┼───────────────┐
