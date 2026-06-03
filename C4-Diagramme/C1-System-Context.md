@@ -8,43 +8,43 @@
 
 ```
   ┌──────────────────────┐     reicht App ein          ┌─────────────────────────────┐
-  │  FitBuddy Team        │── (Review, Privacy-     ──→ │  Apple App Store Connect /  │
-  │  [Person · Betreiber] │    Manifest)                │  TestFlight                 │
-  │  betreibt App; AVV/   │                             │  [Externes System]          │
-  │  DPA mit Anthropic    │                             │  Gatekeeper + Distribution  │
-  └──────────────────────┘                             └──────────────┬──────────────┘
+  │  FitBuddy Team       │── (Review, Privacy- ──────→ │  Apple App Store Connect /  │
+  │  [Person · Betreiber]│    Manifest)                │  TestFlight                 │
+  │  betreibt App; AVV/  │                             │  [Externes System]          │
+  │  DPA mit Anthropic   │                             │  Gatekeeper + Distribution  │
+  └──────────────────────┘                             └───────────────┬─────────────┘
                                                                        │ verteilt App +
                                                                        │ App Privacy Report
                                                                        ▼  (App landet beim User)
 
-  KEY-BESCHAFFUNG          NUTZER                   SYSTEM                          LAUFZEIT-SYSTEME
+  KEY-BESCHAFFUNG           NUTZER                    SYSTEM                    LAUFZEIT-SYSTEME
 
   ┌────────────────┐                                                    ┌─────────────────────────────┐
-  │ Hevy-App /      │◀─┐                                                 │  Hevy API (REST)            │
-  │ Website         │  │ holt Hevy-Key                                   │  [Externes System]          │
-  │ [Ext. System]   │  │                                                 │  Krafttrainingsdaten        │
-  └────────────────┘  │  ┌──────────────────┐                           └─────────────────────────────┘
+  │ Hevy-App /     │◀─┐                                                 │  Hevy API (REST)            │
+  │ Website        │  │ holt Hevy-Key                                   │  [Externes System]          │
+  │ [Ext. System]  │  │                                                 │  Krafttrainingsdaten        │
+  └────────────────┘  │  ┌───────────────────┐                          └─────────────────────────────┘
   ┌────────────────┐  │  │  User             │                                    ▲  GET /workouts
-  │ Anthropic       │  │  │  [Person]         │                                   │  (Bearer-Key, HTTPS)
-  │ Console         │◀─┴──│  Endnutzer der    │   ┌───────────────────────┐───────┘
-  │ [Ext. System]   │     │  App              │──→│                       │
-  │ → Claude-Key    │     └──────────────────┘   │   FitBuddy            │  ┌─────────────────────────────┐
-  └────────────────┘  nutzt App, gibt Keys ein,  │   [Software-System]   │── Prompt ─→│ Anthropic Claude API (USA)│
+  │ Anthropic      │  │  │  [Person]         │                                    │  (Bearer-Key, HTTPS)
+  │ Console        │◀─┴──│  Endnutzer der    │    ┌───────────────────────┐───────┘
+  │ [Ext. System]  │     │  App              │ ──→│                       │
+  │ → Claude-Key   │     └───────────────────┘    │   FitBuddy            │  ┌─────────────────────────────────────┐
+  └────────────────┘  nutzt App, gibt Keys ein,   │   [Software-System]   │── Prompt ─→│ Anthropic Claude API (USA)│
                       fordert AI-Analyse an       │   Native iOS-App,     │  ←─ Empf.  │ [Externes System]         │
-                                                  │   kein Backend        │  │ ⚠ Drittland USA (nDSG)      │
-                                                  │                       │  └─────────────────────────────┘
-                                                  │                       │  ┌─────────────────────────────┐
+                                                  │   kein Backend        │  │ ⚠ Drittland USA (nDSG)              │
+                                                  │                       │  └─────────────────────────────────────┘
+                                                  │                       │  ┌────────────────────────────────────┐
                                                   │                       │- - - - - →│ Strava API (OAuth)   v1.1 │
                                                   │                       │ Ausdauer  │ Cardio-Daten (geplant)    │
-                                                  └───────────┬───────────┘  └─────────────────────────────┘
-                                                            │
-                 ON-DEVICE / PLATTFORM                      │
-  ┌──────────────────────┐   ┌──────────────────────┐   ┌──┴──────────────────────┐
-  │  iOS Keychain /        │   │  Apple HealthKit      │   │  iCloud-Backup           │
-  │  Secure Enclave        │   │  [Plattform] (?)      │   │  [Externes System]       │
-  │  [Plattform-Service]   │   │  Schlaf / HRV / RHR   │   │  ✗ KEIN Datenfluss —     │
-  │  API-Keys + Consent    │   │  → OFFENE ENTSCHEIDUNG│   │  isExcludedFromBackup    │
-  └──────────────────────┘   └──────────────────────┘   └──────────────────────────┘
+                                                  └───────────┬───────────┘  └────────────────────────────────────┘
+                                                              │
+                 ON-DEVICE / PLATTFORM                        │
+  ┌──────────────────────┐   ┌───────────────────────┐   ┌────┴─────────────────────┐
+  │  iOS Keychain /      │   │  Apple HealthKit      │   │  iCloud-Backup           │
+  │  Secure Enclave      │   │  [Plattform] (?)      │   │  [Externes System]       │
+  │  [Plattform-Service] │   │  Schlaf / HRV / RHR   │   │  ✗ KEIN Datenfluss —     │
+  │  API-Keys + Consent  │   │  → OFFENE ENTSCHEIDUNG│   │  isExcludedFromBackup    │
+  └──────────────────────┘   └───────────────────────┘   └──────────────────────────┘
             ▲                          ▲                            ▲
             │ speichert / liest        │ liest passiv (NUR falls IN)│ ✗ Store darf NICHT
             │ Keys + Consent-Version   │                            │   ins Backup gelangen

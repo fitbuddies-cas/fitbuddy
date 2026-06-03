@@ -20,30 +20,30 @@ FitBuddy hat **keine Server-Tier**. Durch ADR-004 (kein Backend im PoC) gibt es 
                                 │ nutzt (Touch / SwiftUI, on-device)
                                 ▼
   ╔══════════════════ FitBuddy — iPhone (iOS 17+) ════════════════════════╗
-  ║                                                                        ║
+  ║                                                                       ║
   ║   ┌───────────────────────────────────────────────────┐               ║
-  ║   │  iOS App                                            │               ║
-  ║   │  [Container: Swift · SwiftUI · MVVM ·               │               ║
-  ║   │   Swift Concurrency · URLSession · Swift Charts]    │               ║
-  ║   │                                                     │               ║
-  ║   │  Komponenten (→ C3): Präsentation · Connector-      │               ║
-  ║   │  Layer · Inference-Service · Persistence-Manager    │               ║
-  ║   └──┬──────────────────┬───────────────────────┬───────┘               ║
-  ║      │ ModelContext     │ Security API           │ HTTPS               ║
-  ║      │ (in-process)     │ (in-process)           │ (TLS, cert-pinned)  ║
-  ║      ▼                  ▼                        │                     ║
-  ║  ┌──────────────┐  ┌────────────────────┐        │                     ║
-  ║  │ SwiftData     │  │ iOS Keychain        │        │                     ║
-  ║  │ Store         │  │ [Container:         │        │                     ║
-  ║  │ [Container:   │  │  Keychain Services] │        │                     ║
-  ║  │  SQLite]      │  │  API-Keys + Consent │        │                     ║
-  ║  │  Activity-    │  │  (verschlüsselt)    │        │                     ║
-  ║  │  Cache (90 T) │  └────────────────────┘        │                     ║
-  ║  └──────────────┘                                 │                     ║
-  ╚═══════════════════════════════════════════════════┼═════════════════════╝
-                                                       │
-            ┌──────────────────────┬───────────────────┴─────┐
-            ▼                      ▼                          ▼
+  ║   │  iOS App                                          │               ║
+  ║   │  [Container: Swift · SwiftUI · MVVM ·             │               ║
+  ║   │   Swift Concurrency · URLSession · Swift Charts]  │               ║
+  ║   │                                                   │               ║
+  ║   │  Komponenten (→ C3): Präsentation · Connector-    │               ║
+  ║   │  Layer · Inference-Service · Persistence-Manager  │               ║
+  ║   └──┬──────────────────┬───────────────────────┬─────┘               ║
+  ║      │ ModelContext     │ Security API          │ HTTPS               ║
+  ║      │ (in-process)     │ (in-process)          │ (TLS, cert-pinned)  ║
+  ║      ▼                  ▼                       │                     ║
+  ║  ┌──────────────┐  ┌────────────────────┐       │                     ║
+  ║  │ SwiftData    │  │ iOS Keychain       │       │                     ║
+  ║  │ Store        │  │ [Container:        │       │                     ║
+  ║  │ [Container:  │  │  Keychain Services]│       │                     ║
+  ║  │  SQLite]     │  │  API-Keys + Consent│       │                     ║
+  ║  │  Activity-   │  │  (verschlüsselt)   │       │                     ║
+  ║  │  Cache (90 T)│  └────────────────────┘       │                     ║
+  ║  └──────────────┘                               │                     ║
+  ╚═════════════════════════════════════════════════┼═════════════════════╝
+                                                    │
+            ┌──────────────────────┬────────────────┴─────┐
+            ▼                      ▼                      ▼
    ┌─────────────────┐   ┌──────────────────────┐   ┌────────────────────┐
    │ Hevy API (REST) │   │ Anthropic Claude API │   │ Strava API (OAuth) │
    │ [Ext. System]   │   │ [Ext. System · USA]  │   │ [Ext. System] v1.1 │
@@ -53,8 +53,8 @@ FitBuddy hat **keine Server-Tier**. Durch ADR-004 (kein Backend im PoC) gibt es 
   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   v1.0 / v1.1 (NICHT im PoC):
   ┌────────────────────────────────────────────────────────────────────────┐
-  │ Backend / Proxy  [Container: AWS Lambda + API Gateway, eu-central-1]     │
-  │ Kapselt Bedrock-Region (ADR-5) und Strava-OAuth-Token-Exchange (Secret)  │
+  │ Backend / Proxy  [Container: AWS Lambda + API Gateway, eu-central-1]   │
+  │ Kapselt Bedrock-Region (ADR-5) und Strava-OAuth-Token-Exchange (Secret)│
   └────────────────────────────────────────────────────────────────────────┘
 ```
 
