@@ -4,15 +4,6 @@
 
 FitBuddy ist eine native iOS-App, die Trainingsdaten aus mehreren Fitness-Apps in einem einzigen Dashboard aggregiert und auf Knopfdruck AI-gestützte Progressions-Empfehlungen liefert.
 
-| | |
-|---|---|
-| Kurs | CAS Application Development with AI (ADAI) 2026 |
-| Hochschule | BFH Biel |
-| Dozent | Ilja Rasin |
-| Team | 2–3 Personen |
-| Abgabe | Präsentation Modul 3 |
-| Status | Proof of Concept |
-
 ---
 
 ## Problem
