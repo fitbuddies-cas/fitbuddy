@@ -6,14 +6,15 @@
 
 ## Inhalt
 
+- [Qualitätsziele](#qualitätsziele)
 - [Kontextabgrenzung](#kontextabgrenzung)
   - [Akteure & externe Systeme](#akteure--externe-systeme)
   - [Bewusste Leerstellen](#bewusste-leerstellen)
 - [Lösungsstrategie](#lösungsstrategie)
 - [Bausteinsicht](#bausteinsicht)
-  - [Schichtenarchitektur](#schichtenarchitektur-layered-monolith--mvvm)
-  - [Container](#container)
-  - [Komponenten — C3](#komponenten--c3-folgt-in-modul-5--coding-phase)
+  - [L1 — Gesamtsystem (Container)](#l1--gesamtsystem-container)
+  - [L2 — iOS App (Schichtenarchitektur)](#l2--ios-app-schichtenarchitektur)
+  - [L3 — Komponenten](#l3--komponenten-folgt-in-modul-5--coding-phase)
   - [Connector-Interface](#connector-interface)
   - [Normalisiertes Datenmodell](#normalisiertes-datenmodell)
 - [Laufzeitsicht](#laufzeitsicht)
@@ -23,6 +24,7 @@
   - [AI-Integration](#ai-integration)
   - [ExerciseTemplateCache](#exercisetemplatecache)
 - [Architekturentscheide](#architekturentscheide)
+- [Risiken & Technische Schulden](#risiken--technische-schulden)
 - [Offene Fragen](#offene-fragen)
   - [Widersprüche & Unklarheiten](#widersprüche--unklarheiten)
   - [Offene Architektur-Fragen](#offene-architektur-fragen)
@@ -31,45 +33,41 @@
 
 ## Kontextabgrenzung
 
-```
-  ┌──────────────────────┐     reicht App ein          ┌─────────────────────────────┐
-  │  FitBuddy Team       │── (Review, Privacy- ──────→ │  Apple App Store Connect /  │
-  │  [Person · Betreiber]│    Manifest)                │  TestFlight                 │
-  │  betreibt App; AVV/  │                             │  [Externes System]          │
-  │  DPA mit Anthropic   │                             │  Gatekeeper + Distribution  │
-  └──────────────────────┘                             └───────────────┬─────────────┘
-                                                                       │ verteilt App
-                                                                       ▼
-  KEY-BESCHAFFUNG           NUTZER                    SYSTEM                    LAUFZEIT-SYSTEME
+```mermaid
+flowchart TB
+    classDef person fill:#08427b,color:#fff,stroke:#052e56
+    classDef system fill:#1168bd,color:#fff,stroke:#0b4884
+    classDef ext fill:#6b6b6b,color:#fff,stroke:#454545
+    classDef platform fill:#438dd5,color:#fff,stroke:#2e6295
+    classDef excluded fill:#e0e0e0,color:#888,stroke:#bbb,stroke-dasharray:4 4
 
-  ┌────────────────┐                                                    ┌─────────────────────────────┐
-  │ Hevy-App /     │◀─┐                                                 │  Hevy API (REST)            │
-  │ Website        │  │ holt Hevy-Key                                   │  [Externes System]          │
-  │ [Ext. System]  │  │                                                 │  Krafttrainingsdaten        │
-  └────────────────┘  │  ┌───────────────────┐                          └─────────────────────────────┘
-  ┌────────────────┐  │  │  User             │                                    ▲  GET /workouts
-  │ Anthropic      │  │  │  [Person]         │                                    │  (Bearer-Key, HTTPS)
-  │ Console        │◀─┴──│  Endnutzer der    │    ┌───────────────────────┐───────┘
-  │ [Ext. System]  │     │  App              │ ──→│                       │
-  │ → Claude-Key   │     └───────────────────┘    │   FitBuddy            │  ┌──────────────────────────────────────┐
-  └────────────────┘  nutzt App, gibt Keys ein,   │   [Software-System]   │── Prompt ─→│ Anthropic Claude API (USA) │
-                      fordert AI-Analyse an        │   Native iOS-App,     │  ←─ Empf.  │ [Externes System]          │
-                                                   │   kein Backend        │            │ ⚠ Drittland USA (nDSG)     │
-                                                   │                       │            └──────────────────────────────────────┘
-                                                   │                       │  ┌─────────────────────────────────────┐
-                                                   │                       │- - - - →│ Strava / Polar API      v1.1 │
-                                                   └───────────┬───────────┘  Ausdauer│ Cardio-Daten (geplant)      │
-                                                               │             └─────────────────────────────────────┘
-                              ON-DEVICE / PLATTFORM            │
-  ┌──────────────────────┐   ┌───────────────────────┐   ┌────┴─────────────────────┐
-  │  iOS Keychain /      │   │  Apple HealthKit      │   │  iCloud-Backup           │
-  │  Secure Enclave      │   │  [Plattform] (?)      │   │  [Externes System]       │
-  │  [Plattform-Service] │   │  Schlaf / HRV / RHR   │   │  ✗ KEIN Datenfluss —     │
-  │  API-Keys + Consent  │   │  → OFFENE ENTSCHEIDUNG│   │  isExcludedFromBackup    │
-  └──────────────────────┘   └───────────────────────┘   └──────────────────────────┘
-```
+    subgraph KEY["Key-Beschaffung (einmalig, vor Onboarding)"]
+        HEVYAPP["Hevy-App / Website"]:::ext
+        CONSOLE["Anthropic Console"]:::ext
+    end
 
-**Legende:** durchgezogen = PoC · `- - -` = v1.1 (geplant) · `(?)` = offene Entscheidung · `✗` = bewusst geblockter Datenfluss
+    USER["User\n[Endnutzer]"]:::person
+    FITBUDDY["FitBuddy\n[Native iOS-App · kein Backend]"]:::system
+
+    subgraph APIS["Externe APIs"]
+        direction LR
+        HEVYAPI["Hevy API\n"]:::ext
+        CLAUDEAPI["Anthropic Claude API\nAI-Empfehlungen"]:::ext
+    end
+
+    subgraph ONDEVICE["On-Device / Plattform"]
+        direction LR
+        KEYCHAIN[("iOS Keychain\nAPI-Keys + Consent")]:::platform
+        ICLOUD["iCloud-Backup\n✗ ausgeschlossen"]:::excluded
+    end
+
+    USER -->|"holt Hevy-Key"| HEVYAPP
+    USER -->|"holt Claude-Key"| CONSOLE
+    USER -->|"nutzt App"| FITBUDDY
+    FITBUDDY -->|"GET /workouts · HTTPS"| HEVYAPI
+    FITBUDDY -->|"Prompt → Empfehlung · HTTPS"| CLAUDEAPI
+    FITBUDDY <-->|"liest / schreibt"| KEYCHAIN
+```
 
 ### Akteure & externe Systeme
 
@@ -84,8 +82,6 @@
 | iOS Keychain | Plattform-Service | PoC | Sichere Key-/Consent-Speicherung |
 | Apple HealthKit | Plattform-Service | **offen** | Schlaf/HRV/RHR — Scope ungeklärt |
 | iCloud-Backup | Externes System | **ausgeschlossen** | `isExcludedFromBackup` — kein Datenfluss |
-| Strava API | Externes System | v1.1 | Ausdauerdaten via OAuth — Backend-Problematik offen (→ W-6) |
-| Polar Accesslink | Externes System | v1.1 | Alternative zu Strava; PKCE-fähig, kein Backend nötig (→ [polar-integration.md](polar-integration.md)) |
 
 ### Bewusste Leerstellen
 
@@ -103,7 +99,6 @@ FitBuddy ist eine **on-device iOS-App ohne Server-Tier**: alle Daten bleiben auf
 | AI | Claude API (Anthropic) | On-demand, kein eigenes ML-Training |
 | Primäre Datenquelle | Hevy REST API | PoC-Quelle; Pro-User haben API-Key |
 | Lokaler Speicher | iOS Keychain + SwiftData (SQLite) | Privacy-First: keine User-Daten auf eigenen Servern |
-| Datenquelle v1.1 | Strava OAuth / Polar Accesslink | Ausdauerdaten; architektonisch vorbereitet via `FitnessConnector` |
 
 **Kein Backend im PoC.** Der Claude API-Key wird direkt im Keychain gespeichert — vereinfacht den PoC erheblich, muss vor v1.0-Launch überprüft werden (→ ADR-004). Die Apple-native Technologiewahl (SwiftUI, SwiftData, URLSession, Swift Concurrency, Swift Charts) eliminiert Drittanbieter-Build-Abhängigkeiten und senkt die Einarbeitungshürde für ein gemischtes Team.
 
@@ -111,82 +106,36 @@ FitBuddy ist eine **on-device iOS-App ohne Server-Tier**: alle Daten bleiben auf
 
 ## Bausteinsicht
 
-### Schichtenarchitektur (Layered Monolith + MVVM)
+### L1 — Gesamtsystem (Container)
 
-```
-┌────────────────────────────────────────────┐
-│  Presentation Layer                         │
-│  SwiftUI Views · @State · @Binding          │
-│  → Dashboard (US-2), Onboarding (US-4),     │
-│    AI-Result-View (US-3)                    │
-├────────────────────────────────────────────┤
-│  ViewModel Layer  [@MainActor]              │
-│  @Observable ViewModels                     │
-│  → DashboardViewModel, AnalysisViewModel,   │
-│    OnboardingViewModel                      │
-├────────────────────────────────────────────┤
-│  Service / Domain Layer                     │
-│  → InferenceService (Claude-Call kapseln,   │
-│    Prompt-Build, 6h-Cooldown)               │
-│  → ConnectorLayer (FitnessConnector-        │
-│    Protocol, Delta-Sync, Error-Routing)     │
-├────────────────────────────────────────────┤
-│  Data Layer                                 │
-│  → HevyConnector (URLSession, Pagination)   │
-│  → KeychainService (SecItemAdd/CopyMatching)│
-│  → SwiftData Store (ModelActor,             │
-│    Activity / Exercise / ExerciseSet)       │
-│  → ExerciseTemplateCache (SwiftData)        │
-└────────────────────────────────────────────┘
-```
+FitBuddy besteht aus drei on-device-Bausteinen (iOS App, SwiftData Store, iOS Keychain) und kommuniziert direkt mit zwei externen APIs — kein Backend.
 
-**Schichtregeln:**
-- API-Keys berühren ausschliesslich den Data Layer — nie ViewModel oder View.
-- Dashboard und InferenceService lesen ausschliesslich aus dem normalisierten `Activity`-Modell (ADR-006).
-- Alle SwiftData-Schreibzugriffe laufen über `ModelActor`, nie direkt auf dem `@MainActor`.
+```mermaid
+flowchart TB
+    classDef person fill:#08427b,color:#fff,stroke:#052e56
+    classDef system fill:#1168bd,color:#fff,stroke:#0b4884
+    classDef ext fill:#6b6b6b,color:#fff,stroke:#454545
+    classDef storage fill:#438dd5,color:#fff,stroke:#2e6295
 
-### Container
+    USER["User\n[Person]"]:::person
 
-```
-                         ┌──────────────┐
-                         │     User      │
-                         │   [Person]    │
-                         └──────┬───────┘
-                                │ nutzt (Touch / SwiftUI, on-device)
-                                ▼
-  ╔══════════════════ FitBuddy — iPhone (iOS 17+) ════════════════════════╗
-  ║                                                                       ║
-  ║   ┌───────────────────────────────────────────────────┐               ║
-  ║   │  iOS App                                          │               ║
-  ║   │  [Swift · SwiftUI · MVVM · Swift Concurrency ·    │               ║
-  ║   │   URLSession · Swift Charts]                      │               ║
-  ║   └──┬──────────────────┬───────────────────────┬─────┘               ║
-  ║      │ ModelContext     │ Security API          │ HTTPS               ║
-  ║      │ (in-process)     │ (in-process)          │ (TLS)               ║
-  ║      ▼                  ▼                       │                     ║
-  ║  ┌──────────────┐  ┌────────────────────┐       │                     ║
-  ║  │ SwiftData    │  │ iOS Keychain       │       │                     ║
-  ║  │ Store        │  │ [Keychain Services]│       │                     ║
-  ║  │ [SQLite]     │  │ API-Keys + Consent │       │                     ║
-  ║  │ Activity-    │  │ (verschlüsselt)    │       │                     ║
-  ║  │ Cache (90 T) │  └────────────────────┘       │                     ║
-  ║  └──────────────┘                               │                     ║
-  ╚═════════════════════════════════════════════════┼═════════════════════╝
-                                                    │
-            ┌──────────────────────┬────────────────┴─────┐
-            ▼                      ▼                      ▼
-   ┌─────────────────┐   ┌──────────────────────┐   ┌────────────────────┐
-   │ Hevy API (REST) │   │ Anthropic Claude API │   │ Strava / Polar     │
-   │ [Ext. System]   │   │ [Ext. System · USA]  │   │ [Ext. System] v1.1 │
-   │ GET /workouts   │   │ Messages API         │   │ (geplant, - - -)   │
-   └─────────────────┘   └──────────────────────┘   └────────────────────┘
+    subgraph IPHONE["FitBuddy — iPhone (iOS 17+)"]
+        APP["iOS App\nSwift · SwiftUI · MVVM · Swift Concurrency\nURLSession · Swift Charts"]:::system
+        SWIFTDATA[("SwiftData Store\n[SQLite · on-device]\nActivity-Cache 90 Tage")]:::storage
+        KEYCHAIN[("iOS Keychain\n[Keychain Services]\nAPI-Keys + Consent")]:::storage
+    end
 
-  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  v1.0 / v1.1 (NICHT im PoC):
-  ┌───────────────────────────────────────────────────────────────────┐
-  │ Backend / Proxy  [AWS Lambda + API Gateway, eu-central-1]         │
-  │ Für: Bedrock-Region (ADR-5) und ggf. Strava-OAuth-Token-Exchange  │
-  └───────────────────────────────────────────────────────────────────┘
+    subgraph APIS["Externe APIs"]
+        direction LR
+        HEVY["Hevy API\n[REST]\nGET /workouts"]:::ext
+        CLAUDE["Anthropic Claude API\n[USA]\nMessages API"]:::ext
+    end
+
+    USER -->|"nutzt (Touch / SwiftUI)"| APP
+    APP <-->|"ModelContext · in-process"| SWIFTDATA
+    APP <-->|"Security API · in-process"| KEYCHAIN
+    APP -->|"GET /workouts · HTTPS"| HEVY
+    APP -->|"Prompt → Empfehlung · HTTPS"| CLAUDE
 ```
 
 | Container | Technologie | Kritischstes Risiko |
@@ -194,13 +143,33 @@ FitBuddy ist eine **on-device iOS-App ohne Server-Tier**: alle Daten bleiben auf
 | **iOS App** | Swift · SwiftUI · MVVM · Swift Concurrency | Actor-Isolation-Fehler crashen erst zur Laufzeit |
 | **SwiftData Store** | SwiftData (`@Model`) · SQLite · on-device | Stille Store-Löschung bei fehlender `VersionedSchema` |
 | **iOS Keychain** | Keychain Services · `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` | Kein Recovery-Pfad bei verlorenem Key |
-| *(v1.0/v1.1)* **Backend/Proxy** | AWS Lambda + API Gateway · eu-central-1 | Übergang PoC → v1.0 ist ein Umbau, kein Plugin |
 
 *Bewusst nicht vorhanden: Web-App, API-Server, Server-Datenbank, verteilter Cache, Message Queue (ADR-004).*
 
-### Komponenten — C3 *(folgt in Modul 5 / Coding Phase)*
+### L2 — iOS App (Schichtenarchitektur)
 
-C3 zeigt die konkreten Swift-Klassen und ihre Abhängigkeiten *innerhalb* des iOS-App-Containers. Wird hier ergänzt, sobald die Implementierung beginnt — die Schichtenarchitektur oben ist bis dahin die massgebliche Struktur.
+Zoom in den iOS-App-Container: vier strikt getrennte Schichten, die von oben nach unten Verantwortung delegieren.
+
+```mermaid
+flowchart TB
+    classDef layer fill:#1168bd,color:#fff,stroke:#0b4884
+
+    PRES["Presentation Layer\nSwiftUI Views · @State · @Binding\nDashboard (US-2) · Onboarding (US-4) · AI-Result-View (US-3)"]:::layer
+    VM["ViewModel Layer · @MainActor\n@Observable ViewModels\nDashboardViewModel · AnalysisViewModel · OnboardingViewModel"]:::layer
+    SVC["Service / Domain Layer\nInferenceService · Prompt-Build · 6h-Cooldown\nConnectorLayer · FitnessConnector-Protocol · Delta-Sync · Error-Routing"]:::layer
+    DATA["Data Layer\nHevyConnector · URLSession · Pagination\nKeychainService · SecItemAdd / CopyMatching\nSwiftData Store · ModelActor · Activity / Exercise / ExerciseSet\nExerciseTemplateCache · SwiftData"]:::layer
+
+    PRES --> VM --> SVC --> DATA
+```
+
+**Schichtregeln:**
+- API-Keys berühren ausschliesslich den Data Layer — nie ViewModel oder View.
+- Dashboard und InferenceService lesen ausschliesslich aus dem normalisierten `Activity`-Modell (ADR-006).
+- Alle SwiftData-Schreibzugriffe laufen über `ModelActor`, nie direkt auf dem `@MainActor`.
+
+### L3 — Komponenten *(folgt in Modul 5 / Coding Phase)*
+
+Zoom in den Service / Domain Layer und Data Layer: konkrete Swift-Klassen und ihre Abhängigkeiten. Wird hier ergänzt, sobald die Implementierung beginnt — L2 oben ist bis dahin die massgebliche Struktur.
 
 ### Connector-Interface
 
@@ -215,7 +184,7 @@ protocol FitnessConnector {
 }
 
 /// Polymorphe Credentials — Hevy braucht einen API-Key,
-/// OAuth-Quellen (Strava, Polar) brauchen Tokens mit Ablaufdatum.
+/// OAuth-Quellen brauchen Tokens mit Ablaufdatum.
 enum ConnectorCredentials {
     case apiKey(String)
     case oauthTokens(accessToken: String, refreshToken: String, expiresAt: Date)
@@ -225,7 +194,6 @@ enum ConnectorCredentials {
 **Keychain-Keys (je eigener Eintrag, nie gemischt):**
 - `fitbuddy.hevy.apikey`
 - `fitbuddy.claude.apikey`
-- `fitbuddy.strava.access_token` / `fitbuddy.strava.refresh_token` / `fitbuddy.strava.token_expiry`
 
 ### Normalisiertes Datenmodell
 
@@ -234,7 +202,7 @@ Alle Datenquellen werden auf ein gemeinsames `Activity`-Modell normalisiert. Vor
 ```swift
 struct Activity {
     let id: String
-    let source: DataSource        // .hevy, .strava, .polar
+    let source: DataSource        // .hevy — erweiterbar für weitere Quellen
     let type: ActivityType        // .strength, .cardio
     let startedAt: Date
     let durationMinutes: Int
@@ -309,7 +277,6 @@ enum SetType { case warmup, normal, failure, dropset }
 | Datenabruf (Hevy API) | Nein | Klassische App-Logik |
 | Aggregation & Visualisierung | Nein | Deterministisch, kein AI-Mehrwert |
 | Key-Speicherung | Nein | iOS Keychain ist die richtige Lösung |
-| Cross-Source-Analyse (v1.1) | Ja (LLM) | Kraft + Ausdauer kombiniert, Recovery-Berechnung |
 
 **Prompt-Engineering (US-3)** — Eingabe: Strukturierte Trainingsdaten der letzten 4 Wochen (Volumen, Frequenz, Übungshistorie, Set-Typen, RPE-Werte).
 
@@ -345,6 +312,29 @@ class ExerciseTemplateCache {
 
 ---
 
+## Risiken & Technische Schulden
+
+### Architektonische Risiken
+
+| # | Risiko | Impact | Mitigation |
+|---|---|---|---|
+| AR-1 | **Hevy API ohne SLA-Garantien** — Hevy hat Stabilität explizit nicht zugesichert (*"no guarantees — we might abandon this entirely"*). Hevy ToS auf kommerzielle API-Nutzung noch nicht geprüft. | Hoch | `FitnessConnector`-Protocol (ADR-006) — zweite Quelle ohne Umbau integrierbar |
+| AR-2 | **Hevy Events-Endpoint als "early development" markiert** — Breaking Changes ohne Vorankündigung möglich | Mittel | Fallback auf vollständigen Re-Fetch bei HTTP-Fehler im `HevyConnector` einbauen |
+
+*AR-1 entspricht R1 in [README.md](README.md).*
+
+### Technische Schulden
+
+Bekannte Lücken im PoC-Design — vor Sprint 3 (AI-Integration) adressieren:
+
+| # | Lücke | Konsequenz | Handlungsbedarf |
+|---|---|---|---|
+| TD-1 | **Kein Token-Limit im Prompt-Build** | `400 context_length_exceeded` bei 90 Tagen × vollem Trainingsvolumen | Prompt-Fenster als Konstante definieren (→ W-2); Daten vor API-Call kürzen |
+| TD-2 | **Cooldown-Write nach API-Call** | Crash-Window → doppelte Analyse-Kosten möglich | Cooldown-Timestamp **vor** dem API-Call schreiben; bei Fehler zurücksetzen |
+| TD-3 | **Kein Backgrounding-Handling beim Claude-Call** | iOS beendet URLSession-Task nach ~30s — Analyse verloren, kein Benutzer-Feedback | `URLSession` mit `background`-Konfiguration oder explizites Timeout + Benutzer-Feedback |
+
+---
+
 ## Offene Fragen
 
 ### Widersprüche & Unklarheiten
@@ -367,5 +357,3 @@ class ExerciseTemplateCache {
 | AUP-Klärung: Erlaubt Anthropic Direct-from-Mobile für TestFlight? Bei Ablehnung: Cloudflare AI Gateway als Plan-B (~0.5 Tage Aufwand) — muss vor Sprint 3 feststehen | Hoch — in Sprint 1 klären |
 | Fehlerzustand 401: harter Logout vs. weicher Banner | Mittel — Empfehlung: harter Logout im PoC |
 | `ExerciseTemplateCache`: SwiftData oder In-Memory-Dictionary mit UserDefaults-Persistenz? | Mittel — vor US-2 entscheiden |
-| Strava vs. Polar als v1.1-Quelle: Entscheid und ADR | Mittel — vor v1.1-Sprint |
-| Hevy Events-Endpoint ist als "early development" markiert — Fallback-Strategie bei Breaking Change | Niedrig — beobachten |
