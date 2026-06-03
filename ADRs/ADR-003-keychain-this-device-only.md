@@ -1,8 +1,7 @@
 # ADR-3: API-Keys im iOS Keychain mit `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`
 
-**Status:** Proposed
-**Datum:** 2026-05-27
-**Autor:** FitBuddy Team (CAS ADAI 2026, Modul 3)
+**Status:** Accepted
+**Datum:** 2026-06-03
 
 ---
 
@@ -14,9 +13,9 @@ Auf der in [[ADR-2]] festgelegten iOS-Plattform speichert FitBuddy mindestens zw
 
 | QA | Anforderung an die Key-Speicherung | Quelle |
 |---|---|---|
-| **QA-1 Security / Privacy** | API-Keys verlassen das Gerät nie; kein iCloud-Sync; kein Backup-Restore auf Fremdgerät; bei Sperre hardware-geschützt | REQUIREMENTS.md §6, §7 QA-1 |
-| **QA-2 Reliability** | Bei HTTP 401 ([[ADR-1]] / US-1 AC3) muss der Key atomar löschbar sein, damit kein stiller Weiterbetrieb mit invalidem Key auftritt | REQUIREMENTS.md §7 QA-2 |
-| **QA-3 Maintainability** | Nutzung des Standard-`Security`-Frameworks; keine zusätzlichen Crypto-Libraries; klare Service-Keys für drei Connectoren ([[ADR-6]]) | REQUIREMENTS.md §7 QA-3 |
+| **QA-1 Security / Privacy** | API-Keys verlassen das Gerät nie; kein iCloud-Sync; kein Backup-Restore auf Fremdgerät; bei Sperre hardware-geschützt | REQUIREMENTS.md §5 QA-1 |
+| **QA-2 Reliability** | Bei HTTP 401 ([[ADR-1]] / US-1 AC3) muss der Key atomar löschbar sein, damit kein stiller Weiterbetrieb mit invalidem Key auftritt | REQUIREMENTS.md §5 QA-2 |
+| **QA-3 Maintainability** | Nutzung des Standard-`Security`-Frameworks; keine zusätzlichen Crypto-Libraries; klare Service-Keys für drei Connectoren ([[ADR-6]]) | REQUIREMENTS.md §5 QA-3 |
 
 ### Geprüfte Optionen
 
@@ -34,7 +33,7 @@ Auf der in [[ADR-2]] festgelegten iOS-Plattform speichert FitBuddy mindestens zw
 
 **Wir speichern alle FitBuddy-API-Keys im iOS Keychain mit dem Accessibility-Attribut `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`.**
 
-Wir verwenden die definierten Service-Keys `fitbuddy.hevy.apikey`, `fitbuddy.claude.apikey` und (v1.1) `fitbuddy.strava.token`. Keys werden nie geloggt, nie in Crash-Reports gesendet und nie in SwiftData oder UserDefaults gespiegelt — der Keychain ist die einzige Persistenzschicht für Key-Material. Bei HTTP 401 ([[ADR-1]] / US-1 AC3) löscht die App den betroffenen Key atomar und zwingt User zurück ins Onboarding (US-4).
+Wir verwenden die definierten Service-Keys `fitbuddy.hevy.apikey`, `fitbuddy.claude.apikey` und (v1.0) `fitbuddy.strava.token`. Keys werden nie geloggt, nie in Crash-Reports gesendet und nie in SwiftData oder UserDefaults gespiegelt — der Keychain ist die einzige Persistenzschicht für Key-Material. Bei HTTP 401 ([[ADR-1]] / US-1 AC3) löscht die App den betroffenen Key atomar und zwingt User zurück ins Onboarding (US-4).
 
 Die `kSecAttrAccessGroup` wird ab Sprint 1 explizit gesetzt (auch ohne Watch/Widget im PoC-Scope), um eine spätere Watch-Extension oder ein Widget ohne Migrations-Zwang zu ermöglichen.
 

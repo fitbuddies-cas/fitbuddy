@@ -1,22 +1,21 @@
 # ADR-2: Native iOS (SwiftUI) als Plattform
 
-**Status:** Proposed
-**Datum:** 2026-05-27
-**Autor:** FitBuddy Team (CAS ADAI 2026, Modul 3)
+**Status:** Accepted
+**Datum:** 2026-06-03
 
 ---
 
 ## Kontext
 
-FitBuddy verarbeitet Trainingsdaten (Gesundheitsdaten nach revDSG Art. 5 lit. c) und speichert zwei sensible API-Keys (Hevy, Claude) auf dem Gerät — siehe `REQUIREMENTS_PO.md` §6/§7. Die Plattformwahl entscheidet, wie verlässlich das Versprechen «Keys verlassen das Gerät nie» technisch eingelöst werden kann. [[ADR-1]] hat SwiftData als lokale Persistenz gewählt und damit **iOS 17 als Mindest-Deployment-Target** festgesetzt — die Plattformentscheidung erbt diese Anforderung. Das Team (2–3 Personen, 3 Monate) liefert ausschliesslich für iOS aus (TestFlight, kein App Store).
+FitBuddy verarbeitet Trainingsdaten (Gesundheitsdaten nach revDSG Art. 5 lit. c) und speichert zwei sensible API-Keys (Hevy, Claude) auf dem Gerät — siehe `REQUIREMENTS.md` §6/§7. Die Plattformwahl entscheidet, wie verlässlich das Versprechen «Keys verlassen das Gerät nie» technisch eingelöst werden kann. [[ADR-1]] hat SwiftData als lokale Persistenz gewählt und damit **iOS 17 als Mindest-Deployment-Target** festgesetzt — die Plattformentscheidung erbt diese Anforderung. Das Team (2–3 Personen, 3 Monate) liefert ausschliesslich für iOS aus (TestFlight, kein App Store).
 
 ### Entscheidungstreiber — Top-3-QAs
 
 | QA | Anforderung an die Plattform | Quelle |
 |---|---|---|
-| **QA-1 Security / Privacy** | Direkter Keychain-Zugriff ohne JS-Bridge/WebView; kein zusätzlicher Drittcode zwischen Key-Material und Hardware | REQUIREMENTS_PO.md §7 QA-1 |
-| **QA-3 Maintainability** | Native Integration mit SwiftData ([[ADR-1]]) und Keychain ([[ADR-3]]); keine Cross-Platform-Wrapper, die bei OS-Updates brechen | REQUIREMENTS_PO.md §7 QA-3 |
-| **QA-2 Reliability** | Apple-natives Crash-Reporting (Xcode Organizer); klare App-Lifecycle-Semantik für Cache-Loads (US-2 AC2) | REQUIREMENTS_PO.md §7 QA-2 |
+| **QA-1 Security / Privacy** | Direkter Keychain-Zugriff ohne JS-Bridge/WebView; kein zusätzlicher Drittcode zwischen Key-Material und Hardware | REQUIREMENTS.md §5 QA-1 |
+| **QA-3 Maintainability** | Native Integration mit SwiftData ([[ADR-1]]) und Keychain ([[ADR-3]]); keine Cross-Platform-Wrapper, die bei OS-Updates brechen | REQUIREMENTS.md §5 QA-3 |
+| **QA-2 Reliability** | Apple-natives Crash-Reporting (Xcode Organizer); klare App-Lifecycle-Semantik für Cache-Loads (US-2 AC2) | REQUIREMENTS.md §5 QA-2 |
 
 ### Geprüfte Optionen
 

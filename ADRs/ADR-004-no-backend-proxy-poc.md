@@ -1,7 +1,7 @@
 # ADR-4: Kein Backend-Proxy im PoC — Direkter API-Call vom iOS-Client
 
-**Status:** Proposed
-**Datum:** 2026-05-27
+**Status:** Accepted
+**Datum:** 2026-06-03
 **Treiber-QA:** Security / Privacy (QA-1), Maintainability (QA-3)
 
 ## Kontext
