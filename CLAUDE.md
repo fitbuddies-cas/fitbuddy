@@ -50,3 +50,4 @@ re-raise DPA/DSFA/AUP as PoC blockers.
 - **Naming:** `WorkoutListView`, `WorkoutListViewModel`, `HevyService`, `Workout`
 - **Folder:** `Views/` `ViewModels/` `Services/` `Models/`
 - No force-unwrap. Async/await, not Combine. Keychain only in Services. One type per file.
+- For every new `ViewModel` and `Service`, write corresponding unit tests in `FitBuddyTests/` using XCTest. Views do not require unit tests.
