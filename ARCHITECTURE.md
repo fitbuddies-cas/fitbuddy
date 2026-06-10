@@ -127,7 +127,7 @@ flowchart TB
     subgraph APIS["Externe APIs"]
         direction LR
         HEVY["Hevy API\n[REST]\nGET /workouts"]:::ext
-        CLAUDE["Anthropic Claude API\n[USA]\nMessages API"]:::ext
+        CLAUDE["Anthropic Claude API\nMessages API"]:::ext
     end
 
     USER -->|"nutzt (Touch / SwiftUI)"| APP
