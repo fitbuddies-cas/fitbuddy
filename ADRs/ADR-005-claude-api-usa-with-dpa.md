@@ -1,7 +1,7 @@
 # ADR-5: Claude API (USA) via Anthropic Commercial Terms im PoC, EU-Hosting vor v1.0
 
-**Status:** Proposed
-**Datum:** 2026-05-27
+**Status:** Accepted
+**Datum:** 2026-06-10
 **Treiber-QA:** Security / Privacy (QA-1), Maintainability (QA-3)
 
 ## Kontext
