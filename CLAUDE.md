@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 * Be brief, concise, and specific.
 * Do not mention personas in any other Document else than README.md
 * Always use the term "PoC" (Proof of Concept) — never "MVP" — when referring to the project scope.
-* If you want to mention a Version (e.g. v1 or v0) - always use v0 for our PoC. Anything beyond our PoC is v1. Do not use v1.1!
+* If you want to mentio!!n a Version (e.g. v1 or v0) - always use v0 for our PoC. Anything beyond our PoC is v1. Do not use v1.1!
 
 ## Project
 **FitBuddy** is a CAS (ADAI 2026, BFH Biel) Proof of Concept Project. The app to be built is a native iOS (SwiftUI) training assistant aggregating Hevy API data and delivering on-demand AI recommendations via Claude API.
@@ -43,6 +43,7 @@ re-raise DPA/DSFA/AUP as PoC blockers.
 | `REQUIREMENTS.md` | 12 user stories with acceptance criteria (MoSCoW v5) | &bull; Use this document to get all functional and non-functional requirements (sorted by MoSCoW), the out-of-scope requirements, and the top three non-functional requirements.<br>&bull; When adding/removing text in this file, use the German language.<br>&bull; Do NOT change or extend the existing chapter structure (1. User Stories with subsections 1.1 Must / 1.2 Should / 1.3 Could / 1.4 Won't, 2. MoSCoW-Priorisierung, 3. Nicht-funktionale Anforderungen, 4. Out of Scope, 5. Quality Attributes). Only edit content within existing chapters.<br>&bull; **Sync rule:** `REQUIREMENTS.md` is the single source of truth for user stories and acceptance criteria. It must always be in sync with the corresponding GitHub Issues (US-1–US-12 in `fitbuddies-cas/fitbuddy`). Whenever a user story or acceptance criterion changes — in either place — update the other accordingly. |
 | `ARCHITECTURE.md` | System design, Swift data model, Connector interface, ADRs | &bull; Use this document to get an overview of the architecture of our app project.<br>&bull; When adding/removing text in this file, use the German language                                                                                    |
 | `ADRs/`           | Architecture Decision Records | &bull; Architecture decisions are stored in this directory.<br>&bull; Create and edit ADRs using the Nygard format (Title, Status, Context, Decision, Consequences). <br>&bull; When adding/removing text in this file, use the German language.                                                                         |
+| `SPRINTS.md`      | Sprintplanung & Roadmap (Sprint 1 detailliert, Sprint 2–5 als Vorschau) | &bull; Use this file to understand the current sprint, scope, and implementation order.<br>&bull; Update sprint status and dates when a sprint starts or closes.<br>&bull; When adding/removing text in this file, use the German language. |
 
 ## Code Conventions
 
