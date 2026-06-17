@@ -3,3 +3,11 @@ Kursdokumente/
 .claude/settings.local.json
 node_modules
 .idea/
+
+# Xcode — user-specific state (the .xcodeproj itself is committed)
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+*.xcscmblueprint
+*.xccheckout
