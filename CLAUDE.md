@@ -58,6 +58,6 @@ re-raise DPA/DSFA/AUP as PoC blockers.
 
 - **MVVM:** View (SwiftUI, no logic) → ViewModel (`@MainActor final class ObservableObject`) → Service (`actor`, API/Keychain) → Model (`struct Codable`)
 - **Naming:** `WorkoutListView`, `WorkoutListViewModel`, `HevyService`, `Workout`
-- **Folder:** `Views/` `ViewModels/` `Services/` `Models/`
+- **Folder-Structure (feature-first):** Each feature gets `Features/<Name>/` containing its `Views/` + ViewModel (e.g. `Features/Onboarding/`, `Features/Dashboard/`, `Features/Analysis/`). Cross-cutting code lives in `Core/` (`Keychain/`, `Connector/`, `Networking/`, `Persistence/`, `DesignSystem/`); app entry & root navigation in `App/`. Add a `domain/`+`data/` split inside a folder **only where it genuinely has both** — for v0 that is only `Core/Connector/` (normalized `Activity` model vs `HevyConnector`/DTOs), not every feature.
 - No force-unwrap. Async/await, not Combine. Keychain only in Services. One type per file.
 - For every new `ViewModel` and `Service`, write corresponding unit tests in `FitBuddyTests/` using XCTest. Views do not require unit tests.
