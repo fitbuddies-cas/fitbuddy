@@ -44,6 +44,16 @@ re-raise DPA/DSFA/AUP as PoC blockers.
 | `docs/ARCHITECTURE.md` | System design, Swift data model, Connector interface, ADRs | &bull; Use this document to get an overview of the architecture of our app project.<br>&bull; When adding/removing text in this file, use the German language                                                                                    |
 | `docs/adr/`           | Architecture Decision Records | &bull; Architecture decisions are stored in this directory.<br>&bull; Create and edit ADRs using the Nygard format (Title, Status, Context, Decision, Consequences). <br>&bull; When adding/removing text in this file, use the German language.                                                                         |
 
+## Git Workflow
+
+| Regel | Vorgabe |
+|---|---|
+| **Branch-Naming** | `main`, `develop`, `feature/[task-001]-branch-name`, `fix/bug-001-branch-name` |
+| **Merge nach main** | Alle Teammitglieder dürfen mergen |
+| **PR Reviews** | Mind. 1, empfohlen 2 |
+| **Claude Pre-Review** | Ja — Reviewer triggert `/code-review` bei grösseren PRs |
+| **Merge-Rhythmus** | `develop` pro Task; `main` 1× wöchentlich (Mittwochabend) |
+
 ## Code Conventions
 
 - **MVVM:** View (SwiftUI, no logic) → ViewModel (`@MainActor final class ObservableObject`) → Service (`actor`, API/Keychain) → Model (`struct Codable`)
