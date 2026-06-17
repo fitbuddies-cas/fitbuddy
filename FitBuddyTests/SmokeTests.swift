@@ -1,10 +1,13 @@
 import XCTest
 @testable import FitBuddy
 
-/// Skelett-Smoke-Test: stellt sicher, dass App-Modul + Test-Target bauen und laufen.
-/// Wird ergänzt durch echte Tests ab #19 (KeychainService).
+/// Skelett-Smoke-Test: Test-Target ist mit dem App-Modul verdrahtet und die
+/// Root-View lässt sich zur Laufzeit konstruieren. Wird durch echte Tests ab
+/// #19 (KeychainService) ersetzt.
 final class SmokeTests: XCTestCase {
-    func testAppModuleLoads() {
-        XCTAssertNotNil(RootView())
+    @MainActor
+    func testRootViewBodyEvaluates() {
+        // Evaluiert den View-Body zur Laufzeit (mehr als ein reiner Compile-Check).
+        _ = RootView().body
     }
 }
