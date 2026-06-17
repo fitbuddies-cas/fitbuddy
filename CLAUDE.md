@@ -46,13 +46,17 @@ re-raise DPA/DSFA/AUP as PoC blockers.
 
 ## Git Workflow
 
+**Flow:** `feature/*` / `fix/*` → PR nach **`develop`** (pro Task) → `develop` → `main` (1× wöchentlich, Mi-Abend). **Nie** direkt auf `develop` oder `main` committen — immer via PR.
+
 | Regel | Vorgabe |
 |---|---|
-| **Branch-Naming** | `main`, `develop`, `feature/[task-001]-branch-name`, `fix/bug-001-branch-name` |
-| **Merge nach main** | Alle Teammitglieder dürfen mergen |
-| **PR Reviews** | Mind. 1, empfohlen 2 |
-| **Claude Pre-Review** | Ja — Reviewer triggert `/code-review` bei grösseren PRs |
-| **Merge-Rhythmus** | `develop` pro Task; `main` 1× wöchentlich (Mittwochabend) |
+| **Dauerbranches** | `main` (release-stabil), `develop` (Integration) |
+| **Arbeitsbranches** | `feature/task-<issue#>-kurz` bzw. `fix/bug-<issue#>-kurz` (z. B. `feature/task-019-keychain-service`) |
+| **PR-Ziel (Base)** | `feature/*` & `fix/*` **immer gegen `develop`** — nie gegen `main` |
+| **Merge-Rechte** | Alle Teammitglieder dürfen mergen |
+| **PR Reviews** | Mind. 1 Approval (empfohlen 2) vor Merge |
+| **Claude Pre-Review** | Reviewer triggert `/code-review` bei grösseren PRs |
+| **`develop` → `main`** | 1× wöchentlich (Mittwochabend), als Sammel-PR |
 
 ## Code Conventions
 
