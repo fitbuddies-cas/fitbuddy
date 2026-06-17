@@ -1,6 +1,6 @@
 # FitBuddy — Architektur
 
-> *Getrennt geführt: Ziele, Personas, Risiken → [README.md](README.md) · User Stories, NFRs → [REQUIREMENTS.md](REQUIREMENTS.md) · Architekturentscheide (Detail) → [ADRs/](ADRs/)*
+> *Getrennt geführt: Ziele, Personas, Risiken → [README.md](../README.md) · User Stories, NFRs → [REQUIREMENTS.md](REQUIREMENTS.md) · Architekturentscheide (Detail) → [adr/](adr/)*
 
 ---
 
@@ -245,12 +245,12 @@ Alle asynchronen Zugriffe folgen drei fixen Ausführungskontexten — gilt schic
 
 | ADR | Titel | Status |
 |---|---|---|
-| [ADR-001](ADRs/ADR-001-local-database.md) | Lokale Datenbank — SwiftData als Persistenz-Technologie | Proposed |
-| [ADR-002](ADRs/ADR-002-native-ios-swiftui.md) | Native iOS (SwiftUI) als Plattform | Proposed |
-| [ADR-003](ADRs/ADR-003-keychain-this-device-only.md) | API-Keys im iOS Keychain mit `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` | Proposed |
-| [ADR-004](ADRs/ADR-004-no-backend-proxy-poc.md) | Kein Backend-Proxy im PoC — Direkter API-Call vom iOS-Client | Proposed |
-| [ADR-005](ADRs/ADR-005-claude-api-usa-with-dpa.md) | Claude API (USA) via Anthropic Commercial Terms im PoC, EU-Hosting vor v1.0 | Proposed |
-| [ADR-006](ADRs/ADR-006-fitness-connector-protocol.md) | `FitnessConnector`-Protocol als Abstraktion ab Sprint 1 | Proposed |
+| [ADR-001](adr/ADR-001-local-database.md) | Lokale Datenbank — SwiftData als Persistenz-Technologie | Proposed |
+| [ADR-002](adr/ADR-002-native-ios-swiftui.md) | Native iOS (SwiftUI) als Plattform | Proposed |
+| [ADR-003](adr/ADR-003-keychain-this-device-only.md) | API-Keys im iOS Keychain mit `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` | Proposed |
+| [ADR-004](adr/ADR-004-no-backend-proxy-poc.md) | Kein Backend-Proxy im PoC — Direkter API-Call vom iOS-Client | Proposed |
+| [ADR-005](adr/ADR-005-claude-api-usa-with-dpa.md) | Claude API (USA) via Anthropic Commercial Terms im PoC, EU-Hosting vor v1.0 | Proposed |
+| [ADR-006](adr/ADR-006-fitness-connector-protocol.md) | `FitnessConnector`-Protocol als Abstraktion ab Sprint 1 | Proposed |
 
 ---
 
@@ -263,7 +263,7 @@ Alle asynchronen Zugriffe folgen drei fixen Ausführungskontexten — gilt schic
 | AR-1 | **Hevy API ohne SLA-Garantien** — Hevy hat Stabilität explizit nicht zugesichert (*"no guarantees — we might abandon this entirely"*). Hevy ToS auf kommerzielle API-Nutzung noch nicht geprüft. | Hoch | `FitnessConnector`-Protocol (ADR-006) — zweite Quelle ohne Umbau integrierbar |
 | AR-2 | **Hevy Events-Endpoint als "early development" markiert** — Breaking Changes ohne Vorankündigung möglich | Mittel | Fallback auf vollständigen Re-Fetch bei HTTP-Fehler im `HevyConnector` einbauen |
 
-*AR-1 entspricht R1 in [README.md](README.md).*
+*AR-1 entspricht R1 in [README.md](../README.md).*
 
 ### Technische Schulden
 
@@ -288,7 +288,7 @@ Bekannte Lücken im PoC-Design — vor Sprint 3 (AI-Integration) adressieren:
 | W-3 | **Certificate Pinning: als aktiv formuliert, laut ADR noch nicht implementiert.** ADR-004 markiert es als «Pflicht in Sprint 2». | `ADR-004` | Formulierung korrigieren: «geplant, Sprint 2». |
 | W-4 | **6h-Cooldown-Speicherort undefiniert.** ADR-004 nennt «6h via UserDefaults». ADR-001 reserviert UserDefaults nur für den Sync-Zeitstempel. Kein Dokument definiert den konkreten Key. | `ADR-004`, `ADR-001` | UserDefaults-Key-Konvention (`fitbuddy.analysis.lastCooldownTimestamp`) in ADR-001 oder ADR-004 ergänzen. |
 | W-5 | **HealthKit: Entscheid gefordert, aber nirgends getroffen.** Das `Activity`-Modell ist deshalb noch nicht finalisierbar. | `ADR-006` | Entscheid blockiert Protocol-Design und Datenmodell. Empfehlung: OUT für PoC. |
-| W-6 | **Strava OAuth-Secret ohne Backend strukturell unlösbar.** Secret in App einbetten ist nicht akzeptabel. Polar Accesslink (PKCE, kein Secret) ist eine Backend-freie Alternative — Entscheid steht aus. | `ADR-004`, `ADR-006`, [polar-integration.md](polar-integration.md) | Vor v1.1-Implementierung: Strava (Backend nötig) oder Polar (kein Backend) als zweite Quelle festlegen — eigener ADR. |
+| W-6 | **Strava OAuth-Secret ohne Backend strukturell unlösbar.** Secret in App einbetten ist nicht akzeptabel. Polar Accesslink (PKCE, kein Secret) ist eine Backend-freie Alternative — Entscheid steht aus. | `ADR-004`, `ADR-006` | Vor v1-Implementierung: Strava (Backend nötig) oder Polar (kein Backend) als zweite Quelle festlegen — eigener ADR. |
 
 ### Offene Architektur-Fragen
 
