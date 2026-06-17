@@ -43,20 +43,20 @@ Native iOS-App (SwiftUI), die:
 | Quelle | Status |
 |---|---|
 | Hevy (Kraft) | PoC |
-| Strava (Cardio) | Geplant v1.1 |
+| Strava (Cardio) | Geplant v1 |
 | Apple Health | In Abklärung |
 
 ## Anforderungen
 
 Der PoC umfasst vier **Must-Have**-User-Stories: API-Key sicher speichern (US-1), Trainingsdaten im Dashboard (US-2), AI-Analyse auf Knopfdruck (US-3) und Onboarding in 3 Schritten (US-4).
 
-Alle 12 User Stories mit Akzeptanzkriterien, MoSCoW-Priorisierung und Out of Scope: siehe [REQUIREMENTS.md](REQUIREMENTS.md).
+Alle 12 User Stories mit Akzeptanzkriterien, MoSCoW-Priorisierung und Out of Scope: siehe [REQUIREMENTS.md](docs/REQUIREMENTS.md).
 
 ## Architektur
 
-Native iOS (SwiftUI), kein Backend: Alle API-Keys verbleiben auf dem Gerät im iOS Keychain, die Aufrufe an Hevy- und Claude-API laufen direkt vom Gerät. Ein `FitnessConnector`-Interface kapselt die Datenquellen, damit Strava (v1.1) ohne Umbau ergänzt werden kann.
+Native iOS (SwiftUI), kein Backend: Alle API-Keys verbleiben auf dem Gerät im iOS Keychain, die Aufrufe an Hevy- und Claude-API laufen direkt vom Gerät. Ein `FitnessConnector`-Interface kapselt die Datenquellen, damit Strava (v1) ohne Umbau ergänzt werden kann.
 
-Systemdesign, Tech-Stack, Datenmodell, ADRs und offene Architektur-Fragen: siehe [ARCHITECTURE.md](ARCHITECTURE.md).
+Systemdesign, Tech-Stack, Datenmodell, ADRs und offene Architektur-Fragen: siehe [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Risiken
 
