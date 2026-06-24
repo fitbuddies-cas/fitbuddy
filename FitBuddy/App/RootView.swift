@@ -17,7 +17,7 @@ struct RootView: View {
                 placeholderHome
             }
         }
-        .task { await consentViewModel.refreshState() }
+        .task { await consentViewModel.bootstrap() }
     }
 
     /// Stand-in for the post-onboarding app surface (Dashboard arrives in #27).

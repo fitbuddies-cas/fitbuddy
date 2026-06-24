@@ -78,4 +78,42 @@ final class ConsentViewModelTests: XCTestCase {
         await sut.refreshState()
         XCTAssertEqual(sut.state, .required)
     }
+
+    // MARK: - bootstrap / fresh-install reset
+
+    func testBootstrapOnFreshInstallClearsPriorConsent() async throws {
+        // Prior install granted consent...
+        try await keychain.save(ConsentViewModel.currentVersion, for: .consentVersion)
+
+        // ...but a fresh install has no first-launch marker, so bootstrap must
+        // wipe the stale consent and re-require it.
+        let suiteName = "fitbuddy.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let reset = FirstLaunchResetService(defaults: defaults, keychain: keychain)
+        let viewModel = ConsentViewModel(keychain: keychain, firstLaunchReset: reset)
+
+        await viewModel.bootstrap()
+
+        XCTAssertEqual(viewModel.state, .required)
+        let stored = try await keychain.read(.consentVersion)
+        XCTAssertNil(stored)
+    }
+
+    func testBootstrapKeepsConsentOnSubsequentLaunch() async throws {
+        let suiteName = "fitbuddy.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let reset = FirstLaunchResetService(defaults: defaults, keychain: keychain)
+        let viewModel = ConsentViewModel(keychain: keychain, firstLaunchReset: reset)
+
+        // First launch: bootstrap sets the marker, then the user grants consent.
+        await viewModel.bootstrap()
+        viewModel.hasAcceptedCheckbox = true
+        await viewModel.confirm()
+
+        // Subsequent launch (marker already set) must not wipe consent.
+        await viewModel.bootstrap()
+        XCTAssertEqual(viewModel.state, .granted)
+    }
 }

@@ -24,9 +24,21 @@ final class ConsentViewModel: ObservableObject {
     var canConfirm: Bool { hasAcceptedCheckbox && !isSaving }
 
     private let keychain: KeychainService
+    private let firstLaunchReset: FirstLaunchResetService
 
-    init(keychain: KeychainService = KeychainService()) {
+    init(
+        keychain: KeychainService = KeychainService(),
+        firstLaunchReset: FirstLaunchResetService = FirstLaunchResetService()
+    ) {
         self.keychain = keychain
+        self.firstLaunchReset = firstLaunchReset
+    }
+
+    /// Startup entry point for the gate: clears stale Keychain state on a fresh
+    /// install (so a reinstall re-shows consent), then evaluates `state`.
+    func bootstrap() async {
+        try? await firstLaunchReset.resetIfFirstLaunch()
+        await refreshState()
     }
 
     /// Reads stored consent and sets `state` to `.granted` only if a consent
