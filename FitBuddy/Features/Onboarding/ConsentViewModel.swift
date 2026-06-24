@@ -1,0 +1,62 @@
+import Foundation
+
+/// Drives the consent screen: tracks the checkbox, persists consent
+/// (version + timestamp) to the Keychain, and exposes the resulting
+/// `ConsentState` used to gate the app's root view.
+@MainActor
+final class ConsentViewModel: ObservableObject {
+    /// Version of the consent text currently shown. Bump this whenever the
+    /// data processing described in the consent changes, so existing users are
+    /// asked to consent again.
+    static let currentVersion = "v0"
+
+    /// Whether the user ticked the consent checkbox.
+    @Published var hasAcceptedCheckbox = false
+    /// Current gating state for the root view.
+    @Published private(set) var state: ConsentState = .unknown
+    /// True while a save is in flight (disables the confirm button).
+    @Published private(set) var isSaving = false
+    /// User-facing error message when persisting consent fails.
+    @Published private(set) var errorMessage: String?
+
+    /// The confirm button is enabled only with a ticked checkbox and no
+    /// in-flight save.
+    var canConfirm: Bool { hasAcceptedCheckbox && !isSaving }
+
+    private let keychain: KeychainService
+
+    init(keychain: KeychainService = KeychainService()) {
+        self.keychain = keychain
+    }
+
+    /// Reads stored consent and sets `state` to `.granted` only if a consent
+    /// for the current version exists; otherwise `.required`.
+    func refreshState() async {
+        do {
+            let storedVersion = try await keychain.read(.consentVersion)
+            state = (storedVersion == Self.currentVersion) ? .granted : .required
+        } catch {
+            // Treat a Keychain read failure as "consent needed" — never let the
+            // user into the app without a confirmed consent.
+            state = .required
+        }
+    }
+
+    /// Persists the current consent version and an ISO8601 timestamp, then
+    /// transitions to `.granted`. No-op without a ticked checkbox.
+    func confirm() async {
+        guard hasAcceptedCheckbox else { return }
+        isSaving = true
+        errorMessage = nil
+        defer { isSaving = false }
+
+        do {
+            let timestamp = ISO8601DateFormatter().string(from: Date())
+            try await keychain.save(Self.currentVersion, for: .consentVersion)
+            try await keychain.save(timestamp, for: .consentTimestamp)
+            state = .granted
+        } catch {
+            errorMessage = "Einwilligung konnte nicht gespeichert werden. Bitte erneut versuchen."
+        }
+    }
+}
