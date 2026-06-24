@@ -66,3 +66,5 @@ re-raise DPA/DSFA/AUP as PoC blockers.
 - No force-unwrap. Async/await, not Combine. Keychain only in Services. One type per file.
 - For every new `ViewModel` and `Service`, write corresponding unit tests in `FitBuddyTests/` using XCTest. Views do not require unit tests.
 - All comments in the iOS code base must be in English, no other languages
+- Before doing an UI task consult the design folder
+- The text in the app has to be in english
