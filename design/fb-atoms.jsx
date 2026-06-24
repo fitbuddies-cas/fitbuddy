@@ -27,6 +27,32 @@ const FB = {
   fontMono: '"SF Mono", ui-monospace, "Menlo", monospace',
 };
 
+// Dark-mode palette. Warm charcoal surfaces echo the light off-white; accents
+// are lightened so they keep contrast on a dark background. Mirrors the dark
+// appearances in the iOS DesignSystem.xcassets color sets.
+const FB_DARK = {
+  // surfaces
+  bg: '#1A1815',
+  card: '#262320',
+  cardSubtle: '#302C28',
+  // ink
+  ink: '#F2F1ED',
+  ink2: '#B5B2A8',
+  muted: '#8E8B85',
+  ter: 'rgba(235,235,245,0.30)',
+  border: 'rgba(255,255,255,0.12)',
+  divider: 'rgba(255,255,255,0.08)',
+  // accents
+  accent: '#55B66E',
+  accentInk: '#BCDFC6',
+  accentSoft: '#18271D',
+  accentBorder: '#2C4F38',
+  warn: '#E98B3A',
+  warnSoft: '#2A2117',
+  red: '#FF5A60',
+  redSoft: '#2E1A1B',
+};
+
 // ─── Layout ────────────────────────────────────────────────────────────
 function FBScreen({ children, padding = '0 16px', bg = FB.bg, dark = false }) {
   return (
@@ -178,6 +204,6 @@ if (typeof document !== 'undefined' && !document.getElementById('fb-anim')) {
 }
 
 Object.assign(window, {
-  FB, FBScreen, FBNav, FBButton, FBCard, FBLabel, FBStat, FBBar,
+  FB, FB_DARK, FBScreen, FBNav, FBButton, FBCard, FBLabel, FBStat, FBBar,
   FBSpinner, FBLockIcon, FBChevron,
 });

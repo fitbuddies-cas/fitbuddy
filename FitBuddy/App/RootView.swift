@@ -10,7 +10,9 @@ struct RootView: View {
         Group {
             switch consentViewModel.state {
             case .unknown:
-                ProgressView()
+                FBSpinner()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.fbBackground)
             case .required:
                 ConsentView(viewModel: consentViewModel)
             case .granted:
@@ -25,14 +27,17 @@ struct RootView: View {
         VStack(spacing: 12) {
             Image(systemName: "dumbbell.fill")
                 .font(.system(size: 48))
-                .foregroundStyle(.tint)
+                .foregroundStyle(Color.fbAccent)
             Text("FitBuddy")
                 .font(.largeTitle.bold())
+                .foregroundStyle(Color.fbInk)
             Text("PoC skeleton – ready for Sprint 1")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.fbInkSecondary)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
+        .background(Color.fbBackground)
     }
 }
 
