@@ -173,7 +173,7 @@ flowchart TB
 ### Kritischer Datenfluss — «Analysieren» (US-3)
 
 ```
-[1] Keychain Read      → Claude API-Key lesen (<1ms, synchron)
+[1] Keychain Read      → Claude API-Key lesen (<1ms, async — KeychainService ist actor, await)
 [2] SwiftData Query    → Workouts 90 Tage laden (async, ModelActor)
 [3] Prompt-Build       → Daten serialisieren (kein Token-Limit definiert ⚠)
 [4] HTTPS POST         → api.anthropic.com (5–30s, kein Streaming, kein Retry ⚠)
