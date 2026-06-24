@@ -27,7 +27,8 @@ struct FBButtonStyle: ButtonStyle {
 
         var body: some View {
             configuration.label
-                .font(.system(size: 17, weight: .semibold))
+                // `.headline` is 17 pt semibold and scales with Dynamic Type.
+                .font(.headline)
                 .foregroundStyle(foreground)
                 .frame(maxWidth: fullWidth ? .infinity : nil)
                 .frame(height: 52)

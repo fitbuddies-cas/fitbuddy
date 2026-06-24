@@ -20,7 +20,7 @@ struct PrivacyPolicyView: View {
                             TestFlight to test users as part of a proof of concept.
                             """
                         )
-                        Divider().background(Color.fbDivider)
+                        Divider().overlay(Color.fbDivider)
                         FBInfoRow(
                             title: "What data we process",
                             text: """
@@ -30,7 +30,7 @@ struct PrivacyPolicyView: View {
                             • The time and version of your consent.
                             """
                         )
-                        Divider().background(Color.fbDivider)
+                        Divider().overlay(Color.fbDivider)
                         FBInfoRow(
                             title: "Purpose",
                             text: """
@@ -39,7 +39,7 @@ struct PrivacyPolicyView: View {
                             evaluation across multiple users.
                             """
                         )
-                        Divider().background(Color.fbDivider)
+                        Divider().overlay(Color.fbDivider)
                         FBInfoRow(
                             title: "Recipients (third parties)",
                             text: """
@@ -51,7 +51,7 @@ struct PrivacyPolicyView: View {
                             by the FitBuddy team.
                             """
                         )
-                        Divider().background(Color.fbDivider)
+                        Divider().overlay(Color.fbDivider)
                         FBInfoRow(
                             title: "Third country USA",
                             text: """
@@ -64,7 +64,7 @@ struct PrivacyPolicyView: View {
                             your Anthropic account.
                             """
                         )
-                        Divider().background(Color.fbDivider)
+                        Divider().overlay(Color.fbDivider)
                         FBInfoRow(
                             title: "Local storage",
                             text: """
@@ -73,7 +73,7 @@ struct PrivacyPolicyView: View {
                             during your own API calls to Hevy or Anthropic.
                             """
                         )
-                        Divider().background(Color.fbDivider)
+                        Divider().overlay(Color.fbDivider)
                         FBInfoRow(
                             title: "Your rights",
                             text: """

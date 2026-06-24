@@ -3,12 +3,15 @@ import SwiftUI
 /// FitBuddy typography helpers. The design system uses the system font (SF Pro)
 /// with tabular numerals on all numeric values so stats and figures align.
 extension Font {
-    /// Large numeric value used in stat cards (32 pt, bold).
-    static let fbStatValue = Font.system(size: 32, weight: .bold)
-    /// Section / card title (17 pt, semibold).
-    static let fbTitle = Font.system(size: 17, weight: .semibold)
-    /// Uppercase label above stats and sections (12 pt, medium).
-    static let fbLabel = Font.system(size: 12, weight: .medium)
+    /// Large numeric value used in stat cards (bold). Anchored to the
+    /// `.largeTitle` text style so it scales with Dynamic Type.
+    static let fbStatValue = Font.system(.largeTitle).weight(.bold)
+    /// Section / card title (17 pt, semibold). `.headline` is 17 pt semibold
+    /// and scales with Dynamic Type.
+    static let fbTitle = Font.headline
+    /// Uppercase label above stats and sections (medium). Anchored to the
+    /// `.caption` text style so it scales with Dynamic Type.
+    static let fbLabel = Font.system(.caption).weight(.medium)
 }
 
 extension View {

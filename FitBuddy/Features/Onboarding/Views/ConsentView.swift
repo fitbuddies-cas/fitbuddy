@@ -26,7 +26,7 @@ struct ConsentView: View {
                                 Anthropic DPA of your own account (incl. SCCs + Swiss Addendum).
                                 """
                             )
-                            Divider().background(Color.fbDivider)
+                            Divider().overlay(Color.fbDivider)
                             FBInfoRow(
                                 icon: "cross.case",
                                 title: "Not a medical device",
