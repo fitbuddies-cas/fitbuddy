@@ -45,7 +45,13 @@ struct FBButtonStyle: ButtonStyle {
 
         private var foreground: Color {
             switch kind {
-            case .primary, .accent: return .white
+            // `fbInk` flips to an off-white surface in dark mode, so the label
+            // must use the inverse surface (`fbBackground`) to stay legible in
+            // both appearances — a fixed white would vanish on the dark-mode
+            // (light) button.
+            case .primary: return .fbBackground
+            // The accent stays green in both appearances, so white keeps contrast.
+            case .accent: return .white
             case .secondary, .ghost: return .fbInk
             case .danger: return .fbRed
             }
