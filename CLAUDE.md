@@ -46,17 +46,17 @@ re-raise DPA/DSFA/AUP as PoC blockers.
 
 ## Git Workflow
 
-**Flow:** `feature/*` / `fix/*` → PR nach **`develop`** (pro Task) → `develop` → `main` (1× wöchentlich, Mi-Abend). **Nie** direkt auf `develop` oder `main` committen — immer via PR.
+**Flow:** `feature/*` / `fix/*` → PR to **`develop`** (per task) → `develop` → `main` (1× weekly, Wed evening). **Never** commit directly to `develop` or `main` — always via PR.
 
-| Regel | Vorgabe |
+| Rule | Default |
 |---|---|
-| **Dauerbranches** | `main` (release-stabil), `develop` (Integration) |
-| **Arbeitsbranches** | `feature/task-<issue#>-kurz` bzw. `fix/bug-<issue#>-kurz` (z. B. `feature/task-019-keychain-service`) |
-| **PR-Ziel (Base)** | `feature/*` & `fix/*` **immer gegen `develop`** — nie gegen `main` |
-| **Merge-Rechte** | Alle Teammitglieder dürfen mergen |
-| **PR Reviews** | Mind. 1 Approval (empfohlen 2) vor Merge |
-| **Claude Pre-Review** | Reviewer triggert `/code-review` bei grösseren PRs |
-| **`develop` → `main`** | 1× wöchentlich (Mittwochabend), als Sammel-PR |
+| **Permanent branches** | `main` (release-stable), `develop` (integration) |
+| **Working branches** | `feature/task-<issue#>-short` or `fix/bug-<issue#>-short` (e.g. `feature/task-019-keychain-service`) |
+| **PR Target (Base)** | `feature/*` & `fix/*` **always against `develop`** — never against `main` |
+| **Merge rights** | All team members may merge |
+| **PR Reviews** | Min. 1 approval (recommended 2) before merge |
+| **Claude Pre-Review** | Reviewer triggers `/code-review` for larger PRs |
+| **`develop` → `main`** | 1× weekly (Wednesday evening), as a bundled PR |
 
 ## Code Conventions
 
