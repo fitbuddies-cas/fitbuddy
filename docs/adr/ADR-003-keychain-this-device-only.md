@@ -35,7 +35,7 @@ Auf der in [[ADR-2]] festgelegten iOS-Plattform speichert FitBuddy mindestens zw
 
 Wir verwenden die definierten Service-Keys `fitbuddy.hevy.apikey`, `fitbuddy.claude.apikey` und (v1.0) `fitbuddy.strava.token`. Keys werden nie geloggt, nie in Crash-Reports gesendet und nie in SwiftData oder UserDefaults gespiegelt — der Keychain ist die einzige Persistenzschicht für Key-Material. Bei HTTP 401 ([[ADR-1]] / US-1 AC3) löscht die App den betroffenen Key atomar und zwingt User zurück ins Onboarding (US-4).
 
-Die `kSecAttrAccessGroup` wird ab Sprint 1 explizit gesetzt (auch ohne Watch/Widget im PoC-Scope), um eine spätere Watch-Extension oder ein Widget ohne Migrations-Zwang zu ermöglichen.
+Die `kSecAttrAccessGroup` wird im v0-PoC **nicht** explizit gesetzt: FitBuddy ist ein einzelnes App-Target ohne Watch-Extension oder Widget, und ein expliziter Access Group würde ein Keychain-Sharing-Entitlement erfordern, das im PoC keinen Nutzen hat (und im Simulator zu `errSecMissingEntitlement` führen kann). Es gilt daher die Default-Access-Group des App-Bundles. Sobald eine Watch-Extension oder ein Widget hinzukommt (v1.0), wird der Access Group explizit gesetzt; eine einmalige Key-Migration ist dann hinzunehmen.
 
 ---
 

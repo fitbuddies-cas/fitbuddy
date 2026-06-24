@@ -46,18 +46,25 @@ re-raise DPA/DSFA/AUP as PoC blockers.
 
 ## Git Workflow
 
-| Regel | Vorgabe |
+**Flow:** `feature/*` / `fix/*` → PR to **`develop`** (per task) → `develop` → `main` (1× weekly, Wed evening). **Never** commit directly to `develop` or `main` — always via PR.
+
+| Rule | Default |
 |---|---|
-| **Branch-Naming** | `main`, `develop`, `feature/[task-001]-branch-name`, `fix/bug-001-branch-name` |
-| **Merge nach main** | Alle Teammitglieder dürfen mergen |
-| **PR Reviews** | Mind. 1, empfohlen 2 |
-| **Claude Pre-Review** | Ja — Reviewer triggert `/code-review` bei grösseren PRs |
-| **Merge-Rhythmus** | `develop` pro Task; `main` 1× wöchentlich (Mittwochabend) |
+| **Permanent branches** | `main` (release-stable), `develop` (integration) |
+| **Working branches** | `feature/task-<issue#>-short` or `fix/bug-<issue#>-short` (e.g. `feature/task-019-keychain-service`) |
+| **PR Target (Base)** | `feature/*` & `fix/*` **always against `develop`** — never against `main` |
+| **Merge rights** | All team members may merge |
+| **PR Reviews** | Min. 1 approval (recommended 2) before merge |
+| **Claude Pre-Review** | Reviewer triggers `/code-review` for larger PRs |
+| **`develop` → `main`** | 1× weekly (Wednesday evening), as a bundled PR |
 
 ## Code Conventions
 
 - **MVVM:** View (SwiftUI, no logic) → ViewModel (`@MainActor final class ObservableObject`) → Service (`actor`, API/Keychain) → Model (`struct Codable`)
 - **Naming:** `WorkoutListView`, `WorkoutListViewModel`, `HevyService`, `Workout`
-- **Folder:** `Views/` `ViewModels/` `Services/` `Models/`
+- **Folder-Structure (feature-first):** Each feature gets `Features/<Name>/` containing its `Views/` + ViewModel (e.g. `Features/Onboarding/`, `Features/Dashboard/`, `Features/Analysis/`). Cross-cutting code lives in `Core/` (`Keychain/`, `Connector/`, `Networking/`, `Persistence/`, `DesignSystem/`); app entry & root navigation in `App/`. Add a `domain/`+`data/` split inside a folder **only where it genuinely has both** — for v0 that is only `Core/Connector/` (normalized `Activity` model vs `HevyConnector`/DTOs), not every feature. **Services** follow the same rule: a feature-specific service (e.g. `InferenceService`) lives in its feature folder; a shared/cross-feature service (e.g. `KeychainService`, `HevyConnector`, API client) lives under `Core/` in the matching subfolder.
 - No force-unwrap. Async/await, not Combine. Keychain only in Services. One type per file.
 - For every new `ViewModel` and `Service`, write corresponding unit tests in `FitBuddyTests/` using XCTest. Views do not require unit tests.
+- All comments in the iOS code base must be in English, no other languages
+- Before doing an UI task consult the design folder
+- The text in the app has to be in english

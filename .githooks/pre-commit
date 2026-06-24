@@ -1,0 +1,10 @@
+#!/bin/sh
+# Install: run once after cloning
+#      git config core.hooksPath .githooks
+branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+
+if [ "$branch" = "main" ] || [ "$branch" = "develop" ]; then
+  echo "ERROR: Direct commits to '$branch' are not allowed."
+  echo "Create a feature/* or fix/* branch and open a PR instead."
+  exit 1
+fi

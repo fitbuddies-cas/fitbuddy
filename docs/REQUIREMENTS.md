@@ -65,7 +65,7 @@ Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 | AC1 | Nutzer tippt auf «Quelle hinzufügen» | Er wählt Quelle und schliesst OAuth-Flow ab | Aktivitäten der letzten 30 Tage erscheinen normalisiert im Dashboard neben bestehenden Daten |
 | AC2 | Token einer Quelle ist abgelaufen | Dashboard lädt | Hinweis erscheint («Strava-Verbindung erneuern») mit direktem Link zum Re-Auth-Flow |
 
-> **Hinweis:** Im PoC wird nur das `FitnessConnector`-Interface verankert; der Strava-Connector selbst erst in v1.1.
+> **Hinweis:** Im PoC wird nur das `FitnessConnector`-Interface verankert; der Strava-Connector selbst erst in v1.
 
 ### 1.2.2 US-6 · Analyse-Kontext transparent machen
 **Als** Nutzer **möchte ich** sehen, auf welcher Datenbasis die AI-Empfehlung generiert wurde, **damit** ich die Empfehlung einordnen und ihr vertrauen oder sie hinterfragen kann.
@@ -131,10 +131,10 @@ Out of Scope — siehe Abschnitt 4.
 | US-2 | 90 Tage Trainingsdaten im Dashboard | **Must** | Datenbasis für AI-Analyse (US-3) und alle Visualisierungen. 90 Tage statt 30, da Progression erst über 8–12 Wochen messbar ist. |
 | US-3 | AI-Analyse auf Knopfdruck | **Must** | Die AI-Empfehlung *ist* das Produkt — ohne sie wird FitBuddy zum reinen Hevy-Viewer. |
 | US-4 | Onboarding in 3 Schritten | **Must** | Zwei API-Keys (Hevy + Claude) sind für nicht-technische User echtes Produktrisiko (R4). Onboarding muss ohne Doku machbar sein. |
-| US-5 | Zweite Datenquelle verbinden | **Should** | Differenzierung durch zweite Quelle ist Produktargument. Connector-Interface wird im PoC architektonisch verankert, Strava-Connector erst v1.1 (OAuth + Normalisierung + kombinierte Analyse ≈ 1.5–2 Sprints). |
+| US-5 | Zweite Datenquelle verbinden | **Should** | Differenzierung durch zweite Quelle ist Produktargument. Connector-Interface wird im PoC architektonisch verankert, Strava-Connector erst v1 (OAuth + Normalisierung + kombinierte Analyse ≈ 1.5–2 Sprints). |
 | US-6 | Analyse-Kontext transparent machen | **Should** | AC1 könnte als AC in US-3 wandern; eigenständige Story v. a. wegen AC2 (Warnung bei dünner Datenbasis). |
 | US-7 | Übungssuche & Filter | **Should** | Wird notwendig, sobald User-Historie >20 Übungen erreicht. Für PoC-Demos mit wenigen Sessions verzichtbar. |
-| US-8 | Datenquelle-Status sichtbar | **Could** | Bei nur einer Quelle (Hevy) reicht im PoC der Sync-Zeitstempel aus US-2 AC2. Vollwertig relevant ab v1.1. |
+| US-8 | Datenquelle-Status sichtbar | **Could** | Bei nur einer Quelle (Hevy) reicht im PoC der Sync-Zeitstempel aus US-2 AC2. Vollwertig relevant ab v1. |
 | US-9 | Progressionskurven pro Übung | **Could** | US-3 deckt den Hauptnutzen ab. Epley-Formel + Plateau-Detection sind nicht-trivial. |
 | US-10 | Daten manuell neu laden | **Could** | iOS-Pattern, das User erwarten — kein Showstopper. 1–2 Tage Aufwand, ergänzt US-2 AC2. |
 | US-11 | Wochenübersicht als Push-Notification | **Won't** | iOS-Permission-Flow + Background-Scheduling + LLM-Call-Fallback ist eigenes Sub-System. Relevant ab v1.2. |
@@ -167,7 +167,7 @@ Bewusst ausgeschlossen für den PoC. Dokumentiert, damit später kein Scope-Cree
 |---|---|
 | **US-11** Push-Notifications (Wochenübersicht) | iOS-Permission-Flow, Background-Scheduling, LLM-Fallback bei Offline-Zustand — eigenes Sub-System. Frühestens v1.2 sinnvoll, wenn Retention-Daten zeigen, dass User die App nicht regelmässig öffnen. |
 | **US-12** Write-back nach Hevy | Erfordert Hevy PRO, ungeklärtes Write-Target (Routine vs. zukünftiges Workout) und Undo-UX. Falsch übernommene AI-Empfehlung ist ein realer Schaden für den User (R3). |
-| **Strava-Connector (Implementierung)** | Nur das `FitnessConnector`-Interface wird verankert (US-5 / ADR-3). Die OAuth-Implementierung samt Token-Refresh und Cross-Source-Analyse kommt in v1.1. |
+| **Strava-Connector (Implementierung)** | Nur das `FitnessConnector`-Interface wird verankert (US-5 / ADR-3). Die OAuth-Implementierung samt Token-Refresh und Cross-Source-Analyse kommt in v1. |
 | **Apple Health Integration** | Siehe Risiko 1 — Vorschlag: OUT für PoC. |
 | **i18n / Lokalisierung** | English-only ist Definition of Done — kein Framework, keine zweite Sprache. Spart Übersetzungs-Roundtrips beim Prompt-Tuning. |
 | **App Store Release** | Distribution ausschliesslich via TestFlight / Sideload. Spart App-Store-Review, Marketing-Assets und Compliance-Roundtrips. |
@@ -215,7 +215,7 @@ Beide externen Abhängigkeiten sind instabil — dokumentiert: Hevy hat «no gua
 
 | Massnahme | Begründung |
 |---|---|
-| CoreData für Activity-Cache (nicht UserDefaults) | Relationales Modell für `Activity → Exercise → ExerciseSet`; Migration-Support für Strava-Daten in v1.1; Queries ohne alles in-memory laden |
+| CoreData für Activity-Cache (nicht UserDefaults) | Relationales Modell für `Activity → Exercise → ExerciseSet`; Migration-Support für Strava-Daten in v1; Queries ohne alles in-memory laden |
 | `lastSyncTimestamp` persistent in UserDefaults | Überlebt App-Kills; immer als Banner im Dashboard sichtbar (US-2 AC2) |
 | HTTP 401 → harter Logout (US-1 AC3) | Kein stilles Weiterlaufen mit gecachten Daten die der User für aktuell hält → falsche AI-Empfehlung auf Basis veralteter Daten |
 | Claude-Timeout 30 s + Cancel-Button (US-3 AC1) | Ohne Cancel-Button: User sieht hängenden Spinner, kill-swipet die App, glaubt sie ist kaputt |
@@ -231,21 +231,21 @@ Hevy hat einen Ausfall → leerer Screen (Cache war in-memory, App wurde über N
 
 **Warum für FitBuddy besonders wichtig:**
 
-Zwei dokumentierte Roadmap-Items blockieren ohne saubere Abstraktion: Strava (v1.1, in MoSCoW als Should gelistet) und die Bedrock-Migration (v1.0, ADR-5: «obligatorisch vor kommerziellem Launch»). Wenn HevyConnector-Code in Dashboard-Logik und AI-Prompt-Builder verwächst, muss bei jedem neuen Connector alles angefasst werden. Der Entscheid muss vor Sprint 1 getroffen sein — «Im PoC wird nur das `FitnessConnector`-Interface verankert» bedeutet: die Architektur muss jetzt stimmen.
+Zwei dokumentierte Roadmap-Items blockieren ohne saubere Abstraktion: Strava (v1, in MoSCoW als Should gelistet) und die Bedrock-Migration (v1.0, ADR-5: «obligatorisch vor kommerziellem Launch»). Wenn HevyConnector-Code in Dashboard-Logik und AI-Prompt-Builder verwächst, muss bei jedem neuen Connector alles angefasst werden. Der Entscheid muss vor Sprint 1 getroffen sein — «Im PoC wird nur das `FitnessConnector`-Interface verankert» bedeutet: die Architektur muss jetzt stimmen.
 
 **Konkrete architektonische Massnahmen:**
 
 | Massnahme | Begründung |
 |---|---|
 | `FitnessConnector`-Protocol **vor** HevyConnector implementieren (ADR-3) | Verhindert, dass Hevy-spezifische Typen in UI und AI Engine eindringen |
-| `StravaConnector`-Stub im PoC committen (kompiliert, wirft `NotImplemented`) | Verhindert Protocol-Drift zwischen Sprint 1 und v1.1 — Interface bleibt stabil |
+| `StravaConnector`-Stub im PoC committen (kompiliert, wirft `NotImplemented`) | Verhindert Protocol-Drift zwischen Sprint 1 und v1 — Interface bleibt stabil |
 | AI Analysis Engine liest **nur** aus dem Activity-Cache, nie direkt vom Connector | Claude-Prompt-Builder bleibt unverändert wenn Strava dazukommt |
 | Claude-API-Call in eigene `InferenceService`-Klasse kapseln | Bedrock-Migration = eine Klasse austauschen, nicht jeden Call im Codebase |
 | ADRs 1–5 im Code verlinkt | Neue Teammitglieder verstehen warum Entscheidungen so sind — verhindert «versehentliches Rückgängigmachen» |
 
 **Wenn ignoriert:**
 
-Strava-Integration in v1.1 erfordert Refactor von HevyConnector + Dashboard + AI Engine statt nur eines neuen Connectors. Bedrock-Migration (gesetzliche Pflicht für nDSG-Konformität vor v1.0) berührt jeden Claude-Call statt einer `InferenceService`-Klasse. Das Team schätzt 2 Tage — es werden 2 Wochen mit Regressionen.
+Strava-Integration in v1 erfordert Refactor von HevyConnector + Dashboard + AI Engine statt nur eines neuen Connectors. Bedrock-Migration (gesetzliche Pflicht für nDSG-Konformität vor v1.0) berührt jeden Claude-Call statt einer `InferenceService`-Klasse. Das Team schätzt 2 Tage — es werden 2 Wochen mit Regressionen.
 
 ---
 
@@ -255,7 +255,7 @@ Strava-Integration in v1.1 erfordert Refactor von HevyConnector + Dashboard + AI
 |---|---|---|
 | Security / Privacy | Rechtliche Haftung + App-Store-Ablehnung | Vor erstem TestFlight-Build |
 | Reliability | App wirkt kaputt beim ersten Hevy-Ausfall | Sprint 2 (Dashboard) |
-| Maintainability | Strava v1.1 und Bedrock v1.0 werden zu Refactors statt Features | Grundlage muss in Sprint 1 gelegt werden |
+| Maintainability | Strava v1 und Bedrock v1.0 werden zu Refactors statt Features | Grundlage muss in Sprint 1 gelegt werden |
 
 ---
 
