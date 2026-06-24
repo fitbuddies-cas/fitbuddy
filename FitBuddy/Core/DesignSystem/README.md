@@ -18,13 +18,13 @@ type-safe `Color.fb…` constants. To add or change a color, edit the color set 
 `DesignSystem.xcassets`; the `Color.fb…` accessor follows automatically from the
 asset name (`FBAccent` → `Color.fbAccent`).
 
-v0 uses a **fixed light palette** (warm off-white canvas `#F2F1ED`, white cards):
-each color set has a single universal appearance, so the app renders identically
-regardless of the system appearance — the prototype is light-only. Light/dark
-variants can later be added per color set without touching call sites. The two
-accent tokens are `oklch` in the design source; both fall inside the sRGB gamut,
-so the catalog stores their exact sRGB values (`fbAccent` `#399D57`, `fbWarn`
-`#DA720D`) — no Display-P3 needed.
+Each color set defines **light + dark appearances**, so the app follows the
+system appearance with no call-site changes. The light palette is the warm
+off-white canvas (`#F2F1ED`) with white cards; the dark palette uses warm
+charcoal surfaces (`#1A1815`) with accents lightened for contrast. Both palettes
+are mirrored in the design source (`design/fb-atoms.jsx`: `FB` / `FB_DARK`). The
+two accent tokens are `oklch` in the design source; both fall inside the sRGB
+gamut, so the catalog stores their exact sRGB values — no Display-P3 needed.
 
 ## Atoms
 
