@@ -1,3 +1,4 @@
+import Security
 import XCTest
 @testable import FitBuddy
 
@@ -60,6 +61,29 @@ final class KeychainServiceTests: XCTestCase {
         try await sut.save("2026-06-24T10:00:00Z", for: .consentTimestamp)
         let after = try await sut.exists(.consentTimestamp)
         XCTAssertTrue(after)
+    }
+
+    // MARK: - accessibility attribute
+
+    func testSavedItemUsesWhenUnlockedThisDeviceOnly() async throws {
+        try await sut.save("secret", for: .hevyAPIKey)
+
+        // Read the stored item's attributes back directly, bypassing the SUT,
+        // to verify the accessibility promise in the header doc comment.
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "ch.bfh.fitbuddy",
+            kSecAttrAccount as String: KeychainKey.hevyAPIKey.rawValue,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        XCTAssertEqual(status, errSecSuccess)
+
+        let attributes = try XCTUnwrap(result as? [String: Any])
+        let accessible = attributes[kSecAttrAccessible as String] as? String
+        XCTAssertEqual(accessible, kSecAttrAccessibleWhenUnlockedThisDeviceOnly as String)
     }
 
     // MARK: - delete

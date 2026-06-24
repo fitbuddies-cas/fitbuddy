@@ -26,29 +26,27 @@ actor KeychainService {
 
     /// Stores `value` for `key`, inserting or updating as needed.
     ///
-    /// Avoids `errSecDuplicateItem` by checking for an existing item first and
-    /// routing to `SecItemUpdate` instead of `SecItemAdd`.
+    /// Attempts `SecItemAdd` first and falls back to `SecItemUpdate` only on
+    /// `errSecDuplicateItem`. This is a single atomic Keychain call in the
+    /// common (insert) case and has no check-then-act race: a concurrent writer
+    /// that wins the add simply routes us to the update branch.
     func save(_ value: String, for key: KeychainKey) throws {
         let data = Data(value.utf8)
 
-        if try exists(key) {
-            let query = baseQuery(for: key)
-            let attributes: [String: Any] = [kSecValueData as String: data]
-            let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-            guard status == errSecSuccess else {
-                logger.error("SecItemUpdate failed: \(status, privacy: .public)")
-                throw KeychainError.unexpectedStatus(status)
-            }
-        } else {
-            var query = baseQuery(for: key)
-            query[kSecValueData as String] = data
-            query[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-            let status = SecItemAdd(query as CFDictionary, nil)
-            guard status == errSecSuccess else {
-                logger.error("SecItemAdd failed: \(status, privacy: .public)")
-                throw KeychainError.unexpectedStatus(status)
-            }
+        var addQuery = baseQuery(for: key)
+        addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+
+        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+        guard addStatus == errSecDuplicateItem else {
+            try check(addStatus, operation: "SecItemAdd")
+            return
         }
+
+        // Item already exists → update its value in place.
+        let attributes: [String: Any] = [kSecValueData as String: data]
+        let updateStatus = SecItemUpdate(baseQuery(for: key) as CFDictionary, attributes as CFDictionary)
+        try check(updateStatus, operation: "SecItemUpdate")
     }
 
     /// Returns the stored string for `key`, or `nil` if no item exists.
@@ -70,18 +68,15 @@ actor KeychainService {
         case errSecItemNotFound:
             return nil
         default:
-            logger.error("SecItemCopyMatching failed: \(status, privacy: .public)")
-            throw KeychainError.unexpectedStatus(status)
+            try check(status, operation: "SecItemCopyMatching")
+            return nil
         }
     }
 
     /// Deletes the item for `key`. A missing item is treated as success.
     func delete(_ key: KeychainKey) throws {
         let status = SecItemDelete(baseQuery(for: key) as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            logger.error("SecItemDelete failed: \(status, privacy: .public)")
-            throw KeychainError.unexpectedStatus(status)
-        }
+        try check(status, operation: "SecItemDelete", tolerating: errSecItemNotFound)
     }
 
     /// Returns whether an item exists for `key`.
@@ -96,12 +91,25 @@ actor KeychainService {
         case errSecItemNotFound:
             return false
         default:
-            logger.error("SecItemCopyMatching (exists) failed: \(status, privacy: .public)")
-            throw KeychainError.unexpectedStatus(status)
+            try check(status, operation: "SecItemCopyMatching")
+            return false
         }
     }
 
     // MARK: - Helpers
+
+    /// Maps an `OSStatus` to a thrown `KeychainError`, logging the failing
+    /// operation. Returns normally for `errSecSuccess` and any explicitly
+    /// tolerated status (e.g. `errSecItemNotFound` on delete).
+    private func check(
+        _ status: OSStatus,
+        operation: String,
+        tolerating tolerated: OSStatus...
+    ) throws {
+        guard status != errSecSuccess, !tolerated.contains(status) else { return }
+        logger.error("\(operation, privacy: .public) failed: \(status, privacy: .public)")
+        throw KeychainError.unexpectedStatus(status)
+    }
 
     /// Base query identifying a single item by class, service and account.
     private func baseQuery(for key: KeychainKey) -> [String: Any] {
