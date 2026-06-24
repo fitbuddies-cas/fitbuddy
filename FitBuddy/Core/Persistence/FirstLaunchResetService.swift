@@ -19,7 +19,12 @@ actor FirstLaunchResetService {
     }
 
     /// Purges all Keychain items on the first launch after install, then marks
-    /// the reset as done. A no-op on every subsequent launch.
+    /// the reset as done; a no-op once the marker is set.
+    ///
+    /// The purge runs before the marker is written, so the two steps are not
+    /// atomic: a process kill in between simply re-runs the (idempotent) purge
+    /// on the next launch. This order is deliberate — the alternative (marker
+    /// first) could leave stale Keychain items if interrupted.
     func resetIfFirstLaunch() async throws {
         guard !defaults.bool(forKey: Self.didResetKey) else { return }
 

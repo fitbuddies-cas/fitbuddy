@@ -24,8 +24,9 @@ final class ConsentViewModelTests: XCTestCase {
     }
 
     private func clearConsentKeys() async throws {
-        try await keychain.delete(.consentVersion)
-        try await keychain.delete(.consentTimestamp)
+        for key in KeychainKey.allCases {
+            try await keychain.delete(key)
+        }
     }
 
     // MARK: - confirm gating
@@ -59,6 +60,13 @@ final class ConsentViewModelTests: XCTestCase {
     // MARK: - app start / refreshState
 
     func testRefreshStateRequiredWhenNoConsent() async {
+        await sut.refreshState()
+        XCTAssertEqual(sut.state, .required)
+    }
+
+    func testRefreshStateRequiredWhenTimestampMissing() async throws {
+        // Simulate a partial write: version persisted but no timestamp.
+        try await keychain.save(ConsentViewModel.currentVersion, for: .consentVersion)
         await sut.refreshState()
         XCTAssertEqual(sut.state, .required)
     }

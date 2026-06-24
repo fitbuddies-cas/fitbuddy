@@ -28,10 +28,12 @@ final class ConsentViewModel: ObservableObject {
 
     init(
         keychain: KeychainService = KeychainService(),
-        firstLaunchReset: FirstLaunchResetService = FirstLaunchResetService()
+        firstLaunchReset: FirstLaunchResetService? = nil
     ) {
         self.keychain = keychain
-        self.firstLaunchReset = firstLaunchReset
+        // Share a single KeychainService instance with the reset service so both
+        // collaborators address the Keychain through the same actor instance.
+        self.firstLaunchReset = firstLaunchReset ?? FirstLaunchResetService(keychain: keychain)
     }
 
     /// Startup entry point for the gate: clears stale Keychain state on a fresh
@@ -41,12 +43,16 @@ final class ConsentViewModel: ObservableObject {
         await refreshState()
     }
 
-    /// Reads stored consent and sets `state` to `.granted` only if a consent
-    /// for the current version exists; otherwise `.required`.
+    /// Reads stored consent and sets `state` to `.granted` only if both the
+    /// current version and a timestamp are present; otherwise `.required`. The
+    /// timestamp check guards against a partial write (version saved, timestamp
+    /// not) leaving the user grantable without a recorded consent time.
     func refreshState() async {
         do {
             let storedVersion = try await keychain.read(.consentVersion)
-            state = (storedVersion == Self.currentVersion) ? .granted : .required
+            let storedTimestamp = try await keychain.read(.consentTimestamp)
+            let isGranted = storedVersion == Self.currentVersion && storedTimestamp != nil
+            state = isGranted ? .granted : .required
         } catch {
             // Treat a Keychain read failure as "consent needed" — never let the
             // user into the app without a confirmed consent.
