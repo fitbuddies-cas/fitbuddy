@@ -13,24 +13,23 @@ struct ConsentView: View {
                     header
                     disclosure(
                         icon: "globe",
-                        title: "Datenübertragung an Anthropic (USA)",
+                        title: "Data transfer to Anthropic (USA)",
                         text: """
-                        Deine Trainingsdaten sind Gesundheitsdaten (Art. 5 lit. c nDSG). \
-                        Für die KI-Analyse werden sie an Anthropic übertragen. Vertragspartner \
-                        ist Anthropic Ireland, Limited (irisches Recht); die technische \
-                        Verarbeitung erfolgt in den USA durch Anthropic PBC. Die USA bieten \
-                        kein dem Schweizer Recht gleichwertiges Datenschutzniveau. Grundlage \
-                        der Übertragung ist der Anthropic-DPA deines eigenen Accounts \
-                        (inkl. SCCs + Swiss Addendum).
+                        Your training data is health data (Art. 5 lit. c nDSG). For the AI \
+                        analysis it is transferred to Anthropic. Your contracting party is \
+                        Anthropic Ireland, Limited (Irish law); the technical processing takes \
+                        place in the USA by Anthropic PBC. The USA does not provide a level of \
+                        data protection equivalent to Swiss law. The transfer is based on the \
+                        Anthropic DPA of your own account (incl. SCCs + Swiss Addendum).
                         """
                     )
                     disclosure(
                         icon: "cross.case",
-                        title: "Kein Medizinprodukt",
+                        title: "Not a medical device",
                         text: """
-                        FitBuddy ist kein medizinisches Produkt und ersetzt keine ärztliche \
-                        oder therapeutische Beratung. Du trägst selbst die Verantwortung für \
-                        umgesetzte Empfehlungen.
+                        FitBuddy is not a medical product and does not replace medical or \
+                        therapeutic advice. You are responsible for any recommendations you \
+                        choose to act on.
                         """
                     )
                     privacyLink
@@ -44,13 +43,13 @@ struct ConsentView: View {
                 }
                 .padding()
             }
-            .navigationTitle("Bevor es losgeht")
+            .navigationTitle("Before we start")
             .navigationBarTitleDisplayMode(.inline)
         }
     }
 
     private var header: some View {
-        Text("Damit FitBuddy dich beim Training unterstützen kann, brauchen wir deine Einwilligung in die folgende Datenbearbeitung.")
+        Text("For FitBuddy to support your training, we need your consent to the following data processing.")
             .font(.subheadline)
             .foregroundStyle(.secondary)
     }
@@ -72,13 +71,13 @@ struct ConsentView: View {
         NavigationLink {
             PrivacyPolicyView()
         } label: {
-            Label("Datenschutzerklärung lesen", systemImage: "doc.text")
+            Label("Read privacy policy", systemImage: "doc.text")
         }
     }
 
     private var consentToggle: some View {
         Toggle(isOn: $viewModel.hasAcceptedCheckbox) {
-            Text("Ich habe die Hinweise gelesen und willige in die beschriebene Datenbearbeitung ein.")
+            Text("I have read the information above and consent to the described data processing.")
                 .font(.subheadline)
         }
     }
@@ -87,7 +86,7 @@ struct ConsentView: View {
         Button {
             Task { await viewModel.confirm() }
         } label: {
-            Text("Bestätigen und fortfahren")
+            Text("Confirm and continue")
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)

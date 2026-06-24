@@ -68,7 +68,7 @@ final class ConsentViewModel: ObservableObject {
             try await keychain.save(timestamp, for: .consentTimestamp)
             state = .granted
         } catch {
-            errorMessage = "Einwilligung konnte nicht gespeichert werden. Bitte erneut versuchen."
+            errorMessage = "Consent could not be saved. Please try again."
         }
     }
 }

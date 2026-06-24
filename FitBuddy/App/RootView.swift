@@ -28,7 +28,7 @@ struct RootView: View {
                 .foregroundStyle(.tint)
             Text("FitBuddy")
                 .font(.largeTitle.bold())
-            Text("PoC-Skelett – bereit für Sprint 1")
+            Text("PoC skeleton – ready for Sprint 1")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
