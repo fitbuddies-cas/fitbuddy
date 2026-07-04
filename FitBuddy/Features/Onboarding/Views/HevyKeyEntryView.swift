@@ -71,11 +71,11 @@ struct HevyKeyEntryView: View {
         HStack(alignment: .top, spacing: 12) {
             screenshotPlaceholder
             VStack(alignment: .leading, spacing: 6) {
-                Text("In Hevy, open **Settings → Developer → API Keys** and tap **Create new key**.")
+                Text("The key is not available in the Hevy app — only on the Hevy website. Log in at **hevy.com**, open **Settings → Developer**, and tap **Generate API key**.")
                     .font(.footnote)
                     .foregroundStyle(Color.fbInkSecondary)
                 Link(destination: HevyKeyEntryViewModel.hevyAPISettingsURL) {
-                    Text("Open Hevy ↗")
+                    Text("Open hevy.com ↗")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(Color.fbAccent)
                 }
@@ -170,7 +170,7 @@ struct HevyKeyEntryView: View {
                 .foregroundStyle(Color.fbInkSecondary)
             if failure == .invalidKey {
                 Link(destination: HevyKeyEntryViewModel.hevyAPISettingsURL) {
-                    Text("Open Hevy API settings ↗")
+                    Text("Open hevy.com API settings ↗")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(Color.fbRed)
                 }
@@ -198,7 +198,7 @@ struct HevyKeyEntryView: View {
     private func bannerMessage(for failure: HevyKeyEntryState.Failure) -> String {
         switch failure {
         case .invalidKey:
-            return "The key may be revoked or mistyped. Open Hevy and generate a new one, then paste it here."
+            return "The key may be revoked or mistyped. Generate a new one on hevy.com (Settings → Developer), then paste it here."
         case .network:
             return "Check your internet connection and try again."
         case .keychain:
