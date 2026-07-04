@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// Root view that gates app access on consent (US-4). Until consent for the
-/// current version is stored, the consent screen is shown; afterwards the app
-/// content follows. The full onboarding (API keys, #21–24) plugs in here later.
+/// Root view that gates app access on consent (US-4), then on the Hevy API key
+/// (step 1, #21). Interim wiring: the coordinated 3-step onboarding flow
+/// (OnboardingViewModel, #23) replaces the nested switch later.
 struct RootView: View {
     @StateObject private var consentViewModel = ConsentViewModel()
+    @StateObject private var hevyKeyViewModel = HevyKeyEntryViewModel()
 
     var body: some View {
         Group {
@@ -16,10 +17,18 @@ struct RootView: View {
             case .required:
                 ConsentView(viewModel: consentViewModel)
             case .granted:
-                placeholderHome
+                if hevyKeyViewModel.state == .connected {
+                    // Step 2 (Claude key, #22) plugs in here.
+                    placeholderHome
+                } else {
+                    HevyKeyEntryView(viewModel: hevyKeyViewModel)
+                }
             }
         }
-        .task { await consentViewModel.bootstrap() }
+        .task {
+            await consentViewModel.bootstrap()
+            await hevyKeyViewModel.bootstrap()
+        }
     }
 
     /// Stand-in for the post-onboarding app surface (Dashboard arrives in #27).
@@ -34,6 +43,16 @@ struct RootView: View {
             Text("PoC skeleton – ready for Sprint 1")
                 .font(.subheadline)
                 .foregroundStyle(Color.fbInkSecondary)
+            // Interim confirmation that step 1 succeeded, until the Claude key
+            // screen (#22) and dashboard (#27) take over from here.
+            Label("Hevy connected", systemImage: "checkmark.circle.fill")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Color.fbAccent)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.fbAccentSoft)
+                .clipShape(Capsule())
+                .padding(.top, 4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
