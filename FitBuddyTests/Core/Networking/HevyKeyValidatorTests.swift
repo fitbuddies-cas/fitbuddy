@@ -53,9 +53,9 @@ final class HevyKeyValidatorTests: XCTestCase {
         await assertValidateThrows("hv_live_bad", expected: .invalidKey)
     }
 
-    func testHTTP403ThrowsInvalidKey() async {
+    func testHTTP403ThrowsUnexpectedStatusNotInvalidKey() async {
         StubURLProtocol.handler = { Self.response(status: 403, for: $0) }
-        await assertValidateThrows("hv_live_bad", expected: .invalidKey)
+        await assertValidateThrows("hv_live_bad", expected: .unexpectedStatus(403))
     }
 
     func testHTTP500ThrowsUnexpectedStatus() async {

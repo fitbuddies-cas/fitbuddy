@@ -36,9 +36,12 @@ actor HevyKeyValidator: HevyKeyValidating {
         switch http.statusCode {
         case 200:
             return
-        case 401, 403:
+        case 401:
             throw HevyKeyValidationError.invalidKey
         default:
+            // 403 deliberately lands here: Hevy uses 401 for a bad key, while
+            // 403 can hit a valid key too (WAF, geo, quota) — telling the user
+            // to regenerate the key would be wrong advice.
             throw HevyKeyValidationError.unexpectedStatus(http.statusCode)
         }
     }
