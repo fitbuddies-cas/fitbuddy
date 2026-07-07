@@ -37,6 +37,7 @@ final class HevyKeyEntryViewModelTests: XCTestCase {
     }
 
     func testConnectWithEmptyKeyIsNoOp() async throws {
+        await sut.bootstrap()
         await sut.connect()
         XCTAssertEqual(sut.state, .idle)
         let receivedKeys = await validator.receivedKeys
@@ -121,13 +122,17 @@ final class HevyKeyEntryViewModelTests: XCTestCase {
 
     // MARK: - Bootstrap
 
+    func testInitialStateIsUnknownUntilBootstrap() {
+        XCTAssertEqual(sut.state, .unknown)
+    }
+
     func testBootstrapConnectsWhenKeyAlreadyStored() async throws {
         try await keychain.save("hv_live_existing", for: .hevyAPIKey)
         await sut.bootstrap()
         XCTAssertEqual(sut.state, .connected)
     }
 
-    func testBootstrapStaysIdleWithoutStoredKey() async {
+    func testBootstrapMovesToIdleWithoutStoredKey() async {
         await sut.bootstrap()
         XCTAssertEqual(sut.state, .idle)
     }

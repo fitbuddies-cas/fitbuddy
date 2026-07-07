@@ -11,16 +11,19 @@ struct RootView: View {
         Group {
             switch consentViewModel.state {
             case .unknown:
-                FBSpinner()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.fbBackground)
+                loadingView
             case .required:
                 ConsentView(viewModel: consentViewModel)
             case .granted:
-                if hevyKeyViewModel.state == .connected {
+                switch hevyKeyViewModel.state {
+                case .unknown:
+                    // Keychain check still running — don't flash the entry
+                    // screen at returning users who already stored a key.
+                    loadingView
+                case .connected:
                     // Step 2 (Claude key, #22) plugs in here.
                     placeholderHome
-                } else {
+                case .idle, .validating, .failed:
                     HevyKeyEntryView(viewModel: hevyKeyViewModel)
                 }
             }
@@ -29,6 +32,13 @@ struct RootView: View {
             await consentViewModel.bootstrap()
             await hevyKeyViewModel.bootstrap()
         }
+    }
+
+    /// Shown while a gate's persisted state is still being read at launch.
+    private var loadingView: some View {
+        FBSpinner()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.fbBackground)
     }
 
     /// Stand-in for the post-onboarding app surface (Dashboard arrives in #27).

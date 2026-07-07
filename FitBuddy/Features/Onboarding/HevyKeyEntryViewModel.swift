@@ -15,7 +15,7 @@ final class HevyKeyEntryViewModel: ObservableObject {
             if case .failed = state, apiKey != oldValue { state = .idle }
         }
     }
-    @Published private(set) var state: HevyKeyEntryState = .idle
+    @Published private(set) var state: HevyKeyEntryState = .unknown
 
     private let validator: HevyKeyValidating
     private let keychain: KeychainService
@@ -40,13 +40,13 @@ final class HevyKeyEntryViewModel: ObservableObject {
         !trimmedKey.isEmpty && state != .validating
     }
 
-    /// Skips the screen when a (previously validated) key is already stored,
-    /// e.g. after an app restart mid-onboarding.
+    /// Resolves `.unknown` by checking the Keychain: skips the screen when a
+    /// (previously validated) key is already stored, e.g. after an app restart
+    /// mid-onboarding; otherwise moves to `.idle` for fresh input.
     func bootstrap() async {
-        guard state == .idle else { return }
-        if (try? await keychain.exists(.hevyAPIKey)) == true {
-            state = .connected
-        }
+        guard state == .unknown else { return }
+        let hasStoredKey = (try? await keychain.exists(.hevyAPIKey)) == true
+        state = hasStoredKey ? .connected : .idle
     }
 
     /// Validates the entered key with a live Hevy API call and stores it in

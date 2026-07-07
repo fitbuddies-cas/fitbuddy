@@ -12,6 +12,9 @@ enum HevyKeyEntryState: Equatable {
         case keychain
     }
 
+    /// Stored-key check (`bootstrap()`) has not finished yet — the root view
+    /// shows a spinner instead of flashing the entry screen at returning users.
+    case unknown
     /// Waiting for input; no validation attempt in flight.
     case idle
     /// Key is being verified against the Hevy API.
