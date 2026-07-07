@@ -45,8 +45,16 @@ final class HevyKeyEntryViewModel: ObservableObject {
     /// mid-onboarding; otherwise moves to `.idle` for fresh input.
     func bootstrap() async {
         guard state == .unknown else { return }
-        let hasStoredKey = (try? await keychain.exists(.hevyAPIKey)) == true
-        state = hasStoredKey ? .connected : .idle
+        do {
+            state = try await keychain.exists(.hevyAPIKey) ? .connected : .idle
+        } catch {
+            // The Keychain can be transiently unreadable (e.g. a prewarm
+            // launch while the device is still locked). Fail open to the
+            // entry screen rather than spinning forever on .unknown: in the
+            // worst case the user re-validates a key that was already stored,
+            // and saving simply overwrites it.
+            state = .idle
+        }
     }
 
     /// Validates the entered key with a live Hevy API call and stores it in
