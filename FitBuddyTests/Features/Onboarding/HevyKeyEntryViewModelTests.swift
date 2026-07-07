@@ -79,11 +79,14 @@ final class HevyKeyEntryViewModelTests: XCTestCase {
         XCTAssertNil(stored)
     }
 
-    func testUnexpectedStatusMapsToNetworkFailure() async {
+    func testUnexpectedStatusMapsToServiceUnavailable() async throws {
         await validator.setResult(.failure(HevyKeyValidationError.unexpectedStatus(503)))
         sut.apiKey = "hv_live_abc"
         await sut.connect()
-        XCTAssertEqual(sut.state, .failed(.network))
+
+        XCTAssertEqual(sut.state, .failed(.serviceUnavailable))
+        let stored = try await keychain.read(.hevyAPIKey)
+        XCTAssertNil(stored)
     }
 
     // MARK: - Recovery

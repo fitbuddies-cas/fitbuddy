@@ -67,10 +67,12 @@ final class HevyKeyEntryViewModel: ObservableObject {
         state = .validating
         do {
             try await validator.validate(key)
-        } catch HevyKeyValidationError.invalidKey {
-            state = .failed(.invalidKey)
+        } catch let error as HevyKeyValidationError {
+            state = .failed(Self.failure(for: error))
             return
         } catch {
+            // The protocol allows arbitrary errors; without an HTTP response
+            // a connectivity problem is the closest description.
             state = .failed(.network)
             return
         }
@@ -80,6 +82,20 @@ final class HevyKeyEntryViewModel: ObservableObject {
             state = .connected
         } catch {
             state = .failed(.keychain)
+        }
+    }
+
+    /// Maps validator errors to banner failures. Exhaustive on purpose: a new
+    /// validator error case must make a conscious copy decision here instead
+    /// of silently inheriting the "check your internet" advice.
+    private static func failure(for error: HevyKeyValidationError) -> HevyKeyEntryState.Failure {
+        switch error {
+        case .invalidKey:
+            return .invalidKey
+        case .transport:
+            return .network
+        case .unexpectedStatus:
+            return .serviceUnavailable
         }
     }
 

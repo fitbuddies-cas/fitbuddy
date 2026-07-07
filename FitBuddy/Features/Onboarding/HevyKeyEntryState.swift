@@ -6,8 +6,11 @@ enum HevyKeyEntryState: Equatable {
     enum Failure: Equatable {
         /// Hevy rejected the key (HTTP 401).
         case invalidKey
-        /// Hevy could not be reached or answered unexpectedly.
+        /// Hevy could not be reached at all (offline, timeout, DNS…).
         case network
+        /// Hevy answered, but not with 200/401 (rate limit, outage…) — the
+        /// key was not rejected and the connection works.
+        case serviceUnavailable
         /// The key validated but could not be persisted to the Keychain.
         case keychain
     }
