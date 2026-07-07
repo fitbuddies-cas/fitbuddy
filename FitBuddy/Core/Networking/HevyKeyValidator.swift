@@ -6,7 +6,7 @@ import Foundation
 /// here — that is `HevyService`'s job (#25).
 actor HevyKeyValidator: HevyKeyValidating {
     /// Smallest possible authenticated request against the workouts endpoint.
-    private static let probeURL = URL(string: "https://api.hevyapp.com/v1/workouts?page=1&pageSize=1")!
+    private static let probeURL = URL(staticString: "https://api.hevyapp.com/v1/workouts?page=1&pageSize=1")
 
     private let session: URLSession
 

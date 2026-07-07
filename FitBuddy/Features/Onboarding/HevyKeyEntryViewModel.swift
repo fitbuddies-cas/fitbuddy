@@ -6,7 +6,7 @@ import Foundation
 @MainActor
 final class HevyKeyEntryViewModel: ObservableObject {
     /// Hevy page where the user creates/manages API keys (AC3 error link).
-    static let hevyAPISettingsURL = URL(string: "https://hevy.com/settings?developer")!
+    static let hevyAPISettingsURL = URL(staticString: "https://hevy.com/settings?developer")
 
     /// Raw text field content. Editing after a failure returns to `.idle` so
     /// the error styling clears as soon as the user starts fixing the key.
