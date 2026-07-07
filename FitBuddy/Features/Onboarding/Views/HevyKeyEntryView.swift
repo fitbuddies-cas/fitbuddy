@@ -183,7 +183,7 @@ struct HevyKeyEntryView: View {
         .clipShape(RoundedRectangle(cornerRadius: FBRadius.control))
         .overlay(
             RoundedRectangle(cornerRadius: FBRadius.control)
-                .strokeBorder(Color.fbRed.opacity(0.2), lineWidth: 1)
+                .strokeBorder(Color.fbRedBorder, lineWidth: 1)
         )
     }
 
