@@ -14,6 +14,10 @@ struct OnboardingFlowView: View {
                 .navigationDestination(for: OnboardingStep.self) { step in
                     destination(for: step)
                         .navigationBarBackButtonHidden(true)
+                        // Hevy/Claude screens own their look end-to-end (custom
+                        // step indicator, no title) — without this the stack
+                        // still renders an empty system nav bar above them.
+                        .toolbar(.hidden, for: .navigationBar)
                 }
         }
     }
