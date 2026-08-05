@@ -1,6 +1,6 @@
 import Foundation
 
-/// Drives the Claude API-key entry screen (US-4, step 2): persists the entered
+/// Drives the Claude API-key entry screen (US-4, step 3): persists the entered
 /// key to the Keychain, or lets the user skip the step entirely (AC2). There is
 /// no live validation against the Claude API — a rejected key just fails later,
 /// at the point of the first AI analysis call (US-3).

@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// Root view that gates app access on consent (US-4), then on the Hevy API key
-/// (step 1, #21), then on the optional Claude API key (step 2, #22). Interim
-/// wiring: the coordinated 3-step onboarding flow (OnboardingViewModel, #23)
-/// replaces the nested switch later.
+/// Root view that gates app access on consent (US-4, step 1), then on the Hevy
+/// API key (step 2, #21), then on the optional Claude API key (step 3, #22).
+/// Interim wiring: the coordinated 3-step onboarding flow (OnboardingViewModel,
+/// #23) replaces the nested switch later.
 struct RootView: View {
     @StateObject private var consentViewModel = ConsentViewModel()
     @StateObject private var hevyKeyViewModel = HevyKeyEntryViewModel()

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Onboarding step 1 (US-4): enter and verify the Hevy API key. Mirrors
+/// Onboarding step 2 (US-4): enter and verify the Hevy API key. Mirrors
 /// `FBKeyEntryScreen` in `design/fb-screens.jsx` — step indicator, where-to-find
 /// card, monospaced key field with inline spinner, error banner with a direct
 /// link to Hevy's API settings, and a bottom CTA.
@@ -47,22 +47,22 @@ struct HevyKeyEntryView: View {
 
     // MARK: - Sections
 
-    /// Three-segment progress bar; this screen is always step 1 of 3.
+    /// Three-segment progress bar; this screen is always step 2 of 3.
     private var stepIndicator: some View {
         HStack(spacing: 6) {
             ForEach(0..<3) { index in
                 Capsule()
-                    .fill(index == 0 ? Color.fbInk : Color.fbBorder)
+                    .fill(index <= 1 ? Color.fbInk : Color.fbBorder)
                     .frame(height: 3)
             }
-            Text("Step 1 of 3")
+            Text("Step 2 of 3")
                 .font(.fbLabel)
                 .foregroundStyle(Color.fbMuted)
                 .padding(.leading, 8)
                 .fixedSize()
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Onboarding step 1 of 3")
+        .accessibilityLabel("Onboarding step 2 of 3")
     }
 
     /// Explains where the key lives in Hevy (AC1). The dashed box is a

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Onboarding step 2 (US-4): optionally enter the Claude API key. Mirrors the
+/// Onboarding step 3 (US-4): optionally enter the Claude API key. Mirrors the
 /// layout of `HevyKeyEntryView` (step indicator, where-to-find card, monospaced
 /// key field), but the key is optional — a prominent "Skip" CTA (AC2) sits
 /// alongside "Save & continue" and there is no live key validation.
@@ -46,22 +46,22 @@ struct ClaudeKeyEntryView: View {
 
     // MARK: - Sections
 
-    /// Three-segment progress bar; this screen is always step 2 of 3.
+    /// Three-segment progress bar; this screen is always step 3 of 3.
     private var stepIndicator: some View {
         HStack(spacing: 6) {
             ForEach(0..<3) { index in
                 Capsule()
-                    .fill(index <= 1 ? Color.fbInk : Color.fbBorder)
+                    .fill(index <= 2 ? Color.fbInk : Color.fbBorder)
                     .frame(height: 3)
             }
-            Text("Step 2 of 3")
+            Text("Step 3 of 3")
                 .font(.fbLabel)
                 .foregroundStyle(Color.fbMuted)
                 .padding(.leading, 8)
                 .fixedSize()
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Onboarding step 2 of 3")
+        .accessibilityLabel("Onboarding step 3 of 3")
     }
 
     /// Explains where the key lives in the Anthropic console.
