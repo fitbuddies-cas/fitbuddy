@@ -1,6 +1,6 @@
 import Foundation
 
-/// UI state of the Hevy API-key entry screen (US-4, step 1).
+/// UI state of the Hevy API-key entry screen (US-4, step 2).
 enum HevyKeyEntryState: Equatable {
     /// Reasons the connect attempt can fail, each with its own banner copy.
     enum Failure: Equatable {
@@ -24,6 +24,6 @@ enum HevyKeyEntryState: Equatable {
     case validating
     /// The last connect attempt failed.
     case failed(Failure)
-    /// Key was validated and stored — onboarding can move to step 2.
+    /// Key was validated and stored — onboarding can move to step 3.
     case connected
 }

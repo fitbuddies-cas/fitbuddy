@@ -1,6 +1,6 @@
 import Foundation
 
-/// Drives the Hevy API-key entry screen (US-4, step 1): validates the entered
+/// Drives the Hevy API-key entry screen (US-4, step 2): validates the entered
 /// key against the Hevy API and persists it to the Keychain only after Hevy
 /// accepted it, so no unverified key is ever kept.
 @MainActor
