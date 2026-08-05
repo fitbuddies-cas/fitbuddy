@@ -1,6 +1,6 @@
 import Foundation
 
-/// Drives the Claude API-key entry screen (US-4, step 3): persists the entered
+/// Drives the Claude API-key entry screen (US-4, step 2): persists the entered
 /// key to the Keychain, or lets the user skip the step entirely (AC2). There is
 /// no live validation against the Claude API — a rejected key just fails later,
 /// at the point of the first AI analysis call (US-3).
@@ -18,10 +18,18 @@ final class ClaudeKeyEntryViewModel: ObservableObject {
     }
     @Published private(set) var state: ClaudeKeyEntryState = .unknown
 
-    private let keychain: KeychainService
+    /// `UserDefaults` key backing the "skip for now" decision (AC2). Unlike the
+    /// Keychain, `UserDefaults` is wiped on app deletion, so a skip does not
+    /// outlive a reinstall — see `FirstLaunchResetService` for the same
+    /// reasoning applied to its own marker.
+    private static let skippedKey = "fitbuddy.onboarding.claudeKeySkipped"
 
-    init(keychain: KeychainService = KeychainService()) {
+    private let keychain: KeychainService
+    private let defaults: UserDefaults
+
+    init(keychain: KeychainService = KeychainService(), defaults: UserDefaults = .standard) {
         self.keychain = keychain
+        self.defaults = defaults
     }
 
     /// Key with surrounding whitespace/newlines removed (pasting often adds a
@@ -42,7 +50,11 @@ final class ClaudeKeyEntryViewModel: ObservableObject {
     func bootstrap() async {
         guard state == .unknown else { return }
         do {
-            state = try await keychain.exists(.claudeAPIKey) ? .saved : .idle
+            if try await keychain.exists(.claudeAPIKey) {
+                state = .saved
+            } else {
+                state = defaults.bool(forKey: Self.skippedKey) ? .skipped : .idle
+            }
         } catch {
             // Fail open to the entry screen rather than spinning forever on
             // .unknown — see HevyKeyEntryViewModel.bootstrap() for the same
@@ -65,13 +77,11 @@ final class ClaudeKeyEntryViewModel: ObservableObject {
         }
     }
 
-    /// Continues onboarding without a Claude key (AC2 "Überspringen").
+    /// Continues onboarding without a Claude key (AC2 "Überspringen"). Persisted
+    /// via `UserDefaults` so the entry screen doesn't reappear on every cold
+    /// start until the user actually adds a key.
     func skip() {
+        defaults.set(true, forKey: Self.skippedKey)
         state = .skipped
-    }
-
-    /// Resets a failed attempt back to editing (the "Try again" CTA).
-    func retry() {
-        if case .failed = state { state = .idle }
     }
 }

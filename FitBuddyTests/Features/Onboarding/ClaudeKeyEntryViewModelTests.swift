@@ -3,22 +3,30 @@ import XCTest
 
 /// Unit tests for `ClaudeKeyEntryViewModel`. Keychain access uses the real
 /// `KeychainService` on the simulator (same pattern as
-/// `HevyKeyEntryViewModelTests`), with the Claude key cleared around each test.
+/// `HevyKeyEntryViewModelTests`), with the Claude key cleared around each
+/// test; the skip flag uses an isolated `UserDefaults` suite (same pattern as
+/// `FirstLaunchResetServiceTests`).
 @MainActor
 final class ClaudeKeyEntryViewModelTests: XCTestCase {
     private var keychain: KeychainService!
+    private var defaults: UserDefaults!
+    private var suiteName: String!
     private var sut: ClaudeKeyEntryViewModel!
 
     override func setUp() async throws {
         try await super.setUp()
         keychain = KeychainService()
         try await keychain.delete(.claudeAPIKey)
-        sut = ClaudeKeyEntryViewModel(keychain: keychain)
+        suiteName = "fitbuddy.tests.\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
+        sut = ClaudeKeyEntryViewModel(keychain: keychain, defaults: defaults)
     }
 
     override func tearDown() async throws {
         try await keychain.delete(.claudeAPIKey)
         sut = nil
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults = nil
         keychain = nil
         try await super.tearDown()
     }
@@ -61,12 +69,20 @@ final class ClaudeKeyEntryViewModelTests: XCTestCase {
         XCTAssertNil(stored)
     }
 
-    // MARK: - Recovery
+    func testSkipPersistsTheDecisionToUserDefaults() {
+        sut.skip()
+        XCTAssertTrue(defaults.bool(forKey: "fitbuddy.onboarding.claudeKeySkipped"))
+    }
 
-    func testRetryIsNoOpWhenNotFailed() async {
-        await sut.bootstrap()
-        sut.retry()
-        XCTAssertEqual(sut.state, .idle)
+    func testSkipPersistsAcrossRelaunch() async {
+        sut.skip()
+
+        // A fresh view model sharing the same stores simulates a cold start
+        // after the user previously skipped.
+        let relaunched = ClaudeKeyEntryViewModel(keychain: keychain, defaults: defaults)
+        await relaunched.bootstrap()
+
+        XCTAssertEqual(relaunched.state, .skipped)
     }
 
     // MARK: - Bootstrap

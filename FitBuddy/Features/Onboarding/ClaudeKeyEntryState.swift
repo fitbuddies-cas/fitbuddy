@@ -1,7 +1,7 @@
 import Foundation
 
-/// UI state of the Claude API-key entry screen (US-4, step 3). Unlike the Hevy
-/// key (step 2), the Claude key is optional (AC2) and is not validated against
+/// UI state of the Claude API-key entry screen (US-4, step 2). Unlike the Hevy
+/// key (step 1), the Claude key is optional (AC2) and is not validated against
 /// a live API before saving — it is only stored in the Keychain.
 enum ClaudeKeyEntryState: Equatable {
     /// Reasons a save attempt can fail.
