@@ -1,0 +1,616 @@
+<title>FitBuddy · AI-Risiko-Klassifikation</title>
+<style>
+  :root {
+    --bg: #F2F1ED;
+    --card: #FFFFFF;
+    --card-subtle: #F8F7F4;
+    --ink: #0E0E0E;
+    --ink2: #3C3C43;
+    --muted: #8A8A8E;
+    --border: rgba(60,60,67,0.10);
+    --divider: rgba(60,60,67,0.08);
+    --accent: #35975E;
+    --accent-ink: #0E2F1F;
+    --accent-soft: #EAF4EC;
+    --warn: #C97A28;
+    --warn-soft: #FAF2E3;
+    --red: #E5484D;
+    --red-ink: #A32328;
+    --red-soft: #FFEFEF;
+    --red-border: rgba(229,72,77,0.28);
+    --font: -apple-system, "SF Pro Text", system-ui, "Segoe UI", sans-serif;
+    --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    --r-card: 18px;
+    --r-control: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1A1815;
+      --card: #262320;
+      --card-subtle: #302C28;
+      --ink: #F2F1ED;
+      --ink2: #B5B2A8;
+      --muted: #8E8B85;
+      --border: rgba(255,255,255,0.12);
+      --divider: rgba(255,255,255,0.08);
+      --accent: #55B66E;
+      --accent-ink: #BCDFC6;
+      --accent-soft: #18271D;
+      --warn: #E98B3A;
+      --warn-soft: #2A2117;
+      --red: #FF5A60;
+      --red-ink: #FF8A8E;
+      --red-soft: #2E1A1B;
+      --red-border: rgba(255,90,96,0.35);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #F2F1ED; --card: #FFFFFF; --card-subtle: #F8F7F4;
+    --ink: #0E0E0E; --ink2: #3C3C43; --muted: #8A8A8E;
+    --border: rgba(60,60,67,0.10); --divider: rgba(60,60,67,0.08);
+    --accent: #35975E; --accent-ink: #0E2F1F; --accent-soft: #EAF4EC;
+    --warn: #C97A28; --warn-soft: #FAF2E3;
+    --red: #E5484D; --red-ink: #A32328; --red-soft: #FFEFEF;
+    --red-border: rgba(229,72,77,0.28);
+  }
+  :root[data-theme="dark"] {
+    --bg: #1A1815; --card: #262320; --card-subtle: #302C28;
+    --ink: #F2F1ED; --ink2: #B5B2A8; --muted: #8E8B85;
+    --border: rgba(255,255,255,0.12); --divider: rgba(255,255,255,0.08);
+    --accent: #55B66E; --accent-ink: #BCDFC6; --accent-soft: #18271D;
+    --warn: #E98B3A; --warn-soft: #2A2117;
+    --red: #FF5A60; --red-ink: #FF8A8E; --red-soft: #2E1A1B;
+    --red-border: rgba(255,90,96,0.35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 1060px;
+    margin: 0 auto;
+    padding: 48px 24px 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  .eyebrow {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  header h1 {
+    margin: 10px 0 12px;
+    font-size: clamp(30px, 4.5vw, 44px);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+  header .lede {
+    max-width: 62ch;
+    margin: 0;
+    color: var(--ink2);
+    font-size: 17px;
+  }
+
+  .tier-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: stretch;
+  }
+  .tier-chip {
+    flex: 1 1 260px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--card);
+    border: 1px solid var(--red-border);
+    border-radius: var(--r-control);
+    padding: 14px 18px;
+  }
+  .tier-chip .scope {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink2);
+  }
+  .tier-chip .tier {
+    margin-left: auto;
+    background: var(--red-soft);
+    color: var(--red-ink);
+    border-radius: 999px;
+    padding: 4px 14px;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+  .gate-note {
+    flex: 1 1 100%;
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .gate-note strong { color: var(--ink2); font-weight: 600; }
+
+  section > h2 {
+    margin: 0 0 4px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  section > .section-sub {
+    margin: 0 0 18px;
+    color: var(--ink2);
+    font-size: 15px;
+    max-width: 70ch;
+  }
+
+  .assessments {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 20px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    padding: 26px 26px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .card h3 {
+    margin: 0;
+    font-size: 21px;
+    letter-spacing: -0.01em;
+  }
+  .card .card-sub {
+    margin: 4px 0 20px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .axis { padding: 12px 0; border-top: 1px solid var(--divider); }
+  .axis-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .axis-name {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    min-width: 88px;
+  }
+  .axis-label { font-size: 15px; font-weight: 600; }
+  .axis-score {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .axis-score.s-low  { color: var(--accent); }
+  .axis-score.s-mid  { color: var(--warn); }
+  .axis-score.s-high { color: var(--red); }
+  .meter {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    margin: 8px 0 6px;
+  }
+  .meter span {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--divider);
+  }
+  .meter.m-low  span.on { background: var(--accent); }
+  .meter.m-mid  span.on { background: var(--warn); }
+  .meter.m-high span.on { background: var(--red); }
+  .axis-note {
+    margin: 0;
+    font-size: 13.5px;
+    color: var(--ink2);
+  }
+
+  .derivation {
+    margin-top: 14px;
+    background: var(--card-subtle);
+    border-radius: var(--r-control);
+    padding: 14px 16px;
+    font-size: 13.5px;
+    color: var(--ink2);
+  }
+  .derivation .d-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .redline {
+    margin-top: 10px;
+    background: var(--red-soft);
+    border: 1px solid var(--red-border);
+    border-radius: var(--r-control);
+    padding: 14px 16px;
+    font-size: 13.5px;
+    color: var(--ink);
+  }
+  .redline .d-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--red-ink);
+    margin-bottom: 4px;
+  }
+
+  .always-on {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  .always-on .ctrl {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-control);
+    padding: 14px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+  }
+  .always-on .ctrl::before {
+    content: "●";
+    color: var(--accent);
+    font-size: 10px;
+    flex: none;
+  }
+  .always-on .ctrl small {
+    display: block;
+    font-weight: 400;
+    color: var(--muted);
+    font-size: 12.5px;
+    margin-top: 2px;
+  }
+
+  .measures {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 20px;
+  }
+  ul.measure-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .measure-list li {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 11px 0;
+    border-top: 1px solid var(--divider);
+    font-size: 14.5px;
+  }
+  .measure-list li:first-child { border-top: none; }
+  .measure-list .m-text { color: var(--ink); }
+  .measure-list .m-text small {
+    display: block;
+    color: var(--muted);
+    font-size: 12.5px;
+    margin-top: 1px;
+  }
+  .pill {
+    flex: none;
+    margin-top: 1px;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    min-width: 86px;
+    text-align: center;
+  }
+  .pill.done { background: var(--accent-soft); color: var(--accent-ink); }
+  .pill.open { background: var(--warn-soft); color: var(--warn); }
+
+  .footer-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    padding: 24px 26px;
+  }
+  .footer-card p { margin: 0 0 10px; max-width: 75ch; color: var(--ink2); font-size: 15px; }
+  .footer-card p:last-child { margin-bottom: 0; }
+  .footer-card strong { color: var(--ink); }
+
+  .meta {
+    color: var(--muted);
+    font-size: 12.5px;
+    border-top: 1px solid var(--divider);
+    padding-top: 16px;
+  }
+  .meta code { font-family: var(--mono); font-size: 12px; }
+
+  @media (max-width: 720px) {
+    .page { padding: 32px 16px 56px; gap: 32px; }
+    .card { padding: 20px 18px 16px; }
+  }
+</style>
+
+<div class="page">
+
+  <header>
+    <p class="eyebrow">FitBuddy · CAS ADAI 2026, BFH Biel · Stand 05.08.2026</p>
+    <h1>AI-Risiko-Klassifikation: Produkt &amp; Entwicklungsprozess</h1>
+    <p class="lede">
+      Wir haben den AI-Agent-Risiko-Rechner zweimal ausgefüllt: einmal für das Produkt
+      (die FitBuddy-App mit ihrer Claude-Analyse) und einmal für unseren Entwicklungsprozess
+      (Claude Code als Coding-Agent). Beide landen auf <strong>Critical</strong> — aus
+      unterschiedlichen Gründen, mit unterschiedlichen Massnahmen.
+    </p>
+  </header>
+
+  <div class="tier-strip">
+    <div class="tier-chip">
+      <span class="scope">Produkt · App</span>
+      <span class="tier">CRITICAL</span>
+    </div>
+    <div class="tier-chip">
+      <span class="scope">Entwicklungsprozess</span>
+      <span class="tier">CRITICAL</span>
+    </div>
+    <p class="gate-note"><strong>Gate für beide:</strong> Explizites Sign-off + Human-in-the-Loop.
+    Red-Line-Checks können nicht gelockert werden — eine Ausnahme ist eine Entscheidung mit Namen dran,
+    keine Konfigurationsänderung.</p>
+  </div>
+
+  <section>
+    <h2>Einstufung</h2>
+    <p class="section-sub">Vier Achsen, je Stufe 1–4. Pro Achse gilt die höchste Stufe, die ehrlich zutrifft.
+    Basis-Level = höchste Achse; Kombinationen erhöhen; Red Lines übersteuern die Arithmetik.</p>
+
+    <div class="assessments">
+
+      <article class="card">
+        <h3>Produkt — FitBuddy App</h3>
+        <p class="card-sub">User-Trainingsdaten → Claude API → Trainingsempfehlung als Text</p>
+
+        <div class="axis">
+          <div class="axis-head">
+            <span class="axis-name">Surface</span>
+            <span class="axis-label">Uses knowledge sources</span>
+            <span class="axis-score s-mid">2</span>
+          </div>
+          <div class="meter m-mid"><span class="on"></span><span class="on"></span><span></span><span></span></div>
+          <p class="axis-note">Claude erhält aufbereitete Hevy-Daten als Kontext — keine Tools.</p>
+        </div>
+
+        <div class="axis">
+          <div class="axis-head">
+            <span class="axis-name">Data</span>
+            <span class="axis-label">Special category</span>
+            <span class="axis-score s-high">4</span>
+          </div>
+          <div class="meter m-high"><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span></div>
+          <p class="axis-note">Trainingsdaten sind Gesundheitsdaten (nDSG Art. 5 lit. c). Zahlungsdaten: keine.</p>
+        </div>
+
+        <div class="axis">
+          <div class="axis-head">
+            <span class="axis-name">Autonomy</span>
+            <span class="axis-label">Generates text only</span>
+            <span class="axis-score s-mid">2</span>
+          </div>
+          <div class="meter m-mid"><span class="on"></span><span class="on"></span><span></span><span></span></div>
+          <p class="axis-note">Nur Text-Empfehlung auf Knopfdruck. Kein Tool-Use, kein Write-back (US-12 = Won't).</p>
+        </div>
+
+        <div class="axis">
+          <div class="axis-head">
+            <span class="axis-name">Exposure</span>
+            <span class="axis-label">Multiple boundaries</span>
+            <span class="axis-score s-high">4</span>
+          </div>
+          <div class="meter m-high"><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span></div>
+          <p class="axis-note">Daten verlassen das Gerät zu zwei externen Empfängern: Hevy und Anthropic (USA).</p>
+        </div>
+
+        <div class="derivation">
+          <span class="d-label">Herleitung</span>
+          Basis-Level 3 (höchste Achse = 3) → Kombination «sensible Daten × verlassen unsere
+          Jurisdiktion» (+1) → Level 4.
+        </div>
+        <div class="redline">
+          <span class="d-label">Red Line → Critical</span>
+          Besondere Kategorien von Daten (Gesundheitsdaten) gehen an ein Modell ausserhalb der
+          Kontrolle der Organisation — übersteuert die Arithmetik.
+        </div>
+      </article>
+
+      <article class="card">
+        <h3>Entwicklungsprozess — Claude Code</h3>
+        <p class="card-sub">Coding-Agent mit Schreibzugriff auf Repo, Shell und GitHub</p>
+
+        <div class="axis">
+          <div class="axis-head">
+            <span class="axis-name">Surface</span>
+            <span class="axis-label">Verändernde Tools</span>
+            <span class="axis-score s-high">4</span>
+          </div>
+          <div class="meter m-high"><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span></div>
+          <p class="axis-note">Editiert Dateien, führt Shell-Befehle aus, erstellt Branches und PRs.</p>
+        </div>
+
+        <div class="axis">
+          <div class="axis-head">
+            <span class="axis-name">Data</span>
+            <span class="axis-label">Vertraulich / Secrets</span>
+            <span class="axis-score s-mid">3</span>
+          </div>
+          <div class="meter m-mid"><span class="on"></span><span class="on"></span><span class="on"></span><span></span></div>
+          <p class="axis-note">Quellcode, interne Doku — und potenziell API-Keys auf der Entwicklermaschine.</p>
+        </div>
+
+        <div class="axis">
+          <div class="axis-head">
+            <span class="axis-name">Autonomy</span>
+            <span class="axis-label">Plans and executes</span>
+            <span class="axis-score s-high">4</span>
+          </div>
+          <div class="meter m-high"><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span></div>
+          <p class="axis-note">Plant eigene Schritt-Sequenzen und führt sie aus — verkettete Tools bis zum Ziel.</p>
+        </div>
+
+        <div class="axis">
+          <div class="axis-head">
+            <span class="axis-name">Exposure</span>
+            <span class="axis-label">Multiple boundaries</span>
+            <span class="axis-score s-high">4</span>
+          </div>
+          <div class="meter m-high"><span class="on"></span><span class="on"></span><span class="on"></span><span class="on"></span></div>
+          <p class="axis-note">Kontext geht an Anthropic (USA); Code geht zu GitHub; Tools erreichen weitere Dienste.</p>
+        </div>
+
+        <div class="derivation">
+          <span class="d-label">Herleitung</span>
+          Basis-Level 4 (höchste Achse = 4): autonomer Agent × zustandsverändernde Tools ×
+          Daten verlassen unsere Jurisdiktion.
+        </div>
+        <div class="redline">
+          <span class="d-label">Einstufung → Critical</span>
+          Ein Agent, der eigenständig plant und mit verändernden Tools auf vertraulichen Daten
+          arbeitet, erreicht das höchste Tier — der Prozess braucht dieselben Gates wie das Produkt.
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Always on — nie abschaltbar</h2>
+    <p class="section-sub">Diese Kontrollen gelten auf Tier Critical immer, in beiden Kontexten.</p>
+    <div class="always-on">
+      <div class="ctrl"><span>Prompt-Injection- &amp; Jailbreak-Erkennung<small>Fremder Input (Hevy-Daten, Web-Inhalte) wird nie als Anweisung behandelt</small></span></div>
+      <div class="ctrl"><span>Harmful-Content-Filter<small>Keine schädlichen Empfehlungen — FitBuddy ist kein medizinisches Produkt</small></span></div>
+      <div class="ctrl"><span>Schutz der System-Instructions<small>Prompt und Tool-Namen sind nicht durch User-Input überschreibbar</small></span></div>
+      <div class="ctrl"><span>AI-Offenlegung<small>User weiss immer, dass er mit AI-Output interagiert (EU AI Act, Art. 50)</small></span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Massnahmen</h2>
+    <p class="section-sub">Was aus den geforderten Kontrollen bereits umgesetzt ist — und was wir als
+    nächstes angehen. Status: Stand 05.08.2026.</p>
+
+    <div class="measures">
+
+      <article class="card">
+        <h3>Produkt — App (v0)</h3>
+        <p class="card-sub">Kontrollen aus dem Rechner → konkrete Umsetzung</p>
+        <ul class="measure-list">
+          <li><span class="pill done">Umgesetzt</span>
+            <span class="m-text">Human-in-the-Loop
+            <small>Analyse nur auf Knopfdruck (US-3); Umsetzung jeder Empfehlung liegt beim User (Consent, US-4 AC4)</small></span></li>
+          <li><span class="pill done">Umgesetzt</span>
+            <span class="m-text">AI-Offenlegung &amp; informierte Einwilligung
+            <small>Consent-Screen vor App-Zugang, Datenschutzerklärung aus Onboarding + Einstellungen</small></span></li>
+          <li><span class="pill done">Umgesetzt</span>
+            <span class="m-text">BYO-Key, Keys nur im Keychain
+            <small><code>ThisDeviceOnly</code>, kein Backend, kein Team-Key (ADR-003/004)</small></span></li>
+          <li><span class="pill done">Umgesetzt</span>
+            <span class="m-text">Least Privilege: Hevy nur lesend
+            <small>Kein Write-back — US-12 ist Won't; der Connector hat keine schreibenden Methoden</small></span></li>
+          <li><span class="pill done">Umgesetzt</span>
+            <span class="m-text">Rechtsgrundlage USA-Transfer
+            <small>User-eigener Anthropic-DPA inkl. SCCs + Swiss Addendum (ADR-005)</small></span></li>
+          <li><span class="pill done">Umgesetzt</span>
+            <span class="m-text">Risikonotiz dokumentiert
+            <small><code>docs/RISK-CLASSIFICATION.md</code> (PR #63) — die für v0 geforderte Risk Note</small></span></li>
+          <li><span class="pill open">Offen</span>
+            <span class="m-text">Certificate Pinning für Hevy + Claude API
+            <small>Als NFR identifiziert, noch zu ergänzen und umzusetzen</small></span></li>
+          <li><span class="pill open">Offen</span>
+            <span class="m-text">Kill-Switch-Äquivalent
+            <small>Delete/Reset in der App + dokumentierter Weg: Key in der Anthropic/Hevy-Konsole widerrufen</small></span></li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <h3>Entwicklungsprozess — Claude Code</h3>
+        <p class="card-sub">Der Mensch bleibt das Gate vor jedem Merge</p>
+        <ul class="measure-list">
+          <li><span class="pill done">Umgesetzt</span>
+            <span class="m-text">Kein Direkt-Commit auf main/develop
+            <small>Pre-Commit-Hook blockt (PR #51); alles läuft über PRs mit min. 1 Review</small></span></li>
+          <li><span class="pill done">Umgesetzt</span>
+            <span class="m-text">Human Review jedes AI-Diffs
+            <small>Review-Pflicht vor Merge; Claude-Pre-Review (/code-review) bei grösseren PRs</small></span></li>
+          <li><span class="pill done">Umgesetzt</span>
+            <span class="m-text">Leitplanken in CLAUDE.md
+            <small>Konventionen, geprüfte Architektur-Entscheide und Scope-Regeln steuern den Agenten</small></span></li>
+          <li><span class="pill done">Umgesetzt</span>
+            <span class="m-text">Tests als Pass/Fail-Gate
+            <small>Unit-Test-Pflicht für ViewModels/Services; Build + Tests vor jedem Commit</small></span></li>
+          <li><span class="pill done">Umgesetzt</span>
+            <span class="m-text">Gestufte Releases
+            <small>develop → main nur 1× wöchentlich als gebündelter, reviewter PR</small></span></li>
+          <li><span class="pill open">Offen</span>
+            <span class="m-text">Secrets konsequent aus dem Agent-Kontext halten
+            <small>Echte API-Keys nie in Dateien im Repo-Baum; .gitignore-Abdeckung prüfen</small></span></li>
+          <li><span class="pill open">Offen</span>
+            <span class="m-text">Permission-Regeln schärfen
+            <small>Destruktive Befehle (push, delete) nur mit expliziter Bestätigung — kein Blanko-Auto-Approve</small></span></li>
+          <li><span class="pill open">Offen</span>
+            <span class="m-text">Named Owner + Sign-off
+            <small>Pro Release eine benannte Person, die das Go-Live explizit freigibt</small></span></li>
+        </ul>
+      </article>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="footer-card">
+      <p><strong>Warum Critical kein Blocker ist:</strong> Beim Produkt folgt das Tier direkt aus der
+      Red Line «Gesundheitsdaten an ein externes Modell» — das ist der Kern des Produkts selbst, nicht
+      ein vermeidbarer Implementierungsfehler. Beim Entwicklungsprozess folgt es aus der Natur eines
+      Coding-Agenten. In beiden Fällen lautet die Antwort nicht «abschalten», sondern:
+      <strong>Human-in-the-Loop an jeder Stelle, an der etwas Wirkung entfaltet</strong> — der User
+      entscheidet über jede Trainingsempfehlung, das Team über jeden Merge.</p>
+      <p><strong>Verantwortlichkeiten auf diesem Tier:</strong> Security-Review vor dem Merge · benannter
+      Owner · Pass/Fail-Test vor Go-Live · Kill-Switch verifiziert · explizites Security-Sign-off vor
+      Go-Live · alles dokumentiert, geloggt, zuordenbar.</p>
+    </div>
+  </section>
+
+  <p class="meta">
+    Quellen: AI-Agent-Risiko-Rechner (Teaching Version, bewertet 05.08.2026) ·
+    <code>docs/RISK-CLASSIFICATION.md</code> · <code>docs/REQUIREMENTS.md</code> ·
+    ADR-003/004/005.
+  </p>
+
+</div>
