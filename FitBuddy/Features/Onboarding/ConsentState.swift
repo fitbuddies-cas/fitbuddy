@@ -1,6 +1,7 @@
 import Foundation
 
-/// Gates the app's root view based on whether the user has granted consent.
+/// Gates the app's root view based on whether the user has granted consent
+/// (US-4, step 1).
 enum ConsentState: Equatable {
     /// Consent has not been checked yet (initial launch state).
     case unknown

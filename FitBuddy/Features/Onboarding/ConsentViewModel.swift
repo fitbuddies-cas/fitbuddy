@@ -1,7 +1,7 @@
 import Foundation
 
-/// Drives the consent screen: tracks the checkbox, persists consent
-/// (version + timestamp) to the Keychain, and exposes the resulting
+/// Drives the consent screen (US-4, step 1): tracks the checkbox, persists
+/// consent (version + timestamp) to the Keychain, and exposes the resulting
 /// `ConsentState` used to gate the app's root view.
 @MainActor
 final class ConsentViewModel: ObservableObject {

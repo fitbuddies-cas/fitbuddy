@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// Consent screen shown before any app access (US-4 / AC4). Presents the three
-/// mandatory disclosures, a link to the privacy policy, and a confirm button
-/// that stays disabled until the user ticks the checkbox. Styled with the
-/// shared design system (`Core/DesignSystem`).
+/// Consent screen shown before any app access (US-4 / AC4, step 1). Presents
+/// the three mandatory disclosures, a link to the privacy policy, and a
+/// confirm button that stays disabled until the user ticks the checkbox.
+/// Styled with the shared design system (`Core/DesignSystem`).
 struct ConsentView: View {
     @ObservedObject var viewModel: ConsentViewModel
 
@@ -11,6 +11,7 @@ struct ConsentView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    stepIndicator
                     header
                     FBCard {
                         VStack(alignment: .leading, spacing: 20) {
@@ -53,6 +54,24 @@ struct ConsentView: View {
             .navigationTitle("Before we start")
             .navigationBarTitleDisplayMode(.inline)
         }
+    }
+
+    /// Three-segment progress bar; this screen is always step 1 of 3.
+    private var stepIndicator: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<3) { index in
+                Capsule()
+                    .fill(index == 0 ? Color.fbInk : Color.fbBorder)
+                    .frame(height: 3)
+            }
+            Text("Step 1 of 3")
+                .font(.fbLabel)
+                .foregroundStyle(Color.fbMuted)
+                .padding(.leading, 8)
+                .fixedSize()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Onboarding step 1 of 3")
     }
 
     private var header: some View {

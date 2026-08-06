@@ -71,7 +71,7 @@ struct FBButtonStyle: ButtonStyle {
         private var border: Color {
             switch kind {
             case .secondary, .ghost: return .fbBorder
-            case .danger: return .fbRed.opacity(0.2)
+            case .danger: return .fbRedBorder
             default: return .clear
             }
         }
