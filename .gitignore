@@ -4,6 +4,12 @@ Kursdokumente/
 node_modules
 .idea/
 
+# Python — analysis agent spike (agent/)
+__pycache__/
+*.py[cod]
+.venv/
+.env
+
 # Xcode — user-specific state (the .xcodeproj itself is committed)
 xcuserdata/
 *.xcuserstate
