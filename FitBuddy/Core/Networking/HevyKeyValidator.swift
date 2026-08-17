@@ -11,8 +11,9 @@ actor HevyKeyValidator: HevyKeyValidating {
     private let session: URLSession
 
     /// - Parameter session: Injectable for tests (e.g. with a stub
-    ///   `URLProtocol`); defaults to `.shared`.
-    init(session: URLSession = .shared) {
+    ///   `URLProtocol`); defaults to the ephemeral `.fitBuddy` session so the
+    ///   key-bearing request is never cached to disk.
+    init(session: URLSession = .fitBuddy) {
         self.session = session
     }
 
