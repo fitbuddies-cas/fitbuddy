@@ -18,17 +18,17 @@ actor WorkoutStore {
     /// workouts the user deleted in Hevy for free. Delete and insert share one
     /// `save()`, so a failure leaves the previous cache intact.
     func replaceCachedWorkouts(with workouts: [HevyWorkoutDTO]) throws {
-        deleteAllWorkouts()
+        try deleteAllWorkouts()
         for dto in workouts {
             modelContext.insert(dto.makeWorkout())
         }
-        try modelContext.save()
+        try saveOrRollback()
     }
 
     /// Empties the cache (hard logout, "delete my data").
     func deleteAll() throws {
-        deleteAllWorkouts()
-        try modelContext.save()
+        try deleteAllWorkouts()
+        try saveOrRollback()
     }
 
     /// Number of cached workouts — the `Sendable` summary callers need.
@@ -48,10 +48,28 @@ actor WorkoutStore {
     /// form bypasses the object graph and leaves `Exercise`/`ExerciseSet` rows
     /// orphaned instead of honouring their `.cascade` rule. At ~360 workouts
     /// per window the extra fetch is irrelevant.
-    private func deleteAllWorkouts() {
-        guard let workouts = try? modelContext.fetch(FetchDescriptor<Workout>()) else { return }
-        for workout in workouts {
+    ///
+    /// A failing fetch must propagate: swallowing it would let the caller
+    /// insert a second copy of the window on top of the old one, and without
+    /// `@Attribute(.unique)` on `Workout.id` every workout would then be
+    /// cached twice while the sync still reports success.
+    private func deleteAllWorkouts() throws {
+        for workout in try modelContext.fetch(FetchDescriptor<Workout>()) {
             modelContext.delete(workout)
+        }
+    }
+
+    /// Saves, discarding the pending changes if the save fails.
+    ///
+    /// Without the rollback the failed deletes and inserts stay in this
+    /// actor's context: reads would report the unsaved state, and the next
+    /// successful `save()` would commit the leftovers along with it.
+    private func saveOrRollback() throws {
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            throw error
         }
     }
 }

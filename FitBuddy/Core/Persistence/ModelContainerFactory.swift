@@ -16,13 +16,27 @@ enum ModelContainerFactory {
     private static let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "ModelContainer")
 
     /// Creates the on-disk container used by the app.
-    static func makePersistent() throws -> ModelContainer {
-        let configuration = ModelConfiguration(
-            schema: schema,
-            isStoredInMemoryOnly: false,
-            allowsSave: true,
-            cloudKitDatabase: .none
-        )
+    ///
+    /// - Parameter storeURL: Overrides the default store location. Only tests
+    ///   pass it, so they can exercise the hardening without touching — or
+    ///   leaving behind — the host app's real store.
+    static func makePersistent(storeURL: URL? = nil) throws -> ModelContainer {
+        let configuration: ModelConfiguration
+        if let storeURL {
+            configuration = ModelConfiguration(
+                schema: schema,
+                url: storeURL,
+                allowsSave: true,
+                cloudKitDatabase: .none
+            )
+        } else {
+            configuration = ModelConfiguration(
+                schema: schema,
+                isStoredInMemoryOnly: false,
+                allowsSave: true,
+                cloudKitDatabase: .none
+            )
+        }
         // SwiftData's default store lives in Application Support, which does
         // not exist in a fresh app container — create it before the store,
         // otherwise the first launch falls back to an in-memory cache that
@@ -82,10 +96,13 @@ enum ModelContainerFactory {
     private static func harden(storeURL: URL) {
         let fileManager = FileManager.default
         let directory = storeURL.deletingLastPathComponent()
+        // SQLite names its sidecars with a suffix (`default.store-wal`), not a
+        // path extension — `appendingPathExtension` would build a file that
+        // never exists.
         let urls = [directory,
                     storeURL,
-                    storeURL.appendingPathExtension("wal"),
-                    storeURL.appendingPathExtension("shm")]
+                    URL(fileURLWithPath: storeURL.path + "-wal"),
+                    URL(fileURLWithPath: storeURL.path + "-shm")]
 
         for url in urls where fileManager.fileExists(atPath: url.path) {
             do {

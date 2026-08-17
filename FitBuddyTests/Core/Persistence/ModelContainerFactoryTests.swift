@@ -27,7 +27,17 @@ final class ModelContainerFactoryTests: XCTestCase {
     }
 
     func testPersistentStoreIsExcludedFromICloudBackup() throws {
-        let container = try ModelContainerFactory.makePersistent()
+        // A temporary store, not the default one: the tests run inside the
+        // FitBuddy host, which already holds the real store open — and a second
+        // container on the same SQLite file would also outlive the run.
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+
+        let container = try ModelContainerFactory.makePersistent(
+            storeURL: directory.appendingPathComponent("default.store")
+        )
         let storeURL = try XCTUnwrap(container.configurations.first?.url)
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: storeURL.path))

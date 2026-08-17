@@ -160,6 +160,28 @@ final class HevyServiceTests: XCTestCase {
         XCTAssertEqual(result.windowStart, expected)
     }
 
+    func testWorkoutRepeatedAcrossAPageBoundaryIsCachedOnce() async throws {
+        // Hevy paginates newest first over a live list: a workout logged while
+        // the walk is between two pages pushes "boundary" down a slot, so it
+        // comes back on page 2 as well.
+        stub(pages: [
+            HevyPayloadFactory.page(page: 1, pageCount: 2, workouts: [
+                HevyPayloadFactory.workout(id: "newest", start: daysAgo(1)),
+                HevyPayloadFactory.workout(id: "boundary", start: daysAgo(2)),
+            ]),
+            HevyPayloadFactory.page(page: 2, pageCount: 2, workouts: [
+                HevyPayloadFactory.workout(id: "boundary", start: daysAgo(2)),
+                HevyPayloadFactory.workout(id: "oldest", start: daysAgo(3)),
+            ]),
+        ])
+
+        let result = try await sut.syncRecentWorkouts()
+
+        XCTAssertEqual(result.workoutCount, 3, "A duplicate would inflate every derived metric")
+        let ids = try await workouts.cachedWorkoutIDs()
+        XCTAssertEqual(ids, ["newest", "boundary", "oldest"])
+    }
+
     func testEmptyHistoryCachesNothing() async throws {
         stub(pages: [HevyPayloadFactory.page(page: 1, pageCount: 1, workouts: [])])
 
@@ -285,6 +307,20 @@ final class HevyServiceTests: XCTestCase {
         // 403 can hit a valid key (WAF, geo) — wiping it would be wrong.
         let storedKey = try await keychain.read(.hevyAPIKey)
         XCTAssertEqual(storedKey, "hv_live_abc")
+    }
+
+    func testCancellationIsNotReportedAsANetworkFailure() async {
+        StubURLProtocol.handler = { _ in throw URLError(.cancelled) }
+
+        do {
+            _ = try await sut.syncRecentWorkouts()
+            XCTFail("Expected the cancellation to propagate")
+        } catch let error as URLError {
+            // Navigating away mid-sync must not surface as "no internet".
+            XCTAssertEqual(error.code, .cancelled)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
     }
 
     func testMalformedBodyMapsToInvalidResponse() async {

@@ -90,12 +90,18 @@ actor HevyService: WorkoutSyncing {
     /// slower.
     private func fetchWindow(from windowStart: Date, apiKey: String) async throws -> [HevyWorkoutDTO] {
         var collected: [HevyWorkoutDTO] = []
+        var seenIDs: Set<String> = []
         var page = 1
 
         while page <= Self.maxPages {
             let payload = try await fetchPage(page, apiKey: apiKey)
             let inWindow = payload.workouts.filter { $0.startTime >= windowStart }
-            collected.append(contentsOf: inWindow)
+            // Hevy paginates newest first over a live list: a workout logged
+            // while the walk is between two pages shifts everything down a slot
+            // and hands the entry on the boundary back twice. `Workout.id`
+            // carries no unique constraint, so a duplicate would be cached — and
+            // would inflate every count and volume the dashboard derives.
+            collected.append(contentsOf: inWindow.filter { seenIDs.insert($0.id).inserted })
 
             if inWindow.isEmpty && !payload.workouts.isEmpty { break }
             if page >= max(payload.pageCount, 1) { break }
@@ -120,6 +126,12 @@ actor HevyService: WorkoutSyncing {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
+            // A cancelled sync (user navigated away, a newer sync superseded
+            // this one) is not a connectivity problem and must not surface as
+            // one — rethrow it untouched.
+            if error is CancellationError || (error as? URLError)?.code == .cancelled {
+                throw error
+            }
             throw HevyServiceError.networkUnavailable
         }
 
@@ -186,8 +198,13 @@ actor HevyService: WorkoutSyncing {
         do {
             stored = try await keychain.read(.hevyAPIKey)
         } catch {
+            // `KeychainService.read` returns nil for a missing item and only
+            // throws for real Keychain failures — e.g. `errSecInteractionNotAllowed`
+            // on a locked device, where the key is present but unreadable.
+            // Reporting that as `.missingAPIKey` would send a fully onboarded
+            // user back to re-enter a key that never went away.
             logger.error("Keychain read failed: \(error, privacy: .public)")
-            throw HevyServiceError.missingAPIKey
+            throw HevyServiceError.keychainUnavailable
         }
         guard let key = stored, !key.isEmpty else { throw HevyServiceError.missingAPIKey }
         return key

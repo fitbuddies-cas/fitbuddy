@@ -10,6 +10,10 @@ enum HevyServiceError: Error, Equatable {
     /// No Hevy key in the Keychain — onboarding never completed, or a previous
     /// 401 already wiped it.
     case missingAPIKey
+    /// The Keychain refused the read (e.g. `errSecInteractionNotAllowed` while
+    /// the device is locked). The key is still stored — this is retryable and
+    /// must not route the user back into onboarding.
+    case keychainUnavailable
     /// Hevy rejected the key (HTTP 401). The hard logout has already run.
     case unauthorized
     /// HTTP 429, with Hevy's `Retry-After` in seconds when it sent one.

@@ -60,6 +60,24 @@ final class HevyWorkoutDTOTests: XCTestCase {
         XCTAssertEqual(set.durationSeconds, 90)
     }
 
+    func testOutOfRangeNumbersDecodeToNilInsteadOfTrapping() throws {
+        // The loose-number fallback exists to survive odd payloads, so a value
+        // no `Int` can hold must drop the field rather than crash the app.
+        let dto = try decode([
+            "id": "w-1",
+            "start_time": "2021-09-14T12:00:00Z",
+            "exercises": [[
+                "index": 0,
+                "title": "Squat (Barbell)",
+                "sets": [["index": 0, "type": "normal", "reps": 1e30, "duration_seconds": 1e30]],
+            ]],
+        ])
+
+        let set = try XCTUnwrap(dto.exercises.first?.sets.first)
+        XCTAssertNil(set.reps)
+        XCTAssertNil(set.durationSeconds)
+    }
+
     func testUnknownSetTypeDoesNotFailDecoding() throws {
         let dto = try decode([
             "id": "w-1",
