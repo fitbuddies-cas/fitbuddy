@@ -1,0 +1,17 @@
+import Foundation
+
+/// UI state of the dashboard's workout list (US-2).
+enum WorkoutListState: Equatable {
+    /// First read of the cache has not finished yet.
+    case loading
+    /// The cache holds workouts inside the 90-day window.
+    case loaded(workouts: [WorkoutSummary], metrics: DashboardMetrics)
+    /// No workouts in the window — the «No training data for the last 90 days»
+    /// case (US-2 AC3). Reached both by a new user and by one who paused
+    /// training; the dashboard cannot tell the two apart, and neither should.
+    case empty
+    /// The local cache could not be read. Distinct from `.empty`: showing "no
+    /// training data" for a broken store would tell the user something false
+    /// about their training.
+    case failed
+}
