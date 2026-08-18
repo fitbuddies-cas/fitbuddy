@@ -17,6 +17,10 @@ final class HevyKeyEntryViewModel: ObservableObject {
     }
     @Published private(set) var state: HevyKeyEntryState = .unknown
 
+    /// Invoked when a key was actively validated and stored (not on a
+    /// bootstrap restore) — lets the onboarding coordinator advance to step 3.
+    var onConnected: (() -> Void)?
+
     private let validator: HevyKeyValidating
     private let keychain: KeychainService
 
@@ -80,9 +84,18 @@ final class HevyKeyEntryViewModel: ObservableObject {
         do {
             try await keychain.save(key, for: .hevyAPIKey)
             state = .connected
+            onConnected?()
         } catch {
             state = .failed(.keychain)
         }
+    }
+
+    /// Returns to fresh input after the stored key was invalidated (HTTP 401
+    /// anywhere in the app). Clears the field so the rejected key cannot be
+    /// resubmitted by accident.
+    func reset() {
+        apiKey = ""
+        state = .idle
     }
 
     /// Maps validator errors to banner failures. Exhaustive on purpose: a new

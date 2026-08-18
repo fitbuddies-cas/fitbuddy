@@ -1,57 +1,30 @@
 import SwiftUI
 
-/// Root view that gates app access on consent (US-4, step 1), then on the Hevy
-/// API key (step 2, #21), then on the optional Claude API key (step 3, #22).
-/// Interim wiring: the coordinated 3-step onboarding flow (OnboardingViewModel,
-/// #23) replaces the nested switch later.
+/// Root view gating app access on the 3-step onboarding flow (US-4), which is
+/// coordinated by `OnboardingViewModel`: consent → Hevy key → Claude key →
+/// dashboard (placeholder until #27).
 struct RootView: View {
-    @StateObject private var consentViewModel = ConsentViewModel()
-    @StateObject private var hevyKeyViewModel = HevyKeyEntryViewModel()
-    @StateObject private var claudeKeyViewModel = ClaudeKeyEntryViewModel()
+    @StateObject private var onboardingViewModel = OnboardingViewModel()
 
     var body: some View {
         Group {
-            switch consentViewModel.state {
-            case .unknown:
+            switch onboardingViewModel.step {
+            case .loading:
                 loadingView
-            case .required:
-                ConsentView(viewModel: consentViewModel)
-            case .granted:
-                switch hevyKeyViewModel.state {
-                case .unknown:
-                    // Keychain check still running — don't flash the entry
-                    // screen at returning users who already stored a key.
-                    loadingView
-                case .connected:
-                    claudeStep
-                case .idle, .validating, .failed:
-                    HevyKeyEntryView(viewModel: hevyKeyViewModel)
-                }
+            case .consent, .hevyKey, .claudeKey:
+                OnboardingFlowView(viewModel: onboardingViewModel)
+            case .completed:
+                placeholderHome
             }
         }
-        .task {
-            await consentViewModel.bootstrap()
-            await hevyKeyViewModel.bootstrap()
-            await claudeKeyViewModel.bootstrap()
-        }
+        // Exposes the coordinator to future app surfaces — services reporting
+        // an invalid Hevy key (HTTP 401, e.g. HevyService #25) call
+        // `handleHevyUnauthorized()` through it.
+        .environmentObject(onboardingViewModel)
+        .task { await onboardingViewModel.bootstrap() }
     }
 
-    @ViewBuilder
-    private var claudeStep: some View {
-        switch claudeKeyViewModel.state {
-        case .unknown:
-            // Keychain check still running — don't flash the entry screen at
-            // returning users who already stored (or skipped) a key.
-            loadingView
-        case .saved, .skipped:
-            // Dashboard (#27) plugs in here.
-            placeholderHome
-        case .idle, .saving, .failed:
-            ClaudeKeyEntryView(viewModel: claudeKeyViewModel)
-        }
-    }
-
-    /// Shown while a gate's persisted state is still being read at launch.
+    /// Shown while the coordinator is still resolving the persisted state.
     private var loadingView: some View {
         FBSpinner()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -72,35 +45,27 @@ struct RootView: View {
                 .foregroundStyle(Color.fbInkSecondary)
             // Interim confirmation of onboarding status, until the dashboard
             // (#27) takes over from here.
-            Label("Hevy connected", systemImage: "checkmark.circle.fill")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(Color.fbAccent)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.fbAccentSoft)
-                .clipShape(Capsule())
+            statusBadge("Hevy connected", icon: "checkmark.circle.fill", emphasized: true)
                 .padding(.top, 4)
-            if claudeKeyViewModel.state == .saved {
-                Label("Claude connected", systemImage: "checkmark.circle.fill")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color.fbAccent)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.fbAccentSoft)
-                    .clipShape(Capsule())
+            if onboardingViewModel.claudeKeyViewModel.state == .saved {
+                statusBadge("Claude connected", icon: "checkmark.circle.fill", emphasized: true)
             } else {
-                Label("Claude skipped — AI analysis unavailable", systemImage: "info.circle")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color.fbMuted)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.fbCardSubtle)
-                    .clipShape(Capsule())
+                statusBadge("Claude skipped — AI analysis unavailable", icon: "info.circle", emphasized: false)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
         .background(Color.fbBackground)
+    }
+
+    private func statusBadge(_ text: String, icon: String, emphasized: Bool) -> some View {
+        Label(text, systemImage: icon)
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(emphasized ? Color.fbAccent : Color.fbMuted)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(emphasized ? Color.fbAccentSoft : Color.fbCardSubtle)
+            .clipShape(Capsule())
     }
 }
 
