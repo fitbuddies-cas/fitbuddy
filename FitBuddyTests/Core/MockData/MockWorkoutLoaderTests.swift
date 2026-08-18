@@ -1,6 +1,11 @@
 import XCTest
 @testable import FitBuddy
 
+// Development fixture: excluded from Release builds, so no mock training
+// history can reach a TestFlight binary. The payloads themselves are
+// stripped from the Release bundle via EXCLUDED_SOURCE_FILE_NAMES.
+#if DEBUG
+
 /// Guards the two properties the bundled mock data is supposed to have (#44):
 /// it decodes through the real Hevy path, and each profile keeps its training
 /// frequency inside the dashboard's 90-day window.
@@ -217,3 +222,5 @@ final class MockWorkoutLoaderTests: XCTestCase {
         return Double(starts.count) / weeks
     }
 }
+
+#endif

@@ -1,5 +1,10 @@
 import Foundation
 
+// Development fixture: excluded from Release builds, so no mock training
+// history can reach a TestFlight binary. The payloads themselves are
+// stripped from the Release bundle via EXCLUDED_SOURCE_FILE_NAMES.
+#if DEBUG
+
 /// One of the bundled mock training histories used to develop and demo the
 /// dashboard (#44) without a live Hevy account.
 ///
@@ -25,3 +30,5 @@ enum MockWorkoutProfile: String, CaseIterable, Sendable {
         }
     }
 }
+
+#endif

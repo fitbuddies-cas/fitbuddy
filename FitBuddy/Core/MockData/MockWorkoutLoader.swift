@@ -1,5 +1,10 @@
 import Foundation
 
+// Development fixture: excluded from Release builds, so no mock training
+// history can reach a TestFlight binary. The payloads themselves are
+// stripped from the Release bundle via EXCLUDED_SOURCE_FILE_NAMES.
+#if DEBUG
+
 /// Reads the bundled Hevy mock payloads (#44) and hands them out either as
 /// cache models or as `GET /v1/workouts` pages.
 ///
@@ -131,3 +136,5 @@ struct MockWorkoutLoader {
             ?? ISO8601DateFormatter.hevyFractional.date(from: raw)
     }
 }
+
+#endif
