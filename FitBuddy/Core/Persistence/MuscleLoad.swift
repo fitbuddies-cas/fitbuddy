@@ -27,7 +27,10 @@ extension MuscleLoad {
         }
 
         return MuscleGroup.allCases
-            .filter { sets[$0] != nil }
+            // Sets, not the key: an exercise made up of warm-ups only still
+            // produces a `MuscleLoad`, and a zero-set group would reach the
+            // chart as a full row labelled "0 sets".
+            .filter { (sets[$0] ?? 0) > 0 }
             .map { MuscleLoad(group: $0, volumeKg: volumes[$0] ?? 0, setCount: sets[$0] ?? 0) }
             .sorted { lhs, rhs in
                 lhs.volumeKg == rhs.volumeKg

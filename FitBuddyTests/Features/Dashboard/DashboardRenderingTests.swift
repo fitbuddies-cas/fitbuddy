@@ -18,8 +18,8 @@ final class DashboardRenderingTests: XCTestCase {
         XCTAssertGreaterThan(image.size.height, 0)
     }
 
-    /// An all-bodyweight window: every bar is zero, so the chart's x scale has
-    /// to stay valid without any volume to scale to.
+    /// An all-bodyweight window: nothing to chart on a kg scale, so the card
+    /// falls back to naming the groups.
     func testMuscleDistributionCardRendersWithoutVolume() throws {
         let image = try render(MuscleDistributionCard(distribution: [
             MuscleLoad(group: .core, volumeKg: 0, setCount: 12),

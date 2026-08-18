@@ -49,6 +49,17 @@ final class MuscleLoadTests: XCTestCase {
         XCTAssertEqual(MuscleLoad.merged(loads.reversed()).map(\.group), [.chest, .legs, .arms])
     }
 
+    /// An exercise made up of warm-up sets contributes neither volume nor
+    /// counted sets — its group must not show up as an empty row.
+    func testGroupsWithoutCountedSetsAreDropped() {
+        let merged = MuscleLoad.merged([
+            MuscleLoad(group: .shoulders, volumeKg: 0, setCount: 0),
+            MuscleLoad(group: .chest, volumeKg: 800, setCount: 3),
+        ])
+
+        XCTAssertEqual(merged.map(\.group), [.chest])
+    }
+
     func testEmptyInputProducesNoBars() {
         XCTAssertTrue(MuscleLoad.merged([]).isEmpty)
     }

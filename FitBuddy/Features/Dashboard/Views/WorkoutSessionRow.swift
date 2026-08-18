@@ -22,7 +22,7 @@ struct WorkoutSessionRow: View {
                     .font(.subheadline.weight(.semibold))
                     .fbTabularNumbers()
                     .foregroundStyle(Color.fbInk)
-                Text("^[\(workout.countedSetCount) set](inflect: true) · ^[\(workout.exerciseCount) exercise](inflect: true)")
+                Text(detail)
                     .font(.caption2)
                     .foregroundStyle(Color.fbMuted)
             }
@@ -30,6 +30,12 @@ struct WorkoutSessionRow: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .accessibilityElement(children: .combine)
+    }
+
+    private var detail: String {
+        let sets = CountFormatter.labelled(workout.countedSetCount, singular: "set")
+        let exercises = CountFormatter.labelled(workout.exerciseCount, singular: "exercise")
+        return "\(sets) · \(exercises)"
     }
 }
 

@@ -119,7 +119,8 @@ final class DashboardMetricsTests: XCTestCase {
     }
 
     func testEmptyWindowHasNoMuscleDistribution() {
-        XCTAssertTrue(DashboardMetrics.empty.muscleDistribution.isEmpty)
+        let metrics = DashboardMetrics(summaries: [], calendar: calendar)
+        XCTAssertTrue(metrics.muscleDistribution.isEmpty)
     }
 
     // MARK: - Helpers

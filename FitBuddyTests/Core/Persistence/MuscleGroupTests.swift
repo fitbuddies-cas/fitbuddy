@@ -36,6 +36,31 @@ final class MuscleGroupTests: XCTestCase {
         XCTAssertEqual(MuscleGroup.from(exerciseTitle: "Rowing Machine"), .other)
         XCTAssertEqual(MuscleGroup.from(exerciseTitle: "Upright Row (Barbell)"), .shoulders)
         XCTAssertEqual(MuscleGroup.from(exerciseTitle: "Seated Row (Cable)"), .back)
+        XCTAssertEqual(MuscleGroup.from(exerciseTitle: "Chest Supported Row (Dumbbell)"), .back)
+    }
+
+    /// Every one of these matched the wrong group while keywords were compared
+    /// as plain substrings in table order: the longer, more specific keyword
+    /// has to win regardless of where its rule sits.
+    func testLongerKeywordWinsOverGenericOne() {
+        XCTAssertEqual(MuscleGroup.from(exerciseTitle: "Walking Lunge (Dumbbell)"), .legs)
+        XCTAssertEqual(MuscleGroup.from(exerciseTitle: "Hamstring Curl (Machine)"), .legs)
+        XCTAssertEqual(MuscleGroup.from(exerciseTitle: "Reverse Fly (Dumbbell)"), .shoulders)
+    }
+
+    /// Keywords match whole words: "rowing" is not "row", and a title is not
+    /// classified by a fragment of one of its words.
+    func testKeywordsMatchOnWordBoundaries() {
+        XCTAssertEqual(MuscleGroup.from(exerciseTitle: "Rowing Machine"), .other)
+        XCTAssertEqual(MuscleGroup.from(exerciseTitle: "Latissimus Stretch"), .other)
+        XCTAssertEqual(MuscleGroup.from(exerciseTitle: "Lat Pulldown (Cable)"), .back)
+    }
+
+    /// Hevy's own titles are singular; a user-created exercise is often not.
+    func testPluralTitlesAreClassifiedLikeSingularOnes() {
+        XCTAssertEqual(MuscleGroup.from(exerciseTitle: "Dips"), .chest)
+        XCTAssertEqual(MuscleGroup.from(exerciseTitle: "Squats"), .legs)
+        XCTAssertEqual(MuscleGroup.from(exerciseTitle: "Crunches"), .core)
     }
 
     func testClassifiesCardioAndCore() {

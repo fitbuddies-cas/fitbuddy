@@ -6,9 +6,16 @@ import Foundation
 /// Debug-only: the shipped app always reads the real `WorkoutStore`. Previews
 /// cannot spin up a SwiftData container per canvas, so they get plain values.
 struct PreviewWorkoutCache: WorkoutSummaryReading {
+    /// Concrete and `Sendable`, unlike a bare `Error` existential: the protocol
+    /// refines `Sendable`, and under Swift 6 the existential would stop
+    /// compiling rather than just warning.
+    enum Failure: Error, Sendable {
+        case cacheUnavailable
+    }
+
     let summaries: [WorkoutSummary]
     /// Set to render the dashboard's failure state.
-    var failure: Error?
+    var failure: Failure?
 
     func workoutSummaries(since date: Date) async throws -> [WorkoutSummary] {
         if let failure { throw failure }

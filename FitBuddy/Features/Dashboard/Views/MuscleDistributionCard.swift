@@ -4,10 +4,12 @@ import SwiftUI
 /// Muscle-group distribution of the window's training volume (US-2 AC1) as a
 /// horizontal bar chart.
 ///
-/// Bars are sized by kg volume, matching the design's "kg volume" label. Groups
-/// that produce no kg volume — bodyweight and cardio work — still appear, with
-/// their counted sets as the label, so a pull-up-heavy back does not silently
-/// vanish from the chart.
+/// The chart is a single kg scale and only carries groups that produced kg
+/// volume. Groups trained without weight — pull-ups, planks, cardio — are
+/// listed underneath with their set count instead of being drawn: on a kg
+/// scale their bar is zero pixels long, which is indistinguishable from not
+/// having trained the group at all. A second encoding inside the same bars
+/// would be worse: it would let sets and kilograms share one axis.
 struct MuscleDistributionCard: View {
     let distribution: [MuscleLoad]
 
@@ -15,12 +17,15 @@ struct MuscleDistributionCard: View {
         FBCard(padding: 18) {
             VStack(alignment: .leading, spacing: 10) {
                 header
-                if distribution.isEmpty {
-                    Text("No sets logged in this window.")
+                if weighted.isEmpty {
+                    Text("No weighted sets in this window.")
                         .font(.subheadline)
                         .foregroundStyle(Color.fbMuted)
                 } else {
                     chart
+                }
+                if !setsOnly.isEmpty {
+                    bodyweightNote
                 }
             }
         }
@@ -40,7 +45,7 @@ struct MuscleDistributionCard: View {
     }
 
     private var chart: some View {
-        Chart(distribution) { load in
+        Chart(weighted) { load in
             BarMark(
                 x: .value("Volume", load.volumeKg),
                 y: .value("Muscle group", load.group.displayName)
@@ -48,7 +53,7 @@ struct MuscleDistributionCard: View {
             .foregroundStyle(Color.fbAccent)
             .cornerRadius(4)
             .annotation(position: .trailing, alignment: .leading) {
-                Text(label(for: load))
+                Text(VolumeFormatter.compact(load.volumeKg))
                     .font(.caption2)
                     .fbTabularNumbers()
                     .foregroundStyle(Color.fbMuted)
@@ -56,8 +61,6 @@ struct MuscleDistributionCard: View {
             .accessibilityLabel(load.group.displayName)
             .accessibilityValue("\(VolumeFormatter.full(load.volumeKg)) kilograms, \(load.setCount) sets")
         }
-        // Category order comes from the data (heaviest first); leaving it to
-        // Charts would sort the groups alphabetically.
         .chartYAxis {
             AxisMarks(preset: .aligned, position: .leading) { _ in
                 AxisValueLabel()
@@ -66,26 +69,38 @@ struct MuscleDistributionCard: View {
             }
         }
         .chartXAxis(.hidden)
+        // Category order comes from the data (heaviest first); leaving it to
+        // Charts would sort the groups alphabetically.
+        .chartYScale(domain: weighted.map(\.group.displayName))
         // Room for the trailing annotation, which is drawn outside the plot.
         .chartXScale(domain: 0...maxVolume * 1.25)
-        .chartYScale(domain: distribution.map(\.group.displayName))
-        .frame(height: CGFloat(distribution.count) * 30 + 10)
+        .frame(height: CGFloat(weighted.count) * 30 + 10)
     }
 
-    /// Groups without kg volume are labelled by their sets — otherwise every
-    /// bodyweight and cardio row would read "0".
-    private func label(for load: MuscleLoad) -> String {
-        load.volumeKg > 0
-            ? VolumeFormatter.compact(load.volumeKg)
-            : "\(load.setCount) sets"
+    /// Groups the user trained without weight. Named rather than charted, so
+    /// the card does not imply they were skipped.
+    private var bodyweightNote: some View {
+        Text("Bodyweight & cardio: \(setsOnly.map { "\($0.group.displayName) \($0.setCount) sets" }.joined(separator: " · "))")
+            .font(.caption2)
+            .foregroundStyle(Color.fbMuted)
+            .padding(.top, 2)
     }
 
-    /// Never zero, so the x scale stays valid for an all-bodyweight window.
+    private var weighted: [MuscleLoad] {
+        distribution.filter { $0.volumeKg > 0 }
+    }
+
+    private var setsOnly: [MuscleLoad] {
+        distribution.filter { $0.volumeKg <= 0 }
+    }
+
+    /// Never zero, so the x scale stays valid.
     private var maxVolume: Double {
-        max(distribution.map(\.volumeKg).max() ?? 0, 1)
+        max(weighted.map(\.volumeKg).max() ?? 0, 1)
     }
 }
 
+#if DEBUG
 #Preview {
     MuscleDistributionCard(distribution: [
         MuscleLoad(group: .chest, volumeKg: 46_200, setCount: 84),
@@ -98,3 +113,4 @@ struct MuscleDistributionCard: View {
     .padding()
     .background(Color.fbBackground)
 }
+#endif
