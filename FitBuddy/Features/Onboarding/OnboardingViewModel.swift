@@ -36,8 +36,8 @@ final class OnboardingViewModel: ObservableObject {
         self.hevyKeyViewModel = hevyKeyViewModel ?? HevyKeyEntryViewModel(keychain: keychain)
         self.claudeKeyViewModel = claudeKeyViewModel ?? ClaudeKeyEntryViewModel(keychain: keychain)
 
-        self.consentViewModel.onGranted = { [weak self] in self?.step = .hevyKey }
-        self.hevyKeyViewModel.onConnected = { [weak self] in self?.step = .claudeKey }
+        self.consentViewModel.onGranted = { [weak self] in self?.step = self?.resolvedStep ?? .hevyKey }
+        self.hevyKeyViewModel.onConnected = { [weak self] in self?.step = self?.resolvedStep ?? .claudeKey }
         self.claudeKeyViewModel.onFinished = { [weak self] in self?.step = .completed }
     }
 

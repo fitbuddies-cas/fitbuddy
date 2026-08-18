@@ -150,6 +150,45 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertEqual(sut.step, .completed)
     }
 
+    /// Regression: re-granting consent (e.g. after a `currentVersion` bump)
+    /// must re-resolve the target step from state, not jump straight to
+    /// `.hevyKey` as a hardcoded transition would, when Hevy and Claude are
+    /// already connected/saved from before.
+    func testReGrantingConsentWithDownstreamStepsAlreadyCompleteSkipsToCompleted() async throws {
+        try await keychain.save("v-old", for: .consentVersion)
+        try await keychain.save("2026-01-01T00:00:00Z", for: .consentTimestamp)
+        try await keychain.save("hevy-key", for: .hevyAPIKey)
+        try await keychain.save("sk-ant-abc", for: .claudeAPIKey)
+        let sut = makeSUT()
+        await sut.bootstrap()
+        XCTAssertEqual(sut.step, .consent)
+
+        sut.consentViewModel.hasAcceptedCheckbox = true
+        await sut.consentViewModel.confirm()
+
+        XCTAssertEqual(sut.step, .completed)
+    }
+
+    /// Regression: reconnecting Hevy after a 401 must re-resolve the target
+    /// step, not jump straight to `.claudeKey` as a hardcoded transition
+    /// would, when Claude is already saved from before.
+    func testReconnectingHevyAfterUnauthorizedWithClaudeAlreadySavedSkipsToCompleted() async throws {
+        try await seedConsent()
+        try await keychain.save("hevy-key", for: .hevyAPIKey)
+        try await keychain.save("sk-ant-abc", for: .claudeAPIKey)
+        let sut = makeSUT()
+        await sut.bootstrap()
+        XCTAssertEqual(sut.step, .completed)
+
+        await sut.handleHevyUnauthorized()
+        XCTAssertEqual(sut.step, .hevyKey)
+
+        sut.hevyKeyViewModel.apiKey = "new-hevy-key"
+        await sut.hevyKeyViewModel.connect()
+
+        XCTAssertEqual(sut.step, .completed)
+    }
+
     // MARK: - Invalid Hevy key (HTTP 401 anywhere in the app)
 
     func testHevyUnauthorizedDeletesKeyAndReturnsToHevyStep() async throws {
