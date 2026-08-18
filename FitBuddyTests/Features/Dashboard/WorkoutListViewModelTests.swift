@@ -120,6 +120,31 @@ final class WorkoutListViewModelTests: XCTestCase {
         XCTAssertEqual(cache.callCount, 2)
     }
 
+    /// A slow read that a newer `load()` superseded must not publish its
+    /// stale result on top of the fresher one (#27 adds pull-to-refresh on
+    /// top of the initial `.task`).
+    func testSupersededLoadDoesNotOverwriteTheNewerResult() async {
+        cache.gatesFirstCall = true
+        cache.results = [
+            [summary(id: "stale", daysAgo: 30, volume: 100)],
+            [summary(id: "fresh", daysAgo: 0, volume: 900)],
+        ]
+        let sut = makeSUT()
+
+        let first = Task { await sut.load() }
+        await cache.waitForFirstCall()
+        await sut.load()
+        cache.releaseFirstCall()
+        await first.value
+
+        guard case let .loaded(workouts, metrics) = sut.state else {
+            return XCTFail("Expected .loaded, got \(sut.state)")
+        }
+        XCTAssertEqual(workouts.map(\.id), ["fresh"])
+        XCTAssertEqual(metrics.totalVolumeKg, 900, accuracy: 0.001)
+        XCTAssertEqual(cache.callCount, 2)
+    }
+
     // MARK: - Helpers
 
     private func makeSUT() -> WorkoutListViewModel {

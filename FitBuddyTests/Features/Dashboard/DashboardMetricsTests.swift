@@ -40,14 +40,27 @@ final class DashboardMetricsTests: XCTestCase {
     }
 
     func testAverageTrainingDaysPerWeekSpreadsOverTheFullWindow() {
-        // 39 training days over 90 days ≈ 3 per week.
+        // 39 training days across the window, every other day.
         let summaries = (0..<39).map { summary(id: "w-\($0)", daysAgo: $0 * 2, volume: 100) }
 
         let metrics = DashboardMetrics(summaries: summaries, calendar: calendar)
 
         XCTAssertEqual(metrics.trainingDayCount, 39)
-        XCTAssertEqual(metrics.averageTrainingDaysPerWeek, 39 / (90.0 / 7), accuracy: 0.001)
-        XCTAssertEqual(metrics.averageTrainingDaysPerWeek, 3.033, accuracy: 0.001)
+        XCTAssertEqual(metrics.averageTrainingDaysPerWeek, 39 / 13.0, accuracy: 0.001)
+        XCTAssertEqual(metrics.averageTrainingDaysPerWeek, 3, accuracy: 0.001)
+    }
+
+    /// Training on every single day of the window must not produce a figure
+    /// above 7 — the divisor has to cover both boundary days.
+    func testTrainingEveryDayOfTheWindowStaysAtSevenPerWeek() {
+        let summaries = (0..<TrainingWindow.spanDays).map {
+            summary(id: "w-\($0)", daysAgo: $0, volume: 100)
+        }
+
+        let metrics = DashboardMetrics(summaries: summaries, calendar: calendar)
+
+        XCTAssertEqual(metrics.trainingDayCount, 91)
+        XCTAssertEqual(metrics.averageTrainingDaysPerWeek, 7, accuracy: 0.001)
     }
 
     func testEmptyWindowIsAllZeros() {
@@ -57,7 +70,6 @@ final class DashboardMetricsTests: XCTestCase {
         XCTAssertEqual(metrics.workoutCount, 0)
         XCTAssertEqual(metrics.trainingDayCount, 0)
         XCTAssertEqual(metrics.averageTrainingDaysPerWeek, 0)
-        XCTAssertEqual(metrics, .empty)
     }
 
     // MARK: - Helpers

@@ -14,6 +14,9 @@ final class WorkoutListViewModel: ObservableObject {
     /// — the banner data for US-2 AC2.
     @Published private(set) var lastSync: Date?
 
+    /// The read currently in flight, so a newer `load()` supersedes it.
+    private var loadTask: Task<Void, Never>?
+
     private let cache: WorkoutSummaryReading
     private let timestamps: SyncTimestampStore
     private let calendar: Calendar
@@ -38,20 +41,38 @@ final class WorkoutListViewModel: ObservableObject {
     ///
     /// Safe to call again after a sync: the previous content stays on screen
     /// while the read runs, so a refresh never flashes an empty dashboard.
+    ///
+    /// Overlapping calls — pull-to-refresh landing on top of the initial
+    /// `.task` (#27) — cancel the older read, so a slow first result cannot
+    /// overwrite a fresher one that already returned.
     func load() async {
-        lastSync = await timestamps.lastSync()
+        loadTask?.cancel()
+        let task = Task { await performLoad() }
+        loadTask = task
+        await task.value
+    }
+
+    private func performLoad() async {
+        let syncedAt = await timestamps.lastSync()
 
         let windowStart = TrainingWindow.start(endingAt: now(), calendar: calendar)
+        let newState: WorkoutListState
         do {
             let summaries = try await cache.workoutSummaries(since: windowStart)
-            state = summaries.isEmpty
+            newState = summaries.isEmpty
                 ? .empty
                 : .loaded(
                     workouts: summaries,
                     metrics: DashboardMetrics(summaries: summaries, calendar: calendar)
                 )
         } catch {
-            state = .failed
+            newState = .failed
         }
+
+        // Publish nothing once superseded: a cancelled read's result is stale
+        // by definition, and `.failed` from a cancelled read would be a lie.
+        guard !Task.isCancelled else { return }
+        lastSync = syncedAt
+        state = newState
     }
 }

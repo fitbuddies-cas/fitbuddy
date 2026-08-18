@@ -11,8 +11,6 @@ import OSLog
 actor HevyService: WorkoutSyncing {
     /// Hevy caps `pageSize` at 10 for this endpoint.
     private static let pageSize = 10
-    /// Dashboard window in days (US-2).
-    private static let windowDays = 90
     /// Safety stop for the pagination loop, at 10 workouts per page: 1000
     /// workouts is far more than a 90-day window can hold, so hitting this
     /// means Hevy is paginating in a way this version does not understand.
@@ -59,7 +57,7 @@ actor HevyService: WorkoutSyncing {
     func syncRecentWorkouts() async throws -> SyncResult {
         let apiKey = try await storedAPIKey()
         let syncedAt = now()
-        let windowStart = windowStart(endingAt: syncedAt)
+        let windowStart = TrainingWindow.start(endingAt: syncedAt, calendar: calendar)
 
         let fetched = try await fetchWindow(from: windowStart, apiKey: apiKey)
 
@@ -208,12 +206,5 @@ actor HevyService: WorkoutSyncing {
         }
         guard let key = stored, !key.isEmpty else { throw HevyServiceError.missingAPIKey }
         return key
-    }
-
-    /// Midnight, `windowDays` days before the sync — day-aligned so the window
-    /// does not drift with the time of day the user happens to sync.
-    private func windowStart(endingAt reference: Date) -> Date {
-        let midnight = calendar.startOfDay(for: reference)
-        return calendar.date(byAdding: .day, value: -Self.windowDays, to: midnight) ?? midnight
     }
 }

@@ -10,7 +10,8 @@ struct DashboardMetrics: Equatable, Sendable {
     /// Calendar days on which at least one workout took place. Two sessions on
     /// the same day are one training day.
     let trainingDayCount: Int
-    /// `trainingDayCount` spread over the window's ~12.9 weeks.
+    /// `trainingDayCount` spread over the window's 13 weeks. Capped at 7 by
+    /// construction: the divisor covers every day the window contains.
     let averageTrainingDaysPerWeek: Double
 
     /// Aggregates the cached window.
@@ -30,9 +31,4 @@ struct DashboardMetrics: Equatable, Sendable {
         // not "3 days/week" — the average has to show the gap.
         averageTrainingDaysPerWeek = Double(trainingDays.count) / TrainingWindow.weeks
     }
-}
-
-extension DashboardMetrics {
-    /// The all-zero state for an empty window.
-    static let empty = DashboardMetrics(summaries: [])
 }
