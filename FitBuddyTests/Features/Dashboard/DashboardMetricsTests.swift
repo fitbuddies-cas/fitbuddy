@@ -72,13 +72,64 @@ final class DashboardMetricsTests: XCTestCase {
         XCTAssertEqual(metrics.averageTrainingDaysPerWeek, 0)
     }
 
+    // MARK: - Muscle distribution (#27)
+
+    func testMuscleDistributionAggregatesEveryWorkoutHeaviestFirst() {
+        let metrics = DashboardMetrics(
+            summaries: [
+                summary(id: "push", daysAgo: 1, volume: 1_800, loads: [
+                    MuscleLoad(group: .chest, volumeKg: 1_200, setCount: 6),
+                    MuscleLoad(group: .arms, volumeKg: 600, setCount: 4),
+                ]),
+                summary(id: "legs", daysAgo: 3, volume: 2_000, loads: [
+                    MuscleLoad(group: .legs, volumeKg: 2_000, setCount: 8),
+                ]),
+                summary(id: "push-2", daysAgo: 5, volume: 900, loads: [
+                    MuscleLoad(group: .chest, volumeKg: 900, setCount: 5),
+                ]),
+            ],
+            calendar: calendar
+        )
+
+        XCTAssertEqual(metrics.muscleDistribution, [
+            MuscleLoad(group: .chest, volumeKg: 2_100, setCount: 11),
+            MuscleLoad(group: .legs, volumeKg: 2_000, setCount: 8),
+            MuscleLoad(group: .arms, volumeKg: 600, setCount: 4),
+        ])
+    }
+
+    /// The chart's bars have to add up to the headline figure — a split that
+    /// disagrees with the total would make one of the two wrong.
+    func testMuscleDistributionSumsToTheTotalVolume() {
+        let metrics = DashboardMetrics(
+            summaries: [
+                summary(id: "a", daysAgo: 1, volume: 1_800, loads: [
+                    MuscleLoad(group: .chest, volumeKg: 1_200, setCount: 6),
+                    MuscleLoad(group: .arms, volumeKg: 600, setCount: 4),
+                ]),
+                summary(id: "b", daysAgo: 2, volume: 2_000, loads: [
+                    MuscleLoad(group: .legs, volumeKg: 2_000, setCount: 8),
+                ]),
+            ],
+            calendar: calendar
+        )
+
+        let distributed = metrics.muscleDistribution.reduce(0) { $0 + $1.volumeKg }
+        XCTAssertEqual(distributed, metrics.totalVolumeKg, accuracy: 0.001)
+    }
+
+    func testEmptyWindowHasNoMuscleDistribution() {
+        XCTAssertTrue(DashboardMetrics.empty.muscleDistribution.isEmpty)
+    }
+
     // MARK: - Helpers
 
     private func summary(
         id: String,
         daysAgo: Int,
         hourOfDay: Int = 8,
-        volume: Double
+        volume: Double,
+        loads: [MuscleLoad] = []
     ) -> WorkoutSummary {
         let day = calendar.startOfDay(for: reference.addingTimeInterval(Double(-daysAgo) * 86_400))
         let start = day.addingTimeInterval(Double(hourOfDay) * 3600)
@@ -88,7 +139,8 @@ final class DashboardMetricsTests: XCTestCase {
             startTime: start,
             volumeKg: volume,
             exerciseCount: 4,
-            countedSetCount: 12
+            countedSetCount: 12,
+            muscleLoads: loads
         )
     }
 }

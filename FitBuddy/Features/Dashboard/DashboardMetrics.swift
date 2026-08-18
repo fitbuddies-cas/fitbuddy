@@ -13,6 +13,10 @@ struct DashboardMetrics: Equatable, Sendable {
     /// `trainingDayCount` spread over the window's 13 weeks. Capped at 7 by
     /// construction: the divisor covers every day the window contains.
     let averageTrainingDaysPerWeek: Double
+    /// Volume split by muscle group, heaviest first — the distribution chart
+    /// on the dashboard (#27). Empty when no workout in the window loaded a
+    /// group this version recognises.
+    let muscleDistribution: [MuscleLoad]
 
     /// Aggregates the cached window.
     ///
@@ -24,6 +28,7 @@ struct DashboardMetrics: Equatable, Sendable {
         let trainingDays = Set(summaries.map { calendar.startOfDay(for: $0.startTime) })
 
         totalVolumeKg = summaries.reduce(0) { $0 + $1.volumeKg }
+        muscleDistribution = MuscleLoad.merged(summaries.flatMap(\.muscleLoads))
         workoutCount = summaries.count
         trainingDayCount = trainingDays.count
         // Divided by the full window, not by the span between the first and
