@@ -33,6 +33,12 @@ These are deliberate, documented decisions (CLAUDE.md "Checked" section) — rai
 
 ## Output
 
-Sections: overview → what's good → issues (ordered by severity, each with file/line and a concrete fix) → suggestions → verdict (approve / approve-after-fixes / request changes). Keep it concise; skip empty sections.
+Write the review itself in German. This is about the review text only — the language check in item 5 (code comments/in-app text in English) still applies to the code under review, unchanged.
+
+Sections: **Übersicht** → **Positives** → **Findings** (nach Schweregrad geordnet) → **Vorschläge** → **Verdict**. Leere Abschnitte weglassen, sonst knapp halten.
+
+Every finding must show the actual code, not just describe it: a `Datei:Zeile`-Referenz, then a fenced code block (matching the file's language, e.g. ```swift) quoting the exact offending line(s) from the diff or checkout, followed by the explanation and a concrete fix — as a short code snippet or a ` ```suggestion ` block where the fix is a small in-place edit.
+
+Verdict stays the fixed English label (`approve` / `approve-after-fixes` / `request changes`) since it's a status tag, not prose.
 
 Only post to GitHub when explicitly asked: `gh pr comment` for an informal comment, `gh pr review --approve|--request-changes|--comment` for a formal review. Otherwise present the review in the conversation.
