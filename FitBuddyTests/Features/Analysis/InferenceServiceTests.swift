@@ -206,6 +206,39 @@ final class InferenceServiceTests: XCTestCase {
         _ = try? await collect(stream)
     }
 
+    /// Regression: `isRunning` must be claimed before the first `await` inside
+    /// `streamAnalysis`, not after the cooldown/Keychain checks — otherwise two
+    /// truly concurrent callers both observe the actor as idle before either
+    /// sets the flag. `async let` starts both calls together, unlike a
+    /// sequential `await` pair which can never exercise this race.
+    func testRejectsATrulyConcurrentSecondCallStartedBeforeTheFirstAwaits() async throws {
+        stubSuccess(textChunks: ["Hi"])
+
+        async let first = sut.streamAnalysis(systemPrompt: "s", userPrompt: "u")
+        async let second = sut.streamAnalysis(systemPrompt: "s", userPrompt: "u")
+
+        var successes = 0
+        var survivor: AsyncThrowingStream<String, Error>?
+        do {
+            survivor = try await first
+            successes += 1
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .alreadyInProgress)
+        }
+        do {
+            let stream = try await second
+            successes += 1
+            survivor = stream
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .alreadyInProgress)
+        }
+
+        XCTAssertEqual(successes, 1, "exactly one of two truly concurrent calls must win")
+        if let survivor {
+            _ = try? await collect(survivor)
+        }
+    }
+
     func testAllowsANewCallAfterThePreviousOneFinished() async throws {
         stubSuccess(textChunks: ["First"])
         _ = try await collect(try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u"))
@@ -230,12 +263,40 @@ final class InferenceServiceTests: XCTestCase {
         _ = try? await consumer.value
 
         // The actor clears `isRunning` from within its own internal task, which
-        // races the assertion below without this: give it a moment to finish.
-        try await Task.sleep(nanoseconds: 200_000_000)
+        // races the assertion below without this: poll rather than guess a
+        // fixed delay.
+        await waitUntilIdle()
 
         stubSuccess(textChunks: ["ok"])
         let chunks = try await collect(try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u"))
         XCTAssertEqual(chunks, ["ok"])
+    }
+
+    /// A bounded poll on `isRunning` (`private(set)`, readable from tests in
+    /// the same module) instead of a fixed sleep — avoids both a flake on a
+    /// loaded CI and an arbitrarily long wait on a fast one.
+    private func waitUntilIdle(timeout: TimeInterval = 1) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while await sut.isRunning, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+    }
+
+    // MARK: - Stream errors (AC3: Prompt/Response-Handling darf keinen Fehler verschlucken)
+
+    func testStreamErrorEventAfterHTTP200SurfacesAsAnError() async throws {
+        StubURLProtocol.handler = { request in
+            Self.captured = request
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, ClaudeSSEFactory.errorBody(type: "overloaded_error", message: "Overloaded"))
+        }
+
+        do {
+            _ = try await collect(try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u"))
+            XCTFail("expected streamInterrupted")
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .streamInterrupted(message: "Overloaded"))
+        }
     }
 
     // MARK: - Error mapping

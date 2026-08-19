@@ -19,22 +19,27 @@ actor InferenceService {
 
     private static let endpoint = URL(staticString: "https://api.anthropic.com/v1/messages")
     private static let anthropicVersion = "2023-06-01"
-    private static let dataLinePrefix = "data: "
+    private static let dataLinePrefix = "data:"
 
     private let session: URLSession
     private let keychain: KeychainService
     private let cooldown: AnalysisCooldownStore
     private let now: () -> Date
+    private let decoder = JSONDecoder()
 
-    /// Whether a stream is currently in flight.
-    private var isRunning = false
+    /// Whether a stream is currently in flight. `private(set)` rather than
+    /// `private`: tests poll it (same module) to wait out an async cleanup
+    /// instead of guessing at a fixed delay; app code cannot write it.
+    private(set) var isRunning = false
 
     /// - Parameters:
     ///   - session: Injectable for tests (stub `URLProtocol`); defaults to
-    ///     `.fitBuddy`, the shared no-disk-cache session for key-bearing calls.
+    ///     `.fitBuddyStreaming`, whose longer idle timeout (NFR: ~30s) fits a
+    ///     streaming call — `.fitBuddy`'s 15s does not reliably compose with a
+    ///     per-request override.
     ///   - now: Injectable clock, so the cooldown window is testable.
     init(
-        session: URLSession = .fitBuddy,
+        session: URLSession = .fitBuddyStreaming,
         keychain: KeychainService = KeychainService(),
         cooldown: AnalysisCooldownStore = AnalysisCooldownStore(),
         now: @escaping () -> Date = Date.init
@@ -55,13 +60,23 @@ actor InferenceService {
     /// only a rejection before that point (bad key, offline, 4xx/5xx) does not.
     func streamAnalysis(systemPrompt: String, userPrompt: String) async throws -> AsyncThrowingStream<String, Error> {
         guard !isRunning else { throw InferenceServiceError.alreadyInProgress }
-        if let availableAt = await cooldown.activeCooldown(now: now()) {
-            throw InferenceServiceError.cooldownActive(availableAt: availableAt)
-        }
-        let apiKey = try await storedAPIKey()
-        let request = try makeRequest(systemPrompt: systemPrompt, userPrompt: userPrompt, apiKey: apiKey)
-
+        // Claim the slot before the first `await` below: an actor releases its
+        // isolation at every suspension point, so two truly concurrent callers
+        // would otherwise both pass the guard above before either sets
+        // `isRunning`. Released again on every early-exit path in the `catch`.
         isRunning = true
+        let request: URLRequest
+        do {
+            if let availableAt = await cooldown.activeCooldown(now: now()) {
+                throw InferenceServiceError.cooldownActive(availableAt: availableAt)
+            }
+            let apiKey = try await storedAPIKey()
+            request = try makeRequest(systemPrompt: systemPrompt, userPrompt: userPrompt, apiKey: apiKey)
+        } catch {
+            isRunning = false
+            throw error
+        }
+
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
@@ -94,7 +109,7 @@ actor InferenceService {
         }
 
         guard let http = response as? HTTPURLResponse else {
-            throw InferenceServiceError.networkUnavailable
+            throw InferenceServiceError.invalidResponse
         }
         try validate(http)
         // Claude accepted the request — it is billing tokens from here on,
@@ -105,11 +120,22 @@ actor InferenceService {
         for try await line in bytes.lines {
             try Task.checkCancellation()
             guard line.hasPrefix(Self.dataLinePrefix) else { continue }
-            let payload = line.dropFirst(Self.dataLinePrefix.count)
+            // SSE permits `data:value` without the space `data: value` shows in
+            // every example — trim rather than assume the space is always there.
+            let payload = line.dropFirst(Self.dataLinePrefix.count).trimmingCharacters(in: .whitespaces)
             guard let data = payload.data(using: .utf8),
-                  let event = try? JSONDecoder().decode(ClaudeStreamEvent.self, from: data) else { continue }
-            if event.type == "content_block_delta", let text = event.delta?.text {
-                continuation.yield(text)
+                  let event = try? decoder.decode(ClaudeStreamEvent.self, from: data) else { continue }
+            switch event.type {
+            case "content_block_delta":
+                if let text = event.delta?.text { continuation.yield(text) }
+            case "error":
+                // Claude can abort a stream after already answering 200 (e.g.
+                // an overload mid-generation) — without this, the loop simply
+                // reaches the end of input and the call looks like a normal,
+                // if short, success.
+                throw InferenceServiceError.streamInterrupted(message: event.error?.message ?? "unknown")
+            default:
+                continue
             }
         }
     }
@@ -126,9 +152,9 @@ actor InferenceService {
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue(Self.anthropicVersion, forHTTPHeaderField: "anthropic-version")
-        // NFR: Claude can take up to ~30s; streamed chunks reset this per-request
-        // idle timeout, so a healthy stream is never cut off mid-flow.
-        request.timeoutInterval = 30
+        // Idle timeout (NFR: ~30s) comes from the session's
+        // `timeoutIntervalForRequest` (`.fitBuddyStreaming`), not a per-request
+        // override here — the two do not reliably compose.
         request.httpBody = try JSONEncoder().encode(
             ClaudeMessageRequest(
                 model: Self.model,
@@ -170,7 +196,10 @@ actor InferenceService {
         do {
             stored = try await keychain.read(.claudeAPIKey)
         } catch {
-            throw InferenceServiceError.missingAPIKey
+            // The read itself failed (e.g. `errSecInteractionNotAllowed` on a
+            // locked device) — the key is still stored, so this must not read
+            // as "no key" and send an onboarded user back to re-enter one.
+            throw InferenceServiceError.keychainUnavailable
         }
         guard let key = stored, !key.isEmpty else { throw InferenceServiceError.missingAPIKey }
         return key

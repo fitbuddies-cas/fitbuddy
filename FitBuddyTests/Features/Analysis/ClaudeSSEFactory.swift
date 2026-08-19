@@ -20,6 +20,24 @@ enum ClaudeSSEFactory {
         return Data(lines.joined(separator: "\n").utf8)
     }
 
+    /// A stream that answered HTTP 200 but then aborted mid-generation, the
+    /// way Claude reports e.g. `overloaded_error` after already starting.
+    static func errorBody(type: String, message: String) -> Data {
+        let lines = [
+            event("message_start", data: #"{"type":"message_start","message":{"id":"msg_test","type":"message","role":"assistant","content":[],"model":"claude-opus-5"}}"#),
+            event("content_block_start", data: #"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#),
+            event("content_block_delta", data: deltaPayload(text: "Partial")),
+            event("error", data: errorPayload(type: type, message: message)),
+        ]
+        return Data(lines.joined(separator: "\n").utf8)
+    }
+
+    private static func errorPayload(type: String, message: String) -> String {
+        let json = ["type": "error", "error": ["type": type, "message": message]] as [String: Any]
+        let data = try! JSONSerialization.data(withJSONObject: json)
+        return String(decoding: data, as: UTF8.self)
+    }
+
     private static func deltaPayload(text: String) -> String {
         let json = ["type": "content_block_delta", "index": 0, "delta": ["type": "text_delta", "text": text]] as [String: Any]
         let data = try! JSONSerialization.data(withJSONObject: json)
