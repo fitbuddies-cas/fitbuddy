@@ -28,12 +28,14 @@ actor HevyService: WorkoutSyncing {
     private let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "HevyService")
 
     /// - Parameters:
-    ///   - session: Injectable for tests (stub `URLProtocol`); defaults to `.shared`.
+    ///   - session: Injectable for tests (stub `URLProtocol`); defaults to the
+    ///     ephemeral `.fitBuddy` session so the key-bearing request is never
+    ///     cached to disk.
     ///   - sessionReset: Defaults to one built from the other dependencies —
     ///     it cannot be a default argument because it needs them.
     ///   - now: Injectable clock, so window boundaries are testable.
     init(
-        session: URLSession = .shared,
+        session: URLSession = .fitBuddy,
         keychain: KeychainService = KeychainService(),
         workouts: WorkoutStore,
         timestamps: SyncTimestampStore = SyncTimestampStore(),
@@ -117,7 +119,9 @@ actor HevyService: WorkoutSyncing {
         request.httpMethod = "GET"
         request.setValue(apiKey, forHTTPHeaderField: "api-key")
         request.setValue("application/json", forHTTPHeaderField: "accept")
-        request.timeoutInterval = 30
+        // No per-request timeout: `.fitBuddy` sets 15s on the configuration, and
+        // a per-request value does not reliably override it. One page is 10
+        // workouts, so the session default is ample.
 
         let data: Data
         let response: URLResponse
