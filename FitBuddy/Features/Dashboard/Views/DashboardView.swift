@@ -3,10 +3,10 @@ import SwiftUI
 /// The dashboard for the last 90 days (US-2): total volume, training frequency,
 /// muscle-group distribution and the recent sessions.
 ///
-/// Renders `WorkoutListViewModel`'s state and nothing else — it reads the local
-/// cache, never the Hevy API, so it looks the same whether the last sync just
-/// finished or the device has been offline for days. The sync trigger and the
-/// "last synced" banner arrive with #28.
+/// Renders `WorkoutListViewModel`'s state and nothing else. The content always
+/// comes from the local cache, so it looks the same whether the last sync just
+/// finished or the device has been offline for days; `SyncStatusView` on top
+/// says which of the two it is (#28).
 struct DashboardView: View {
     @StateObject private var viewModel: WorkoutListViewModel
 
@@ -20,15 +20,29 @@ struct DashboardView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                content
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 32)
+                VStack(spacing: 12) {
+                    // Held back until the first cache read has resolved. Before
+                    // that `lastSync` is still nil and the strip would claim
+                    // "Never synced" for a frame or two — to a user who synced
+                    // yesterday. The spinner below says the same thing without
+                    // asserting anything false.
+                    if viewModel.state != .loading {
+                        SyncStatusView(
+                            status: viewModel.syncStatus,
+                            lastSync: viewModel.lastSync,
+                            onRetry: { Task { await viewModel.refresh() } }
+                        )
+                    }
+                    content
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 32)
             }
             .background(Color.fbBackground)
             .navigationTitle("Dashboard")
-            .refreshable { await viewModel.load() }
+            .refreshable { await viewModel.refresh() }
         }
-        .task { await viewModel.load() }
+        .task { await viewModel.refresh() }
     }
 
     @ViewBuilder
@@ -62,7 +76,7 @@ struct DashboardView: View {
                     """
                 )
                 Button("Try again") {
-                    Task { await viewModel.load() }
+                    Task { await viewModel.refresh() }
                 }
                 .buttonStyle(FBButtonStyle(kind: .secondary))
             }

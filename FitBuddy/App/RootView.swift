@@ -17,20 +17,39 @@ struct RootView: View {
             case .consent, .hevyKey, .claudeKey:
                 OnboardingFlowView(viewModel: onboardingViewModel)
             case .completed:
-                // The autoclosure defers building the store and the ViewModel
-                // until SwiftUI first creates the dashboard's state.
-                DashboardView(
-                    viewModel: WorkoutListViewModel(
-                        cache: WorkoutStore(modelContainer: modelContext.container)
-                    )
-                )
+                // The autoclosure defers building the store, the service and
+                // the ViewModel until SwiftUI first creates the dashboard's
+                // state.
+                DashboardView(viewModel: makeDashboardViewModel())
             }
         }
-        // Exposes the coordinator to future app surfaces — services reporting
-        // an invalid Hevy key (HTTP 401, e.g. HevyService #25) call
-        // `handleHevyUnauthorized()` through it.
+        // Exposes the coordinator to the rest of the app; the dashboard reaches
+        // it through `onUnauthorized` below rather than the environment,
+        // because the ViewModel is built here and must not depend on SwiftUI.
         .environmentObject(onboardingViewModel)
         .task { await onboardingViewModel.bootstrap() }
+    }
+
+    /// Wires the dashboard to the cache and to Hevy (#28).
+    ///
+    /// Store, service and ViewModel share one `WorkoutStore` and one
+    /// `SyncTimestampStore`, so the window the sync writes is exactly the one
+    /// the dashboard reads back and both agree on the sync timestamp.
+    private func makeDashboardViewModel() -> WorkoutListViewModel {
+        let store = WorkoutStore(modelContainer: modelContext.container)
+        let timestamps = SyncTimestampStore()
+        let viewModel = WorkoutListViewModel(
+            cache: store,
+            syncer: HevyService(workouts: store, timestamps: timestamps),
+            timestamps: timestamps
+        )
+        // Hevy rejected the stored key: `HevyService` has already wiped it, so
+        // the only thing left is to send the user back to step 2 (US-1 AC3).
+        let coordinator = onboardingViewModel
+        viewModel.onUnauthorized = { [weak coordinator] in
+            await coordinator?.handleHevyUnauthorized()
+        }
+        return viewModel
     }
 
     /// Shown while the coordinator is still resolving the persisted state.
