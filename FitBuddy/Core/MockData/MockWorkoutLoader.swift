@@ -8,10 +8,13 @@ import Foundation
 /// Reads the bundled Hevy mock payloads (#44) and hands them out either as
 /// cache models or as `GET /v1/workouts` pages.
 ///
-/// The payloads are recorded in Hevy's wire format and are decoded through the
-/// same `HevyWorkoutDTO` path as live data, so anything built against them —
-/// SwiftUI previews, dashboard metrics (#26), a stubbed `URLProtocol` — sees
-/// exactly what the API delivers.
+/// The payload files hold nothing but a `workouts` array in Hevy's wire
+/// format; they are decoded through the same `HevyWorkoutDTO` path as live
+/// data, so anything built against them — SwiftUI previews, dashboard metrics
+/// (#26), a stubbed `URLProtocol` — sees exactly what the API delivers. The
+/// `page`/`page_count` envelope is not stored, it is built per request in
+/// `pageData(for:page:pageSize:)`, so a file can never claim a page count that
+/// contradicts the request it answers.
 ///
 /// **Re-anchoring:** the payloads carry fixed timestamps, which would age out
 /// of the dashboard's 90-day window (US-2) within weeks. The loader therefore
@@ -34,15 +37,22 @@ struct MockWorkoutLoader {
     private static let timestampKeys = ["start_time", "end_time", "updated_at", "created_at"]
 
     private let bundle: Bundle
-    private let now: () -> Date
+
+    /// Read once at init, not per call: every page of one walk is anchored to
+    /// the same instant, so a walk running across midnight cannot shift its
+    /// pages a day against each other.
+    private let anchor: Date
+
+    private let cache = Cache()
 
     /// - Parameters:
     ///   - bundle: Resolved from a type of the app target, so the payloads are
     ///     found from previews and from the (app-hosted) test bundle alike.
-    ///   - now: Injectable clock, so re-anchoring is testable.
-    init(bundle: Bundle = Bundle(for: Workout.self), now: @escaping () -> Date = Date.init) {
+    ///   - now: Injectable clock, so re-anchoring is testable. Called exactly
+    ///     once, when the loader is created.
+    init(bundle: Bundle = Bundle(for: Workout.self), now: () -> Date = Date.init) {
         self.bundle = bundle
-        self.now = now
+        self.anchor = now()
     }
 
     // MARK: - Workouts
@@ -95,7 +105,17 @@ struct MockWorkoutLoader {
     // MARK: - Loading & re-anchoring
 
     /// The payload's workouts with all timestamps moved into the present.
+    ///
+    /// Cached per loader: walking a profile page by page would otherwise re-read
+    /// and re-parse the whole payload once per page.
     private func shiftedWorkouts(for profile: MockWorkoutProfile) throws -> [[String: Any]] {
+        if let cached = cache.shifted[profile] { return cached }
+        let shifted = try makeShiftedWorkouts(for: profile)
+        cache.shifted[profile] = shifted
+        return shifted
+    }
+
+    private func makeShiftedWorkouts(for profile: MockWorkoutProfile) throws -> [[String: Any]] {
         let workouts = try rawWorkouts(for: profile)
         let starts = workouts
             .compactMap { $0["start_time"] as? String }
@@ -104,7 +124,7 @@ struct MockWorkoutLoader {
 
         // Whole days only, rounded down: the newest workout ends up at most 24
         // hours old and never in the future.
-        let days = (now().timeIntervalSince(newest) / 86_400).rounded(.down)
+        let days = (anchor.timeIntervalSince(newest) / 86_400).rounded(.down)
         guard days != 0 else { return workouts }
         let offset = days * 86_400
         return workouts.map { shift($0, by: offset) }
@@ -134,6 +154,12 @@ struct MockWorkoutLoader {
     private static func date(from raw: String) -> Date? {
         ISO8601DateFormatter.hevyPlain.date(from: raw)
             ?? ISO8601DateFormatter.hevyFractional.date(from: raw)
+    }
+
+    /// Shared storage for the copies of one loader — the loader stays a value
+    /// type, the parsed payloads are computed once.
+    private final class Cache {
+        var shifted: [MockWorkoutProfile: [[String: Any]]] = [:]
     }
 }
 

@@ -12,11 +12,15 @@ import Foundation
 /// readable for: a dense strength-training week and a minimal one.
 enum MockWorkoutProfile: String, CaseIterable, Sendable {
     /// Trains five times a week — push/pull/legs plus an upper-body volume and
-    /// a conditioning session, heavy loads, progressive overload across the
-    /// 90-day window.
+    /// a conditioning session, heavy loads. Twelve whole weeks of the same five
+    /// sessions, every exercise progressing across the window, so training
+    /// volume per session rises by roughly a tenth from the oldest week to the
+    /// newest instead of only per exercise.
     case personA = "person-a"
     /// Trains twice a week — two full-body sessions at beginner loads, an
     /// occasional weekend session and one week off in the middle of the window.
+    /// Loads progress like Person A's, but the irregular schedule makes the
+    /// weekly volume jump around that trend.
     case personB = "person-b"
 
     /// Name of the bundled JSON payload (without the `.json` extension).

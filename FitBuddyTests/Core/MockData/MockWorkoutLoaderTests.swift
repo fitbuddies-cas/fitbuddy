@@ -57,6 +57,29 @@ final class MockWorkoutLoaderTests: XCTestCase {
         }
     }
 
+    /// #27 charts training volume over the window and the AI analysis (#3) reads
+    /// a trend out of it, so the fixture has to rise across the window — not
+    /// only per exercise, where set and rep variation can hide the progression.
+    func testVolumePerSessionTrendsUpAcrossTheWindow() throws {
+        for profile in MockWorkoutProfile.allCases {
+            let workouts = try loader.workouts(for: profile).sorted { $0.startTime < $1.startTime }
+            let third = workouts.count / 3
+            let oldest = averageVolume(of: Array(workouts.prefix(third)))
+            let newest = averageVolume(of: Array(workouts.suffix(third)))
+            XCTAssertGreaterThan(newest, oldest * 1.05, "\(profile.rawValue) shows no volume progression")
+        }
+    }
+
+    /// A logged session that counts zero volume reads as "did not train" in the
+    /// dashboard — even the conditioning days carry some weighted work.
+    func testEverySessionCountsSomeVolume() throws {
+        for profile in MockWorkoutProfile.allCases {
+            for workout in try loader.workouts(for: profile) {
+                XCTAssertGreaterThan(totalVolume(of: [workout]), 0, "\(workout.title) counts no volume")
+            }
+        }
+    }
+
     /// Person A trains heavier and more often, so the dashboard shows a clearly
     /// different picture for the two profiles.
     func testPersonATrainsMoreVolumeThanPersonB() throws {
@@ -148,7 +171,46 @@ final class MockWorkoutLoaderTests: XCTestCase {
         XCTAssertGreaterThan(offset, 0)
     }
 
+    /// The clock is read once per loader, not once per call — a page walk that
+    /// runs across midnight must not shift its pages a day against each other.
+    func testOneLoaderReadsTheClockOnce() throws {
+        var reads = 0
+        let advancing: () -> Date = {
+            defer { reads += 1 }
+            return self.now.addingTimeInterval(Double(reads) * 86_400)
+        }
+        let walking = MockWorkoutLoader(bundle: Bundle(for: Workout.self), now: advancing)
+
+        var collected: [Date] = []
+        var page = 1
+        while true {
+            let data = try walking.pageData(for: .personB, page: page, pageSize: MockWorkoutLoader.pageSize)
+            let decoded = try JSONDecoder.hevy.decode(HevyWorkoutsPage.self, from: data)
+            collected.append(contentsOf: decoded.workouts.map(\.startTime))
+            guard page < decoded.pageCount else { break }
+            page += 1
+        }
+
+        XCTAssertEqual(reads, 1)
+        // Same instant for every page, so the walk matches a loader on a fixed clock.
+        XCTAssertEqual(collected, try loader.workouts(for: .personB).map(\.startTime))
+    }
+
     // MARK: - Wire format
+
+    /// The payload files are workout archives, not recorded responses: a stored
+    /// `page`/`page_count` would contradict every request they answer, and the
+    /// loader builds the envelope per request anyway.
+    func testPayloadFilesCarryNoPageEnvelope() throws {
+        for profile in MockWorkoutProfile.allCases {
+            let url = try XCTUnwrap(Bundle(for: Workout.self)
+                .url(forResource: profile.resourceName, withExtension: "json"))
+            let root = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
+            )
+            XCTAssertEqual(Set(root.keys), ["workouts"], "\(profile.rawValue) stores more than its workouts")
+        }
+    }
 
     func testPagesLookLikeHevyPages() throws {
         let data = try loader.pageData(for: .personA, page: 1, pageSize: MockWorkoutLoader.pageSize)
@@ -212,6 +274,11 @@ final class MockWorkoutLoaderTests: XCTestCase {
             .flatMap(\.sets)
             .filter { $0.type.countsTowardsVolume }
             .reduce(0) { $0 + ($1.weightKg ?? 0) * Double($1.reps ?? 0) }
+    }
+
+    private func averageVolume(of workouts: [Workout]) -> Double {
+        guard !workouts.isEmpty else { return 0 }
+        return totalVolume(of: workouts) / Double(workouts.count)
     }
 
     /// Distinct training days per week across the covered window.
