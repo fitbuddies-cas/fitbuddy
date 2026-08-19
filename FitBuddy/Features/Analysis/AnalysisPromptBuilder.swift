@@ -89,28 +89,37 @@ enum AnalysisPromptBuilder {
         let recent = summaries.filter { $0.startTime >= recentStart }
         let previous = summaries.filter { $0.startTime >= previousStart && $0.startTime < recentStart }
 
-        var sections: [String] = [
-            "Here is my own training data. Analyse it and tell me what to do next.",
-            windowSection(recent, from: recentStart, to: now, calendar: calendar),
-        ]
+        let days = DayFormatter(calendar: calendar)
+        let intro = "Here is my own training data. Analyse it and tell me what to do next."
 
-        // An empty window makes every section below it a list of zeroes, which
-        // reads as "trained nothing" rather than "nothing recorded". Saying it
-        // once, plainly, is both shorter and truer.
+        // An empty window turns every figure into a zero, which reads as
+        // "trained nothing" rather than "nothing recorded" — including the
+        // window header itself. Saying it once, plainly, is shorter and truer.
         guard !recent.isEmpty else {
-            sections.append(
+            return [
+                intro,
+                "## Last 4 weeks (\(days.string(recentStart)) to \(days.string(now)))",
                 "No workouts are recorded in this window. Say so plainly and do not "
-                    + "infer a training history from the absence of data."
-            )
-            return sections.joined(separator: "\n\n")
+                    + "infer a training history from the absence of data.",
+            ].joined(separator: "\n\n")
         }
 
-        sections.append(weeklySection(recent, now: now, calendar: calendar))
+        var sections: [String] = [
+            intro,
+            windowSection(recent, from: recentStart, to: now, calendar: calendar, days: days),
+        ]
+        sections.append(weeklySection(recent, now: now, calendar: calendar, days: days))
         sections.append(muscleSection(recent))
         sections.append(
-            comparisonSection(previous, from: previousStart, to: recentStart, calendar: calendar)
+            comparisonSection(
+                previous,
+                from: previousStart,
+                to: recentStart,
+                calendar: calendar,
+                days: days
+            )
         )
-        sections.append(sessionSection(recent, calendar: calendar))
+        sections.append(sessionSection(recent, days: days))
 
         return sections.joined(separator: "\n\n")
     }
@@ -119,11 +128,12 @@ enum AnalysisPromptBuilder {
         _ summaries: [WorkoutSummary],
         from start: Date,
         to end: Date,
-        calendar: Calendar
+        calendar: Calendar,
+        days formatter: DayFormatter
     ) -> String {
         let days = trainingDays(summaries, calendar: calendar)
         return """
-        ## Last 4 weeks (\(day(start, calendar)) to \(day(end, calendar)))
+        ## Last 4 weeks (\(formatter.string(start)) to \(formatter.string(end)))
         Sessions: \(summaries.count)
         Training days: \(days) (\(frequency(days)) per week)
         Total volume: \(kg(volume(of: summaries)))
@@ -136,14 +146,15 @@ enum AnalysisPromptBuilder {
     private static func weeklySection(
         _ summaries: [WorkoutSummary],
         now: Date,
-        calendar: Calendar
+        calendar: Calendar,
+        days: DayFormatter
     ) -> String {
         let weeks = (0..<Int(AnalysisWindow.weeks)).map { index -> String in
             let start = AnalysisWindow.weekStart(index, endingAt: now, calendar: calendar)
             let end = calendar.date(byAdding: .day, value: 7, to: start) ?? start
             let inWeek = summaries.filter { $0.startTime >= start && $0.startTime < end }
             let label = index == 0 ? "most recent" : "\(index + 1) weeks back"
-            return "- Week starting \(day(start, calendar)) (\(label)): "
+            return "- Week starting \(days.string(start)) (\(label)): "
                 + "\(inWeek.count) sessions, \(kg(volume(of: inWeek)))"
         }
         return (["## Volume per week"] + weeks).joined(separator: "\n")
@@ -175,9 +186,11 @@ enum AnalysisPromptBuilder {
         _ summaries: [WorkoutSummary],
         from start: Date,
         to end: Date,
-        calendar: Calendar
+        calendar: Calendar,
+        days formatter: DayFormatter
     ) -> String {
-        let header = "## Previous 4 weeks (\(day(start, calendar)) to \(day(end, calendar))), for comparison"
+        let header =
+            "## Previous 4 weeks (\(formatter.string(start)) to \(formatter.string(end))), for comparison"
         guard !summaries.isEmpty else {
             return header + "\nNo workouts recorded. This may be a break, or simply the "
                 + "start of the recorded history — do not assume which."
@@ -192,11 +205,14 @@ enum AnalysisPromptBuilder {
         """
     }
 
-    private static func sessionSection(_ summaries: [WorkoutSummary], calendar: Calendar) -> String {
+    private static func sessionSection(
+        _ summaries: [WorkoutSummary],
+        days: DayFormatter
+    ) -> String {
         let sorted = summaries.sorted { $0.startTime > $1.startTime }
         let listed = sorted.prefix(maxListedSessions)
         let rows = listed.map { summary in
-            "- \(day(summary.startTime, calendar)) \(summary.title): \(kg(summary.volumeKg)), "
+            "- \(days.string(summary.startTime)) \(summary.title): \(kg(summary.volumeKg)), "
                 + "\(summary.exerciseCount) exercises, \(summary.countedSetCount) working sets"
         }
         let omitted = sorted.count - listed.count
@@ -233,13 +249,27 @@ enum AnalysisPromptBuilder {
         return String(format: "%.1f days", perWeek)
     }
 
-    private static func day(_ date: Date, _ calendar: Calendar) -> String {
-        let formatter = DateFormatter()
-        // Fixed locale and the window's own time zone: the date is data here,
-        // not display text, and must not shift with the device's region.
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = calendar.timeZone
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: date)
+    /// One formatter per prompt, handed to the sections that need it.
+    ///
+    /// A prompt renders up to ~40 dates, and `DateFormatter` is expensive to
+    /// create; it is also not safe to share across calls, so the instance lives
+    /// exactly as long as the build that owns it.
+    private struct DayFormatter {
+        private let formatter: DateFormatter
+
+        init(calendar: Calendar) {
+            let formatter = DateFormatter()
+            // Fixed locale and the window's own time zone: the date is data
+            // here, not display text, and must not shift with the device's
+            // region.
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = calendar.timeZone
+            formatter.dateFormat = "yyyy-MM-dd"
+            self.formatter = formatter
+        }
+
+        func string(_ date: Date) -> String {
+            formatter.string(from: date)
+        }
     }
 }

@@ -178,6 +178,24 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertFalse(prompt.user.contains("## Muscle groups"))
     }
 
+    /// The window header is a section of zeroes too: "Sessions: 0" next to
+    /// "no workouts are recorded" contradicts the sentence it precedes.
+    func testEmptyWindowStatesNoFiguresAtAll() {
+        let prompt = make([])
+
+        XCTAssertFalse(prompt.user.contains("Sessions: 0"))
+        XCTAssertFalse(prompt.user.contains("Training days: 0"))
+        XCTAssertFalse(prompt.user.contains("0 kg"))
+    }
+
+    /// The range still belongs in the prompt — "nothing recorded" is only
+    /// meaningful with the window it refers to.
+    func testEmptyWindowStillNamesTheWindow() {
+        let prompt = make([])
+
+        XCTAssertTrue(prompt.user.contains("## Last 4 weeks ("))
+    }
+
     func testOnlyStaleWorkoutsStillCountAsAnEmptyWindow() {
         let prompt = make([workout(daysAgo: 60, volume: 5_000)])
 
