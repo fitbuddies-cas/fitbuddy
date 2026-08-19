@@ -60,8 +60,12 @@ enum SyncFailure: Equatable {
             return "no connection"
         case .serviceUnavailable:
             return "Hevy unavailable"
-        case .rateLimited:
-            return "too many requests"
+        case .rateLimited(let retryAfter):
+            // Hevy's own `Retry-After` is the only part of a rate limit the
+            // user can act on: without it "too many requests" leaves them
+            // pulling to refresh into a wall they cannot see the end of.
+            guard let wait = Self.wait(retryAfter) else { return "too many requests" }
+            return "too many requests, retry in \(wait)"
         case .keychainUnavailable:
             return "key not readable"
         case .unreadableResponse:
@@ -71,5 +75,35 @@ enum SyncFailure: Equatable {
         case .unknown:
             return "sync failed"
         }
+    }
+
+    /// The symbol shown next to the banner text.
+    ///
+    /// Per reason, not one offline glyph for all of them: a crossed-out
+    /// antenna next to "key not readable" tells a user with a locked device to
+    /// go looking for their reception, and the icon is what they read first.
+    var symbolName: String {
+        switch self {
+        case .offline:
+            return "antenna.radiowaves.left.and.right.slash"
+        case .serviceUnavailable, .rateLimited:
+            return "exclamationmark.icloud"
+        case .keychainUnavailable:
+            return "lock.slash"
+        case .unreadableResponse:
+            return "questionmark.circle"
+        case .cacheWriteFailed:
+            return "externaldrive.badge.exclamationmark"
+        case .unknown:
+            return "exclamationmark.triangle"
+        }
+    }
+
+    /// `30` → `"30 s"`, `180` → `"3 min"`. `nil` when Hevy sent no usable
+    /// value, so the caller can drop the clause instead of printing "0 s".
+    private static func wait(_ retryAfter: TimeInterval?) -> String? {
+        guard let retryAfter, retryAfter >= 1 else { return nil }
+        guard retryAfter >= 90 else { return "\(Int(retryAfter.rounded())) s" }
+        return "\(Int((retryAfter / 60).rounded())) min"
     }
 }

@@ -156,15 +156,15 @@ final class WorkoutListViewModelTests: XCTestCase {
 
     /// The whole point of `refresh()`: show the cache first, then go to Hevy.
     func testRefreshSyncsAndReadsTheCacheBack() async {
-        cache.summaries = []
-        syncer.onSync = { [self] in
-            cache.summaries = [summary(id: "w-1", daysAgo: 2, volume: 800)]
-        }
+        // One entry per cache read: `refresh()` reads before the sync and
+        // again after it, which is exactly what fills the window.
+        cache.results = [[], [summary(id: "w-1", daysAgo: 2, volume: 800)]]
 
         let sut = makeSUT(withSyncer: true)
         await sut.refresh()
 
-        XCTAssertEqual(syncer.callCount, 1)
+        let syncCount = await syncer.callCount
+        XCTAssertEqual(syncCount, 1)
         XCTAssertEqual(cache.callCount, 2)
         guard case let .loaded(workouts, _) = sut.state else {
             return XCTFail("Expected .loaded, got \(sut.state)")
@@ -176,7 +176,7 @@ final class WorkoutListViewModelTests: XCTestCase {
     /// #28 AC1: an unreachable API leaves the cached dashboard on screen.
     func testFailedSyncKeepsTheCachedDashboardAndRaisesTheBanner() async {
         cache.summaries = [summary(id: "cached", daysAgo: 3, volume: 700)]
-        syncer.error = HevyServiceError.networkUnavailable
+        await syncer.setError(HevyServiceError.networkUnavailable)
 
         let sut = makeSUT(withSyncer: true)
         await sut.refresh()
@@ -192,7 +192,7 @@ final class WorkoutListViewModelTests: XCTestCase {
     /// A network failure and an HTTP failure must not collapse into one
     /// message — the issue asks for exactly this distinction.
     func testHTTPFailureIsReportedSeparatelyFromANetworkFailure() async {
-        syncer.error = HevyServiceError.serviceUnavailable
+        await syncer.setError(HevyServiceError.serviceUnavailable)
 
         let sut = makeSUT(withSyncer: true)
         await sut.refresh()
@@ -202,12 +202,12 @@ final class WorkoutListViewModelTests: XCTestCase {
 
     /// #28 AC3.
     func testBannerDisappearsAfterASuccessfulSync() async {
-        syncer.error = HevyServiceError.networkUnavailable
+        await syncer.setError(HevyServiceError.networkUnavailable)
         let sut = makeSUT(withSyncer: true)
         await sut.refresh()
         XCTAssertEqual(sut.syncStatus, .failed(.offline))
 
-        syncer.error = nil
+        await syncer.setError(nil)
         await sut.refresh()
 
         XCTAssertEqual(sut.syncStatus, .idle)
@@ -218,7 +218,7 @@ final class WorkoutListViewModelTests: XCTestCase {
     func testFailedSyncKeepsThePreviousTimestamp() async throws {
         let syncedAt = reference.addingTimeInterval(-7_200)
         await timestamps.setLastSync(syncedAt)
-        syncer.error = HevyServiceError.networkUnavailable
+        await syncer.setError(HevyServiceError.networkUnavailable)
 
         let sut = makeSUT(withSyncer: true)
         await sut.refresh()
@@ -230,7 +230,7 @@ final class WorkoutListViewModelTests: XCTestCase {
     /// HTTP 401: `HevyService` has already wiped the key, so the dashboard
     /// hands over to onboarding instead of showing a banner.
     func testUnauthorizedRoutesToOnboardingWithoutABanner() async {
-        syncer.error = HevyServiceError.unauthorized
+        await syncer.setError(HevyServiceError.unauthorized)
         let sut = makeSUT(withSyncer: true)
         var routed = false
         sut.onUnauthorized = { routed = true }
@@ -244,7 +244,7 @@ final class WorkoutListViewModelTests: XCTestCase {
     /// A cancelled request is not a connectivity problem and must not put an
     /// offline banner on a healthy dashboard.
     func testCancelledSyncReportsNoFailure() async {
-        syncer.error = URLError(.cancelled)
+        await syncer.setError(URLError(.cancelled))
         let sut = makeSUT(withSyncer: true)
 
         await sut.refresh()
@@ -255,20 +255,21 @@ final class WorkoutListViewModelTests: XCTestCase {
     /// Repeated pull-to-refresh must not leave the older sync's outcome on
     /// screen after the newer one already answered.
     func testSupersededSyncDoesNotOverwriteTheNewerOutcome() async {
-        syncer.gatesFirstCall = true
-        syncer.error = HevyServiceError.networkUnavailable
+        await syncer.gateFirstCall()
+        await syncer.setError(HevyServiceError.networkUnavailable)
         let sut = makeSUT(withSyncer: true)
 
         let first = Task { await sut.refresh() }
         await syncer.waitForFirstCall()
-        syncer.error = nil
+        await syncer.setError(nil)
         let second = Task { await sut.refresh() }
-        syncer.releaseFirstCall()
+        await syncer.releaseFirstCall()
         await first.value
         await second.value
 
         XCTAssertEqual(sut.syncStatus, .idle)
-        XCTAssertEqual(syncer.callCount, 2)
+        let syncCount = await syncer.callCount
+        XCTAssertEqual(syncCount, 2)
     }
 
     /// Without a syncer — previews, and the cache-only tests above — `refresh()`

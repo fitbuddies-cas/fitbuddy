@@ -37,12 +37,54 @@ final class SyncFailureTests: XCTestCase {
     /// Every reason needs copy — an empty summary would render "Last synced
     /// 2 h ago · " with a dangling separator.
     func testEverySummaryIsNonEmpty() {
-        let failures: [SyncFailure] = [
-            .offline, .serviceUnavailable, .rateLimited(retryAfter: nil),
-            .keychainUnavailable, .unreadableResponse, .cacheWriteFailed, .unknown,
-        ]
-        for failure in failures {
+        for failure in Self.allFailures {
             XCTAssertFalse(failure.summary.isEmpty, "\(failure) has no summary")
         }
     }
+
+    // MARK: - Retry-After
+
+    /// Hevy's `Retry-After` is the only part of a rate limit the user can act
+    /// on; carrying it as far as the banner and then not saying it wastes it.
+    func testRateLimitSpellsOutTheWaitHevySent() {
+        XCTAssertEqual(
+            SyncFailure.rateLimited(retryAfter: 30).summary,
+            "too many requests, retry in 30 s"
+        )
+        XCTAssertEqual(
+            SyncFailure.rateLimited(retryAfter: 180).summary,
+            "too many requests, retry in 3 min"
+        )
+    }
+
+    /// Without a usable value the clause is dropped rather than printed as
+    /// "retry in 0 s", which would send the user straight back into the limit.
+    func testRateLimitWithoutARetryAfterDropsTheClause() {
+        XCTAssertEqual(SyncFailure.rateLimited(retryAfter: nil).summary, "too many requests")
+        XCTAssertEqual(SyncFailure.rateLimited(retryAfter: 0).summary, "too many requests")
+    }
+
+    // MARK: - Symbols
+
+    func testEveryFailureHasASymbol() {
+        for failure in Self.allFailures {
+            XCTAssertFalse(failure.symbolName.isEmpty, "\(failure) has no symbol")
+        }
+    }
+
+    /// The offline glyph is the one a user reads as "check your reception".
+    /// Putting it next to a locked Keychain or a full disk sends them looking
+    /// in the wrong place, and the icon is read before the text.
+    func testOnlyTheNetworkFailureUsesTheOfflineGlyph() {
+        let offline = SyncFailure.offline.symbolName
+
+        for failure in Self.allFailures where failure != .offline {
+            XCTAssertNotEqual(failure.symbolName, offline, "\(failure) claims to be a network problem")
+        }
+    }
+
+    private static let allFailures: [SyncFailure] = [
+        .offline, .serviceUnavailable, .rateLimited(retryAfter: nil),
+        .keychainUnavailable, .unreadableResponse, .cacheWriteFailed, .unknown,
+    ]
 }

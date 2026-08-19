@@ -21,11 +21,18 @@ struct DashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 12) {
-                    SyncStatusView(
-                        status: viewModel.syncStatus,
-                        lastSync: viewModel.lastSync,
-                        onRetry: { Task { await viewModel.refresh() } }
-                    )
+                    // Held back until the first cache read has resolved. Before
+                    // that `lastSync` is still nil and the strip would claim
+                    // "Never synced" for a frame or two — to a user who synced
+                    // yesterday. The spinner below says the same thing without
+                    // asserting anything false.
+                    if viewModel.state != .loading {
+                        SyncStatusView(
+                            status: viewModel.syncStatus,
+                            lastSync: viewModel.lastSync,
+                            onRetry: { Task { await viewModel.refresh() } }
+                        )
+                    }
                     content
                 }
                 .padding(.horizontal, 16)

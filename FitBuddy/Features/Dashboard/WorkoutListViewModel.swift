@@ -78,7 +78,7 @@ final class WorkoutListViewModel: ObservableObject {
         loadTask?.cancel()
         let task = Task { await performLoad() }
         loadTask = task
-        await task.value
+        await task.awaitingCancellation()
     }
 
     private func performLoad() async {
@@ -116,10 +116,14 @@ final class WorkoutListViewModel: ObservableObject {
         syncTask?.cancel()
         let task = Task { await performSync(with: syncer) }
         syncTask = task
-        await task.value
+        await task.awaitingCancellation()
     }
 
     private func performSync(with syncer: WorkoutSyncing) async {
+        // Closes the window in which a superseded task publishes `.syncing`
+        // over the newer one's result. The main actor runs task bodies FIFO,
+        // so this is not reachable today — but it costs one line.
+        guard !Task.isCancelled else { return }
         syncStatus = .syncing
         do {
             try await syncer.syncRecentWorkouts()
@@ -156,5 +160,22 @@ final class WorkoutListViewModel: ObservableObject {
     /// `CancellationError`, so both forms have to be recognised.
     private static func isCancellation(_ error: Error) -> Bool {
         error is CancellationError || (error as? URLError)?.code == .cancelled
+    }
+}
+
+private extension Task where Success == Void, Failure == Never {
+    /// Awaits the task, forwarding the caller's cancellation into it.
+    ///
+    /// The task has to stay unstructured — a newer `load()` or `sync()`
+    /// cancels the older one by holding on to it, which a child task would not
+    /// allow. But unstructured also means SwiftUI tearing down the `.task` that
+    /// started it leaves the work running: the request finishes, the result is
+    /// published to a view nobody is looking at. This bridges the two.
+    func awaitingCancellation() async {
+        await withTaskCancellationHandler {
+            await value
+        } onCancel: {
+            cancel()
+        }
     }
 }
