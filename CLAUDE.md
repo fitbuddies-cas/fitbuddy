@@ -8,6 +8,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 * Always use the term "PoC" (Proof of Concept) — never "MVP" — when referring to the project scope.
 * If you want to mention a Version (e.g. v1 or v0) - always use v0 for our PoC. Anything beyond our PoC is v1. Do not use v1.1!
 
+## Language Policy
+
+FitBuddy is bilingual by design — English and German each have a fixed scope, never interchangeable:
+
+| Artifact | Language |
+|---|---|
+| Swift code — identifiers, comments | English |
+| In-app UI text | English |
+| Branch & file names | English |
+| Commit messages, PR titles & descriptions | English |
+| `README.md`, `docs/*.md`, `docs/adr/` | German |
+| GitHub Issues (titles & bodies) | German |
+| PR / code reviews (`/code-review`, `/pr-review`) | German — the verdict label (`approve` / `approve-after-fixes` / `request changes`) stays the fixed English tag |
+
+Rule of thumb: code and what sits directly on top of it (comments, commits, PR text) is English; anything the team reads as documentation, planning, or review discussion (docs, issues, reviews) is German.
+
 ## Project
 **FitBuddy** is a CAS (ADAI 2026, BFH Biel) Proof of Concept Project. The app to be built is a native iOS (SwiftUI) training assistant aggregating Hevy API data and delivering on-demand AI recommendations via Claude API.
 

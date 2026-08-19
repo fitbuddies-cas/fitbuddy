@@ -33,6 +33,18 @@ These are deliberate, documented decisions (CLAUDE.md "Checked" section) — rai
 
 ## Output
 
-Sections: overview → what's good → issues (ordered by severity, each with file/line and a concrete fix) → suggestions → verdict (approve / approve-after-fixes / request changes). Keep it concise; skip empty sections.
+Write the review itself in German. This is about the review text only — the language check in item 5 (code comments/in-app text in English) still applies to the code under review, unchanged.
 
-Only post to GitHub when explicitly asked: `gh pr comment` for an informal comment, `gh pr review --approve|--request-changes|--comment` for a formal review. Otherwise present the review in the conversation.
+When presenting in the conversation: sections **Übersicht** → **Positives** → **Findings** (nach Schweregrad geordnet) → **Vorschläge** → **Verdict**. Leere Abschnitte weglassen, sonst knapp halten. Verdict stays the fixed English label (`approve` / `approve-after-fixes` / `request changes`) since it's a status tag, not prose.
+
+### Posting to GitHub — inline, not pasted
+
+Only post when explicitly asked. When posting, findings that concern a specific line belong as **inline PR review comments** anchored to that diff line, not pasted as a code block into a plain issue comment — GitHub then renders its own syntax-highlighted diff context next to the finding instead of a manual quote.
+
+1. Get the PR's head SHA: `gh pr view <nr> --json headRefOid --jq .headRefOid`.
+2. Build one JSON payload for `POST /pulls/<nr>/reviews`: `commit_id` = that SHA, `event` = `COMMENT` / `APPROVE` / `REQUEST_CHANGES` (matching the verdict), `body` = Übersicht + Positives + Vorschläge + Verdict (German, no individual findings — those go in `comments`), and `comments`: one entry per finding on a changed line, `{ "path": "...", "line": <line in the new file>, "side": "RIGHT", "body": "<Finding, German>" }`. Where the fix is a small in-place edit, put a ` ```suggestion\n<replacement>\n``` ` block inside that comment's `body` — GitHub renders it as a one-click-applicable diff.
+3. Submit with `gh api --input review.json -X POST repos/<owner>/<repo>/pulls/<nr>/reviews`.
+
+A finding about a file/line that is **not** part of the diff (e.g. a missing change in an untouched config file) has no diff position to anchor an inline comment to — the review API rejects it. For those, don't force one: reference the exact line with a **permalink** instead (`https://github.com/<owner>/<repo>/blob/<head-sha>/<path>#L<n>` or `#L<n>-L<m>`), placed either in the top-level `body` or in an inline comment on the nearest related changed line. Pasted into a GitHub comment, a permalink auto-expands into a highlighted snippet — no manual code block needed.
+
+`gh pr comment` stays fine for a plain-prose follow-up (e.g. "fixed in commit X") that isn't itself pointing at code.
