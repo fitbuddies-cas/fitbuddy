@@ -4,9 +4,8 @@ import SwiftUI
 ///
 /// Deliberately free of blame: the window is empty both for a user who has not
 /// synced yet and for one who did not train, and the dashboard cannot tell the
-/// two apart. The copy promises only what this version does — pulling re-reads
-/// the local cache; fetching from Hevy arrives with #28, and telling the user
-/// otherwise would make a working app look broken.
+/// two apart. Whether a sync actually reached Hevy is `SyncStatusView`'s
+/// statement to make, not this one's.
 struct DashboardEmptyView: View {
     var body: some View {
         VStack(spacing: 0) {
@@ -32,14 +31,14 @@ struct DashboardEmptyView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 22)
 
-            Text("No workouts from the last 90 days have reached this device yet. Once FitBuddy syncs with Hevy, your sessions show up here.")
+            Text("No workouts from the last 90 days have reached this device yet. Pull down to fetch your sessions from Hevy.")
                 .font(.subheadline)
                 .foregroundStyle(Color.fbMuted)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 8)
 
-            Label("Pull to reload", systemImage: "arrow.clockwise")
+            Label("Pull to sync", systemImage: "arrow.clockwise")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(Color.fbInk)
                 .padding(.horizontal, 16)

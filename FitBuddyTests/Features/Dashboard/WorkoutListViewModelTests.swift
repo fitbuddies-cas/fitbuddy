@@ -6,6 +6,7 @@ import XCTest
 @MainActor
 final class WorkoutListViewModelTests: XCTestCase {
     private var cache: StubWorkoutCache!
+    private var syncer: StubWorkoutSyncer!
     private var defaults: UserDefaults!
     private var suiteName: String!
     private var timestamps: SyncTimestampStore!
@@ -15,6 +16,7 @@ final class WorkoutListViewModelTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         cache = StubWorkoutCache()
+        syncer = StubWorkoutSyncer()
         suiteName = "fitbuddy.tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
         timestamps = SyncTimestampStore(defaults: defaults)
@@ -23,6 +25,7 @@ final class WorkoutListViewModelTests: XCTestCase {
     override func tearDown() async throws {
         defaults.removePersistentDomain(forName: suiteName)
         cache = nil
+        syncer = nil
         timestamps = nil
         defaults = nil
         try await super.tearDown()
@@ -145,11 +148,147 @@ final class WorkoutListViewModelTests: XCTestCase {
         XCTAssertEqual(cache.callCount, 2)
     }
 
+    // MARK: - Sync (#28)
+
+    func testSyncStatusStartsIdle() {
+        XCTAssertEqual(makeSUT().syncStatus, .idle)
+    }
+
+    /// The whole point of `refresh()`: show the cache first, then go to Hevy.
+    func testRefreshSyncsAndReadsTheCacheBack() async {
+        cache.summaries = []
+        syncer.onSync = { [self] in
+            cache.summaries = [summary(id: "w-1", daysAgo: 2, volume: 800)]
+        }
+
+        let sut = makeSUT(withSyncer: true)
+        await sut.refresh()
+
+        XCTAssertEqual(syncer.callCount, 1)
+        XCTAssertEqual(cache.callCount, 2)
+        guard case let .loaded(workouts, _) = sut.state else {
+            return XCTFail("Expected .loaded, got \(sut.state)")
+        }
+        XCTAssertEqual(workouts.map(\.id), ["w-1"])
+        XCTAssertEqual(sut.syncStatus, .idle)
+    }
+
+    /// #28 AC1: an unreachable API leaves the cached dashboard on screen.
+    func testFailedSyncKeepsTheCachedDashboardAndRaisesTheBanner() async {
+        cache.summaries = [summary(id: "cached", daysAgo: 3, volume: 700)]
+        syncer.error = HevyServiceError.networkUnavailable
+
+        let sut = makeSUT(withSyncer: true)
+        await sut.refresh()
+
+        guard case let .loaded(workouts, metrics) = sut.state else {
+            return XCTFail("Expected .loaded, got \(sut.state)")
+        }
+        XCTAssertEqual(workouts.map(\.id), ["cached"])
+        XCTAssertEqual(metrics.totalVolumeKg, 700, accuracy: 0.001)
+        XCTAssertEqual(sut.syncStatus, .failed(.offline))
+    }
+
+    /// A network failure and an HTTP failure must not collapse into one
+    /// message — the issue asks for exactly this distinction.
+    func testHTTPFailureIsReportedSeparatelyFromANetworkFailure() async {
+        syncer.error = HevyServiceError.serviceUnavailable
+
+        let sut = makeSUT(withSyncer: true)
+        await sut.refresh()
+
+        XCTAssertEqual(sut.syncStatus, .failed(.serviceUnavailable))
+    }
+
+    /// #28 AC3.
+    func testBannerDisappearsAfterASuccessfulSync() async {
+        syncer.error = HevyServiceError.networkUnavailable
+        let sut = makeSUT(withSyncer: true)
+        await sut.refresh()
+        XCTAssertEqual(sut.syncStatus, .failed(.offline))
+
+        syncer.error = nil
+        await sut.refresh()
+
+        XCTAssertEqual(sut.syncStatus, .idle)
+    }
+
+    /// US-2 AC2: the timestamp survives a failed sync, so the user can tell
+    /// how stale the cached window is.
+    func testFailedSyncKeepsThePreviousTimestamp() async throws {
+        let syncedAt = reference.addingTimeInterval(-7_200)
+        await timestamps.setLastSync(syncedAt)
+        syncer.error = HevyServiceError.networkUnavailable
+
+        let sut = makeSUT(withSyncer: true)
+        await sut.refresh()
+
+        let stored = try XCTUnwrap(sut.lastSync)
+        XCTAssertEqual(stored.timeIntervalSince1970, syncedAt.timeIntervalSince1970, accuracy: 0.001)
+    }
+
+    /// HTTP 401: `HevyService` has already wiped the key, so the dashboard
+    /// hands over to onboarding instead of showing a banner.
+    func testUnauthorizedRoutesToOnboardingWithoutABanner() async {
+        syncer.error = HevyServiceError.unauthorized
+        let sut = makeSUT(withSyncer: true)
+        var routed = false
+        sut.onUnauthorized = { routed = true }
+
+        await sut.refresh()
+
+        XCTAssertTrue(routed)
+        XCTAssertEqual(sut.syncStatus, .idle)
+    }
+
+    /// A cancelled request is not a connectivity problem and must not put an
+    /// offline banner on a healthy dashboard.
+    func testCancelledSyncReportsNoFailure() async {
+        syncer.error = URLError(.cancelled)
+        let sut = makeSUT(withSyncer: true)
+
+        await sut.refresh()
+
+        XCTAssertEqual(sut.syncStatus, .idle)
+    }
+
+    /// Repeated pull-to-refresh must not leave the older sync's outcome on
+    /// screen after the newer one already answered.
+    func testSupersededSyncDoesNotOverwriteTheNewerOutcome() async {
+        syncer.gatesFirstCall = true
+        syncer.error = HevyServiceError.networkUnavailable
+        let sut = makeSUT(withSyncer: true)
+
+        let first = Task { await sut.refresh() }
+        await syncer.waitForFirstCall()
+        syncer.error = nil
+        let second = Task { await sut.refresh() }
+        syncer.releaseFirstCall()
+        await first.value
+        await second.value
+
+        XCTAssertEqual(sut.syncStatus, .idle)
+        XCTAssertEqual(syncer.callCount, 2)
+    }
+
+    /// Without a syncer — previews, and the cache-only tests above — `refresh()`
+    /// is just a cache read and never claims a sync happened.
+    func testRefreshWithoutASyncerIsAPlainCacheRead() async {
+        cache.summaries = [summary(id: "w-1", daysAgo: 1, volume: 100)]
+
+        let sut = makeSUT()
+        await sut.refresh()
+
+        XCTAssertEqual(cache.callCount, 1)
+        XCTAssertEqual(sut.syncStatus, .idle)
+    }
+
     // MARK: - Helpers
 
-    private func makeSUT() -> WorkoutListViewModel {
+    private func makeSUT(withSyncer: Bool = false) -> WorkoutListViewModel {
         WorkoutListViewModel(
             cache: cache,
+            syncer: withSyncer ? syncer : nil,
             timestamps: timestamps,
             calendar: .current,
             now: { self.reference }
