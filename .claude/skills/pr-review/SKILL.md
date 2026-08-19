@@ -1,6 +1,6 @@
 ---
 name: pr-review
-description: Review a FitBuddy pull request against the project's conventions (CLAUDE.md). Use when asked to review a PR, do a code review, or pre-review before merging.
+description: Review a FitBuddy pull request against the project's conventions (CLAUDE.md) and post the review to the PR on GitHub by default. Use when asked to review a PR, do a code review, or pre-review before merging.
 ---
 
 # FitBuddy PR review
@@ -37,9 +37,9 @@ Write the review itself in German. This is about the review text only — the la
 
 When presenting in the conversation: sections **Übersicht** → **Positives** → **Findings** (nach Schweregrad geordnet) → **Vorschläge** → **Verdict**. Leere Abschnitte weglassen, sonst knapp halten. Verdict stays the fixed English label (`approve` / `approve-after-fixes` / `request changes`) since it's a status tag, not prose.
 
-### Posting to GitHub — inline, not pasted
+### Posting to GitHub — inline, not pasted, and on by default
 
-Only post when explicitly asked. When posting, findings that concern a specific line belong as **inline PR review comments** anchored to that diff line, not pasted as a code block into a plain issue comment — GitHub then renders its own syntax-highlighted diff context next to the finding instead of a manual quote.
+Posting the finished review to the PR is the default outcome of this skill, not an opt-in step — do it right after presenting the review in the conversation, without waiting to be asked. Skip posting only if the user explicitly says not to (e.g. "just show me", "don't post this"), or if posting fails (no write access, PR already merged/closed). Findings that concern a specific line belong as **inline PR review comments** anchored to that diff line, not pasted as a code block into a plain issue comment — GitHub then renders its own syntax-highlighted diff context next to the finding instead of a manual quote.
 
 1. Get the PR's head SHA: `gh pr view <nr> --json headRefOid --jq .headRefOid`.
 2. Build one JSON payload for `POST /pulls/<nr>/reviews`: `commit_id` = that SHA, `event` = `COMMENT` / `APPROVE` / `REQUEST_CHANGES` (matching the verdict), `body` = Übersicht + Positives + Vorschläge + Verdict (German, no individual findings — those go in `comments`), and `comments`: one entry per finding on a changed line, `{ "path": "...", "line": <line in the new file>, "side": "RIGHT", "body": "<Finding, German>" }`. Where the fix is a small in-place edit, put a ` ```suggestion\n<replacement>\n``` ` block inside that comment's `body` — GitHub renders it as a one-click-applicable diff.
