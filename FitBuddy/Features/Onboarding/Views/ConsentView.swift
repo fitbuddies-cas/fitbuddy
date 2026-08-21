@@ -11,20 +11,23 @@ struct ConsentView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                stepIndicator
+                FBStepIndicator(current: 1)
                 header
                 FBCard {
                     VStack(alignment: .leading, spacing: 20) {
                         FBInfoRow(
                             icon: "globe",
-                            title: "Data transfer to Anthropic (USA)",
+                            title: "Data transfer to AI providers (USA/EU)",
                             text: """
                             Your training data is health data (Art. 5 lit. c nDSG). For the AI \
-                            analysis it is transferred to Anthropic. Your contracting party is \
-                            Anthropic Ireland, Limited (Irish law); the technical processing takes \
-                            place in the USA by Anthropic PBC. The USA does not provide a level of \
-                            data protection equivalent to Swiss law. The transfer is based on the \
-                            Anthropic DPA of your own account (incl. SCCs + Swiss Addendum).
+                            analysis it is transferred to the AI providers you connect a key \
+                            for — Anthropic (Claude), Google (Gemini), and/or Mistral AI — and \
+                            only to those. Anthropic (contracting party: Anthropic Ireland, \
+                            Limited; technical processing by Anthropic PBC) and Google process \
+                            data in the USA, which does not provide a level of data protection \
+                            equivalent to Swiss law; Mistral AI processes data in the EU. Each \
+                            transfer is based on the API terms of your own account with that \
+                            provider (for Anthropic: DPA incl. SCCs + Swiss Addendum).
                             """
                         )
                         Divider().overlay(Color.fbDivider)
@@ -53,24 +56,6 @@ struct ConsentView: View {
         .background(Color.fbBackground)
         .navigationTitle("Before we start")
         .navigationBarTitleDisplayMode(.inline)
-    }
-
-    /// Three-segment progress bar; this screen is always step 1 of 3.
-    private var stepIndicator: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<3) { index in
-                Capsule()
-                    .fill(index == 0 ? Color.fbInk : Color.fbBorder)
-                    .frame(height: 3)
-            }
-            Text("Step 1 of 3")
-                .font(.fbLabel)
-                .foregroundStyle(Color.fbMuted)
-                .padding(.leading, 8)
-                .fixedSize()
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Onboarding step 1 of 3")
     }
 
     private var header: some View {

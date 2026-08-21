@@ -11,8 +11,8 @@ enum OnboardingStep: Hashable {
     case consent
     /// Step 2: Hevy API key entry + validation.
     case hevyKey
-    /// Step 3: optional Claude API key entry (or skip).
-    case claudeKey
+    /// Step 3: optional LLM provider key entry (or skip).
+    case llmKeys
     /// Onboarding finished — the app surface (dashboard, #27) takes over.
     case completed
 }

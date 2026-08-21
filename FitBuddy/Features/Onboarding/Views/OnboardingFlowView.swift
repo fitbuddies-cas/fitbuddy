@@ -14,7 +14,7 @@ struct OnboardingFlowView: View {
                 .navigationDestination(for: OnboardingStep.self) { step in
                     destination(for: step)
                         .navigationBarBackButtonHidden(true)
-                        // Hevy/Claude screens own their look end-to-end (custom
+                        // Hevy/LLM screens own their look end-to-end (custom
                         // step indicator, no title) — without this the stack
                         // still renders an empty system nav bar above them.
                         .toolbar(.hidden, for: .navigationBar)
@@ -27,8 +27,8 @@ struct OnboardingFlowView: View {
         switch step {
         case .hevyKey:
             HevyKeyEntryView(viewModel: viewModel.hevyKeyViewModel)
-        case .claudeKey:
-            ClaudeKeyEntryView(viewModel: viewModel.claudeKeyViewModel)
+        case .llmKeys:
+            LLMKeysView(viewModel: viewModel.llmKeysViewModel)
         case .loading, .consent, .completed:
             // Never pushed: .loading/.completed are handled by RootView and
             // .consent is the stack's root.
@@ -47,8 +47,8 @@ struct OnboardingFlowView: View {
                     return []
                 case .hevyKey:
                     return [.hevyKey]
-                case .claudeKey:
-                    return [.hevyKey, .claudeKey]
+                case .llmKeys:
+                    return [.hevyKey, .llmKeys]
                 }
             },
             set: { _ in }

@@ -44,12 +44,12 @@ final class OnboardingViewModelTests: XCTestCase {
             firstLaunchReset: FirstLaunchResetService(defaults: defaults, keychain: keychain)
         )
         let hevy = HevyKeyEntryViewModel(validator: validator, keychain: keychain)
-        let claude = ClaudeKeyEntryViewModel(keychain: keychain, defaults: defaults)
+        let llmKeys = LLMKeysViewModel(keychain: keychain, defaults: defaults)
         return OnboardingViewModel(
             keychain: keychain,
             consentViewModel: consent,
             hevyKeyViewModel: hevy,
-            claudeKeyViewModel: claude,
+            llmKeysViewModel: llmKeys,
             launchArguments: launchArguments
         )
     }
@@ -78,15 +78,15 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertEqual(sut.step, .hevyKey)
     }
 
-    func testBootstrapWithConsentAndHevyKeyResumesAtClaudeStep() async throws {
+    func testBootstrapWithConsentAndHevyKeyResumesAtLLMStep() async throws {
         try await seedConsent()
         try await keychain.save("hevy-key", for: .hevyAPIKey)
         let sut = makeSUT()
         await sut.bootstrap()
-        XCTAssertEqual(sut.step, .claudeKey)
+        XCTAssertEqual(sut.step, .llmKeys)
     }
 
-    func testBootstrapWithStoredClaudeKeyCompletesOnboarding() async throws {
+    func testBootstrapWithStoredLLMKeyCompletesOnboarding() async throws {
         try await seedConsent()
         try await keychain.save("hevy-key", for: .hevyAPIKey)
         try await keychain.save("sk-ant-abc", for: .claudeAPIKey)
@@ -95,10 +95,10 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertEqual(sut.step, .completed)
     }
 
-    func testBootstrapWithSkippedClaudeCompletesOnboarding() async throws {
+    func testBootstrapWithSkippedLLMStepCompletesOnboarding() async throws {
         try await seedConsent()
         try await keychain.save("hevy-key", for: .hevyAPIKey)
-        defaults.set(true, forKey: "fitbuddy.onboarding.claudeKeySkipped")
+        defaults.set(true, forKey: "fitbuddy.onboarding.llmKeysSkipped")
         let sut = makeSUT()
         await sut.bootstrap()
         XCTAssertEqual(sut.step, .completed)
@@ -116,7 +116,7 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertEqual(sut.step, .hevyKey)
     }
 
-    func testConnectingHevyAdvancesToClaudeStep() async throws {
+    func testConnectingHevyAdvancesToLLMStep() async throws {
         try await seedConsent()
         let sut = makeSUT()
         await sut.bootstrap()
@@ -124,36 +124,36 @@ final class OnboardingViewModelTests: XCTestCase {
         sut.hevyKeyViewModel.apiKey = "hevy-key"
         await sut.hevyKeyViewModel.connect()
 
-        XCTAssertEqual(sut.step, .claudeKey)
+        XCTAssertEqual(sut.step, .llmKeys)
     }
 
-    func testSavingClaudeKeyCompletesOnboarding() async throws {
+    func testSavingLLMKeyCompletesOnboarding() async throws {
         try await seedConsent()
         try await keychain.save("hevy-key", for: .hevyAPIKey)
         let sut = makeSUT()
         await sut.bootstrap()
 
-        sut.claudeKeyViewModel.apiKey = "sk-ant-abc"
-        await sut.claudeKeyViewModel.save()
+        sut.llmKeysViewModel.slots = [LLMKeySlot(provider: .claude, key: "sk-ant-abc")]
+        await sut.llmKeysViewModel.save()
 
         XCTAssertEqual(sut.step, .completed)
     }
 
-    func testSkippingClaudeCompletesOnboarding() async throws {
+    func testSkippingLLMStepCompletesOnboarding() async throws {
         try await seedConsent()
         try await keychain.save("hevy-key", for: .hevyAPIKey)
         let sut = makeSUT()
         await sut.bootstrap()
 
-        sut.claudeKeyViewModel.skip()
+        sut.llmKeysViewModel.skip()
 
         XCTAssertEqual(sut.step, .completed)
     }
 
     /// Regression: re-granting consent (e.g. after a `currentVersion` bump)
     /// must re-resolve the target step from state, not jump straight to
-    /// `.hevyKey` as a hardcoded transition would, when Hevy and Claude are
-    /// already connected/saved from before.
+    /// `.hevyKey` as a hardcoded transition would, when Hevy and an LLM key
+    /// are already connected/saved from before.
     func testReGrantingConsentWithDownstreamStepsAlreadyCompleteSkipsToCompleted() async throws {
         try await keychain.save("v-old", for: .consentVersion)
         try await keychain.save("2026-01-01T00:00:00Z", for: .consentTimestamp)
@@ -170,9 +170,9 @@ final class OnboardingViewModelTests: XCTestCase {
     }
 
     /// Regression: reconnecting Hevy after a 401 must re-resolve the target
-    /// step, not jump straight to `.claudeKey` as a hardcoded transition
-    /// would, when Claude is already saved from before.
-    func testReconnectingHevyAfterUnauthorizedWithClaudeAlreadySavedSkipsToCompleted() async throws {
+    /// step, not jump straight to `.llmKeys` as a hardcoded transition
+    /// would, when an LLM key is already saved from before.
+    func testReconnectingHevyAfterUnauthorizedWithLLMKeyAlreadySavedSkipsToCompleted() async throws {
         try await seedConsent()
         try await keychain.save("hevy-key", for: .hevyAPIKey)
         try await keychain.save("sk-ant-abc", for: .claudeAPIKey)
@@ -194,7 +194,7 @@ final class OnboardingViewModelTests: XCTestCase {
     func testHevyUnauthorizedDeletesKeyAndReturnsToHevyStep() async throws {
         try await seedConsent()
         try await keychain.save("hevy-key", for: .hevyAPIKey)
-        defaults.set(true, forKey: "fitbuddy.onboarding.claudeKeySkipped")
+        defaults.set(true, forKey: "fitbuddy.onboarding.llmKeysSkipped")
         let sut = makeSUT()
         await sut.bootstrap()
         XCTAssertEqual(sut.step, .completed)
