@@ -140,7 +140,7 @@ final class WorkoutListViewModel: ObservableObject {
             // A cancelled request says nothing about connectivity, so it gets
             // no banner. It still has to clear `.syncing`, or the strip would
             // claim a sync is running forever.
-            guard !Self.isCancellation(error) else {
+            guard !error.isCancellation else {
                 syncStatus = .idle
                 return
             }
@@ -153,29 +153,6 @@ final class WorkoutListViewModel: ObservableObject {
                 return
             }
             syncStatus = .failed(failure)
-        }
-    }
-
-    /// `URLSession` reports a cancelled request as `URLError.cancelled`, not as
-    /// `CancellationError`, so both forms have to be recognised.
-    private static func isCancellation(_ error: Error) -> Bool {
-        error is CancellationError || (error as? URLError)?.code == .cancelled
-    }
-}
-
-private extension Task where Success == Void, Failure == Never {
-    /// Awaits the task, forwarding the caller's cancellation into it.
-    ///
-    /// The task has to stay unstructured — a newer `load()` or `sync()`
-    /// cancels the older one by holding on to it, which a child task would not
-    /// allow. But unstructured also means SwiftUI tearing down the `.task` that
-    /// started it leaves the work running: the request finishes, the result is
-    /// published to a view nobody is looking at. This bridges the two.
-    func awaitingCancellation() async {
-        await withTaskCancellationHandler {
-            await value
-        } onCancel: {
-            cancel()
         }
     }
 }
