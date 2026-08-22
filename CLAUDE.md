@@ -17,12 +17,12 @@ FitBuddy is bilingual by design — English and German each have a fixed scope, 
 | Swift code — identifiers, comments | English |
 | In-app UI text | English |
 | Branch & file names | English |
-| Commit messages, PR titles & descriptions | English |
+| Commit messages | English |
 | `README.md`, `docs/*.md`, `docs/adr/` | German |
 | GitHub Issues (titles & bodies) | German |
-| PR / code reviews (`/code-review`, `/pr-review`) | German — the verdict label (`approve` / `approve-after-fixes` / `request changes`) stays the fixed English tag |
+| PR titles & descriptions, PR / code reviews (`/code-review`, `/pr-review`) | German — the verdict label (`approve` / `approve-after-fixes` / `request changes`) stays the fixed English tag |
 
-Rule of thumb: code and what sits directly on top of it (comments, commits, PR text) is English; anything the team reads as documentation, planning, or review discussion (docs, issues, reviews) is German.
+Rule of thumb: code and what sits directly on top of it (comments, commits) is English; anything the team reads as documentation, planning, or review discussion (docs, issues, PRs, reviews) is German.
 
 ## Project
 **FitBuddy** is a CAS (ADAI 2026, BFH Biel) Proof of Concept Project. The app to be built is a native iOS (SwiftUI) training assistant aggregating Hevy API data and delivering on-demand AI recommendations via Claude API.
