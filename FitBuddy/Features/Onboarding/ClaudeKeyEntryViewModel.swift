@@ -18,6 +18,10 @@ final class ClaudeKeyEntryViewModel: ObservableObject {
     }
     @Published private(set) var state: ClaudeKeyEntryState = .unknown
 
+    /// Invoked on an active step-3 decision — key saved or step skipped (not
+    /// on a bootstrap restore) — letting the coordinator finish onboarding.
+    var onFinished: (() -> Void)?
+
     /// `UserDefaults` key backing the "skip for now" decision (AC2). Unlike the
     /// Keychain, `UserDefaults` is wiped on app deletion, so a skip does not
     /// outlive a reinstall — see `FirstLaunchResetService` for the same
@@ -56,10 +60,10 @@ final class ClaudeKeyEntryViewModel: ObservableObject {
                 state = defaults.bool(forKey: Self.skippedKey) ? .skipped : .idle
             }
         } catch {
-            // Fail open to the entry screen rather than spinning forever on
-            // .unknown — see HevyKeyEntryViewModel.bootstrap() for the same
-            // reasoning.
-            state = .idle
+            // Fail open rather than spinning forever on .unknown — but honor a
+            // previously persisted skip: it lives in UserDefaults and is
+            // unaffected by the Keychain failure.
+            state = defaults.bool(forKey: Self.skippedKey) ? .skipped : .idle
         }
     }
 
@@ -72,6 +76,7 @@ final class ClaudeKeyEntryViewModel: ObservableObject {
         do {
             try await keychain.save(key, for: .claudeAPIKey)
             state = .saved
+            onFinished?()
         } catch {
             state = .failed(.keychain)
         }
@@ -83,5 +88,6 @@ final class ClaudeKeyEntryViewModel: ObservableObject {
     func skip() {
         defaults.set(true, forKey: Self.skippedKey)
         state = .skipped
+        onFinished?()
     }
 }

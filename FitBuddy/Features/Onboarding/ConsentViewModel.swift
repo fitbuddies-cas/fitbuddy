@@ -23,6 +23,10 @@ final class ConsentViewModel: ObservableObject {
     /// in-flight save.
     var canConfirm: Bool { hasAcceptedCheckbox && !isSaving }
 
+    /// Invoked when the user actively confirms consent (not on a bootstrap
+    /// restore) — lets the onboarding coordinator advance to step 2.
+    var onGranted: (() -> Void)?
+
     private let keychain: KeychainService
     private let firstLaunchReset: FirstLaunchResetService
 
@@ -73,6 +77,7 @@ final class ConsentViewModel: ObservableObject {
             try await keychain.save(Self.currentVersion, for: .consentVersion)
             try await keychain.save(timestamp, for: .consentTimestamp)
             state = .granted
+            onGranted?()
         } catch {
             errorMessage = "Consent could not be saved. Please try again."
         }
