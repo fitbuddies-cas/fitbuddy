@@ -31,11 +31,11 @@ final class LLMKeysViewModel: ObservableObject {
     /// reasoning applied to its own marker.
     private static let skippedKey = "fitbuddy.onboarding.llmKeysSkipped"
 
-    private let keychain: KeychainService
+    private let keychain: any KeychainStoring
     private let priorityStore: LLMPriorityStore
     private let defaults: UserDefaults
 
-    init(keychain: KeychainService = KeychainService(), defaults: UserDefaults = .standard) {
+    init(keychain: any KeychainStoring = KeychainService(), defaults: UserDefaults = .standard) {
         self.keychain = keychain
         self.defaults = defaults
         self.priorityStore = LLMPriorityStore(defaults: defaults)
@@ -76,20 +76,33 @@ final class LLMKeysViewModel: ObservableObject {
 
     /// Persists every complete slot's key to the Keychain and the slot order
     /// as the provider priority. No-op without a complete slot.
+    ///
+    /// The Keychain writes are sequential, so a failure halfway through would
+    /// leave keys behind that no priority order references — orphans the user
+    /// can no longer see or remove once they skip the step. The already
+    /// written keys are therefore rolled back before reporting the failure,
+    /// leaving keys and priority order consistent: either all of them or none.
     func save() async {
         let completeSlots = slots.filter(\.isComplete)
         guard !completeSlots.isEmpty, state != .saving else { return }
 
         state = .saving
+        var written: [LLMProvider] = []
         do {
             for slot in completeSlots {
                 guard let provider = slot.provider else { continue }
                 try await keychain.save(slot.trimmedKey, for: provider.keychainKey)
+                written.append(provider)
             }
-            priorityStore.save(completeSlots.compactMap(\.provider))
+            await priorityStore.save(completeSlots.compactMap(\.provider))
             state = .saved
             onFinished?()
         } catch {
+            // Best effort: a delete that fails too leaves the Keychain as it
+            // was, which is no worse than not trying.
+            for provider in written {
+                try? await keychain.delete(provider.keychainKey)
+            }
             state = .failed(.keychain)
         }
     }

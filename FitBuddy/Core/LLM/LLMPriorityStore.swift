@@ -4,7 +4,11 @@ import Foundation
 /// order is stored — key material lives exclusively in the Keychain. The first
 /// provider is tried first on an analysis call; the following ones are the
 /// fallbacks when a provider fails or has no credit left.
-struct LLMPriorityStore {
+///
+/// An `actor` like every other `UserDefaults`-backed store (`SyncTimestampStore`,
+/// `FirstLaunchResetService`): the order is written from the `MainActor` during
+/// onboarding and read from the inference path off the main actor.
+actor LLMPriorityStore {
     /// `UserDefaults` key holding the ordered provider raw values.
     static let priorityOrderKey = "fitbuddy.llm.priorityOrder"
 

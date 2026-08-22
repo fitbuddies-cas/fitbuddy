@@ -22,33 +22,38 @@ final class LLMPriorityStoreTests: XCTestCase {
         super.tearDown()
     }
 
-    func testOrderIsEmptyByDefault() {
-        XCTAssertEqual(sut.order, [])
+    func testOrderIsEmptyByDefault() async {
+        let order = await sut.order
+        XCTAssertEqual(order, [])
     }
 
-    func testSaveAndReadRoundTripPreservesOrder() {
-        sut.save([.mistral, .claude, .gemini])
-        XCTAssertEqual(sut.order, [.mistral, .claude, .gemini])
+    func testSaveAndReadRoundTripPreservesOrder() async {
+        await sut.save([.mistral, .claude, .gemini])
+        let order = await sut.order
+        XCTAssertEqual(order, [.mistral, .claude, .gemini])
     }
 
-    func testOrderSurvivesANewStoreInstance() {
-        sut.save([.gemini, .claude])
+    func testOrderSurvivesANewStoreInstance() async {
+        await sut.save([.gemini, .claude])
 
         // A fresh store on the same defaults simulates a cold start.
         let relaunched = LLMPriorityStore(defaults: defaults)
 
-        XCTAssertEqual(relaunched.order, [.gemini, .claude])
+        let order = await relaunched.order
+        XCTAssertEqual(order, [.gemini, .claude])
     }
 
-    func testUnknownRawValuesAreDropped() {
+    func testUnknownRawValuesAreDropped() async {
         defaults.set(["claude", "openai", "mistral"], forKey: LLMPriorityStore.priorityOrderKey)
-        XCTAssertEqual(sut.order, [.claude, .mistral])
+        let order = await sut.order
+        XCTAssertEqual(order, [.claude, .mistral])
     }
 
-    func testClearRemovesTheStoredOrder() {
-        sut.save([.claude])
-        sut.clear()
-        XCTAssertEqual(sut.order, [])
+    func testClearRemovesTheStoredOrder() async {
+        await sut.save([.claude])
+        await sut.clear()
+        let order = await sut.order
+        XCTAssertEqual(order, [])
         XCTAssertNil(defaults.stringArray(forKey: LLMPriorityStore.priorityOrderKey))
     }
 }

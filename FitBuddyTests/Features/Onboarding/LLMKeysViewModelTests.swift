@@ -160,7 +160,7 @@ final class LLMKeysViewModelTests: XCTestCase {
         await sut.save()
 
         XCTAssertEqual(sut.state, .saved)
-        let priority = LLMPriorityStore(defaults: defaults).order
+        let priority = await LLMPriorityStore(defaults: defaults).order
         XCTAssertEqual(priority, [.claude])
     }
 
@@ -208,6 +208,49 @@ final class LLMKeysViewModelTests: XCTestCase {
         XCTAssertEqual(relaunched.state, .skipped)
     }
 
+    // MARK: - Save failure (partial write rollback)
+
+    func testFailedSaveRollsBackKeysWrittenBeforeTheFailure() async throws {
+        // Fails on the second of three writes: without a rollback the first
+        // key would stay in the Keychain with no priority order naming it.
+        let failing = FailingKeychainStub(failOnSaveNumber: 2)
+        let sut = LLMKeysViewModel(keychain: failing, defaults: defaults)
+        sut.select(.claude, forSlot: sut.slots[0].id)
+        sut.slots[0].key = "sk-ant-abc"
+        sut.addSlot()
+        sut.select(.gemini, forSlot: sut.slots[1].id)
+        sut.slots[1].key = "AIza-abc"
+
+        await sut.save()
+
+        XCTAssertEqual(sut.state, .failed(.keychain))
+        let stored = await failing.storedKeys
+        XCTAssertTrue(stored.isEmpty, "partially written keys must not survive a failed save")
+    }
+
+    func testFailedSaveDoesNotPersistAPriorityOrder() async {
+        let sut = LLMKeysViewModel(keychain: FailingKeychainStub(failOnSaveNumber: 1), defaults: defaults)
+        sut.select(.claude, forSlot: sut.slots[0].id)
+        sut.slots[0].key = "sk-ant-abc"
+
+        await sut.save()
+
+        XCTAssertEqual(sut.state, .failed(.keychain))
+        let priority = await LLMPriorityStore(defaults: defaults).order
+        XCTAssertEqual(priority, [])
+    }
+
+    func testEditingAfterAFailedSaveClearsTheError() async {
+        let sut = LLMKeysViewModel(keychain: FailingKeychainStub(failOnSaveNumber: 1), defaults: defaults)
+        sut.select(.claude, forSlot: sut.slots[0].id)
+        sut.slots[0].key = "sk-ant-abc"
+        await sut.save()
+
+        sut.slots[0].key = "sk-ant-fixed"
+
+        XCTAssertEqual(sut.state, .idle)
+    }
+
     // MARK: - Bootstrap
 
     func testInitialStateIsUnknownUntilBootstrap() {
@@ -224,4 +267,28 @@ final class LLMKeysViewModelTests: XCTestCase {
         await sut.bootstrap()
         XCTAssertEqual(sut.state, .idle)
     }
+}
+
+/// In-memory `KeychainStoring` that throws on the n-th `save` call — the real
+/// `KeychainService` cannot be made to fail on demand on the simulator.
+private actor FailingKeychainStub: KeychainStoring {
+    private(set) var storedKeys: [KeychainKey: String] = [:]
+    private let failOnSaveNumber: Int
+    private var saveCount = 0
+
+    init(failOnSaveNumber: Int) {
+        self.failOnSaveNumber = failOnSaveNumber
+    }
+
+    func save(_ value: String, for key: KeychainKey) throws {
+        saveCount += 1
+        guard saveCount != failOnSaveNumber else { throw KeychainError.invalidData }
+        storedKeys[key] = value
+    }
+
+    func read(_ key: KeychainKey) throws -> String? { storedKeys[key] }
+
+    func delete(_ key: KeychainKey) throws { storedKeys[key] = nil }
+
+    func exists(_ key: KeychainKey) throws -> Bool { storedKeys[key] != nil }
 }
