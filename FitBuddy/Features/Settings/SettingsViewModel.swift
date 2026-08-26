@@ -92,6 +92,12 @@ final class SettingsViewModel: ObservableObject {
     /// exists without an entry in the order (a partially written order, or one
     /// written by a build that did not know the provider) is appended rather
     /// than hidden — an invisible key is one the user can never delete.
+    ///
+    /// A repaired order is written back: the list the user sees has to be the
+    /// one the fallback chain uses, otherwise an appended key would stay
+    /// outside the persisted order and `InferenceService` would never reach it.
+    /// The same write prunes providers that the order still names after their
+    /// key is gone.
     private func storedLLMKeys() async throws -> [LLMProviderKey] {
         let order = await priorityStore.order
         let ranked = order + LLMProvider.allCases.filter { !order.contains($0) }
@@ -99,6 +105,10 @@ final class SettingsViewModel: ObservableObject {
         for provider in ranked {
             guard let key = try await keychain.read(provider.keychainKey) else { continue }
             result.append(LLMProviderKey(provider: provider, mask: KeyMask.masked(key)))
+        }
+        let repaired = result.map(\.provider)
+        if repaired != order {
+            await priorityStore.save(repaired)
         }
         return result
     }

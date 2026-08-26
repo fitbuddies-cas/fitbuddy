@@ -102,6 +102,31 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(sut.llmKeys.map(\.provider), [.claude, .gemini])
     }
 
+    /// Appending is not enough: an appended key that stays outside the
+    /// persisted order would never be reached by the fallback chain.
+    func testLoadPersistsTheRepairedOrder() async throws {
+        try await keychain.save("sk-ant-abcdefghijkl", for: .claudeAPIKey)
+        try await keychain.save("AIzaabcdefghijkl", for: .geminiAPIKey)
+        await priority.save([.claude])
+
+        await sut.load()
+
+        let stored = await priority.order
+        XCTAssertEqual(stored, [.claude, .gemini])
+    }
+
+    /// The same write drops providers the order still names after their key is
+    /// gone — the chain would otherwise point at a provider without a key.
+    func testLoadPrunesOrderedProvidersWithoutAStoredKey() async throws {
+        try await keychain.save("sk-ant-abcdefghijkl", for: .claudeAPIKey)
+        await priority.save([.claude, .gemini])
+
+        await sut.load()
+
+        let stored = await priority.order
+        XCTAssertEqual(stored, [.claude])
+    }
+
     func testLoadIgnoresOrderedProvidersWithoutAStoredKey() async throws {
         await priority.save([.claude, .gemini])
 

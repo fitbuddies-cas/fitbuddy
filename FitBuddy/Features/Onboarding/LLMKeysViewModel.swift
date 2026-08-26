@@ -122,7 +122,7 @@ final class LLMKeysViewModel: ObservableObject {
         }
     }
 
-    /// Continues onboarding without any LLM key (AC2 "Überspringen").
+    /// Continues onboarding without any LLM key (AC2 "Skip").
     /// Persisted via `LLMKeysSkipStore` so the entry screen doesn't reappear on
     /// every cold start until the user actually adds a key.
     func skip() async {

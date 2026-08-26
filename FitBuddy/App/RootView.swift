@@ -85,9 +85,9 @@ struct RootView: View {
     }
 
     /// Wires the settings screen to the Keychain and to the two reset paths
-    /// (#83). Both resets share one `WorkoutStore` and one `SyncTimestampStore`
-    /// with the dashboard's collaborators, so a wipe empties exactly the cache
-    /// the dashboard reads back.
+    /// (#83). Both resets work on the same `ModelContainer` and the same
+    /// `UserDefaults` as the dashboard's collaborators, so a wipe empties
+    /// exactly the cache the dashboard reads back.
     private func makeSettingsViewModel() -> SettingsViewModel {
         let store = WorkoutStore(modelContainer: modelContext.container)
         let timestamps = SyncTimestampStore()
