@@ -41,23 +41,8 @@ struct AnalysisIntroView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
             }
 
-            privacyNote
+            AnalysisPrivacyNote()
         }
-    }
-
-    /// The one claim the user cannot verify from the screen itself, so it is
-    /// stated where the tap happens rather than only in the consent text
-    /// (US-3 AC3).
-    private var privacyNote: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "lock")
-                .font(.caption2)
-            Text("Only your own training data is sent to Claude — no benchmarks.")
-                .font(.caption)
-        }
-        .foregroundStyle(Color.fbMuted)
-        .frame(maxWidth: .infinity, alignment: .center)
-        .padding(.top, 4)
     }
 }
 

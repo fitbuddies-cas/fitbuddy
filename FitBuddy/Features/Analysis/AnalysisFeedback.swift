@@ -20,13 +20,17 @@ enum AnalysisFeedback: String, CaseIterable, Sendable {
         }
     }
 
-    /// The symbol on the button, filled once the verdict is the selected one.
-    var symbolName: String {
+    /// The symbol on the button, filled once this verdict is the selected one —
+    /// the same "selected gets filled" treatment the design gives the button
+    /// itself.
+    func symbolName(isSelected: Bool) -> String {
+        let base: String
         switch self {
         case .helpful:
-            return "hand.thumbsup"
+            base = "hand.thumbsup"
         case .notHelpful:
-            return "hand.thumbsdown"
+            base = "hand.thumbsdown"
         }
+        return isSelected ? "\(base).fill" : base
     }
 }

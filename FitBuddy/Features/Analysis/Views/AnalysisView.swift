@@ -8,15 +8,11 @@ import SwiftUI
 /// the cancel button joins the spinner once the run has gone 30s without a
 /// first token (US-3 AC1).
 struct AnalysisView: View {
-    @StateObject private var viewModel: AnalysisViewModel
+    /// Observed, not owned: the view model belongs to the presenting dashboard,
+    /// which keeps it alive across sheet presentations so a run survives a
+    /// dismissed sheet.
+    @ObservedObject var viewModel: AnalysisViewModel
     @Environment(\.dismiss) private var dismiss
-
-    /// - Parameter viewModel: Built lazily — the autoclosure is evaluated once,
-    ///   when SwiftUI first creates the view's state, so presenting the sheet
-    ///   from a parent's `body` does not rebuild it on every render.
-    init(viewModel: @autoclosure @escaping () -> AnalysisViewModel) {
-        _viewModel = StateObject(wrappedValue: viewModel())
-    }
 
     var body: some View {
         NavigationStack {
@@ -79,7 +75,7 @@ struct AnalysisView: View {
             AnalysisErrorView(
                 failure: failure,
                 onRetry: failure.isRetryable ? start : nil,
-                onDismiss: { viewModel.reset() }
+                onBack: { viewModel.reset() }
             )
         }
     }
@@ -87,6 +83,12 @@ struct AnalysisView: View {
     /// The bar under the recommendation: the two feedback buttons while a
     /// result is showing (US-3 AC9), otherwise the cooldown label — and
     /// nothing at all while a run is in flight, where neither applies.
+    ///
+    /// `.idle` is deliberately not in the cooldown branch: `AnalysisIntroView`
+    /// already prints the same label under its button, and repeating it in the
+    /// bottom bar would show the user the same sentence twice. In `.error` the
+    /// repetition is wanted — `AnalysisFailure.cooldownActive` names the time,
+    /// the label next to it keeps ticking.
     @ViewBuilder
     private var footer: some View {
         switch viewModel.state {
@@ -96,11 +98,11 @@ struct AnalysisView: View {
                 cooldownMessage: viewModel.cooldownMessage,
                 onSelect: { verdict in Task { await viewModel.submitFeedback(verdict) } }
             )
-        case .idle, .error:
+        case .error:
             if let cooldownMessage = viewModel.cooldownMessage {
                 cooldownBar(cooldownMessage)
             }
-        case .loading, .streaming:
+        case .idle, .loading, .streaming:
             EmptyView()
         }
     }
@@ -122,8 +124,22 @@ struct AnalysisView: View {
 }
 
 #if DEBUG
+/// Holds the view model for the previews the way the dashboard does in the app,
+/// so `AnalysisView` gets an instance that outlives a body re-evaluation.
+private struct AnalysisViewPreviewHost: View {
+    @StateObject private var viewModel: AnalysisViewModel
+
+    init(viewModel: @autoclosure @escaping () -> AnalysisViewModel) {
+        _viewModel = StateObject(wrappedValue: viewModel())
+    }
+
+    var body: some View {
+        AnalysisView(viewModel: viewModel)
+    }
+}
+
 #Preview("Ready") {
-    AnalysisView(viewModel: AnalysisViewModel(
+    AnalysisViewPreviewHost(viewModel: AnalysisViewModel(
         cache: PreviewWorkoutCache.filled,
         inference: PreviewAnalysisStreamer.recommendation
     ))
@@ -132,7 +148,7 @@ struct AnalysisView: View {
 /// Tapping "Analyze with AI" here shows the cancel button after 2s instead of
 /// 30, on a stream that never answers.
 #Preview("Taking long") {
-    AnalysisView(viewModel: AnalysisViewModel(
+    AnalysisViewPreviewHost(viewModel: AnalysisViewModel(
         cache: PreviewWorkoutCache.filled,
         inference: PreviewAnalysisStreamer.silent,
         slowThreshold: 2

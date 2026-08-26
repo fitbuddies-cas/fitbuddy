@@ -11,7 +11,9 @@ struct AnalysisErrorView: View {
     /// active cooldown), where a "Try again" button would only produce the
     /// same message again.
     let onRetry: (() -> Void)?
-    let onDismiss: () -> Void
+    /// Returns to the intro state — the button reads "Back", and that is what
+    /// it does; it does not close the sheet.
+    let onBack: () -> Void
 
     var body: some View {
         VStack(spacing: 16) {
@@ -26,7 +28,7 @@ struct AnalysisErrorView: View {
                 Button("Try again", action: onRetry)
                     .buttonStyle(.fb(.accent))
             }
-            Button("Back", action: onDismiss)
+            Button("Back", action: onBack)
                 .buttonStyle(.fb(.secondary))
         }
         .padding(.top, 8)
@@ -35,13 +37,13 @@ struct AnalysisErrorView: View {
 
 #if DEBUG
 #Preview("Offline") {
-    AnalysisErrorView(failure: .offline, onRetry: {}, onDismiss: {})
+    AnalysisErrorView(failure: .offline, onRetry: {}, onBack: {})
         .padding(16)
         .background(Color.fbBackground)
 }
 
 #Preview("No key") {
-    AnalysisErrorView(failure: .missingAPIKey, onRetry: nil, onDismiss: {})
+    AnalysisErrorView(failure: .missingAPIKey, onRetry: nil, onBack: {})
         .padding(16)
         .background(Color.fbBackground)
 }
