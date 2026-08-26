@@ -84,9 +84,15 @@ struct LLMKeysView: View {
         let index = viewModel.slots.firstIndex(where: { $0.id == slot.wrappedValue.id }) ?? 0
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("PROVIDER \(index + 1)")
-                    .font(.fbLabel)
-                    .foregroundStyle(Color.fbMuted)
+                HStack {
+                    Text("PROVIDER \(index + 1)")
+                        .font(.fbLabel)
+                        .foregroundStyle(Color.fbMuted)
+                    Spacer()
+                    if canRemove(slot.wrappedValue) {
+                        removeSlotButton(for: slot.wrappedValue)
+                    }
+                }
                 providerPicker(for: slot.wrappedValue)
             }
             if let provider = slot.wrappedValue.provider {
@@ -102,6 +108,27 @@ struct LLMKeysView: View {
                 }
             }
         }
+    }
+
+    /// A slot can be cleared as soon as there is something to clear — a picked
+    /// provider, or an extra slot beyond the first.
+    private func canRemove(_ slot: LLMKeySlot) -> Bool {
+        slot.provider != nil || viewModel.slots.count > 1
+    }
+
+    /// Undoes a provider choice: the picker itself only assigns, so this is the
+    /// only way back out of a slot the user no longer wants.
+    private func removeSlotButton(for slot: LLMKeySlot) -> some View {
+        Button {
+            viewModel.removeSlot(slot.id)
+        } label: {
+            Label("Remove", systemImage: "xmark.circle.fill")
+                .font(.footnote)
+                .labelStyle(.titleAndIcon)
+                .foregroundStyle(Color.fbMuted)
+        }
+        .disabled(isSaving)
+        .accessibilityLabel("Remove provider \(slot.provider?.displayName ?? "slot")")
     }
 
     /// Menu-backed dropdown listing only the providers not taken by another

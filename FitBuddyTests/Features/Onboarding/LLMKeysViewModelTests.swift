@@ -1,3 +1,4 @@
+import Security
 import XCTest
 @testable import FitBuddy
 
@@ -267,17 +268,153 @@ final class LLMKeysViewModelTests: XCTestCase {
         await sut.bootstrap()
         XCTAssertEqual(sut.state, .idle)
     }
+
+    func testBootstrapStillFindsAProviderWhenAnotherKeychainReadThrows() async {
+        // A throwing read on one provider must not hide the others: a user with
+        // only a Mistral key would otherwise be sent through step 3 again.
+        let failing = FailingKeychainStub(
+            failExistsFor: [.claudeAPIKey],
+            stored: [.mistralAPIKey: "mistral-key"]
+        )
+        let sut = LLMKeysViewModel(keychain: failing, defaults: defaults)
+
+        await sut.bootstrap()
+
+        XCTAssertEqual(sut.state, .saved)
+    }
+
+    func testBootstrapFailsOpenToIdleWhenEveryKeychainReadThrows() async {
+        let failing = FailingKeychainStub(failExistsFor: Set(LLMProvider.allCases.map(\.keychainKey)))
+        let sut = LLMKeysViewModel(keychain: failing, defaults: defaults)
+
+        await sut.bootstrap()
+
+        XCTAssertEqual(sut.state, .idle)
+    }
+
+    // MARK: - Skip marker migration
+
+    func testBootstrapHonorsTheSkipMarkerWrittenByTheSingleKeyBuild() async {
+        // An existing tester skipped step 3 before the multi-provider rename;
+        // without the fallback read they would be forced through it again.
+        defaults.set(true, forKey: "fitbuddy.onboarding.claudeKeySkipped")
+
+        await sut.bootstrap()
+
+        XCTAssertEqual(sut.state, .skipped)
+    }
+
+    func testTheLegacySkipMarkerIsMigratedForwardAndRemoved() async {
+        defaults.set(true, forKey: "fitbuddy.onboarding.claudeKeySkipped")
+
+        await sut.bootstrap()
+
+        XCTAssertTrue(defaults.bool(forKey: "fitbuddy.onboarding.llmKeysSkipped"))
+        XCTAssertNil(defaults.object(forKey: "fitbuddy.onboarding.claudeKeySkipped"))
+    }
+
+    // MARK: - Removing a slot
+
+    func testRemoveSlotDropsTheSlot() {
+        sut.select(.claude, forSlot: sut.slots[0].id)
+        sut.slots[0].key = "sk-ant-abc"
+        sut.addSlot()
+        sut.select(.gemini, forSlot: sut.slots[1].id)
+
+        sut.removeSlot(sut.slots[1].id)
+
+        XCTAssertEqual(sut.slots.count, 1)
+        XCTAssertEqual(sut.slots[0].provider, .claude)
+    }
+
+    func testRemovingTheOnlySlotEmptiesItInsteadOfLeavingNone() {
+        sut.select(.claude, forSlot: sut.slots[0].id)
+        sut.slots[0].key = "sk-ant-abc"
+
+        sut.removeSlot(sut.slots[0].id)
+
+        XCTAssertEqual(sut.slots.count, 1)
+        XCTAssertNil(sut.slots[0].provider)
+        XCTAssertEqual(sut.slots[0].key, "")
+    }
+
+    func testRemovingAHalfFilledSlotUnblocksAddingAnother() {
+        sut.select(.claude, forSlot: sut.slots[0].id)
+        sut.slots[0].key = "sk-ant-abc"
+        sut.addSlot()
+        sut.select(.gemini, forSlot: sut.slots[1].id)
+        XCTAssertFalse(sut.canAddSlot)
+
+        sut.removeSlot(sut.slots[1].id)
+
+        XCTAssertTrue(sut.canAddSlot)
+    }
+
+    // MARK: - Half-filled slots are never dropped silently
+
+    func testCanSaveIsFalseWhileASlotHasAProviderButNoKey() {
+        sut.select(.claude, forSlot: sut.slots[0].id)
+        sut.slots[0].key = "sk-ant-abc"
+        sut.addSlot()
+        sut.select(.gemini, forSlot: sut.slots[1].id)
+
+        XCTAssertTrue(sut.hasPartialSlot)
+        XCTAssertFalse(sut.canSave)
+    }
+
+    func testSaveIsANoOpWhileASlotHasAProviderButNoKey() async throws {
+        // The key field's `onSubmit` calls `save()` directly, past the disabled
+        // button — persisting only slot 1 here would tell the user they had
+        // connected two providers when they had connected one.
+        await sut.bootstrap()
+        sut.select(.claude, forSlot: sut.slots[0].id)
+        sut.slots[0].key = "sk-ant-abc"
+        sut.addSlot()
+        sut.select(.gemini, forSlot: sut.slots[1].id)
+
+        await sut.save()
+
+        XCTAssertEqual(sut.state, .idle)
+        let stored = try await keychain.read(.claudeAPIKey)
+        XCTAssertNil(stored)
+        let priority = await LLMPriorityStore(defaults: defaults).order
+        XCTAssertEqual(priority, [])
+    }
+
+    func testFillingTheHalfFilledSlotMakesTheSaveAvailableAgain() {
+        sut.select(.claude, forSlot: sut.slots[0].id)
+        sut.slots[0].key = "sk-ant-abc"
+        sut.addSlot()
+        sut.select(.gemini, forSlot: sut.slots[1].id)
+
+        sut.slots[1].key = "AIza-abc"
+
+        XCTAssertFalse(sut.hasPartialSlot)
+        XCTAssertTrue(sut.canSave)
+    }
 }
 
-/// In-memory `KeychainStoring` that throws on the n-th `save` call — the real
-/// `KeychainService` cannot be made to fail on demand on the simulator.
+/// In-memory `KeychainStoring` that can be made to throw on demand — on a
+/// chosen `save` call, or on `exists` for chosen keys — which the real
+/// `KeychainService` cannot on the simulator.
 private actor FailingKeychainStub: KeychainStoring {
-    private(set) var storedKeys: [KeychainKey: String] = [:]
+    private(set) var storedKeys: [KeychainKey: String]
     private let failOnSaveNumber: Int
+    private let failExistsFor: Set<KeychainKey>
     private var saveCount = 0
 
-    init(failOnSaveNumber: Int) {
+    /// - Parameters:
+    ///   - failOnSaveNumber: 1-based `save` call that throws; 0 never fails.
+    ///   - failExistsFor: Keys whose `exists` check throws, standing in for
+    ///     `errSecInteractionNotAllowed` on a locked device.
+    init(
+        failOnSaveNumber: Int = 0,
+        failExistsFor: Set<KeychainKey> = [],
+        stored: [KeychainKey: String] = [:]
+    ) {
         self.failOnSaveNumber = failOnSaveNumber
+        self.failExistsFor = failExistsFor
+        self.storedKeys = stored
     }
 
     func save(_ value: String, for key: KeychainKey) throws {
@@ -290,5 +427,8 @@ private actor FailingKeychainStub: KeychainStoring {
 
     func delete(_ key: KeychainKey) throws { storedKeys[key] = nil }
 
-    func exists(_ key: KeychainKey) throws -> Bool { storedKeys[key] != nil }
+    func exists(_ key: KeychainKey) throws -> Bool {
+        guard !failExistsFor.contains(key) else { throw KeychainError.unexpectedStatus(errSecInteractionNotAllowed) }
+        return storedKeys[key] != nil
+    }
 }

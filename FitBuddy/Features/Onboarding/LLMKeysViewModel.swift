@@ -31,6 +31,12 @@ final class LLMKeysViewModel: ObservableObject {
     /// reasoning applied to its own marker.
     private static let skippedKey = "fitbuddy.onboarding.llmKeysSkipped"
 
+    /// Name this marker had while step 3 took a single Claude key. Existing
+    /// testers who skipped back then still carry it, so it is read as a
+    /// fallback and migrated forward once — without it, their decision would be
+    /// lost on update and step 3 would reappear.
+    private static let legacySkippedKey = "fitbuddy.onboarding.claudeKeySkipped"
+
     private let keychain: any KeychainStoring
     private let priorityStore: LLMPriorityStore
     private let defaults: UserDefaults
@@ -68,10 +74,29 @@ final class LLMKeysViewModel: ObservableObject {
         slots.append(LLMKeySlot())
     }
 
-    /// The save button needs at least one complete slot and no save in
-    /// flight. Incomplete slots are ignored on save rather than blocking it.
+    /// Removes a slot, the only way to undo a provider choice. The screen
+    /// always keeps at least one picker, so removing the last remaining slot
+    /// empties it instead of leaving the user with nothing to fill in.
+    func removeSlot(_ id: LLMKeySlot.ID) {
+        guard state != .saving, let index = slots.firstIndex(where: { $0.id == id }) else { return }
+        if slots.count == 1 {
+            slots[0] = LLMKeySlot()
+        } else {
+            slots.remove(at: index)
+        }
+    }
+
+    /// A slot the user started but did not finish: a provider is picked, the
+    /// key is still missing. Saving would drop that choice silently, so it
+    /// blocks the save until the user fills the key in or removes the slot.
+    var hasPartialSlot: Bool {
+        slots.contains { $0.provider != nil && !$0.isComplete }
+    }
+
+    /// The save button needs at least one complete slot, no half-filled slot
+    /// that would be dropped silently, and no save in flight.
     var canSave: Bool {
-        slots.contains(where: \.isComplete) && state != .saving
+        slots.contains(where: \.isComplete) && !hasPartialSlot && state != .saving
     }
 
     /// Persists every complete slot's key to the Keychain and the slot order
@@ -83,8 +108,10 @@ final class LLMKeysViewModel: ObservableObject {
     /// written keys are therefore rolled back before reporting the failure,
     /// leaving keys and priority order consistent: either all of them or none.
     func save() async {
+        // `canSave` rather than a local check: the key field's `onSubmit`
+        // reaches this directly, bypassing the disabled save button.
+        guard canSave else { return }
         let completeSlots = slots.filter(\.isComplete)
-        guard !completeSlots.isEmpty, state != .saving else { return }
 
         state = .saving
         var written: [LLMProvider] = []
@@ -112,8 +139,19 @@ final class LLMKeysViewModel: ObservableObject {
     /// every cold start until the user actually adds a key.
     func skip() {
         defaults.set(true, forKey: Self.skippedKey)
+        defaults.removeObject(forKey: Self.legacySkippedKey)
         state = .skipped
         onFinished?()
+    }
+
+    /// Whether the user already declined the step, honoring the pre-multi-provider
+    /// marker and migrating it forward so the stale entry does not linger.
+    private var hasSkipped: Bool {
+        if defaults.bool(forKey: Self.skippedKey) { return true }
+        guard defaults.bool(forKey: Self.legacySkippedKey) else { return false }
+        defaults.set(true, forKey: Self.skippedKey)
+        defaults.removeObject(forKey: Self.legacySkippedKey)
+        return true
     }
 
     /// Resolves `.unknown` by checking the Keychain: skips the screen when at
@@ -121,19 +159,24 @@ final class LLMKeysViewModel: ObservableObject {
     /// mid-onboarding; otherwise moves to `.idle` for fresh input.
     func bootstrap() async {
         guard state == .unknown else { return }
-        do {
+        let keychain = self.keychain
+        // Concurrently, and each provider on its own `try?`: a throwing read
+        // (e.g. `errSecInteractionNotAllowed` on a locked device during a
+        // background launch) must not mask the providers that would have
+        // answered, and three serial round-trips sit on the launch critical
+        // path — `OnboardingViewModel.bootstrap()` awaits this before the root
+        // view can leave `.loading`.
+        let hasStoredKey = await withTaskGroup(of: Bool.self) { group in
             for provider in LLMProvider.allCases {
-                if try await keychain.exists(provider.keychainKey) {
-                    state = .saved
-                    return
+                group.addTask {
+                    (try? await keychain.exists(provider.keychainKey)) ?? false
                 }
             }
-            state = defaults.bool(forKey: Self.skippedKey) ? .skipped : .idle
-        } catch {
-            // Fail open rather than spinning forever on .unknown — but honor a
-            // previously persisted skip: it lives in UserDefaults and is
-            // unaffected by the Keychain failure.
-            state = defaults.bool(forKey: Self.skippedKey) ? .skipped : .idle
+            return await group.reduce(false) { $0 || $1 }
         }
+        // Fail open rather than spinning forever on `.unknown`: with every read
+        // failing this lands on `.idle`, or on `.skipped` when the user already
+        // declined — that marker lives in UserDefaults and is unaffected.
+        state = hasStoredKey ? .saved : (hasSkipped ? .skipped : .idle)
     }
 }

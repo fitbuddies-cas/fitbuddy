@@ -32,7 +32,9 @@ final class InferenceServiceTests: XCTestCase {
     override func tearDown() async throws {
         StubURLProtocol.handler = nil
         Self.captured = nil
-        try await keychain.delete(.claudeAPIKey)
+        for provider in LLMProvider.allCases {
+            try await keychain.delete(provider.keychainKey)
+        }
         defaults.removePersistentDomain(forName: suiteName)
         sut = nil
         cooldown = nil
@@ -41,8 +43,21 @@ final class InferenceServiceTests: XCTestCase {
         try await super.tearDown()
     }
 
-    private func makeService() -> InferenceService {
-        InferenceService(session: StubURLProtocol.makeSession(), keychain: keychain, cooldown: cooldown, now: { Self.now })
+    /// - Parameter priority: Provider order to resolve the key from. Empty (the
+    ///   default) is the pre-multi-provider install: a Claude key and no stored
+    ///   order.
+    private func makeService(priority: [LLMProvider] = []) -> InferenceService {
+        let store = LLMPriorityStore(defaults: defaults)
+        if !priority.isEmpty {
+            defaults.set(priority.map(\.rawValue), forKey: LLMPriorityStore.priorityOrderKey)
+        }
+        return InferenceService(
+            session: StubURLProtocol.makeSession(),
+            keychain: keychain,
+            priority: store,
+            cooldown: cooldown,
+            now: { Self.now }
+        )
     }
 
     // MARK: - Stubbing
@@ -138,6 +153,49 @@ final class InferenceServiceTests: XCTestCase {
             XCTAssertEqual(error, .missingAPIKey)
         }
         XCTAssertNil(Self.captured, "a missing key must not reach the network")
+    }
+
+    // MARK: - Provider priority (US-4 step 3)
+
+    func testUsesTheKeyOfTheFirstCallableProviderInPriorityOrder() async throws {
+        // Gemini ranks first but this build cannot call it yet, so the call
+        // must fall through to the Claude key rather than failing outright.
+        try await keychain.save("AIza-first", for: .geminiAPIKey)
+        sut = makeService(priority: [.gemini, .claude])
+        stubSuccess(textChunks: ["Hi"])
+
+        _ = try await collect(try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u"))
+
+        let request = try XCTUnwrap(Self.captured)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "x-api-key"), "sk-ant-test")
+    }
+
+    func testThrowsProviderNotSupportedYetWhenNoConfiguredProviderIsCallable() async throws {
+        // The dead end the multi-provider step made reachable: onboarding
+        // completes on a Mistral-only setup that no analysis call can use.
+        try await keychain.delete(.claudeAPIKey)
+        try await keychain.save("mistral-key", for: .mistralAPIKey)
+        sut = makeService(priority: [.mistral])
+
+        do {
+            _ = try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u")
+            XCTFail("expected providerNotSupportedYet")
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .providerNotSupportedYet(.mistral))
+        }
+        XCTAssertNil(Self.captured, "an uncallable provider must not reach the network")
+    }
+
+    func testThrowsMissingAPIKeyWhenTheCallableProviderHasNoStoredKey() async throws {
+        try await keychain.delete(.claudeAPIKey)
+        sut = makeService(priority: [.gemini, .claude])
+
+        do {
+            _ = try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u")
+            XCTFail("expected missingAPIKey")
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .missingAPIKey)
+        }
     }
 
     // MARK: - Cooldown (AC: Cooldown-Timer übersteht App-Neustart)

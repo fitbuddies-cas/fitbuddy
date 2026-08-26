@@ -59,6 +59,19 @@ enum LLMProvider: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    /// Whether this build can actually run an analysis call against the
+    /// provider. v0 implements the Claude endpoint only (#29) — Gemini and
+    /// Mistral keys are accepted and stored during onboarding, but their
+    /// request building and response parsing land with #79. Until then the
+    /// inference path skips them rather than sending a Claude-shaped request
+    /// to the wrong API.
+    var isCallable: Bool {
+        switch self {
+        case .claude: return true
+        case .gemini, .mistral: return false
+        }
+    }
+
     /// Keychain slot holding this provider's key.
     var keychainKey: KeychainKey {
         switch self {
