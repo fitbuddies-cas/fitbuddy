@@ -8,7 +8,7 @@ Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 ## 1.1 Must Have — Zwingend für PoC
 
 ### 1.1.1 US-1 · API-Key sicher speichern 
-**Als** technikaffiner Multi-App-Nutzer **möchte ich** meinen Hevy API-Key lokal auf meinem iPhone speichern, **damit** meine Trainingsdaten nie einen fremden Server verlassen.
+**Als** technikaffiner Multi-App-Nutzer **möchte ich** meine API-Keys (Hevy sowie bis zu drei LLM-Provider) lokal auf meinem iPhone speichern, **damit** meine Trainingsdaten nie einen fremden Server verlassen.
 
 | # | Given | When | Then |
 |---|---|---|---|
@@ -43,14 +43,14 @@ Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 > **Hinweis:** US-3 ist als Epic geführt und vor Sprint-Planung in Child Stories aufzuteilen (Prompt-Design, UI, Error-Handling, Disclaimer).
 
 ### 1.1.4 US-4 · Onboarding in 3 Schritten
-**Als** Nutzerin ohne technischen Hintergrund **möchte ich** den Hevy und Claude API-Key in maximal 3 verständlichen Schritten einrichten, **damit** ich die App nutzen kann, ohne eine Dokumentation lesen zu müssen.
+**Als** Nutzerin ohne technischen Hintergrund **möchte ich** den Hevy-Key und optional bis zu drei LLM-Provider-Keys (Claude, Gemini, Mistral) in maximal 3 verständlichen Schritten einrichten, **damit** ich die App nutzen kann, ohne eine Dokumentation lesen zu müssen.
 
 | # | Given | When | Then |
 |---|---|---|---|
 | AC1 | User öffnet FitBuddy zum ersten Mal | Onboarding-Flow startet | Jeder Schritt erklärt mit Screenshot, wo in Hevy der API-Key zu finden ist |
-| AC2 | Hevy API-Key wurde eingegeben und gespeichert | User tippt auf «Next» | Claude API-Key kann eingegeben oder vorerst übersprungen werden |
+| AC2 | Hevy API-Key wurde eingegeben und gespeichert | User tippt auf «Next» | Bis zu drei LLM-Provider-Keys (Claude, Gemini, Mistral) können über einen Provider-Picker in Prioritätsreihenfolge hinterlegt oder vorerst übersprungen werden. Die Reihenfolge bestimmt, welcher Provider bei der Analyse zuerst verwendet wird (Fallback bei Fehler oder fehlendem Guthaben); sie wird lokal persistiert (nur die Reihenfolge, nie Key-Material) und überlebt einen Kaltstart. Alle Keys landen ausschliesslich im iOS Keychain (`kSecAttrAccessibleWhenUnlockedThisDeviceOnly`); keine Live-Validierung — ein ungültiger Key fällt erst beim ersten Analyse-Call auf. **v0-Einschränkung:** Der Analyse-Call bedient ausschliesslich den Claude-Endpoint; Gemini- und Mistral-Keys werden bereits gespeichert und in die Prioritätsreihenfolge aufgenommen, aber erst mit der Fallback-Kette (#79) tatsächlich aufgerufen. Schritt 3 weist explizit darauf hin, damit ein Setup ohne Claude-Key nicht als funktionsfähig missverstanden wird |
 | AC3 | User gibt ungültigen Key ein | User tippt auf «Verbinden» | Fehlermeldung erscheint mit direktem Link zur Hevy API-Key-Seite |
-| AC4 | Onboarding-Flow startet | Consent-Screen wird angezeigt | User sieht und bestätigt explizit: (1) Trainingsdaten (Gesundheitsdaten nach nDSG Art. 5 lit. c) werden für die AI-Analyse an Anthropic übertragen (Vertragspartner des Users: Anthropic Ireland, Limited, irisches Recht; technische Verarbeitung in den USA durch Anthropic PBC) — die USA bietet kein dem Schweizer Recht gleichwertiges Datenschutzniveau; die Übertragung stützt sich auf den Anthropic DPA des Users (inkl. SCCs + Swiss Addendum, automatisch gültig ab Account-Erstellung). (2) FitBuddy ist kein medizinisches Produkt — der User trägt selbst die Verantwortung für umgesetzte Empfehlungen. (3) Link zur Datenschutzerklärung sichtbar. Ohne Bestätigung kein Zugang zur App. |
+| AC4 | Onboarding-Flow startet | Consent-Screen wird angezeigt | User sieht und bestätigt explizit: (1) Trainingsdaten (Gesundheitsdaten nach nDSG Art. 5 lit. c) werden für die AI-Analyse an die vom User verbundenen LLM-Provider übertragen — ausschliesslich an jene, für die ein Key hinterlegt ist: Anthropic/Claude (Vertragspartner des Users: Anthropic Ireland, Limited, irisches Recht; technische Verarbeitung in den USA durch Anthropic PBC; Rechtsgrundlage: Anthropic DPA des Users inkl. SCCs + Swiss Addendum, automatisch gültig ab Account-Erstellung), Google/Gemini (Verarbeitung in den USA) und/oder Mistral AI (Verarbeitung in der EU) — die USA bietet kein dem Schweizer Recht gleichwertiges Datenschutzniveau; Rechtsgrundlage ist jeweils der API-Vertrag des eigenen Provider-Accounts (→ ADR-007). (2) FitBuddy ist kein medizinisches Produkt — der User trägt selbst die Verantwortung für umgesetzte Empfehlungen. (3) Link zur Datenschutzerklärung sichtbar. Ohne Bestätigung kein Zugang zur App. |
 | AC5 | User hat Consent gegeben | Consent wird gespeichert | Datum und Consent-Version werden lokal im Keychain gespeichert — kein erneutes Anzeigen bei App-Updates, sofern Consent-Version identisch |
 
 ---

@@ -26,7 +26,8 @@ struct PrivacyPolicyView: View {
                             text: """
                             • Training data from your Hevy account (workouts, exercises, sets) — \
                             this qualifies as health data under Art. 5 lit. c nDSG.
-                            • Your Hevy and Claude API keys.
+                            • Your Hevy API key and the API keys of the AI providers you \
+                            connect (Claude, Gemini, and/or Mistral).
                             • The time and version of your consent.
                             """
                         )
@@ -45,8 +46,10 @@ struct PrivacyPolicyView: View {
                             text: """
                             • Hevy: source of your training data, fetched directly from your device \
                             with your own API key.
-                            • Anthropic: recipient of the training data for the AI analysis, called \
-                            directly from your device with your own API key.
+                            • AI providers — Anthropic (Claude), Google (Gemini), Mistral AI: \
+                            recipients of the training data for the AI analysis, called directly \
+                            from your device with your own API keys. Only the providers you have \
+                            added a key for receive any data, in the priority order you chose.
                             No data is transferred to any other third parties or to servers operated \
                             by the FitBuddy team.
                             """
@@ -55,13 +58,15 @@ struct PrivacyPolicyView: View {
                         FBInfoRow(
                             title: "Third country USA",
                             text: """
-                            The AI analysis is performed by Anthropic. Your contracting party is \
-                            Anthropic Ireland, Limited; the technical processing takes place in the \
-                            USA by Anthropic PBC. There is no adequacy decision for the USA; the level \
-                            of data protection is not equivalent to Swiss law. The transfer is based \
-                            on the Anthropic DPA of your own account (incl. Standard Contractual \
-                            Clauses and Swiss Addendum), which applies automatically once you create \
-                            your Anthropic account.
+                            The AI analysis is performed by the providers you connect. Anthropic \
+                            (your contracting party is Anthropic Ireland, Limited; the technical \
+                            processing takes place in the USA by Anthropic PBC) and Google process \
+                            data in the USA. There is no adequacy decision for the USA; the level \
+                            of data protection is not equivalent to Swiss law. Each transfer is \
+                            based on the API terms of your own account with that provider — for \
+                            Anthropic, the DPA (incl. Standard Contractual Clauses and Swiss \
+                            Addendum), which applies automatically once you create your account. \
+                            Mistral AI processes data within the EU.
                             """
                         )
                         Divider().overlay(Color.fbDivider)
@@ -70,7 +75,7 @@ struct PrivacyPolicyView: View {
                             text: """
                             API keys and consent data are stored exclusively in your device's iOS \
                             Keychain (this device only, no iCloud sync). They only leave your device \
-                            during your own API calls to Hevy or Anthropic.
+                            during your own API calls to Hevy or your AI providers.
                             """
                         )
                         Divider().overlay(Color.fbDivider)

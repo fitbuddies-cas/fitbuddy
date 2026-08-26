@@ -10,6 +10,10 @@ enum KeychainKey: String, CaseIterable {
     case hevyAPIKey = "fitbuddy.hevy.apikey"
     /// User-provided Claude API key (BYO-key).
     case claudeAPIKey = "fitbuddy.claude.apikey"
+    /// User-provided Gemini API key (BYO-key).
+    case geminiAPIKey = "fitbuddy.gemini.apikey"
+    /// User-provided Mistral API key (BYO-key).
+    case mistralAPIKey = "fitbuddy.mistral.apikey"
     /// Version of the consent text the user agreed to.
     case consentVersion = "fitbuddy.consent.version"
     /// ISO8601 timestamp of when consent was given. Formatting is the caller's

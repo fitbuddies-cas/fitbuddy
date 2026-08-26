@@ -2,7 +2,7 @@ import SwiftData
 import SwiftUI
 
 /// Root view gating app access on the 3-step onboarding flow (US-4), which is
-/// coordinated by `OnboardingViewModel`: consent → Hevy key → Claude key →
+/// coordinated by `OnboardingViewModel`: consent → Hevy key → LLM keys →
 /// dashboard (#27).
 struct RootView: View {
     @Environment(\.modelContext) private var modelContext
@@ -14,7 +14,7 @@ struct RootView: View {
             switch onboardingViewModel.step {
             case .loading:
                 loadingView
-            case .consent, .hevyKey, .claudeKey:
+            case .consent, .hevyKey, .llmKeys:
                 OnboardingFlowView(viewModel: onboardingViewModel)
             case .completed:
                 // The autoclosure defers building the store, the service and

@@ -18,7 +18,7 @@ struct HevyKeyEntryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                stepIndicator
+                FBStepIndicator(current: 2)
                     .padding(.bottom, 22)
                 Text("Connect Hevy")
                     .font(.largeTitle.bold())
@@ -46,24 +46,6 @@ struct HevyKeyEntryView: View {
     }
 
     // MARK: - Sections
-
-    /// Three-segment progress bar; this screen is always step 2 of 3.
-    private var stepIndicator: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<3) { index in
-                Capsule()
-                    .fill(index <= 1 ? Color.fbInk : Color.fbBorder)
-                    .frame(height: 3)
-            }
-            Text("Step 2 of 3")
-                .font(.fbLabel)
-                .foregroundStyle(Color.fbMuted)
-                .padding(.leading, 8)
-                .fixedSize()
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Onboarding step 2 of 3")
-    }
 
     /// Explains where the key lives in Hevy (AC1). The dashed box is a
     /// placeholder for the Hevy settings screenshot, as in the design mock.
@@ -108,47 +90,16 @@ struct HevyKeyEntryView: View {
     }
 
     private var keyInput: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("HEVY API KEY")
-                .font(.fbLabel)
-                .foregroundStyle(Color.fbMuted)
-            HStack(spacing: 8) {
-                Image(systemName: "lock")
-                    .font(.system(size: 14))
-                    .foregroundStyle(viewModel.apiKey.isEmpty ? Color.fbMuted : Color.fbInkSecondary)
-                TextField("hv_live_…", text: $viewModel.apiKey)
-                    .font(.system(.subheadline, design: .monospaced))
-                    .foregroundStyle(Color.fbInk)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.asciiCapable)
-                    .submitLabel(.go)
-                    .focused($keyFieldIsFocused)
-                    .disabled(isValidating)
-                    .onSubmit { Task { await viewModel.connect() } }
-                if isValidating {
-                    FBSpinner(size: 18, color: .fbMuted)
-                }
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 56)
-            .background(Color.fbCard)
-            .clipShape(RoundedRectangle(cornerRadius: FBRadius.control))
-            .overlay(
-                RoundedRectangle(cornerRadius: FBRadius.control)
-                    .strokeBorder(inputBorderColor, lineWidth: inputBorderWidth)
-            )
+        FBKeyField(
+            label: "HEVY API KEY",
+            placeholder: "hv_live_…",
+            text: $viewModel.apiKey,
+            isBusy: isValidating,
+            hasError: failure == .invalidKey,
+            focus: $keyFieldIsFocused
+        ) {
+            Task { await viewModel.connect() }
         }
-    }
-
-    private var inputBorderColor: Color {
-        if failure == .invalidKey { return .fbRed }
-        return viewModel.apiKey.isEmpty ? .fbBorder : .fbInk
-    }
-
-    private var inputBorderWidth: CGFloat {
-        if failure == .invalidKey { return 2 }
-        return viewModel.apiKey.isEmpty ? 1 : 1.5
     }
 
     private var storageNote: some View {

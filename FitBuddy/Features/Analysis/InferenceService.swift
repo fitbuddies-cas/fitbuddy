@@ -1,6 +1,11 @@
 import Foundation
 
-/// Streams an on-demand training analysis from Claude (US-3, #29).
+/// Streams an on-demand training analysis (US-3, #29).
+///
+/// The key it calls with comes from the user's provider priority order
+/// (`LLMPriorityStore`, US-4 step 3) — see `storedAPIKey()`. Only the Claude
+/// endpoint is implemented in v0; Gemini and Mistral request handling lands
+/// with #79.
 ///
 /// Rejects a call before any network request when one is already running or
 /// the 6h cooldown has not elapsed — `AnalysisViewModel` (#31) also disables
@@ -23,6 +28,7 @@ actor InferenceService {
 
     private let session: URLSession
     private let keychain: KeychainService
+    private let priority: LLMPriorityStore
     private let cooldown: AnalysisCooldownStore
     private let now: () -> Date
     private let decoder = JSONDecoder()
@@ -37,15 +43,19 @@ actor InferenceService {
     ///     `.fitBuddyStreaming`, whose longer idle timeout (NFR: ~30s) fits a
     ///     streaming call — `.fitBuddy`'s 15s does not reliably compose with a
     ///     per-request override.
+    ///   - priority: The provider order the user set in onboarding step 3
+    ///     (US-4), which decides whose key this call is made with.
     ///   - now: Injectable clock, so the cooldown window is testable.
     init(
         session: URLSession = .fitBuddyStreaming,
         keychain: KeychainService = KeychainService(),
+        priority: LLMPriorityStore = LLMPriorityStore(),
         cooldown: AnalysisCooldownStore = AnalysisCooldownStore(),
         now: @escaping () -> Date = Date.init
     ) {
         self.session = session
         self.keychain = keychain
+        self.priority = priority
         self.cooldown = cooldown
         self.now = now
     }
@@ -191,17 +201,37 @@ actor InferenceService {
 
     // MARK: - Helpers
 
+    /// Resolves the key to call with by walking the provider priority order the
+    /// user set in onboarding step 3 (US-4): the first provider that this build
+    /// can call and that has a key stored wins. Providers stored but not yet
+    /// implemented are skipped, so a Claude key in slot 2 is still used when
+    /// slot 1 holds Gemini.
     private func storedAPIKey() async throws -> String {
-        let stored: String?
-        do {
-            stored = try await keychain.read(.claudeAPIKey)
-        } catch {
-            // The read itself failed (e.g. `errSecInteractionNotAllowed` on a
-            // locked device) — the key is still stored, so this must not read
-            // as "no key" and send an onboarded user back to re-enter one.
-            throw InferenceServiceError.keychainUnavailable
+        let order = await priority.order
+        // An empty order means the Claude key predates the multi-provider step
+        // (#78) — that install has exactly one key and no stored order.
+        let providers = order.isEmpty ? [LLMProvider.claude] : order
+
+        for provider in providers where provider.isCallable {
+            let stored: String?
+            do {
+                stored = try await keychain.read(provider.keychainKey)
+            } catch {
+                // The read itself failed (e.g. `errSecInteractionNotAllowed` on
+                // a locked device) — the key is still stored, so this must not
+                // read as "no key" and send an onboarded user back to re-enter
+                // one.
+                throw InferenceServiceError.keychainUnavailable
+            }
+            if let key = stored, !key.isEmpty { return key }
         }
-        guard let key = stored, !key.isEmpty else { throw InferenceServiceError.missingAPIKey }
-        return key
+
+        // Distinguish "you have no key" from "your keys are for providers this
+        // version cannot call yet": the second is not fixed by re-entering the
+        // same key, so it must not surface as `.missingAPIKey`.
+        if let configured = providers.first, !providers.contains(where: \.isCallable) {
+            throw InferenceServiceError.providerNotSupportedYet(configured)
+        }
+        throw InferenceServiceError.missingAPIKey
     }
 }
