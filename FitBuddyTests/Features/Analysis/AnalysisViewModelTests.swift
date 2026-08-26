@@ -15,6 +15,7 @@ final class AnalysisViewModelTests: XCTestCase {
     private var defaults: UserDefaults!
     private var suiteName: String!
     private var cooldown: AnalysisCooldownStore!
+    private var feedbackStore: AnalysisFeedbackStore!
 
     override func setUp() async throws {
         try await super.setUp()
@@ -24,11 +25,13 @@ final class AnalysisViewModelTests: XCTestCase {
         suiteName = "fitbuddy.tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
         cooldown = AnalysisCooldownStore(defaults: defaults)
+        feedbackStore = AnalysisFeedbackStore(defaults: defaults)
     }
 
     override func tearDown() async throws {
         defaults.removePersistentDomain(forName: suiteName)
         cooldown = nil
+        feedbackStore = nil
         defaults = nil
         streamer = nil
         cache = nil
@@ -46,6 +49,7 @@ final class AnalysisViewModelTests: XCTestCase {
             cache: cache,
             inference: streamer,
             cooldown: cooldown,
+            feedbackStore: feedbackStore,
             calendar: Self.calendar,
             now: { clock.date },
             slowThreshold: slowThreshold,
@@ -399,6 +403,61 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(sut.state, .result("done"))
         XCTAssertEqual(sut.cooldownMessage, "Next analysis available in 6h 0m")
         XCTAssertFalse(sut.canStartAnalysis)
+    }
+
+    // MARK: - Feedback (US-3 AC9)
+
+    func testFeedbackOnAResultIsPublishedAndStored() async {
+        await streamer.setChunks(["done"])
+        let sut = makeSUT()
+        await sut.start()
+
+        await sut.submitFeedback(.helpful)
+
+        XCTAssertEqual(sut.feedback, .helpful)
+        let stored = await feedbackStore.lastFeedback()
+        XCTAssertEqual(stored?.feedback, .helpful)
+        XCTAssertEqual(stored?.date, Self.reference)
+    }
+
+    /// A tap must not reach the network — US-3 AC9 is "stored locally, no
+    /// backend call", and the stub is the only call path there is.
+    func testFeedbackDoesNotCallClaude() async {
+        await streamer.setChunks(["done"])
+        let sut = makeSUT()
+        await sut.start()
+
+        await sut.submitFeedback(.notHelpful)
+
+        let calls = await streamer.callCount
+        XCTAssertEqual(calls, 1)
+    }
+
+    func testFeedbackIsIgnoredWithoutAResultOnScreen() async {
+        let sut = makeSUT()
+
+        await sut.submitFeedback(.helpful)
+
+        XCTAssertNil(sut.feedback)
+        let stored = await feedbackStore.lastFeedback()
+        XCTAssertNil(stored)
+    }
+
+    /// A verdict belongs to the recommendation it was given for, so the next
+    /// run starts unrated.
+    func testANewRunClearsTheVerdict() async {
+        await streamer.setChunks(["first"])
+        let clock = TestClock(Self.reference)
+        let sut = makeSUT(clock: clock)
+        await sut.start()
+        await sut.submitFeedback(.helpful)
+
+        clock.advance(by: AnalysisCooldownStore.duration + 1)
+        await streamer.setChunks(["second"])
+        await sut.start()
+
+        XCTAssertEqual(sut.state, .result("second"))
+        XCTAssertNil(sut.feedback)
     }
 
     // MARK: - Helpers

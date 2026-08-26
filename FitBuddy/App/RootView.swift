@@ -20,7 +20,10 @@ struct RootView: View {
                 // The autoclosure defers building the store, the service and
                 // the ViewModel until SwiftUI first creates the dashboard's
                 // state.
-                DashboardView(viewModel: makeDashboardViewModel())
+                DashboardView(
+                    viewModel: makeDashboardViewModel(),
+                    analysisViewModel: makeAnalysisViewModel()
+                )
             }
         }
         // Exposes the coordinator to the rest of the app; the dashboard reaches
@@ -50,6 +53,21 @@ struct RootView: View {
             await coordinator?.handleHevyUnauthorized()
         }
         return viewModel
+    }
+
+    /// Wires the analysis sheet to the cache and to Claude (#32).
+    ///
+    /// Its own `WorkoutStore` over the same container, since the analysis only
+    /// reads — unlike the dashboard, it shares no write path with the sync.
+    /// The cooldown store *is* shared with `InferenceService`, so the label on
+    /// screen and the service's own 6h guard can never disagree.
+    private func makeAnalysisViewModel() -> AnalysisViewModel {
+        let cooldown = AnalysisCooldownStore()
+        return AnalysisViewModel(
+            cache: WorkoutStore(modelContainer: modelContext.container),
+            inference: InferenceService(cooldown: cooldown),
+            cooldown: cooldown
+        )
     }
 
     /// Shown while the coordinator is still resolving the persisted state.
