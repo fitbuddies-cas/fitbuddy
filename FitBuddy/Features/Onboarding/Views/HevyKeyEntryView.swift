@@ -92,7 +92,7 @@ struct HevyKeyEntryView: View {
     private var keyInput: some View {
         FBKeyField(
             label: "HEVY API KEY",
-            placeholder: "hv_live_…",
+            placeholder: HevyKeyEntryViewModel.keyPlaceholder,
             text: $viewModel.apiKey,
             isBusy: isValidating,
             hasError: failure == .invalidKey,
@@ -110,13 +110,15 @@ struct HevyKeyEntryView: View {
     }
 
     /// Failure banner (AC3): explains what went wrong and, for a rejected key,
-    /// links straight to Hevy's API-key page.
+    /// links straight to Hevy's API-key page. The copy lives on
+    /// `HevyKeyEntryState.Failure` so the settings key editor (#83) says the
+    /// same thing.
     private func errorBanner(for failure: HevyKeyEntryState.Failure) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(bannerTitle(for: failure))
+            Text(failure.title(for: "Hevy"))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Color.fbRed)
-            Text(bannerMessage(for: failure))
+            Text(failure.message(for: "Hevy"))
                 .font(.footnote)
                 .foregroundStyle(Color.fbInkSecondary)
             if failure == .invalidKey {
@@ -136,28 +138,6 @@ struct HevyKeyEntryView: View {
             RoundedRectangle(cornerRadius: FBRadius.control)
                 .strokeBorder(Color.fbRedBorder, lineWidth: 1)
         )
-    }
-
-    private func bannerTitle(for failure: HevyKeyEntryState.Failure) -> String {
-        switch failure {
-        case .invalidKey: return "Hevy rejected this key (HTTP 401)"
-        case .network: return "Could not reach Hevy"
-        case .serviceUnavailable: return "Hevy is currently unavailable"
-        case .keychain: return "Could not save your key"
-        }
-    }
-
-    private func bannerMessage(for failure: HevyKeyEntryState.Failure) -> String {
-        switch failure {
-        case .invalidKey:
-            return "The key may be revoked or mistyped. Generate a new one on hevy.com (Settings → Developer), then paste it here."
-        case .network:
-            return "Check your internet connection and try again."
-        case .serviceUnavailable:
-            return "Hevy answered with an unexpected error — your key was not rejected. Please try again in a little while."
-        case .keychain:
-            return "The key could not be stored on this device. Please try again."
-        }
     }
 
     private var ctaButton: some View {

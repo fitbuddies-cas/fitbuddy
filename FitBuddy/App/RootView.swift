@@ -9,6 +9,11 @@ struct RootView: View {
 
     @StateObject private var onboardingViewModel = OnboardingViewModel()
 
+    /// Whether the settings sheet (#83) is presented. Owned here rather than in
+    /// `DashboardView`, because deleting a key sends the user back into
+    /// onboarding — a step change this view is the one to react to.
+    @State private var showsSettings = false
+
     var body: some View {
         Group {
             switch onboardingViewModel.step {
@@ -22,7 +27,8 @@ struct RootView: View {
                 // state.
                 DashboardView(
                     viewModel: makeDashboardViewModel(),
-                    analysisViewModel: makeAnalysisViewModel()
+                    analysisViewModel: makeAnalysisViewModel(),
+                    onOpenSettings: { showsSettings = true }
                 )
             }
         }
@@ -30,6 +36,14 @@ struct RootView: View {
         // it through `onUnauthorized` below rather than the environment,
         // because the ViewModel is built here and must not depend on SwiftUI.
         .environmentObject(onboardingViewModel)
+        .sheet(isPresented: $showsSettings) {
+            SettingsView(viewModel: makeSettingsViewModel())
+        }
+        // Deleting the Hevy key or all data drops the app back into
+        // onboarding; the settings sheet must not stay up over it.
+        .onChange(of: onboardingViewModel.step) { _, step in
+            if step != .completed { showsSettings = false }
+        }
         .task { await onboardingViewModel.bootstrap() }
     }
 
@@ -68,6 +82,29 @@ struct RootView: View {
             inference: InferenceService(cooldown: cooldown),
             cooldown: cooldown
         )
+    }
+
+    /// Wires the settings screen to the Keychain and to the two reset paths
+    /// (#83). Both resets share one `WorkoutStore` and one `SyncTimestampStore`
+    /// with the dashboard's collaborators, so a wipe empties exactly the cache
+    /// the dashboard reads back.
+    private func makeSettingsViewModel() -> SettingsViewModel {
+        let store = WorkoutStore(modelContainer: modelContext.container)
+        let timestamps = SyncTimestampStore()
+        let viewModel = SettingsViewModel(
+            sessionReset: SessionResetService(workouts: store, timestamps: timestamps),
+            dataReset: DataResetService(workouts: store, timestamps: timestamps)
+        )
+        let coordinator = onboardingViewModel
+        // The hard logout already wiped the key and the cache; all that is left
+        // is returning to step 2 — the same path an HTTP 401 takes (US-1 AC3).
+        viewModel.onHevyKeyDeleted = { [weak coordinator] in
+            await coordinator?.handleHevyUnauthorized()
+        }
+        viewModel.onDataDeleted = { [weak coordinator] in
+            coordinator?.handleDataReset()
+        }
+        return viewModel
     }
 
     /// Shown while the coordinator is still resolving the persisted state.

@@ -25,26 +25,14 @@ final class LLMKeysViewModel: ObservableObject {
     /// on a bootstrap restore) — letting the coordinator finish onboarding.
     var onFinished: (() -> Void)?
 
-    /// `UserDefaults` key backing the "skip for now" decision (AC2). Unlike the
-    /// Keychain, `UserDefaults` is wiped on app deletion, so a skip does not
-    /// outlive a reinstall — see `FirstLaunchResetService` for the same
-    /// reasoning applied to its own marker.
-    private static let skippedKey = "fitbuddy.onboarding.llmKeysSkipped"
-
-    /// Name this marker had while step 3 took a single Claude key. Existing
-    /// testers who skipped back then still carry it, so it is read as a
-    /// fallback and migrated forward once — without it, their decision would be
-    /// lost on update and step 3 would reappear.
-    private static let legacySkippedKey = "fitbuddy.onboarding.claudeKeySkipped"
-
     private let keychain: any KeychainStoring
     private let priorityStore: LLMPriorityStore
-    private let defaults: UserDefaults
+    private let skipStore: LLMKeysSkipStore
 
     init(keychain: any KeychainStoring = KeychainService(), defaults: UserDefaults = .standard) {
         self.keychain = keychain
-        self.defaults = defaults
         self.priorityStore = LLMPriorityStore(defaults: defaults)
+        self.skipStore = LLMKeysSkipStore(defaults: defaults)
     }
 
     /// Providers still selectable for the given slot: all that are not taken
@@ -135,23 +123,20 @@ final class LLMKeysViewModel: ObservableObject {
     }
 
     /// Continues onboarding without any LLM key (AC2 "Überspringen").
-    /// Persisted via `UserDefaults` so the entry screen doesn't reappear on
+    /// Persisted via `LLMKeysSkipStore` so the entry screen doesn't reappear on
     /// every cold start until the user actually adds a key.
-    func skip() {
-        defaults.set(true, forKey: Self.skippedKey)
-        defaults.removeObject(forKey: Self.legacySkippedKey)
+    func skip() async {
+        await skipStore.setSkipped()
         state = .skipped
         onFinished?()
     }
 
-    /// Whether the user already declined the step, honoring the pre-multi-provider
-    /// marker and migrating it forward so the stale entry does not linger.
-    private var hasSkipped: Bool {
-        if defaults.bool(forKey: Self.skippedKey) { return true }
-        guard defaults.bool(forKey: Self.legacySkippedKey) else { return false }
-        defaults.set(true, forKey: Self.skippedKey)
-        defaults.removeObject(forKey: Self.legacySkippedKey)
-        return true
+    /// Returns to fresh input after the stored keys and the skip marker were
+    /// deleted ("Delete all data" in Settings, #83). Clears the slots so no
+    /// entered key survives the wipe in memory.
+    func reset() {
+        slots = [LLMKeySlot()]
+        state = .idle
     }
 
     /// Resolves `.unknown` by checking the Keychain: skips the screen when at
@@ -177,6 +162,7 @@ final class LLMKeysViewModel: ObservableObject {
         // Fail open rather than spinning forever on `.unknown`: with every read
         // failing this lands on `.idle`, or on `.skipped` when the user already
         // declined — that marker lives in UserDefaults and is unaffected.
+        let hasSkipped = await skipStore.isSkipped
         state = hasStoredKey ? .saved : (hasSkipped ? .skipped : .idle)
     }
 }

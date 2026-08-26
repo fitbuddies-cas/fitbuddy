@@ -64,6 +64,14 @@ final class ConsentViewModel: ObservableObject {
         }
     }
 
+    /// Returns to a fresh consent request after the stored consent was deleted
+    /// ("Delete all data" in Settings, #83).
+    func reset() {
+        hasAcceptedCheckbox = false
+        errorMessage = nil
+        state = .required
+    }
+
     /// Persists the current consent version and an ISO8601 timestamp, then
     /// transitions to `.granted`. No-op without a ticked checkbox.
     func confirm() async {
