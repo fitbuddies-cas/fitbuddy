@@ -145,7 +145,7 @@ final class OnboardingViewModelTests: XCTestCase {
         let sut = makeSUT()
         await sut.bootstrap()
 
-        sut.llmKeysViewModel.skip()
+        await sut.llmKeysViewModel.skip()
 
         XCTAssertEqual(sut.step, .completed)
     }
@@ -207,6 +207,29 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertEqual(sut.hevyKeyViewModel.apiKey, "")
         let stored = try await keychain.read(.hevyAPIKey)
         XCTAssertNil(stored)
+    }
+
+    // MARK: - Delete all data (#83)
+
+    func testDataResetReturnsToConsentAndClearsTheChildren() async throws {
+        try await seedConsent()
+        try await keychain.save("hevy-key", for: .hevyAPIKey)
+        try await keychain.save("sk-ant-abc", for: .claudeAPIKey)
+        let sut = makeSUT()
+        await sut.bootstrap()
+        XCTAssertEqual(sut.step, .completed)
+        sut.hevyKeyViewModel.apiKey = "stale input"
+        sut.llmKeysViewModel.slots[0].key = "stale key"
+
+        sut.handleDataReset()
+
+        XCTAssertEqual(sut.step, .consent)
+        XCTAssertEqual(sut.consentViewModel.state, .required)
+        XCTAssertFalse(sut.consentViewModel.hasAcceptedCheckbox)
+        XCTAssertEqual(sut.hevyKeyViewModel.state, .idle)
+        XCTAssertEqual(sut.hevyKeyViewModel.apiKey, "")
+        XCTAssertEqual(sut.llmKeysViewModel.state, .idle)
+        XCTAssertEqual(sut.llmKeysViewModel.slots.map(\.key), [""])
     }
 
     // MARK: - DEBUG skip launch argument

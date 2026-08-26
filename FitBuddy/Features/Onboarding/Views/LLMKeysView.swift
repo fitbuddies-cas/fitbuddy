@@ -262,7 +262,7 @@ struct LLMKeysView: View {
             .disabled(!viewModel.canSave)
 
             Button {
-                viewModel.skip()
+                Task { await viewModel.skip() }
             } label: {
                 Text("Skip for now")
             }

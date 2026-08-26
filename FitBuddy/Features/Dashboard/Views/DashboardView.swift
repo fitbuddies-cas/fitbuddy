@@ -15,6 +15,11 @@ struct DashboardView: View {
     /// reopened.
     @StateObject private var analysisViewModel: AnalysisViewModel
 
+    /// Tapping the toolbar gear. The settings screen itself is presented by
+    /// `RootView`, which owns the onboarding coordinator that a deleted key
+    /// sends the user back to (#83).
+    private let onOpenSettings: () -> Void
+
     @State private var showsAnalysis = false
 
     /// - Parameters:
@@ -22,12 +27,15 @@ struct DashboardView: View {
     ///     SwiftUI first creates the view's state, so wiring it up in a
     ///     parent's `body` does not rebuild it on every render.
     ///   - analysisViewModel: Same, for the analysis sheet (#32).
+    ///   - onOpenSettings: Defaults to a no-op so previews need no coordinator.
     init(
         viewModel: @autoclosure @escaping () -> WorkoutListViewModel,
-        analysisViewModel: @autoclosure @escaping () -> AnalysisViewModel
+        analysisViewModel: @autoclosure @escaping () -> AnalysisViewModel,
+        onOpenSettings: @escaping () -> Void = {}
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
         _analysisViewModel = StateObject(wrappedValue: analysisViewModel())
+        self.onOpenSettings = onOpenSettings
     }
 
     var body: some View {
@@ -60,6 +68,15 @@ struct DashboardView: View {
             .background(Color.fbBackground)
             .navigationTitle("Dashboard")
             .refreshable { await viewModel.refresh() }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: onOpenSettings) {
+                        Image(systemName: "gearshape")
+                            .foregroundStyle(Color.fbInk)
+                    }
+                    .accessibilityLabel("Settings")
+                }
+            }
         }
         .task { await viewModel.refresh() }
         .sheet(isPresented: $showsAnalysis) {

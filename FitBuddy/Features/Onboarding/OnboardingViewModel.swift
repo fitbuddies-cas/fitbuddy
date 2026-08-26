@@ -70,6 +70,17 @@ final class OnboardingViewModel: ObservableObject {
         step = .hevyKey
     }
 
+    /// Entry point for "Delete all data" in Settings (#83). `DataResetService`
+    /// has already wiped every persisted trace, so the children are returned
+    /// to their fresh-install state and the flow restarts at step 1 — consent
+    /// has to be given again (US-4 AC5).
+    func handleDataReset() {
+        consentViewModel.reset()
+        hevyKeyViewModel.reset()
+        llmKeysViewModel.reset()
+        step = .consent
+    }
+
     /// First incomplete step according to the children's persisted state.
     /// The LLM step counts as complete on an explicit decision only (saved
     /// keys or persisted skip) — a user killed mid-step-3 resumes there, not

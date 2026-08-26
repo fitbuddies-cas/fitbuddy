@@ -185,7 +185,7 @@ final class LLMKeysViewModelTests: XCTestCase {
     // MARK: - Skip (AC2)
 
     func testSkipMovesToSkippedWithoutStoringAnything() async throws {
-        sut.skip()
+        await sut.skip()
         XCTAssertEqual(sut.state, .skipped)
         for provider in LLMProvider.allCases {
             let stored = try await keychain.read(provider.keychainKey)
@@ -193,13 +193,13 @@ final class LLMKeysViewModelTests: XCTestCase {
         }
     }
 
-    func testSkipPersistsTheDecisionToUserDefaults() {
-        sut.skip()
+    func testSkipPersistsTheDecisionToUserDefaults() async {
+        await sut.skip()
         XCTAssertTrue(defaults.bool(forKey: "fitbuddy.onboarding.llmKeysSkipped"))
     }
 
     func testSkipPersistsAcrossRelaunch() async {
-        sut.skip()
+        await sut.skip()
 
         // A fresh view model sharing the same stores simulates a cold start
         // after the user previously skipped.
