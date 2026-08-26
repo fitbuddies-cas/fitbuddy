@@ -15,7 +15,6 @@ final class AnalysisViewModelTests: XCTestCase {
     private var defaults: UserDefaults!
     private var suiteName: String!
     private var cooldown: AnalysisCooldownStore!
-    private var clock: TestClock!
 
     override func setUp() async throws {
         try await super.setUp()
@@ -25,7 +24,6 @@ final class AnalysisViewModelTests: XCTestCase {
         suiteName = "fitbuddy.tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
         cooldown = AnalysisCooldownStore(defaults: defaults)
-        clock = TestClock(Self.reference)
     }
 
     override func tearDown() async throws {
@@ -34,17 +32,22 @@ final class AnalysisViewModelTests: XCTestCase {
         defaults = nil
         streamer = nil
         cache = nil
-        clock = nil
         try await super.tearDown()
     }
 
-    private func makeSUT(slowThreshold: TimeInterval = 30, tickInterval: TimeInterval = 60) -> AnalysisViewModel {
+    /// The clock is passed in rather than held in a property, so no test has to
+    /// force-unwrap it. Tests that move time keep their own reference.
+    private func makeSUT(
+        clock: TestClock = TestClock(AnalysisViewModelTests.reference),
+        slowThreshold: TimeInterval = 30,
+        tickInterval: TimeInterval = 60
+    ) -> AnalysisViewModel {
         AnalysisViewModel(
             cache: cache,
             inference: streamer,
             cooldown: cooldown,
             calendar: Self.calendar,
-            now: { [clock] in clock!.date },
+            now: { clock.date },
             slowThreshold: slowThreshold,
             tickInterval: tickInterval
         )
@@ -180,6 +183,55 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(calls, 1)
     }
 
+    /// Both taps land before the first run has passed its first await, where
+    /// the state is still `.idle` unless the slot is claimed synchronously.
+    func testTwoTapsInTheSameRunLoopStartOnlyOneRun() async {
+        await streamer.setChunks(["done"])
+        let sut = makeSUT()
+
+        async let first: Void = sut.start()
+        async let second: Void = sut.start()
+        _ = await (first, second)
+
+        let calls = await streamer.callCount
+        XCTAssertEqual(calls, 1)
+        XCTAssertEqual(sut.state, .result("done"))
+    }
+
+    /// A cancel during the cooldown lookup must not be overrun by the run it
+    /// stopped before it reached the service.
+    func testCancelBeforeTheCallReachesTheServiceStopsTheRun() async {
+        await streamer.setChunks(["never rendered"])
+        let sut = makeSUT()
+
+        let run = Task { await sut.start() }
+        await Task.yield()
+        sut.cancel()
+        await run.value
+
+        XCTAssertEqual(sut.state, .idle)
+        let calls = await streamer.callCount
+        XCTAssertEqual(calls, 0)
+    }
+
+    /// The explanation must not outlive its reason: once the 6h window closes,
+    /// the cooldown error clears on the next refresh.
+    func testCooldownErrorClearsOnceTheWindowCloses() async {
+        let clock = TestClock(Self.reference)
+        await cooldown.recordCall(at: Self.reference.addingTimeInterval(-AnalysisCooldownStore.duration + 60))
+        let sut = makeSUT(clock: clock)
+
+        await sut.start()
+        XCTAssertEqual(sut.state, .error(.cooldownActive(availableAt: Self.reference.addingTimeInterval(60))))
+
+        clock.advance(by: 61)
+        await sut.refreshCooldown()
+
+        XCTAssertEqual(sut.state, .idle)
+        XCTAssertNil(sut.cooldownMessage)
+        XCTAssertTrue(sut.canStartAnalysis)
+    }
+
     // MARK: - Failures
 
     func testStartFailureIsMappedOntoTheScreen() async {
@@ -307,7 +359,8 @@ final class AnalysisViewModelTests: XCTestCase {
 
     func testCooldownLabelCountsDownWithTheClock() async {
         await cooldown.recordCall(at: Self.reference.addingTimeInterval(-AnalysisCooldownStore.duration + 130))
-        let sut = makeSUT(tickInterval: 0.01)
+        let clock = TestClock(Self.reference)
+        let sut = makeSUT(clock: clock, tickInterval: 0.01)
 
         let ticker = Task { await sut.trackCooldown() }
         await waitUntil("the initial label appears") {

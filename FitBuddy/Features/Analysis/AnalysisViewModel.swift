@@ -87,15 +87,21 @@ final class AnalysisViewModel: ObservableObject {
     /// tapping twice must not buy two analyses.
     func start() async {
         guard !state.isRunning else { return }
+        // Claim the slot before the first await: an await releases the main
+        // actor, so two taps landing in that window would otherwise both pass
+        // the guard above and start a run each.
+        state = .loading
 
-        await refreshCooldown()
-        if let availableAt = await cooldown.activeCooldown(now: now()) {
+        if let availableAt = await refreshCooldown() {
             // Checked here as well as inside `InferenceService`: the button is
             // already disabled, but a stale label plus a fast tap must produce
             // an explanation, not a silent no-op.
             state = .error(.cooldownActive(availableAt: availableAt))
             return
         }
+        // A `cancel()` that landed during the await above already published a
+        // resting state; it wins over the run it stopped before it started.
+        guard case .loading = state else { return }
 
         runID &+= 1
         let id = runID
@@ -126,7 +132,7 @@ final class AnalysisViewModel: ObservableObject {
     }
 
     private func performAnalysis(_ id: UInt64) async {
-        state = .loading
+        // `state` is already `.loading` — `start()` claimed the slot there.
         startSlowTimer()
 
         guard let prompt = await buildPrompt() else { return await finish(id) }
@@ -231,13 +237,24 @@ final class AnalysisViewModel: ObservableObject {
 
     // MARK: - Cooldown
 
-    /// Recomputes `cooldownMessage` from the stored timestamp.
-    func refreshCooldown() async {
-        // One reading of the clock for both, so the label can never be built
-        // against a different instant than the window was checked with.
+    /// Recomputes `cooldownMessage` from the stored timestamp and returns the
+    /// instant the window ends, or `nil` while a run is allowed.
+    ///
+    /// Callers that need the decision as well as the label take it from here
+    /// rather than asking the store again: one reading of the clock and one of
+    /// the store, so message and decision can never describe different
+    /// instants.
+    @discardableResult
+    func refreshCooldown() async -> Date? {
         let reference = now()
         let availableAt = await cooldown.activeCooldown(now: reference)
         cooldownMessage = CooldownFormatter.message(until: availableAt, now: reference)
+        // A cooldown message on screen outlives its reason otherwise: once the
+        // window closes, the explanation is wrong and the button is back.
+        if availableAt == nil, case .error(.cooldownActive) = state {
+            state = .idle
+        }
+        return availableAt
     }
 
     /// Keeps the cooldown label counting down while the screen is on display —
