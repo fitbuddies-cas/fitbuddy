@@ -32,6 +32,7 @@ FitBuddy erlaubt im PoC bis zu drei LLM-Provider (Claude, Gemini, Mistral) im st
 2. **Consent- und Datenschutztext nennen alle möglichen Empfänger** (Anthropic, Google, Mistral AI) inkl. Drittland-Hinweis USA für Anthropic und Google sowie EU-Verarbeitung für Mistral — und stellen klar, dass nur die Provider Daten erhalten, für die der User einen Key hinterlegt hat (US-4 AC4). Die Consent-Version wird angehoben, sodass bestehende Tester erneut einwilligen.
 3. **Mistral-Experiment-Tier-Risiko wird adressiert:** Da der kostenlose Mistral-Tier per Default trainiert, wird in der Dokumentation/Onboarding-Hilfe empfohlen, Pay-as-you-go zu aktivieren oder das Trainings-Opt-out in der Mistral Admin Console zu setzen (offener Punkt: Hinweis direkt im UI, sobald #79 den Provider aktiv nutzt).
 4. **Kein Team-Key, für keinen Provider** — die Architekturpflicht aus [[ADR-004]]/[[ADR-005]] gilt unverändert für Google und Mistral.
+5. **v0 ruft ausschliesslich Claude auf:** Die Key-Erfassung (#78) nimmt bereits alle drei Provider entgegen und persistiert die Prioritätsreihenfolge, der `InferenceService` bedient aber nur den Claude-Endpoint (`LLMProvider.isCallable`); Request-Bau und Response-Parsing für Gemini/Mistral kommen mit #79. Der Analyse-Call überspringt darum noch nicht unterstützte Provider und meldet, wenn keiner der konfigurierten aufrufbar ist, `providerNotSupportedYet` statt eines irreführenden «kein Key hinterlegt». Onboarding-Schritt 3 benennt die Einschränkung explizit (US-4 AC2), damit ein Setup ohne Claude-Key nicht als funktionsfähig missverstanden wird.
 
 ## Konsequenzen
 
@@ -46,6 +47,7 @@ FitBuddy erlaubt im PoC bis zu drei LLM-Provider (Claude, Gemini, Mistral) im st
 
 - **Drei Vertragswerke statt einem:** Änderungen an Google- oder Mistral-Terms muss das Team künftig genauso beobachten wie die Anthropic Commercial Terms; die Prüftiefe von ADR-005 ist für Google/Mistral noch nicht vollständig erreicht (offene Punkte unten).
 - **Mistral-Experiment-Tier trainiert per Default:** Ein User, der den kostenlosen Tier ohne Opt-out nutzt, gibt Gesundheitsdaten in ein Trainingsprogramm. Das lässt sich app-seitig nicht technisch verhindern — nur durch klare Hinweise (Entscheidung Punkt 3).
+- **Erfassung und Ausführung fallen in v0 auseinander:** Der Onboarding-Screen bietet drei Provider an, ausgeführt wird bis #79 nur Claude. Das ist bewusst so — die Keys und die Reihenfolge müssen vor der Fallback-Kette erfasst sein, damit #79 direkt auf einer stabilen API aufsetzt — erzeugt aber ein Zeitfenster, in dem ein Gemini-/Mistral-only-Setup keine Analyse ausführen kann. Abgefedert durch den Hinweis in Schritt 3 und einen eigenen Fehlerfall statt eines stillen Fehlschlags.
 - **Consent-Text wird länger und komplexer**; die Verständlichkeit für nicht-technische User (US-4-Ziel) leidet tendenziell.
 - **Gemini-Standortabhängigkeit:** Das Trainings-Verbot im Free Tier hängt am Standort Schweiz/EWR/UK des Users. Für den geschlossenen CAS-PoC (Schweizer Tester) ist das gegeben; bei Ausweitung des Testerkreises wäre es neu zu bewerten.
 - Safety-/Abuse-Logging existiert bei allen drei Providern (Anthropic Safety Classifier, Google Missbrauchs-Logging, Mistral 30-Tage-Retention) — im Datenschutztext als Verarbeitung abzubilden.
@@ -57,6 +59,7 @@ FitBuddy erlaubt im PoC bis zu drei LLM-Provider (Claude, Gemini, Mistral) im st
 | Google-Vertragsentität für Schweizer Privatkunden der Gemini API verifizieren (Entity-Tabelle) und SCC/Swiss-Addendum-Abdeckung im Google-DPA prüfen | Hoch | vor TestFlight-Build mit Gemini-Call (#79) |
 | Mistral DPA: SCC-/Schweiz-Abdeckung und Subprozessoren prüfen (EU-Hosting macht dies voraussichtlich unkritisch) | Mittel | vor TestFlight-Build mit Mistral-Call (#79) |
 | Hinweis auf Mistral-Trainings-Opt-out (Experiment-Tier) im Onboarding-UI ergänzen | Hoch | mit #79 |
+| Hinweis «v0 analysiert nur mit Claude» aus Schritt 3 entfernen, sobald die Fallback-Kette Gemini/Mistral tatsächlich aufruft (`LLMProvider.isCallable` und `providerNotSupportedYet` werden dann obsolet) | Mittel | mit #79 |
 | Einseitige Risikonotiz (PoC) um Google/Mistral erweitern | Mittel | vor v1.0 |
 | Verhältnismässigkeits-Freigabe durch Datenschutz-Verantwortlichen der BFH einholen → Status auf «Accepted» heben | Hoch | vor Merge von #79 |
 

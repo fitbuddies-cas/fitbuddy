@@ -50,16 +50,22 @@ struct LLMKeysView: View {
         .background(Color.fbBackground)
         .safeAreaInset(edge: .bottom) { ctaButtons.padding(16) }
         .animation(.easeOut(duration: 0.15), value: viewModel.state)
-        .animation(.easeOut(duration: 0.15), value: viewModel.slots)
+        // Only the structural changes — a slot added or removed, a provider
+        // picked — not every keystroke: `slots` carries the key text, so
+        // animating on the whole array restarts the transaction over the entire
+        // subtree per typed character.
+        .animation(.easeOut(duration: 0.15), value: viewModel.slots.map(\.provider))
     }
 
     // MARK: - Sections
 
     /// Explains that the slot order is the provider priority for the analysis
-    /// call, including the fallback behavior.
+    /// call, including the fallback behavior, and that v0 only runs the call
+    /// against Claude — without that sentence the screen offers a setup it
+    /// cannot honor until #79 (see `LLMProvider.isCallable`).
     private var priorityNote: some View {
         Label {
-            Text("The order matters: the first provider is used for the analysis. If it fails or runs out of credit, the next one takes over.")
+            Text("The order matters: the first provider is used for the analysis. If it fails or runs out of credit, the next one takes over. This version runs the analysis with Claude only — other keys are stored now and used as soon as their provider is supported.")
                 .font(.footnote)
                 .foregroundStyle(Color.fbInkSecondary)
         } icon: {
