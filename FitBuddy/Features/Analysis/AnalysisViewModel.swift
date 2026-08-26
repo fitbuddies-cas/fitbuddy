@@ -32,6 +32,11 @@ final class AnalysisViewModel: ObservableObject {
     /// `nil` while none was given (US-3 AC9). Reset with every new run: a
     /// rating belongs to the recommendation it was given for.
     @Published private(set) var feedback: AnalysisFeedback?
+    /// The window the analysis on screen actually covers. `.default` until a
+    /// run resolves it, and widened by the fallback ladder when the last four
+    /// weeks are empty (#87) — the UI names it only when it is not the
+    /// default.
+    @Published private(set) var window: AnalysisWindow = .default
 
     /// Whether tapping "Analyse" can start a run right now.
     var canStartAnalysis: Bool {
@@ -113,6 +118,7 @@ final class AnalysisViewModel: ObservableObject {
         guard case .loading = state else { return }
 
         feedback = nil
+        window = .default
         runID &+= 1
         let id = runID
         let task = Task { await performAnalysis(id) }
@@ -191,20 +197,35 @@ final class AnalysisViewModel: ObservableObject {
     private func buildPrompt() async -> AnalysisPrompt? {
         let reference = now()
         do {
+            // Read wide enough for the widest rung of the ladder and its
+            // comparison window; the cache returns what it has, and the
+            // resolved window decides what of it is actually analysed.
             let summaries = try await cache.workoutSummaries(
-                since: AnalysisWindow.previousStart(endingAt: reference, calendar: calendar)
+                since: AnalysisWindow.widest.previousStart(endingAt: reference, calendar: calendar)
             )
             guard !Task.isCancelled else { return nil }
 
             // The comparison window may well be empty — that is a break, and
-            // the prompt says so. An empty *recent* window is different: there
-            // is nothing to analyse, and paying Claude to say so is waste.
-            let recentStart = AnalysisWindow.start(endingAt: reference, calendar: calendar)
-            guard summaries.contains(where: { $0.startTime >= recentStart }) else {
+            // the prompt says so. An empty *recent* window widens the window
+            // instead of failing: someone returning from a six-week break has
+            // training worth analysing (#87). Only a cache with nothing in the
+            // widest window at all is "no training data", and paying Claude to
+            // say so would be waste.
+            guard let window = AnalysisWindow.resolve(
+                for: summaries,
+                endingAt: reference,
+                calendar: calendar
+            ) else {
                 state = .error(.noTrainingData)
                 return nil
             }
-            return AnalysisPromptBuilder.make(summaries: summaries, now: reference, calendar: calendar)
+            self.window = window
+            return AnalysisPromptBuilder.make(
+                summaries: summaries,
+                window: window,
+                now: reference,
+                calendar: calendar
+            )
         } catch {
             guard !Task.isCancelled, !error.isCancellation else { return nil }
             state = .error(.cacheUnavailable)

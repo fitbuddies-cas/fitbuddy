@@ -110,11 +110,13 @@ final class AnalysisViewModelTests: XCTestCase {
         let user = await streamer.userPrompt
         XCTAssertEqual(system, AnalysisPromptBuilder.systemPrompt)
         XCTAssertEqual(user?.contains("Push Day"), true)
-        // Both windows are read in one go, so the prompt can compare them.
+        // Read wide enough for the widest rung of the ladder and its
+        // comparison window, so one read serves every fallback step (#87).
         XCTAssertEqual(
             cache.requestedSince,
-            AnalysisWindow.previousStart(endingAt: Self.reference, calendar: Self.calendar)
+            AnalysisWindow.widest.previousStart(endingAt: Self.reference, calendar: Self.calendar)
         )
+        XCTAssertEqual(sut.window, .default)
     }
 
     /// The state has to pass through `.loading` before any text arrives — that
@@ -135,8 +137,36 @@ final class AnalysisViewModelTests: XCTestCase {
 
     // MARK: - Guards
 
-    func testEmptyRecentWindowFailsWithoutCallingClaude() async {
+    /// #87: an empty 4-week window is "no *recent* data", not "no data" — the
+    /// window widens and the run goes through.
+    func testEmptyFourWeekWindowRunsOverTheWidenedWindow() async {
         cache.summaries = [Self.workout(daysAgo: 40)]
+        await streamer.setChunks(["Back after a break."])
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.state, .result("Back after a break."))
+        XCTAssertEqual(sut.window.weeks, 8)
+        let user = await streamer.userPrompt
+        XCTAssertEqual(user?.contains("## Last 8 weeks ("), true)
+    }
+
+    func testEmptyEightWeekWindowWidensTo13Weeks() async {
+        cache.summaries = [Self.workout(daysAgo: 80)]
+        await streamer.setChunks(["ok"])
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.state, .result("ok"))
+        XCTAssertEqual(sut.window.weeks, 13)
+    }
+
+    /// Only a cache with nothing in the widest window is genuinely empty —
+    /// and that one still costs no Claude call.
+    func testFullyEmptyCacheFailsWithoutCallingClaude() async {
+        cache.summaries = []
         let sut = makeSUT()
 
         await sut.start()
@@ -144,6 +174,40 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(sut.state, .error(.noTrainingData))
         let calls = await streamer.callCount
         XCTAssertEqual(calls, 0)
+    }
+
+    /// Everything older than the cache window is out of reach of every rung,
+    /// so it is `.noTrainingData` too — the dashboard would not have offered
+    /// the button for it either.
+    func testWorkoutsOlderThanTheWidestWindowStillFail() async {
+        cache.summaries = [Self.workout(daysAgo: 120)]
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.state, .error(.noTrainingData))
+        let calls = await streamer.callCount
+        XCTAssertEqual(calls, 0)
+    }
+
+    /// The window belongs to the run on screen: a second run over recent data
+    /// must not keep the previous run's widened label.
+    func testWindowResetsToTheDefaultOnANewRun() async {
+        cache.summaries = [Self.workout(daysAgo: 40)]
+        await streamer.setChunks(["first"])
+        let clock = TestClock(Self.reference)
+        let sut = makeSUT(clock: clock)
+
+        await sut.start()
+        XCTAssertEqual(sut.window.weeks, 8)
+
+        // Past the 6h cooldown, with recent training in the cache this time.
+        clock.advance(by: 7 * 3_600)
+        cache.summaries = [Self.workout(daysAgo: 2)]
+        await streamer.setChunks(["second"])
+        await sut.start()
+
+        XCTAssertEqual(sut.window, .default)
     }
 
     func testCacheFailureIsReportedAsCacheUnavailable() async {
