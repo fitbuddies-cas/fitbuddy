@@ -14,4 +14,15 @@ enum WorkoutListState: Equatable {
     /// training data" for a broken store would tell the user something false
     /// about their training.
     case failed
+
+    /// Whether the window holds training data to work with — what the analysis
+    /// entry point needs before it is worth offering (#32).
+    var hasWorkouts: Bool {
+        switch self {
+        case .loaded(let workouts, _):
+            return !workouts.isEmpty
+        case .loading, .empty, .failed:
+            return false
+        }
+    }
 }

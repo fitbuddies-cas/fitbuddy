@@ -28,6 +28,10 @@ final class AnalysisViewModel: ObservableObject {
     /// Cleared as soon as the first token arrives, and on every state change
     /// out of a running state.
     @Published private(set) var isTakingLong = false
+    /// The verdict the user gave on the recommendation currently on screen, or
+    /// `nil` while none was given (US-3 AC9). Reset with every new run: a
+    /// rating belongs to the recommendation it was given for.
+    @Published private(set) var feedback: AnalysisFeedback?
 
     /// Whether tapping "Analyse" can start a run right now.
     var canStartAnalysis: Bool {
@@ -46,6 +50,7 @@ final class AnalysisViewModel: ObservableObject {
     private let cache: WorkoutSummaryReading
     private let inference: AnalysisStreaming
     private let cooldown: AnalysisCooldownStore
+    private let feedbackStore: AnalysisFeedbackStore
     private let calendar: Calendar
     private let now: () -> Date
     private let slowThreshold: TimeInterval
@@ -56,6 +61,8 @@ final class AnalysisViewModel: ObservableObject {
     ///   - inference: The streaming call (`InferenceService` in the app).
     ///   - cooldown: The shared 6h window store — the same one the service
     ///     writes to, so the label and the service's own guard never disagree.
+    ///   - feedbackStore: Where a "Helpful" / "Not helpful" tap is persisted —
+    ///     locally, with no call behind it (US-3 AC9).
     ///   - now: Injectable clock, so windows and cooldown math are testable.
     ///   - slowThreshold: Injectable, so tests do not wait 30 real seconds.
     ///   - tickInterval: How often `trackCooldown()` refreshes the label.
@@ -63,6 +70,7 @@ final class AnalysisViewModel: ObservableObject {
         cache: WorkoutSummaryReading,
         inference: AnalysisStreaming,
         cooldown: AnalysisCooldownStore = AnalysisCooldownStore(),
+        feedbackStore: AnalysisFeedbackStore = AnalysisFeedbackStore(),
         calendar: Calendar = .current,
         now: @escaping () -> Date = Date.init,
         slowThreshold: TimeInterval = AnalysisViewModel.defaultSlowThreshold,
@@ -71,6 +79,7 @@ final class AnalysisViewModel: ObservableObject {
         self.cache = cache
         self.inference = inference
         self.cooldown = cooldown
+        self.feedbackStore = feedbackStore
         self.calendar = calendar
         self.now = now
         self.slowThreshold = slowThreshold
@@ -97,6 +106,7 @@ final class AnalysisViewModel: ObservableObject {
             return
         }
 
+        feedback = nil
         runID &+= 1
         let id = runID
         let task = Task { await performAnalysis(id) }
@@ -123,6 +133,21 @@ final class AnalysisViewModel: ObservableObject {
     func reset() {
         guard !state.isRunning else { return }
         state = .idle
+    }
+
+    // MARK: - Feedback
+
+    /// Records the user's verdict on the recommendation on screen (US-3 AC9).
+    ///
+    /// Only meaningful while a finished recommendation is showing: rating a
+    /// spinner or an error message would attach the verdict to something the
+    /// user never read. Purely local — there is no request behind this tap.
+    func submitFeedback(_ feedback: AnalysisFeedback) async {
+        guard case .result = state else { return }
+        // Published first: the button has to look selected on the same run
+        // loop as the tap, not after the store's actor hop.
+        self.feedback = feedback
+        await feedbackStore.record(feedback, at: now())
     }
 
     private func performAnalysis(_ id: UInt64) async {

@@ -10,11 +10,24 @@ import SwiftUI
 struct DashboardView: View {
     @StateObject private var viewModel: WorkoutListViewModel
 
-    /// - Parameter viewModel: Built lazily — the autoclosure is evaluated once,
-    ///   when SwiftUI first creates the view's state, so wiring it up in a
-    ///   parent's `body` does not rebuild it on every render.
-    init(viewModel: @autoclosure @escaping () -> WorkoutListViewModel) {
+    /// Built here rather than inside the sheet's closure, so the running
+    /// analysis and its cooldown survive the sheet being dismissed and
+    /// reopened.
+    @StateObject private var analysisViewModel: AnalysisViewModel
+
+    @State private var showsAnalysis = false
+
+    /// - Parameters:
+    ///   - viewModel: Built lazily — the autoclosure is evaluated once, when
+    ///     SwiftUI first creates the view's state, so wiring it up in a
+    ///     parent's `body` does not rebuild it on every render.
+    ///   - analysisViewModel: Same, for the analysis sheet (#32).
+    init(
+        viewModel: @autoclosure @escaping () -> WorkoutListViewModel,
+        analysisViewModel: @autoclosure @escaping () -> AnalysisViewModel
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel())
+        _analysisViewModel = StateObject(wrappedValue: analysisViewModel())
     }
 
     var body: some View {
@@ -33,6 +46,12 @@ struct DashboardView: View {
                             onRetry: { Task { await viewModel.refresh() } }
                         )
                     }
+                    // Only with data behind it: an analysis of an empty or
+                    // unreadable cache has nothing to say, and the failure it
+                    // would produce is one the dashboard already explains.
+                    if viewModel.state.hasWorkouts {
+                        AnalysisCTACard { showsAnalysis = true }
+                    }
                     content
                 }
                 .padding(.horizontal, 16)
@@ -43,6 +62,9 @@ struct DashboardView: View {
             .refreshable { await viewModel.refresh() }
         }
         .task { await viewModel.refresh() }
+        .sheet(isPresented: $showsAnalysis) {
+            AnalysisView(viewModel: analysisViewModel)
+        }
     }
 
     @ViewBuilder
@@ -87,10 +109,22 @@ struct DashboardView: View {
 
 #if DEBUG
 #Preview("With data") {
-    DashboardView(viewModel: WorkoutListViewModel(cache: PreviewWorkoutCache.filled))
+    DashboardView(
+        viewModel: WorkoutListViewModel(cache: PreviewWorkoutCache.filled),
+        analysisViewModel: AnalysisViewModel(
+            cache: PreviewWorkoutCache.filled,
+            inference: PreviewAnalysisStreamer.recommendation
+        )
+    )
 }
 
 #Preview("Empty") {
-    DashboardView(viewModel: WorkoutListViewModel(cache: PreviewWorkoutCache.empty))
+    DashboardView(
+        viewModel: WorkoutListViewModel(cache: PreviewWorkoutCache.empty),
+        analysisViewModel: AnalysisViewModel(
+            cache: PreviewWorkoutCache.empty,
+            inference: PreviewAnalysisStreamer.recommendation
+        )
+    )
 }
 #endif
