@@ -12,6 +12,9 @@ enum AnalysisFailure: Equatable {
     /// The Keychain read failed (e.g. a locked device). The key is still
     /// there, so this is a retry, not a reason to re-enter it.
     case keychainUnavailable
+    /// The user's highest-priority provider is stored, but v0 can only call
+    /// Claude. Carries that provider so the message can name it.
+    case providerNotSupported(LLMProvider)
     /// Claude rejected the stored key (HTTP 401).
     case unauthorized
     /// The request never reached Claude.
@@ -47,6 +50,8 @@ enum AnalysisFailure: Equatable {
         switch error {
         case .missingAPIKey:
             self = .missingAPIKey
+        case .providerNotSupportedYet(let provider):
+            self = .providerNotSupported(provider)
         case .keychainUnavailable:
             self = .keychainUnavailable
         case .unauthorized:
@@ -69,6 +74,8 @@ enum AnalysisFailure: Equatable {
         switch self {
         case .missingAPIKey, .unauthorized:
             return "Claude key problem"
+        case .providerNotSupported:
+            return "Provider not supported yet"
         case .keychainUnavailable:
             return "Key not readable"
         case .offline:
@@ -96,6 +103,8 @@ enum AnalysisFailure: Equatable {
             return "No Claude API key is stored. Add your key to run an analysis."
         case .unauthorized:
             return "Claude rejected your API key. Check it and enter it again."
+        case .providerNotSupported(let provider):
+            return "\(provider.displayName) cannot be used for analyses yet. Add a Claude API key to run one."
         case .keychainUnavailable:
             return "Your key could not be read from the Keychain. Unlock your device and try again."
         case .offline:
@@ -126,6 +135,8 @@ enum AnalysisFailure: Equatable {
         switch self {
         case .missingAPIKey, .unauthorized:
             return "key.slash"
+        case .providerNotSupported:
+            return "exclamationmark.triangle"
         case .keychainUnavailable:
             return "lock.slash"
         case .offline:
@@ -147,7 +158,8 @@ enum AnalysisFailure: Equatable {
     /// key cannot be retried into working — that one needs onboarding.
     var isRetryable: Bool {
         switch self {
-        case .missingAPIKey, .unauthorized, .cooldownActive, .noTrainingData:
+        case .missingAPIKey, .unauthorized, .providerNotSupported, .cooldownActive,
+             .noTrainingData:
             return false
         case .keychainUnavailable, .offline, .rateLimited, .serviceUnavailable,
              .cacheUnavailable, .unreadableResponse:

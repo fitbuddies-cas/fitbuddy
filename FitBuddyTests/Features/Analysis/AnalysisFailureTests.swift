@@ -12,6 +12,19 @@ final class AnalysisFailureTests: XCTestCase {
         XCTAssertEqual(failure(.missingAPIKey), .missingAPIKey)
         XCTAssertEqual(failure(.unauthorized), .unauthorized)
         XCTAssertEqual(failure(.keychainUnavailable), .keychainUnavailable)
+        XCTAssertEqual(
+            failure(.providerNotSupportedYet(.gemini)),
+            .providerNotSupported(.gemini)
+        )
+    }
+
+    /// The message has to name the provider — "not supported yet" without it
+    /// leaves the user guessing which key is the problem.
+    func testUnsupportedProviderIsNamedAndNotRetryable() {
+        let failure = AnalysisFailure.providerNotSupported(.gemini)
+
+        XCTAssertTrue(failure.message.contains(LLMProvider.gemini.displayName))
+        XCTAssertFalse(failure.isRetryable)
     }
 
     func testMapsTransportErrors() {
@@ -62,7 +75,7 @@ final class AnalysisFailureTests: XCTestCase {
             .missingAPIKey, .keychainUnavailable, .unauthorized, .offline,
             .rateLimited(retryAfter: nil), .serviceUnavailable,
             .cooldownActive(availableAt: Date()), .noTrainingData,
-            .cacheUnavailable, .unreadableResponse,
+            .cacheUnavailable, .unreadableResponse, .providerNotSupported(.gemini),
         ]
         for failure in failures {
             XCTAssertFalse(failure.title.isEmpty, "\(failure) has no title")
