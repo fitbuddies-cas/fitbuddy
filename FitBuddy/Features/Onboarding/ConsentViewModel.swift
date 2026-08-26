@@ -8,7 +8,7 @@ final class ConsentViewModel: ObservableObject {
     /// Version of the consent text currently shown. Bump this whenever the
     /// data processing described in the consent changes, so existing users are
     /// asked to consent again.
-    static let currentVersion = "v0"
+    static let currentVersion = "2026-08-21"
 
     /// Whether the user ticked the consent checkbox.
     @Published var hasAcceptedCheckbox = false

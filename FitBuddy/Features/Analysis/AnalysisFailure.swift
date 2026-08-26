@@ -34,11 +34,11 @@ enum AnalysisFailure: Equatable {
 
     /// Maps an inference or cache error onto a failure the screen can explain.
     ///
-    /// `.alreadyInProgress` has no case of its own: the ViewModel's own state
-    /// machine already prevents a second run, so the actor's guard firing
-    /// would mean two ViewModels share one service — a wiring bug, not
-    /// something to tell the user about. It reads as `.unreadableResponse`,
-    /// the generic bucket.
+    /// `.alreadyInProgress` has no case of its own: `AnalysisViewModel.start()`
+    /// claims its slot synchronously, so a double tap cannot reach the service
+    /// twice, and the actor's guard firing would mean two ViewModels share one
+    /// service — a wiring bug, not something to tell the user about. It reads
+    /// as `.unreadableResponse`, the generic bucket.
     init(analysisError: Error) {
         guard let error = analysisError as? InferenceServiceError else {
             self = .cacheUnavailable

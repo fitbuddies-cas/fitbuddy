@@ -1,10 +1,15 @@
 import Foundation
 
-/// Failure modes of a Claude analysis call (#29).
+/// Failure modes of an LLM analysis call (#29).
 enum InferenceServiceError: Error, Equatable {
-    /// No Claude key in the Keychain — onboarding was skipped or the key was
-    /// never saved.
+    /// No usable provider key in the Keychain — onboarding was skipped or the
+    /// key was never saved.
     case missingAPIKey
+    /// Every provider the user configured in step 3 is stored, but none of
+    /// them can be called by this build yet (Gemini/Mistral land with #79).
+    /// Carries the highest-priority configured provider so the UI can name it
+    /// and point the user at adding a Claude key.
+    case providerNotSupportedYet(LLMProvider)
     /// The Keychain read itself failed (e.g. a locked device). Distinct from
     /// `.missingAPIKey`: the key is still stored, so routing the user back
     /// into onboarding to re-enter it would be wrong.
