@@ -20,6 +20,11 @@ struct DashboardView: View {
     /// sends the user back to (#83).
     private let onOpenSettings: () -> Void
 
+    /// Changes whenever something outside the dashboard invalidated the cache —
+    /// today only a replaced Hevy key (#91). Its value carries no meaning; the
+    /// change itself is the signal to sync again.
+    private let reloadToken: Int
+
     @State private var showsAnalysis = false
 
     /// - Parameters:
@@ -27,14 +32,18 @@ struct DashboardView: View {
     ///     SwiftUI first creates the view's state, so wiring it up in a
     ///     parent's `body` does not rebuild it on every render.
     ///   - analysisViewModel: Same, for the analysis sheet (#32).
+    ///   - reloadToken: Defaults to a constant, so a preview or a test that
+    ///     has no cache-invalidating parent never re-syncs.
     ///   - onOpenSettings: Defaults to a no-op so previews need no coordinator.
     init(
         viewModel: @autoclosure @escaping () -> WorkoutListViewModel,
         analysisViewModel: @autoclosure @escaping () -> AnalysisViewModel,
+        reloadToken: Int = 0,
         onOpenSettings: @escaping () -> Void = {}
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
         _analysisViewModel = StateObject(wrappedValue: analysisViewModel())
+        self.reloadToken = reloadToken
         self.onOpenSettings = onOpenSettings
     }
 
@@ -78,7 +87,10 @@ struct DashboardView: View {
                 }
             }
         }
-        .task { await viewModel.refresh() }
+        // `.task(id:)` rather than a plain `.task`: the first run is the
+        // dashboard appearing, every later one is a cache another screen
+        // invalidated while this view stayed alive (#91).
+        .task(id: reloadToken) { await viewModel.refresh() }
         .sheet(isPresented: $showsAnalysis) {
             AnalysisView(viewModel: analysisViewModel)
         }

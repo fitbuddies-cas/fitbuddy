@@ -43,6 +43,10 @@ final class SettingsViewModel: ObservableObject {
     var onHevyKeyDeleted: (() async -> Void)?
     /// Invoked after all local data was deleted: the app returns to step 1.
     var onDataDeleted: (() -> Void)?
+    /// Invoked after the Hevy key was replaced. The cache of the previous key
+    /// is gone by then, so the dashboard behind this sheet has to sync again —
+    /// its own `.task` does not fire when the sheet is dismissed (#91).
+    var onHevyKeyReplaced: (() -> Void)?
 
     private let keychain: any KeychainStoring
     private let validator: any HevyKeyValidating
@@ -51,8 +55,9 @@ final class SettingsViewModel: ObservableObject {
     private let dataReset: any DataResetting
 
     /// - Parameters:
-    ///   - sessionReset: Deleting the Hevy key reuses the US-1 AC3 hard-logout
-    ///     semantics instead of introducing a second teardown path.
+    ///   - sessionReset: Both Hevy paths go through it — deleting the key
+    ///     reuses the US-1 AC3 hard logout, replacing it reuses that logout's
+    ///     cache teardown (#91), instead of opening a second teardown path.
     ///   - dataReset: Performs the full local wipe behind "Delete all data".
     init(
         sessionReset: any SessionResetting,
@@ -152,6 +157,7 @@ final class SettingsViewModel: ObservableObject {
     /// Validates (Hevy only) and stores the entered key, then closes the
     /// editor. A newly added provider joins the priority order last, so an
     /// existing, deliberately chosen order is never reshuffled by an addition.
+    /// A stored Hevy key additionally invalidates the workout cache (#91).
     func submitEditor() async {
         guard let target = editorTarget else { return }
         let key = trimmedEditorKey
@@ -179,8 +185,24 @@ final class SettingsViewModel: ObservableObject {
             return
         }
 
-        if case .llm(let provider) = target, !isReplacing(target) {
-            await priorityStore.save(llmKeys.map(\.provider) + [provider])
+        switch target {
+        case .hevy:
+            // The cached workouts belong to the key that was just overwritten.
+            // Keeping them would show one Hevy account's training under
+            // another's key until the next manual refresh — and feed it to the
+            // AI analysis (US-3), which is exactly what the hard logout drops
+            // the cache to prevent.
+            //
+            // Also when the user re-enters the *same* key: telling the two
+            // apart would mean reading the stored key back in plaintext to
+            // compare it, which this screen deliberately never does. The cost
+            // of the safe choice is one re-sync.
+            await sessionReset.discardCachedWorkouts()
+            onHevyKeyReplaced?()
+        case .llm(let provider):
+            if !isReplacing(target) {
+                await priorityStore.save(llmKeys.map(\.provider) + [provider])
+            }
         }
         cancelEditing()
         await load()
