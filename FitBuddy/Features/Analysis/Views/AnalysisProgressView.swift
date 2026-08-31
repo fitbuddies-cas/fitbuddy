@@ -6,6 +6,9 @@ import SwiftUI
 struct AnalysisProgressView: View {
     /// What has arrived so far, or `nil` while nothing has (the spinner phase).
     let text: String?
+    /// Who is answering. `nil` only in the instant between the tap and the
+    /// first provider being picked, where there is no name to show yet (#79).
+    let provider: LLMProvider?
     let isTakingLong: Bool
     let onCancel: () -> Void
 
@@ -33,14 +36,30 @@ struct AnalysisProgressView: View {
         .animation(.easeOut(duration: 0.2), value: isTakingLong)
     }
 
+    /// Names the provider while waiting — the phase where the user is most
+    /// likely to wonder who is being asked, and the one place a fallback shows
+    /// up live as the name changes mid-run.
+    private var headline: String {
+        guard text == nil else { return "Writing your recommendation" }
+        guard let provider else { return "Analysing your last 4 weeks" }
+        return "Analysing with \(provider.displayName)…"
+    }
+
+    /// Falls back to a neutral noun rather than a placeholder name: this sits
+    /// on screen for a fraction of a second before the first provider is
+    /// announced.
+    private var providerName: String {
+        provider?.displayName ?? "The provider"
+    }
+
     private var header: some View {
         HStack(spacing: 12) {
             FBSpinner(size: 22)
             VStack(alignment: .leading, spacing: 2) {
-                Text(text == nil ? "Analyzing your last 4 weeks" : "Writing your recommendation")
+                Text(headline)
                     .font(.fbTitle)
                     .foregroundStyle(Color.fbInk)
-                Text("Claude usually answers in a few seconds.")
+                Text("\(providerName) usually answers in a few seconds.")
                     .font(.footnote)
                     .foregroundStyle(Color.fbMuted)
             }
@@ -67,7 +86,7 @@ struct AnalysisProgressView: View {
 
 #if DEBUG
 #Preview("Spinner") {
-    AnalysisProgressView(text: nil, isTakingLong: false, onCancel: {})
+    AnalysisProgressView(text: nil, provider: .claude, isTakingLong: false, onCancel: {})
         .padding(16)
         .background(Color.fbBackground)
 }
@@ -75,6 +94,7 @@ struct AnalysisProgressView: View {
 #Preview("Streaming") {
     AnalysisProgressView(
         text: "Your last four weeks show 14 sessions with steady volume on chest and back",
+        provider: .claude,
         isTakingLong: false,
         onCancel: {}
     )
@@ -83,7 +103,7 @@ struct AnalysisProgressView: View {
 }
 
 #Preview("Taking long") {
-    AnalysisProgressView(text: nil, isTakingLong: true, onCancel: {})
+    AnalysisProgressView(text: nil, provider: .gemini, isTakingLong: true, onCancel: {})
         .padding(16)
         .background(Color.fbBackground)
 }

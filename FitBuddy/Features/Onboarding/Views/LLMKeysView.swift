@@ -60,12 +60,10 @@ struct LLMKeysView: View {
     // MARK: - Sections
 
     /// Explains that the slot order is the provider priority for the analysis
-    /// call, including the fallback behavior, and that v0 only runs the call
-    /// against Claude — without that sentence the screen offers a setup it
-    /// cannot honor until #79 (see `LLMProvider.isCallable`).
+    /// call, including the fallback behavior (#79).
     private var priorityNote: some View {
         Label {
-            Text("The order matters: the first provider is used for the analysis. If it fails or runs out of credit, the next one takes over. This version runs the analysis with Claude only — other keys are stored now and used as soon as their provider is supported.")
+            Text("The order matters: the first provider is used for the analysis. If it fails or runs out of credit, the next one takes over automatically.")
                 .font(.footnote)
                 .foregroundStyle(Color.fbInkSecondary)
         } icon: {
@@ -112,8 +110,31 @@ struct LLMKeysView: View {
                 ) {
                     Task { await viewModel.save() }
                 }
+                if let note = provider.dataUsageNote {
+                    dataUsageNote(note)
+                }
             }
         }
+    }
+
+    /// A provider-specific warning about what it does with the data it
+    /// receives — currently only Mistral's default-on training (ADR-007).
+    /// Sits under the key field rather than in the picker: it matters at the
+    /// moment the user commits to that provider, not while browsing.
+    private func dataUsageNote(_ text: String) -> some View {
+        Label {
+            Text(text)
+                .font(.footnote)
+                .foregroundStyle(Color.fbInkSecondary)
+        } icon: {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 14))
+                .foregroundStyle(Color.fbWarn)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.fbWarnSoft)
+        .clipShape(RoundedRectangle(cornerRadius: FBRadius.control))
     }
 
     /// A slot can be cleared as soon as there is something to clear — a picked

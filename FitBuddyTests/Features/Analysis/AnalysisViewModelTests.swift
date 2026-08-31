@@ -94,7 +94,7 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(AnalysisState.result("whole").text, "whole")
         XCTAssertNil(AnalysisState.loading.text)
         XCTAssertNil(AnalysisState.idle.text)
-        XCTAssertNil(AnalysisState.error(.offline).text)
+        XCTAssertNil(AnalysisState.error(.offline(.claude)).text)
         XCTAssertTrue(AnalysisState.streaming("half").isRunning)
         XCTAssertTrue(AnalysisState.loading.isRunning)
         XCTAssertFalse(AnalysisState.result("whole").isRunning)
@@ -311,6 +311,99 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(sut.state, .error(.missingAPIKey))
     }
 
+    // MARK: - Provider attribution (#79)
+
+    func testPublishesTheAnsweringProvider() async {
+        await streamer.setChunks(["Recommendation"], from: .gemini)
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.attribution?.provider, .gemini)
+        XCTAssertEqual(sut.attribution?.attempted, [.gemini])
+        XCTAssertEqual(sut.attribution?.didFallBack, false)
+    }
+
+    func testAFallbackRecordsBothProvidersInOrder() async {
+        await streamer.setEvents([
+            .attempting(.claude),
+            .attempting(.gemini),
+            .text("Recommendation"),
+        ])
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.attribution?.attempted, [.claude, .gemini])
+        XCTAssertEqual(sut.attribution?.didFallBack, true)
+        XCTAssertEqual(sut.attribution?.fallbackNotice, "Claude unavailable — answered by Gemini")
+    }
+
+    /// DoD: the user never sees two answers merged. Whatever the failed
+    /// provider already streamed is dropped when the next one takes over.
+    func testDiscardsThePartialTextOfAProviderThatGaveWay() async {
+        await streamer.setEvents([
+            .attempting(.claude),
+            .text("Half a Claude answ"),
+            .attempting(.gemini),
+            .text("A complete Gemini answer."),
+        ])
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.state, .result("A complete Gemini answer."))
+    }
+
+    /// A run that failed with nothing on screen still has to say who was tried,
+    /// or the error view cannot tell a one-provider failure from a chain that
+    /// fell all the way through.
+    func testKeepsTheAttributionOnAFailedRun() async {
+        await streamer.setEvents([.attempting(.claude), .attempting(.mistral)])
+        await streamer.setStreamError(InferenceServiceError.serviceUnavailable)
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.state, .error(.serviceUnavailable(.mistral)))
+        XCTAssertEqual(sut.attribution?.attempted, [.claude, .mistral])
+    }
+
+    /// The error names the provider that actually failed last, not the one the
+    /// user ranked first.
+    func testTheErrorNamesTheLastProviderTried() async {
+        await streamer.setEvents([.attempting(.claude), .attempting(.gemini)])
+        await streamer.setStreamError(InferenceServiceError.unauthorized)
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.state, .error(.unauthorized(.gemini)))
+    }
+
+    /// No provider was ever announced (no key, cooldown, cache failure), so
+    /// there is nothing to attribute.
+    func testLeavesTheAttributionEmptyWhenNoProviderWasTried() async {
+        await streamer.setStartError(InferenceServiceError.missingAPIKey)
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertNil(sut.attribution)
+        XCTAssertEqual(sut.state, .error(.missingAPIKey))
+    }
+
+    func testResetClearsTheAttribution() async {
+        await streamer.setChunks(["Recommendation"])
+        let sut = makeSUT()
+        await sut.start()
+        XCTAssertNotNil(sut.attribution)
+
+        sut.reset()
+
+        XCTAssertNil(sut.attribution)
+    }
+
     /// A stream that dies half-way is a failure, not a short recommendation.
     func testMidStreamFailureReplacesThePartialText() async {
         await streamer.setChunks(["Your training "])
@@ -319,7 +412,7 @@ final class AnalysisViewModelTests: XCTestCase {
 
         await sut.start()
 
-        XCTAssertEqual(sut.state, .error(.serviceUnavailable))
+        XCTAssertEqual(sut.state, .error(.serviceUnavailable(.claude)))
     }
 
     func testStreamWithoutAnyTokenIsAnUnreadableResponse() async {
@@ -328,7 +421,7 @@ final class AnalysisViewModelTests: XCTestCase {
 
         await sut.start()
 
-        XCTAssertEqual(sut.state, .error(.unreadableResponse))
+        XCTAssertEqual(sut.state, .error(.unreadableResponse(.claude)))
     }
 
     /// No path may leave the button disabled forever (#31 AC1).

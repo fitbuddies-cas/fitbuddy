@@ -12,7 +12,10 @@ struct AnalysisIntroView: View {
         VStack(alignment: .leading, spacing: 16) {
             FBCard(padding: 18) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("AI · Claude".uppercased())
+                    // No provider name here: which one answers is only
+                    // decided once the run starts and the chain resolves, so
+                    // naming one now could turn out to be wrong (#79).
+                    Text("AI".uppercased())
                         .font(.fbLabel)
                         .tracking(0.6)
                         .foregroundStyle(Color.fbMuted)
@@ -20,9 +23,9 @@ struct AnalysisIntroView: View {
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(Color.fbInk)
                     Text("""
-                    Claude reads the last 4 weeks of your cached training data and \
-                    compares them with the 4 weeks before, then names one concrete \
-                    next step.
+                    Your AI provider reads the last 4 weeks of your cached training \
+                    data and compares them with the 4 weeks before, then names one \
+                    concrete next step.
                     """)
                     .font(.subheadline)
                     .foregroundStyle(Color.fbInkSecondary)

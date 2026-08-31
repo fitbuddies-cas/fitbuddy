@@ -2,16 +2,17 @@ import Foundation
 import XCTest
 @testable import FitBuddy
 
-/// Test double for the Claude stream, so `AnalysisViewModel` can be driven
-/// through every path — a slow first token, a mid-stream failure, a
-/// cancellation — without a `URLProtocol` stub or a Keychain entry.
+/// Test double for the analysis stream, so `AnalysisViewModel` can be driven
+/// through every path — a slow first token, a mid-stream failure, a provider
+/// fallback, a cancellation — without a `URLProtocol` stub or a Keychain
+/// entry.
 ///
 /// An `actor`, mirroring `InferenceService`: `AnalysisStreaming` is a
 /// nonisolated `async` requirement, so its body runs off the main actor while
 /// the tests read `callCount` from it.
 actor StubAnalysisStreamer: AnalysisStreaming {
-    /// Chunks yielded by a successful stream, in order.
-    private var chunks: [String] = []
+    /// Events yielded by a successful stream, in order.
+    private var events: [AnalysisEvent] = []
     /// When set, `streamAnalysis` throws instead of returning a stream.
     private var startError: InferenceServiceError?
     /// When set, the stream yields `chunks` and then fails.
@@ -29,8 +30,14 @@ actor StubAnalysisStreamer: AnalysisStreaming {
     private var arrival: CheckedContinuation<Void, Never>?
     private var callArrived = false
 
-    func setChunks(_ chunks: [String]) {
-        self.chunks = chunks
+    /// Convenience for the common case: one provider that answers.
+    func setChunks(_ chunks: [String], from provider: LLMProvider = .claude) {
+        events = [.attempting(provider)] + chunks.map(AnalysisEvent.text)
+    }
+
+    /// The exact event sequence, for tests about fallback ordering.
+    func setEvents(_ events: [AnalysisEvent]) {
+        self.events = events
     }
 
     func setStartError(_ error: InferenceServiceError?) {
@@ -47,7 +54,7 @@ actor StubAnalysisStreamer: AnalysisStreaming {
         gated = true
     }
 
-    func streamAnalysis(systemPrompt: String, userPrompt: String) async throws -> AsyncThrowingStream<String, Error> {
+    func streamAnalysis(systemPrompt: String, userPrompt: String) async throws -> AsyncThrowingStream<AnalysisEvent, Error> {
         callCount += 1
         self.systemPrompt = systemPrompt
         self.userPrompt = userPrompt
@@ -61,10 +68,10 @@ actor StubAnalysisStreamer: AnalysisStreaming {
 
         if let startError { throw startError }
 
-        let chunks = chunks
+        let events = events
         let streamError = streamError
         return AsyncThrowingStream { continuation in
-            for chunk in chunks { continuation.yield(chunk) }
+            for event in events { continuation.yield(event) }
             continuation.finish(throwing: streamError)
         }
     }
