@@ -188,7 +188,7 @@ final class SettingsViewModel: ObservableObject {
 
     /// Maps validator errors to editor failures. Exhaustive on purpose: a new
     /// validator error case must make a conscious copy decision here.
-    private static func failure(for error: HevyKeyValidationError) -> HevyKeyEntryState.Failure {
+    private static func failure(for error: HevyKeyValidationError) -> APIKeyEntryFailure {
         switch error {
         case .invalidKey: return .invalidKey
         case .transport: return .network

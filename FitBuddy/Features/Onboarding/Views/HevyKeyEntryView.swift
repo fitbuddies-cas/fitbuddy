@@ -10,7 +10,7 @@ struct HevyKeyEntryView: View {
 
     private var isValidating: Bool { viewModel.state == .validating }
 
-    private var failure: HevyKeyEntryState.Failure? {
+    private var failure: APIKeyEntryFailure? {
         if case .failed(let failure) = viewModel.state { return failure }
         return nil
     }
@@ -92,7 +92,7 @@ struct HevyKeyEntryView: View {
     private var keyInput: some View {
         FBKeyField(
             label: "HEVY API KEY",
-            placeholder: HevyKeyEntryViewModel.keyPlaceholder,
+            placeholder: HevyAPIKey.keyPlaceholder,
             text: $viewModel.apiKey,
             isBusy: isValidating,
             hasError: failure == .invalidKey,
@@ -111,9 +111,8 @@ struct HevyKeyEntryView: View {
 
     /// Failure banner (AC3): explains what went wrong and, for a rejected key,
     /// links straight to Hevy's API-key page. The copy lives on
-    /// `HevyKeyEntryState.Failure` so the settings key editor (#83) says the
-    /// same thing.
-    private func errorBanner(for failure: HevyKeyEntryState.Failure) -> some View {
+    /// `APIKeyEntryFailure` so the settings key editor (#83) says the same thing.
+    private func errorBanner(for failure: APIKeyEntryFailure) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(failure.title(for: "Hevy"))
                 .font(.subheadline.weight(.semibold))
