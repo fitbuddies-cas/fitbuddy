@@ -202,6 +202,72 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertTrue(prompt.user.contains("No workouts are recorded in this window"))
     }
 
+    // MARK: - Widened window (#87)
+
+    /// Every header names the window that was actually analysed. A prompt
+    /// saying "last 4 weeks" over eight weeks of data would have Claude read
+    /// half the sessions as missing.
+    func testWidenedWindowNamesItsOwnLengthInEveryHeader() {
+        let prompt = make(
+            [
+                workout(daysAgo: 40, volume: 5_000, loads: [
+                    MuscleLoad(group: .back, volumeKg: 5_000, setCount: 12),
+                ]),
+                workout(daysAgo: 50, volume: 4_000, id: "b"),
+            ],
+            window: AnalysisWindow(weeks: 8)
+        )
+
+        XCTAssertTrue(prompt.user.contains("## Last 8 weeks ("))
+        XCTAssertTrue(prompt.user.contains("## Previous 8 weeks ("))
+        XCTAssertTrue(prompt.user.contains("## Muscle groups (last 8 weeks)"))
+        // The only "4 weeks" left is the intro naming the break itself.
+        XCTAssertFalse(prompt.user.contains("## Last 4 weeks"))
+        XCTAssertFalse(prompt.user.contains("## Previous 4 weeks"))
+    }
+
+    /// The break is stated, not left to be inferred from dates: unstated, the
+    /// model reads the window as a normal one and recommends progression
+    /// across a pause it never noticed.
+    func testWidenedWindowTellsClaudeAboutTheTrainingBreak() {
+        let prompt = make([workout(daysAgo: 40, volume: 5_000)], window: AnalysisWindow(weeks: 8))
+
+        XCTAssertTrue(prompt.user.contains("I have not trained in the last 4 weeks"))
+        XCTAssertTrue(prompt.user.contains("covers the last 8 weeks instead"))
+    }
+
+    func testDefaultWindowDoesNotClaimATrainingBreak() {
+        let prompt = make([workout(daysAgo: 2, volume: 5_000)])
+
+        XCTAssertFalse(prompt.user.contains("I have not trained"))
+    }
+
+    /// The frequency average divides by the window's own weeks — with the
+    /// default's 4 in the denominator, 13 weeks of training would read as more
+    /// than three times the training that actually happened.
+    func testFrequencyAveragesOverTheWindowsOwnWeeks() {
+        let prompt = make(
+            [
+                workout(daysAgo: 40, volume: 1_000),
+                workout(daysAgo: 50, volume: 1_000, id: "b"),
+                workout(daysAgo: 60, volume: 1_000, id: "c"),
+                workout(daysAgo: 70, volume: 1_000, id: "d"),
+            ],
+            window: AnalysisWindow(weeks: 13)
+        )
+
+        XCTAssertTrue(prompt.user.contains("Training days: 4 (0.3 days per week)"))
+    }
+
+    /// One row per week of the resolved window, so the weekly section tiles it
+    /// completely rather than stopping after the default's four.
+    func testWeeklySectionHasOneRowPerWeekOfTheWindow() {
+        let prompt = make([workout(daysAgo: 40, volume: 5_000)], window: AnalysisWindow(weeks: 8))
+        let rows = prompt.user.split(separator: "\n").filter { $0.hasPrefix("- Week starting ") }
+
+        XCTAssertEqual(rows.count, 8)
+    }
+
     // MARK: - Determinism
 
     /// The prompt is data, not display text: a Swiss device must not send
@@ -233,8 +299,16 @@ final class AnalysisPromptBuilderTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func make(_ summaries: [WorkoutSummary]) -> AnalysisPrompt {
-        AnalysisPromptBuilder.make(summaries: summaries, now: reference, calendar: calendar)
+    private func make(
+        _ summaries: [WorkoutSummary],
+        window: AnalysisWindow = .default
+    ) -> AnalysisPrompt {
+        AnalysisPromptBuilder.make(
+            summaries: summaries,
+            window: window,
+            now: reference,
+            calendar: calendar
+        )
     }
 
     private func workout(

@@ -17,10 +17,18 @@ struct AnalysisView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                content
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-                    .padding(.bottom, 24)
+                VStack(alignment: .leading, spacing: 12) {
+                    // Above the answer rather than under it: the period the
+                    // recommendation rests on has to be known while reading it,
+                    // not after (#87).
+                    if viewModel.state.text != nil {
+                        AnalysisWindowNote(window: viewModel.window)
+                    }
+                    content
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
             }
             .background(Color.fbBackground)
             .navigationTitle("AI analysis")

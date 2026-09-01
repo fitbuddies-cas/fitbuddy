@@ -17,6 +17,12 @@ enum WorkoutListState: Equatable {
 
     /// Whether the window holds training data to work with — what the analysis
     /// entry point needs before it is worth offering (#32).
+    ///
+    /// This is exactly the analysis guard's own condition (#87): the widest
+    /// rung of `AnalysisWindow.ladder` spans `TrainingWindow.spanDays`, so a
+    /// dashboard holding any workout at all is a dashboard whose analysis can
+    /// run. The button therefore never leads into a dead end — a gap in the
+    /// last four weeks widens the window instead of failing the run.
     var hasWorkouts: Bool {
         switch self {
         case .loaded(let workouts, _):

@@ -57,6 +57,8 @@ struct DashboardView: View {
                     // Only with data behind it: an analysis of an empty or
                     // unreadable cache has nothing to say, and the failure it
                     // would produce is one the dashboard already explains.
+                    // Anything else the cache holds is analysable — the window
+                    // widens to reach it (#87).
                     if viewModel.state.hasWorkouts {
                         AnalysisCTACard { showsAnalysis = true }
                     }

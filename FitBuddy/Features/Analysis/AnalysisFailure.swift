@@ -26,7 +26,8 @@ enum AnalysisFailure: Equatable {
     /// The 6h cooldown was still running when the call went out. Carries the
     /// instant it ends, so the message can name it.
     case cooldownActive(availableAt: Date)
-    /// The cached window holds no workouts — there is nothing to analyse, and
+    /// The cached window holds no workouts at all — not even in the widest
+    /// rung of the fallback ladder (#87). There is nothing to analyse, and
     /// sending an empty prompt would spend the user's tokens on it.
     case noTrainingData
     /// The local cache could not be read.
@@ -122,7 +123,7 @@ enum AnalysisFailure: Equatable {
             return "You have already run an analysis in the last 6 hours. "
                 + "The next one is available at \(Self.clockTime(availableAt))."
         case .noTrainingData:
-            return "There are no workouts in the last 4 weeks to analyse. Sync your training data first."
+            return "There are no workouts in your cached training data to analyse. Sync it first."
         case .cacheUnavailable:
             return "Your cached training data could not be read. Try again after a sync."
         case .unreadableResponse:
