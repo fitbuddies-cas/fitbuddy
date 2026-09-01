@@ -2,10 +2,10 @@ import Foundation
 
 /// Reasons an API-key entry attempt can fail, each with its own banner copy.
 ///
-/// Shared by every screen that runs the "enter an API key" interaction:
-/// onboarding step 2 (`HevyKeyEntryState`) and the settings key editor
-/// (`KeyEditorState`, #83). The copy is parameterized on the provider name so
-/// both can show it for Hevy as well as for an LLM provider.
+/// Shared by onboarding step 2 (`HevyKeyEntryState`) and the settings key
+/// editor (`KeyEditorState`, #83). The copy is parameterized on the provider
+/// name so both can show it for Hevy as well as for an LLM provider.
+/// Note: onboarding step 3 (`LLMKeysState`) still carries its own copy.
 enum APIKeyEntryFailure: Equatable {
     /// The provider rejected the key (HTTP 401).
     case invalidKey
