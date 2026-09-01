@@ -90,7 +90,15 @@ struct DashboardView: View {
         // `.task(id:)` rather than a plain `.task`: the first run is the
         // dashboard appearing, every later one is a cache another screen
         // invalidated while this view stayed alive (#91).
-        .task(id: reloadToken) { await viewModel.refresh() }
+        .task(id: reloadToken) { await viewModel.reload() }
+        // The recommendation on the analysis sheet was built from the cache
+        // that was just discarded, and that view model outlives the sheet —
+        // without this it would keep showing the previous account's analysis,
+        // and the shared cooldown could block a new one for hours.
+        .onChange(of: reloadToken) { _, _ in
+            analysisViewModel.cancel()
+            analysisViewModel.reset()
+        }
         .sheet(isPresented: $showsAnalysis) {
             AnalysisView(viewModel: analysisViewModel)
         }

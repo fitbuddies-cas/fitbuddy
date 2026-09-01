@@ -280,7 +280,7 @@ final class SettingsViewModelTests: XCTestCase {
         try await keychain.save("hv_live_oldkey12345", for: .hevyAPIKey)
         await sut.load()
         var reloads = 0
-        sut.onHevyKeyReplaced = { reloads += 1 }
+        sut.onHevyKeyStored = { reloads += 1 }
         sut.beginEditing(.hevy)
         sut.editorKey = "hv_live_newkey12345"
 
@@ -311,7 +311,7 @@ final class SettingsViewModelTests: XCTestCase {
         await sut.load()
         await validator.setResult(.failure(HevyKeyValidationError.invalidKey))
         var reloads = 0
-        sut.onHevyKeyReplaced = { reloads += 1 }
+        sut.onHevyKeyStored = { reloads += 1 }
         sut.beginEditing(.hevy)
         sut.editorKey = "hv_live_rejected1234"
 

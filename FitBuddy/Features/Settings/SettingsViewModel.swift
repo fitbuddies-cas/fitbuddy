@@ -43,10 +43,11 @@ final class SettingsViewModel: ObservableObject {
     var onHevyKeyDeleted: (() async -> Void)?
     /// Invoked after all local data was deleted: the app returns to step 1.
     var onDataDeleted: (() -> Void)?
-    /// Invoked after the Hevy key was replaced. The cache of the previous key
-    /// is gone by then, so the dashboard behind this sheet has to sync again —
-    /// its own `.task` does not fire when the sheet is dismissed (#91).
-    var onHevyKeyReplaced: (() -> Void)?
+    /// Invoked after a Hevy key was stored — a replacement as well as a first
+    /// one. Any cache of a previous key is gone by then, so the dashboard
+    /// behind this sheet has to sync again: its own `.task` does not fire when
+    /// the sheet is dismissed (#91).
+    var onHevyKeyStored: (() -> Void)?
 
     private let keychain: any KeychainStoring
     private let validator: any HevyKeyValidating
@@ -198,7 +199,7 @@ final class SettingsViewModel: ObservableObject {
             // compare it, which this screen deliberately never does. The cost
             // of the safe choice is one re-sync.
             await sessionReset.discardCachedWorkouts()
-            onHevyKeyReplaced?()
+            onHevyKeyStored?()
         case .llm(let provider):
             if !isReplacing(target) {
                 await priorityStore.save(llmKeys.map(\.provider) + [provider])

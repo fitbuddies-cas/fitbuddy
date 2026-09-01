@@ -110,9 +110,9 @@ struct RootView: View {
         viewModel.onDataDeleted = { [weak coordinator] in
             coordinator?.handleDataReset()
         }
-        // The key changed but the session did not end, so onboarding stays out
-        // of it: the dashboard simply has to refill the cache it just lost.
-        viewModel.onHevyKeyReplaced = { dashboardReloadToken += 1 }
+        // A key was stored but the session did not end, so onboarding stays
+        // out of it: the dashboard simply has to refill the cache it lost.
+        viewModel.onHevyKeyStored = { dashboardReloadToken += 1 }
         return viewModel
     }
 
