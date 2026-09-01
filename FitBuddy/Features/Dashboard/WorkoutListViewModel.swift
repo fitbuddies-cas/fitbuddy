@@ -62,8 +62,25 @@ final class WorkoutListViewModel: ObservableObject {
     /// full dashboard on screen before the request has even timed out, and the
     /// failed sync only adds the banner on top (#28 AC1).
     func refresh() async {
-        await load()
+        // An empty cache while the sync behind it is still running is not an
+        // answer about the user's training yet: the window may simply have
+        // been discarded (#91) or never filled. The spinner stays up and the
+        // read after the sync publishes the real answer — only from a resting
+        // `.loading`, so pull-to-refresh keeps its content on screen.
+        let holdsSpinner = syncer != nil && state == .loading
+        await load(keepingSpinnerWhenEmpty: holdsSpinner)
         await sync()
+    }
+
+    /// The dashboard's own load: its first appearance, and every time another
+    /// screen invalidated the cache while it stayed alive (#91).
+    ///
+    /// Unlike pull-to-refresh it starts from the spinner — the read underneath
+    /// a discarded cache returns nothing, and "No training data" would be a
+    /// statement about an account this device no longer holds.
+    func reload() async {
+        state = .loading
+        await refresh()
     }
 
     /// Loads the window from the cache and recomputes the metrics.
@@ -74,14 +91,18 @@ final class WorkoutListViewModel: ObservableObject {
     /// Overlapping calls — pull-to-refresh landing on top of the initial
     /// `.task` (#27) — cancel the older read, so a slow first result cannot
     /// overwrite a fresher one that already returned.
-    func load() async {
+    ///
+    /// - Parameter keepingSpinnerWhenEmpty: Leaves `.loading` up instead of
+    ///   publishing `.empty` — for the read that runs before a sync, see
+    ///   `refresh()`.
+    func load(keepingSpinnerWhenEmpty: Bool = false) async {
         loadTask?.cancel()
-        let task = Task { await performLoad() }
+        let task = Task { await performLoad(keepingSpinnerWhenEmpty: keepingSpinnerWhenEmpty) }
         loadTask = task
         await task.awaitingCancellation()
     }
 
-    private func performLoad() async {
+    private func performLoad(keepingSpinnerWhenEmpty: Bool) async {
         let syncedAt = await timestamps.lastSync()
 
         let windowStart = TrainingWindow.start(endingAt: now(), calendar: calendar)
@@ -89,7 +110,7 @@ final class WorkoutListViewModel: ObservableObject {
         do {
             let summaries = try await cache.workoutSummaries(since: windowStart)
             newState = summaries.isEmpty
-                ? .empty
+                ? (keepingSpinnerWhenEmpty ? .loading : .empty)
                 : .loaded(
                     workouts: summaries,
                     metrics: DashboardMetrics(summaries: summaries, calendar: calendar)
@@ -142,6 +163,7 @@ final class WorkoutListViewModel: ObservableObject {
             // claim a sync is running forever.
             guard !error.isCancellation else {
                 syncStatus = .idle
+                await resolveHeldSpinner()
                 return
             }
 
@@ -153,6 +175,18 @@ final class WorkoutListViewModel: ObservableObject {
                 return
             }
             syncStatus = .failed(failure)
+            await resolveHeldSpinner()
         }
+    }
+
+    /// Publishes the empty state that the pre-sync read held back when the
+    /// sync itself had no reload to do — otherwise the spinner would sit on
+    /// screen forever over an empty cache (#28 AC1, #91).
+    ///
+    /// Only reached after the caller has ruled out being superseded, so this
+    /// never cancels a newer read.
+    private func resolveHeldSpinner() async {
+        guard case .loading = state else { return }
+        await load()
     }
 }

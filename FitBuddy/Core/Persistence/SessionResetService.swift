@@ -1,13 +1,15 @@
 import Foundation
 import OSLog
 
-/// Performs the hard logout required when Hevy rejects the stored key
-/// (US-1 AC3): the key is deleted, the cached workouts are dropped, and the
-/// sync timestamp is cleared.
+/// Ends a Hevy session: the hard logout required when Hevy rejects the stored
+/// key (US-1 AC3), and the cache teardown on its own for the case where the
+/// key is replaced rather than lost (#91).
 ///
 /// Dropping the cache is the point of "hard": ARCHITECTURE.md rules out
 /// silently continuing on data the user would read as current — stale training
-/// data would otherwise feed a wrong AI recommendation (US-3).
+/// data would otherwise feed a wrong AI recommendation (US-3). That reasoning
+/// does not depend on *why* the old key is gone, which is why the teardown is
+/// its own entry point rather than something the settings screen rebuilds.
 ///
 /// The Claude key is deliberately kept. It is a separate credential that Hevy
 /// did not reject, and re-entering it is a needless detour through onboarding
@@ -39,10 +41,21 @@ actor SessionResetService {
         } catch {
             logger.error("Hevy key not deleted on logout: \(error, privacy: .public)")
         }
+        await discardCachedWorkouts()
+    }
+
+    /// Drops the cached workouts and the sync timestamp, keeping the stored
+    /// key — what replacing the Hevy key in Settings needs (#91).
+    ///
+    /// The timestamp goes with the cache, always: a "last synced 5 min ago"
+    /// line over an empty dashboard describes a sync of somebody else's
+    /// account, and leaving it behind would also let a delta sync believe it
+    /// only has to fetch what changed since then.
+    func discardCachedWorkouts() async {
         do {
             try await workouts.deleteAll()
         } catch {
-            logger.error("Workout cache not cleared on logout: \(error, privacy: .public)")
+            logger.error("Workout cache not cleared: \(error, privacy: .public)")
         }
         await timestamps.clear()
     }

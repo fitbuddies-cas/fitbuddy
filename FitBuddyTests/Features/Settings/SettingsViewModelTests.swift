@@ -251,6 +251,89 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(stored, "mistral-replacement12")
     }
 
+    // MARK: - Replacing the Hevy key (#91)
+
+    /// The cached workouts belong to the previous key. Keeping them would show
+    /// one Hevy account's training under another's key — and feed it to the AI
+    /// analysis (US-3).
+    func testReplacingTheHevyKeyDiscardsTheWorkoutCache() async throws {
+        try await keychain.save("hv_live_oldkey12345", for: .hevyAPIKey)
+        await sut.load()
+        sut.beginEditing(.hevy)
+        sut.editorKey = "hv_live_newkey12345"
+
+        await sut.submitEditor()
+
+        let discards = await sessionReset.discardCount
+        let logouts = await sessionReset.hardLogoutCount
+        XCTAssertEqual(discards, 1)
+        // Replacing is not a logout: the new key stays stored and onboarding
+        // is not involved.
+        XCTAssertEqual(logouts, 0)
+        let stored = try await keychain.read(.hevyAPIKey)
+        XCTAssertEqual(stored, "hv_live_newkey12345")
+    }
+
+    /// The dashboard sits behind the sheet and its own `.task` does not fire
+    /// again on dismiss, so it has to be told the cache is gone.
+    func testReplacingTheHevyKeyAsksTheDashboardToReload() async throws {
+        try await keychain.save("hv_live_oldkey12345", for: .hevyAPIKey)
+        await sut.load()
+        var reloads = 0
+        sut.onHevyKeyStored = { reloads += 1 }
+        sut.beginEditing(.hevy)
+        sut.editorKey = "hv_live_newkey12345"
+
+        await sut.submitEditor()
+
+        XCTAssertEqual(reloads, 1)
+    }
+
+    /// Same key entered again: told apart from a real change would mean reading
+    /// the stored key back in plaintext, which this screen never does — so the
+    /// cache goes, deliberately.
+    func testReplacingTheHevyKeyWithTheSameKeyStillDiscardsTheCache() async throws {
+        try await keychain.save("hv_live_samekey1234", for: .hevyAPIKey)
+        await sut.load()
+        sut.beginEditing(.hevy)
+        sut.editorKey = "hv_live_samekey1234"
+
+        await sut.submitEditor()
+
+        let discards = await sessionReset.discardCount
+        XCTAssertEqual(discards, 1)
+    }
+
+    /// Nothing was stored, so nothing may be thrown away — the user still has
+    /// the training data of the key that is still in place.
+    func testARejectedHevyKeyKeepsTheWorkoutCache() async throws {
+        try await keychain.save("hv_live_oldkey12345", for: .hevyAPIKey)
+        await sut.load()
+        await validator.setResult(.failure(HevyKeyValidationError.invalidKey))
+        var reloads = 0
+        sut.onHevyKeyStored = { reloads += 1 }
+        sut.beginEditing(.hevy)
+        sut.editorKey = "hv_live_rejected1234"
+
+        await sut.submitEditor()
+
+        let discards = await sessionReset.discardCount
+        XCTAssertEqual(discards, 0)
+        XCTAssertEqual(reloads, 0)
+    }
+
+    /// LLM keys have no cache behind them (#91).
+    func testStoringAnLLMKeyKeepsTheWorkoutCache() async {
+        await sut.load()
+        sut.beginEditing(.llm(.gemini))
+        sut.editorKey = "AIzaabcdefghijkl"
+
+        await sut.submitEditor()
+
+        let discards = await sessionReset.discardCount
+        XCTAssertEqual(discards, 0)
+    }
+
     func testCancelEditingDiscardsTheInput() async {
         await sut.load()
         sut.beginEditing(.llm(.gemini))
@@ -376,9 +459,14 @@ final class SettingsViewModelTests: XCTestCase {
 /// Records how often the hard logout ran.
 private actor SessionResetSpy: SessionResetting {
     private(set) var hardLogoutCount = 0
+    private(set) var discardCount = 0
 
     func hardLogout() async {
         hardLogoutCount += 1
+    }
+
+    func discardCachedWorkouts() async {
+        discardCount += 1
     }
 }
 

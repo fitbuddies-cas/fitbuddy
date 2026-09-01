@@ -284,6 +284,52 @@ final class WorkoutListViewModelTests: XCTestCase {
         XCTAssertEqual(sut.syncStatus, .idle)
     }
 
+    // MARK: - Reload after a discarded cache (#91)
+
+    /// The window belongs to a Hevy key that was just replaced. Neither the
+    /// previous account's workouts nor "No training data" is true while the
+    /// re-sync runs, so the spinner stays up until the sync answered.
+    func testReloadShowsNeitherTheStaleWindowNorTheEmptyStateWhileSyncing() async {
+        cache.results = [[summary(id: "old-account", daysAgo: 2, volume: 500)], []]
+        await syncer.gateFirstCall()
+        let sut = makeSUT(withSyncer: true)
+        await sut.load()
+        XCTAssertTrue(sut.state.hasWorkouts)
+
+        let reload = Task { await sut.reload() }
+        await syncer.waitForFirstCall()
+        XCTAssertEqual(sut.state, .loading)
+
+        await syncer.releaseFirstCall()
+        await reload.value
+
+        XCTAssertEqual(sut.state, .empty)
+    }
+
+    /// A sync that fails has no reload of its own — the held-back empty state
+    /// must still reach the screen instead of leaving the spinner up forever.
+    func testFailedSyncResolvesTheHeldSpinnerToTheEmptyState() async {
+        await syncer.setError(HevyServiceError.networkUnavailable)
+        let sut = makeSUT(withSyncer: true)
+
+        await sut.reload()
+
+        XCTAssertEqual(sut.state, .empty)
+        XCTAssertEqual(sut.syncStatus, .failed(.offline))
+    }
+
+    /// Pull-to-refresh keeps its content: only a resting `.loading` holds the
+    /// spinner back, a loaded dashboard reads through to the real answer.
+    func testRefreshOnALoadedDashboardStillPublishesAnEmptyCache() async {
+        cache.results = [[summary(id: "w-1", daysAgo: 1, volume: 900)], [], []]
+        let sut = makeSUT(withSyncer: true)
+        await sut.load()
+
+        await sut.refresh()
+
+        XCTAssertEqual(sut.state, .empty)
+    }
+
     // MARK: - Helpers
 
     private func makeSUT(withSyncer: Bool = false) -> WorkoutListViewModel {

@@ -14,6 +14,11 @@ struct RootView: View {
     /// onboarding — a step change this view is the one to react to.
     @State private var showsSettings = false
 
+    /// Bumped when the settings screen replaces the Hevy key, which drops the
+    /// cached workouts. The dashboard's own `.task` does not re-run when the
+    /// sheet closes, so without this it would sit on an empty cache (#91).
+    @State private var dashboardReloadToken = 0
+
     var body: some View {
         Group {
             switch onboardingViewModel.step {
@@ -28,6 +33,7 @@ struct RootView: View {
                 DashboardView(
                     viewModel: makeDashboardViewModel(),
                     analysisViewModel: makeAnalysisViewModel(),
+                    reloadToken: dashboardReloadToken,
                     onOpenSettings: { showsSettings = true }
                 )
             }
@@ -104,6 +110,9 @@ struct RootView: View {
         viewModel.onDataDeleted = { [weak coordinator] in
             coordinator?.handleDataReset()
         }
+        // A key was stored but the session did not end, so onboarding stays
+        // out of it: the dashboard simply has to refill the cache it lost.
+        viewModel.onHevyKeyStored = { dashboardReloadToken += 1 }
         return viewModel
     }
 

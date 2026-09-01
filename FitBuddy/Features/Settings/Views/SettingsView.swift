@@ -134,7 +134,10 @@ struct SettingsView: View {
                 .font(.fbLabel)
                 .foregroundStyle(Color.fbMuted)
         } footer: {
-            Text("Deleting the Hevy key also clears the cached workouts and returns you to onboarding.")
+            Text("""
+            Replacing the Hevy key clears the cached workouts and syncs the new account's \
+            training data. Deleting it clears them too and returns you to onboarding.
+            """)
                 .font(.caption)
                 .foregroundStyle(Color.fbMuted)
         }
