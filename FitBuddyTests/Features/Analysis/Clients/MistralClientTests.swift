@@ -73,6 +73,21 @@ final class MistralClientTests: LLMClientTestCase {
 
     // MARK: - Rejection before acceptance
 
+    /// The same post-200 gap as Gemini's: an error frame carries no content and
+    /// would otherwise be skipped, ending the run as a silent success.
+    func testErrorFrameAfterTheStatusCodeInterruptsTheStream() async throws {
+        stub(body: MistralSSEFactory.errorBody(type: "service_tier_capacity_exceeded", message: "capacity exceeded"))
+
+        do {
+            _ = try await collect(try await stream())
+            XCTFail("expected streamInterrupted")
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .streamInterrupted(message: "capacity exceeded"))
+        }
+    }
+
+    // MARK: - Rejection before acceptance
+
     func testUnauthorizedThrowsBeforeReturningAStream() async throws {
         stub(statusCode: 401)
 

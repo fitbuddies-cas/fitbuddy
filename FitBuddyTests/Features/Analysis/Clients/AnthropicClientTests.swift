@@ -38,6 +38,10 @@ final class AnthropicClientTests: LLMClientTestCase {
         let json = try jsonBody(of: request)
         XCTAssertEqual(json["model"] as? String, AnthropicClient.model)
         XCTAssertEqual(json["max_tokens"] as? Int, AnthropicClient.maxTokens)
+        // Thinking is on by default on this model and shares `max_tokens` with
+        // the prose — the effort setting is what keeps the paragraph affordable.
+        let outputConfig = try XCTUnwrap(json["output_config"] as? [String: Any])
+        XCTAssertEqual(outputConfig["effort"] as? String, AnthropicClient.effort)
         XCTAssertEqual(json["stream"] as? Bool, true)
         XCTAssertEqual(json["system"] as? String, "You are FitBuddy.")
         let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])

@@ -22,6 +22,14 @@ enum MistralSSEFactory {
         return Data(body.utf8)
     }
 
+    /// A stream that answered HTTP 200 and then delivered an OpenAI-shaped
+    /// error frame instead of the rest of the answer.
+    static func errorBody(type: String, message: String) -> Data {
+        let json: [String: Any] = ["error": ["type": type, "message": message]]
+        let data = try! JSONSerialization.data(withJSONObject: json)
+        return Data(line(String(decoding: data, as: UTF8.self)).utf8)
+    }
+
     private static func payload(role: String?, content: String?, finishReason: String?) -> String {
         var delta: [String: Any] = [:]
         if let role { delta["role"] = role }

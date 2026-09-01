@@ -209,6 +209,35 @@ final class InferenceServiceTests: XCTestCase {
         ])
     }
 
+    /// A provider can answer 200 and then say nothing — a thinking pass that
+    /// ate the whole token budget, or an error frame its client does not
+    /// recognise. That is not an answer, so the chain must keep going instead
+    /// of ending the run with an empty result.
+    func testFallsBackWhenAProviderAcceptsButProducesNoText() async throws {
+        try await keychain.save("AIza", for: .geminiAPIKey)
+        claude.chunks = []
+        sut = makeService(priority: [.claude, .gemini])
+
+        let events = try await run()
+
+        XCTAssertEqual(attempted(in: events), [.claude, .gemini])
+        XCTAssertEqual(text(of: events), "Gemini answer")
+    }
+
+    func testRaisesInvalidResponseWhenEveryProviderAnswersWithoutText() async throws {
+        try await keychain.save("AIza", for: .geminiAPIKey)
+        claude.chunks = []
+        gemini.chunks = []
+        sut = makeService(priority: [.claude, .gemini])
+
+        do {
+            _ = try await run()
+            XCTFail("expected invalidResponse")
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .invalidResponse)
+        }
+    }
+
     func testRaisesTheLastProvidersErrorWhenAllOfThemFail() async throws {
         try await keychain.save("AIza", for: .geminiAPIKey)
         claude.startError = InferenceServiceError.unauthorized

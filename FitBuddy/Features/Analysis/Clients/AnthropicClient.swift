@@ -14,7 +14,18 @@ struct AnthropicClient: LLMProviderClient {
     /// code-generation-scale response — capped well below the model's ceiling
     /// so a malformed prompt cannot run up an unbounded bill on the user's
     /// own key.
-    static let maxTokens = 4096
+    ///
+    /// Not the prose budget alone: thinking is on by default on this model and
+    /// its tokens count against `max_tokens` too, so a cap sized for the
+    /// paragraph only could be spent entirely on reasoning — the response would
+    /// end at `max_tokens` having sent nothing but `thinking_delta`s, which the
+    /// parser below correctly ignores, and the run would produce no text at all.
+    static let maxTokens = 8192
+    /// Thinking effort. Low, because the model is being asked for a short
+    /// recommendation from a handful of workout summaries, not for a hard
+    /// reasoning problem — and because every thinking token is billed to the
+    /// user's own key and shares the budget above.
+    static let effort = "low"
 
     private static let endpoint = URL(staticString: "https://api.anthropic.com/v1/messages")
     private static let anthropicVersion = "2023-06-01"
@@ -83,7 +94,8 @@ struct AnthropicClient: LLMProviderClient {
                 maxTokens: Self.maxTokens,
                 system: systemPrompt,
                 stream: true,
-                messages: [ClaudeMessageRequest.Message(role: "user", content: userPrompt)]
+                messages: [ClaudeMessageRequest.Message(role: "user", content: userPrompt)],
+                outputConfig: ClaudeMessageRequest.OutputConfig(effort: Self.effort)
             )
         )
         return request

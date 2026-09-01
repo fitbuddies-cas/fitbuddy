@@ -393,6 +393,24 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(sut.state, .error(.missingAPIKey))
     }
 
+    /// A blocked run has no providers of its own; showing the previous run's
+    /// under a cooldown message would read as "we tried Claude, then Gemini,
+    /// and the answer is: come back in five hours".
+    func testACooldownErrorDoesNotInheritThePreviousRunsAttribution() async {
+        await streamer.setEvents([.attempting(.claude), .attempting(.gemini), .text("Recommendation")])
+        let sut = makeSUT()
+        await sut.start()
+        XCTAssertEqual(sut.attribution?.attempted, [.claude, .gemini])
+
+        await cooldown.recordCall(at: Self.reference)
+        await sut.start()
+
+        XCTAssertNil(sut.attribution)
+        guard case .error(.cooldownActive) = sut.state else {
+            return XCTFail("expected a cooldown error, got \(sut.state)")
+        }
+    }
+
     func testResetClearsTheAttribution() async {
         await streamer.setChunks(["Recommendation"])
         let sut = makeSUT()
@@ -505,6 +523,27 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.release()
         await run.value
         XCTAssertFalse(sut.isTakingLong)
+    }
+
+    /// The first token of the provider that later gave way stops the timer. If
+    /// the handover does not restart it, a second provider that hangs shows a
+    /// bare spinner with no way to cancel it — the affordance US-3 AC1 exists
+    /// for.
+    func testTheSlowHintComesBackWhenAnotherProviderTakesOver() async {
+        await streamer.setEvents([
+            .attempting(.claude),
+            .text("Half a Claude answ"),
+            .attempting(.gemini),
+        ])
+        await streamer.holdOpenAfterEvents()
+        let sut = makeSUT(slowThreshold: 0.05)
+
+        let run = Task { await sut.start() }
+        await waitUntil("the slow hint returns for the provider that took over") { sut.isTakingLong }
+
+        XCTAssertEqual(sut.state, .loading)
+        sut.cancel()
+        await run.value
     }
 
     func testFastRunNeverAnnouncesItselfAsSlow() async {

@@ -40,6 +40,14 @@ struct GeminiClient: LLMProviderClient {
                     for try await payload in payloads {
                         guard let data = payload.data(using: .utf8),
                               let chunk = try? decoder.decode(GeminiStreamChunk.self, from: data) else { continue }
+                        if let interruption = chunk.interruption {
+                            // Gemini can abort after already answering 200 — a
+                            // blocked prompt, a safety stop, an error frame.
+                            // None of those carry text, so without this the
+                            // loop just reaches the end of input and the call
+                            // looks like a normal, if empty, success.
+                            throw InferenceServiceError.streamInterrupted(message: interruption)
+                        }
                         let text = chunk.text
                         if !text.isEmpty { continuation.yield(text) }
                     }

@@ -19,6 +19,10 @@ actor StubAnalysisStreamer: AnalysisStreaming {
     private var streamError: InferenceServiceError?
     /// Holds the call before it returns a stream, until `release()`.
     private var gated = false
+    /// Keeps the stream open after its events instead of finishing it, so a
+    /// test can observe the screen mid-run rather than only its outcome. The
+    /// consumer's cancellation is what ends it.
+    private var holdsOpen = false
 
     private(set) var callCount = 0
     private(set) var systemPrompt: String?
@@ -54,6 +58,12 @@ actor StubAnalysisStreamer: AnalysisStreaming {
         gated = true
     }
 
+    /// Leaves the stream open once `events` have been yielded, so the run stays
+    /// in whatever state its last event put it in until the test cancels.
+    func holdOpenAfterEvents() {
+        holdsOpen = true
+    }
+
     func streamAnalysis(systemPrompt: String, userPrompt: String) async throws -> AsyncThrowingStream<AnalysisEvent, Error> {
         callCount += 1
         self.systemPrompt = systemPrompt
@@ -70,8 +80,10 @@ actor StubAnalysisStreamer: AnalysisStreaming {
 
         let events = events
         let streamError = streamError
+        let holdsOpen = holdsOpen
         return AsyncThrowingStream { continuation in
             for event in events { continuation.yield(event) }
+            guard !holdsOpen else { return }
             continuation.finish(throwing: streamError)
         }
     }

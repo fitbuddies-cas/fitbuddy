@@ -43,6 +43,12 @@ struct MistralClient: LLMProviderClient {
                         guard payload != Self.doneSentinel else { break }
                         guard let data = payload.data(using: .utf8),
                               let chunk = try? decoder.decode(MistralStreamChunk.self, from: data) else { continue }
+                        if let interruption = chunk.interruption {
+                            // Same post-200 abort as Claude's `error` event and
+                            // Gemini's blocked prompt: reported inside the
+                            // stream, invisible to the status-code check.
+                            throw InferenceServiceError.streamInterrupted(message: interruption)
+                        }
                         let text = chunk.text
                         if !text.isEmpty { continuation.yield(text) }
                     }

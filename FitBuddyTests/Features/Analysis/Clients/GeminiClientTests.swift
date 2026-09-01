@@ -95,6 +95,54 @@ final class GeminiClientTests: LLMClientTestCase {
         XCTAssertEqual(chunks, [])
     }
 
+    // MARK: - Failure after acceptance
+
+    /// Gemini reports a post-200 failure as an ordinary `data:` frame. Without
+    /// recognising it, the frame carries no text, gets skipped like metadata,
+    /// and the run ends as a silent success — no fallback, cooldown spent.
+    func testErrorFrameAfterTheStatusCodeInterruptsTheStream() async throws {
+        stub(body: GeminiSSEFactory.errorBody(status: "RESOURCE_EXHAUSTED", message: "quota exceeded"))
+
+        do {
+            _ = try await collect(try await stream())
+            XCTFail("expected streamInterrupted")
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .streamInterrupted(message: "quota exceeded"))
+        }
+    }
+
+    func testBlockedPromptInterruptsTheStream() async throws {
+        stub(body: GeminiSSEFactory.blockedPromptBody(reason: "SAFETY"))
+
+        do {
+            _ = try await collect(try await stream())
+            XCTFail("expected streamInterrupted")
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .streamInterrupted(message: "blocked: SAFETY"))
+        }
+    }
+
+    func testAFinishReasonWithNoAnswerBehindItInterruptsTheStream() async throws {
+        stub(body: GeminiSSEFactory.body(textChunks: [], finishReason: "RECITATION"))
+
+        do {
+            _ = try await collect(try await stream())
+            XCTFail("expected streamInterrupted")
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .streamInterrupted(message: "RECITATION"))
+        }
+    }
+
+    /// A truncated answer is still an answer: `MAX_TOKENS` must not throw away
+    /// what the model already wrote and send the run to the next provider.
+    func testTruncationKeepsTheTextItAlreadyProduced() async throws {
+        stub(body: GeminiSSEFactory.body(textChunks: ["Increase squat"], finishReason: "MAX_TOKENS"))
+
+        let chunks = try await collect(try await stream())
+
+        XCTAssertEqual(chunks, ["Increase squat"])
+    }
+
     // MARK: - Rejection before acceptance
 
     /// Google answers a rejected API key with 403, not 401 — it has to land in

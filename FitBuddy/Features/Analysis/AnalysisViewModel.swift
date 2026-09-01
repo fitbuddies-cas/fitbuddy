@@ -111,6 +111,11 @@ final class AnalysisViewModel: ObservableObject {
         // actor, so two taps landing in that window would otherwise both pass
         // the guard above and start a run each.
         state = .loading
+        // Cleared before the cooldown branch below can return: that branch
+        // publishes an error which `AnalysisErrorView` renders together with
+        // the attribution, and the providers of the *previous* run have nothing
+        // to do with a blocked one.
+        attribution = nil
 
         if let availableAt = await refreshCooldown() {
             // Checked here as well as inside `InferenceService`: the button is
@@ -125,7 +130,6 @@ final class AnalysisViewModel: ObservableObject {
 
         feedback = nil
         window = .default
-        attribution = nil
         runID &+= 1
         let id = runID
         let task = Task { await performAnalysis(id) }
@@ -192,9 +196,13 @@ final class AnalysisViewModel: ObservableObject {
                     if attribution != nil {
                         attribution?.append(provider)
                         // Back to the spinner: the new provider has not sent
-                        // anything yet, and the slow hint is timed from the tap,
-                        // not from this handover.
+                        // anything yet.
                         state = .loading
+                        // And the slow hint with it: the first `.text` of the
+                        // provider that gave way already stopped the timer, so
+                        // without a restart here the cancel button of US-3 AC1
+                        // never comes back while the new provider hangs.
+                        startSlowTimer()
                     } else {
                         attribution = AnalysisAttribution(first: provider)
                     }

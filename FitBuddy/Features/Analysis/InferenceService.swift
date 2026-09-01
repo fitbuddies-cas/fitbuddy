@@ -143,11 +143,21 @@ actor InferenceService {
                     await cooldown.recordCall(at: now())
                     didRecordCooldown = true
                 }
+                var didYieldText = false
                 for try await chunk in stream {
                     try Task.checkCancellation()
+                    guard !chunk.isEmpty else { continue }
+                    didYieldText = true
                     continuation.yield(.text(chunk))
                 }
-                return
+                // A clean stream that never produced a token is not an answer:
+                // hand over to the next candidate rather than ending the run.
+                // The clients recognise the error frames they know, but a
+                // provider can also answer 200 and simply say nothing — that
+                // has to fall back too, or the chain stops at the first one
+                // whose response this version cannot read.
+                if didYieldText { return }
+                lastError = InferenceServiceError.invalidResponse
             } catch {
                 // The user cancelled: not a provider problem, and asking the
                 // next one would keep spending on a run nobody is waiting for.
