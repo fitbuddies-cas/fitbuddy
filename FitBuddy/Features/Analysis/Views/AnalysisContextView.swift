@@ -13,10 +13,11 @@ struct AnalysisContextView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Image(systemName: "text.magnifyingglass")
-                    .font(.caption2)
-                Text(basis)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Circle()
+                    .fill(Color.fbAccent)
+                    .frame(width: 6, height: 6)
+                basis
                     .font(.caption)
             }
             if !context.window.isDefault {
@@ -35,18 +36,24 @@ struct AnalysisContextView: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// `"Based on 12 Hevy sessions · last 4 weeks"`.
+    /// `"Based on 12 Hevy sessions · last 4 weeks"`, with the counted part
+    /// emphasised as in `design/fb-screens.jsx:544` — the number is what the
+    /// line exists for.
+    ///
+    /// The sources are joined by hand rather than via `Array.formatted()`:
+    /// that style follows the device locale and would drop a German "und" into
+    /// an English sentence once #33/#35 make `sources` a real list.
     ///
     /// "Sessions" rather than "workouts": Hevy calls a logged entry a workout,
     /// but the same word is what the recommendation uses for a planned one,
     /// and the two must not blur in a line whose whole job is to say what was
     /// counted.
-    private var basis: String {
+    private var basis: Text {
         let sessions = context.sessionCount == 1 ? "session" : "sessions"
-        return """
-        Based on \(context.sessionCount) \(context.sources.formatted()) \
-        \(sessions) · last \(context.window.weeks) weeks
-        """
+        let counted = "\(context.sessionCount) \(context.sources.joined(separator: ", ")) \(sessions)"
+        return Text("Based on ")
+            + Text(counted).foregroundColor(.fbInk).fontWeight(.semibold)
+            + Text(" · last \(context.window.weeks) weeks")
     }
 
     /// Why the period is not the usual four weeks. Carried over from
@@ -62,7 +69,9 @@ struct AnalysisContextView: View {
 
     /// US-6 AC2. Deliberately blunt: a recommendation drawn from three
     /// sessions reads exactly as confident as one drawn from twenty, and this
-    /// line is the only thing that tells the two apart.
+    /// line is the only thing that tells the two apart. `fbWarn` is the token
+    /// the rest of the app warns in (`SyncStatusView`, `LLMKeysView`), so an
+    /// explicit warning reads as one here too.
     private var thinDataWarning: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: "exclamationmark.triangle")
@@ -73,7 +82,7 @@ struct AnalysisContextView: View {
             """)
             .font(.caption)
         }
-        .foregroundStyle(Color.fbInk)
+        .foregroundStyle(Color.fbWarn)
     }
 }
 

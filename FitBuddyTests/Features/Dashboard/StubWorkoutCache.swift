@@ -13,9 +13,12 @@ final class StubWorkoutCache: WorkoutSummaryReading, @unchecked Sendable {
     var results: [[WorkoutSummary]] = []
     /// When set, the read throws instead of returning summaries.
     var error: Error?
-    /// Holds the first call until `releaseFirstCall()` — lets a test drive two
+    /// Holds one call until `releaseFirstCall()` — lets a test drive two
     /// overlapping loads deterministically.
     var gatesFirstCall = false
+    /// Which call the gate holds (1-based). Defaults to the first; a test that
+    /// needs an earlier call to run through raises it.
+    var gatedCall = 1
 
     /// The `since` argument of the last call — proves the 90-day boundary.
     private(set) var requestedSince: Date?
@@ -28,14 +31,14 @@ final class StubWorkoutCache: WorkoutSummaryReading, @unchecked Sendable {
         callCount += 1
         let call = callCount
 
-        if gatesFirstCall && call == 1 {
+        if gatesFirstCall && call == gatedCall {
             await withCheckedContinuation { gate = $0 }
         }
         if let error { throw error }
         return results.isEmpty ? summaries : results[min(call - 1, results.count - 1)]
     }
 
-    /// Suspends until the first call has reached the gate.
+    /// Suspends until the gated call has reached the gate.
     func waitForFirstCall() async {
         // Bounded so a wiring mistake fails the test instead of hanging it.
         for _ in 0..<1_000 where gate == nil {
@@ -43,7 +46,7 @@ final class StubWorkoutCache: WorkoutSummaryReading, @unchecked Sendable {
         }
     }
 
-    /// Lets the gated first call finish.
+    /// Lets the gated call finish.
     func releaseFirstCall() {
         gate?.resume()
         gate = nil

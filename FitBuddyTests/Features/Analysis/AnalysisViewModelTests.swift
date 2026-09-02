@@ -154,9 +154,9 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(sut.context?.sessionCount, 2)
     }
 
-    /// Nothing to describe before a run has resolved a window — and a new run
-    /// must not show the previous run's basis while it is still loading.
-    func testContextIsClearedWhenANewRunStarts() async {
+    /// A run that never resolves a window must not leave the previous run's
+    /// basis on screen.
+    func testContextIsClearedWhenARunFails() async {
         await streamer.setChunks(["first"])
         let clock = TestClock(Self.reference)
         let sut = makeSUT(clock: clock)
@@ -172,6 +172,34 @@ final class AnalysisViewModelTests: XCTestCase {
 
         XCTAssertEqual(sut.state, .error(.noTrainingData))
         XCTAssertNil(sut.context)
+    }
+
+    /// The clearing has to happen at the *start* of a run, not only on its
+    /// failure path: while the second run is still loading, the first run's
+    /// basis would otherwise sit above a recommendation it does not describe.
+    func testContextIsClearedWhileANewRunIsStillLoading() async {
+        await streamer.setChunks(["first"])
+        let clock = TestClock(Self.reference)
+        let sut = makeSUT(clock: clock)
+
+        await sut.start()
+        XCTAssertNotNil(sut.context)
+
+        // Past the 6h cooldown, second run held inside the cache read — after
+        // the clearing, before the window is resolved.
+        clock.advance(by: 7 * 3_600)
+        await streamer.setChunks(["second"])
+        cache.gatesFirstCall = true
+        cache.gatedCall = 2
+        let run = Task { await sut.start() }
+        await cache.waitForFirstCall()
+
+        XCTAssertEqual(sut.state, .loading)
+        XCTAssertNil(sut.context)
+
+        cache.releaseFirstCall()
+        await run.value
+        XCTAssertNotNil(sut.context)
     }
 
     /// The state has to pass through `.loading` before any text arrives — that
