@@ -5,10 +5,9 @@ import SwiftData
 /// ExerciseSet` hierarchy that backs the offline dashboard (US-2 AC2).
 ///
 /// - Note: `id` holds Hevy's workout id and is unique in practice, but is not
-///   marked `@Attribute(.unique)`. Uniqueness constraints drive SwiftData's
-///   upsert-on-insert path, which ADR-001 flags as unreliable on iOS 17.x;
-///   `WorkoutStore` replaces the whole cached window per sync instead, so the
-///   constraint would buy nothing.
+///   marked `@Attribute(.unique)`. `WorkoutStore` replaces the whole cached
+///   window per sync instead of upserting, so the constraint would buy
+///   nothing.
 @Model
 final class Workout {
     /// Hevy's workout id (UUID string).

@@ -3,6 +3,8 @@
 **Status:** Accepted
 **Datum:** 2026-06-03
 
+**Nachtrag (2026-09-02, #108):** Das Mindest-Deployment-Target liegt inzwischen bei iOS 26 — SwiftData bleibt als Persistenzschicht unverändert gewählt, nur die damals daraus abgeleitete Untergrenze iOS 17 ist überholt.
+
 ---
 
 ## Kontext

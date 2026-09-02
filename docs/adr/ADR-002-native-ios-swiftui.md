@@ -3,6 +3,8 @@
 **Status:** Accepted
 **Datum:** 2026-06-03
 
+**Nachtrag (2026-09-02, #108):** Das von [[ADR-1]] geerbte Mindest-Deployment-Target liegt inzwischen bei iOS 26 statt iOS 17; die Plattformentscheidung selbst bleibt unverändert.
+
 ---
 
 ## Kontext

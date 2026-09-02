@@ -118,7 +118,7 @@ flowchart TB
 
     USER["User\n[Person]"]:::person
 
-    subgraph IPHONE["FitBuddy — iPhone (iOS 17+)"]
+    subgraph IPHONE["FitBuddy — iPhone (iOS 26+)"]
         APP["iOS App\nSwift · SwiftUI · MVVM · Swift Concurrency\nURLSession · Swift Charts"]:::system
         SWIFTDATA[("SwiftData Store\n[SQLite · on-device]\nActivity-Cache 90 Tage")]:::storage
         KEYCHAIN[("iOS Keychain\n[Keychain Services]\nAPI-Keys + Consent")]:::storage
