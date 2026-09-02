@@ -194,7 +194,7 @@ struct LLMKeysView: View {
         HStack(alignment: .top, spacing: 12) {
             screenshotPlaceholder
             VStack(alignment: .leading, spacing: 6) {
-                Text(attributedInstructions(for: provider))
+                Text(.markdownOrPlain(provider.consoleInstructions))
                     .font(.footnote)
                     .foregroundStyle(Color.fbInkSecondary)
                 Link(destination: provider.consoleURL) {
@@ -212,11 +212,6 @@ struct LLMKeysView: View {
             RoundedRectangle(cornerRadius: FBRadius.control)
                 .strokeBorder(Color.fbBorder, lineWidth: 1)
         )
-    }
-
-    private func attributedInstructions(for provider: LLMProvider) -> AttributedString {
-        (try? AttributedString(markdown: provider.consoleInstructions))
-            ?? AttributedString(provider.consoleInstructions)
     }
 
     private var screenshotPlaceholder: some View {

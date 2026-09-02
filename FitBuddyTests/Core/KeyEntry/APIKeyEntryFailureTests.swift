@@ -49,6 +49,16 @@ final class APIKeyEntryFailureTests: XCTestCase {
         XCTAssertFalse(APIKeyEntryFailure.keychain.message(for: "Hevy").contains("Hevy"))
     }
 
+    /// Onboarding step 3 writes up to three keys in one go, step 2 and the
+    /// settings editor exactly one — the shared banner may commit to neither
+    /// number (#111 review).
+    func testKeychainCopyCommitsToNoNumberOfKeys() {
+        for copy in [APIKeyEntryFailure.keychain.title(), APIKeyEntryFailure.keychain.message()] {
+            XCTAssertFalse(copy.lowercased().contains("key "), copy)
+            XCTAssertFalse(copy.lowercased().contains("keys"), copy)
+        }
+    }
+
     /// Onboarding step 3 saves up to three provider keys at once and passes no
     /// name. Every case still has to read as a sentence, not as a gap.
     func testFallsBackToANeutralNounWithoutAProvider() {
@@ -59,5 +69,14 @@ final class APIKeyEntryFailureTests: XCTestCase {
         }
         XCTAssertTrue(APIKeyEntryFailure.invalidKey.title().contains("The provider"))
         XCTAssertTrue(APIKeyEntryFailure.network.title().contains("the provider"))
+    }
+
+    /// The fallback sits in three different sentence positions; after a
+    /// possessive it must drop its article (#111 review). "Not empty" alone
+    /// would pass "in your the provider account".
+    func testNeutralFallbackReadsCorrectlyAfterAPossessive() {
+        let message = APIKeyEntryFailure.invalidKey.message()
+        XCTAssertTrue(message.contains("in your provider account"), message)
+        XCTAssertFalse(message.contains("your the"), message)
     }
 }

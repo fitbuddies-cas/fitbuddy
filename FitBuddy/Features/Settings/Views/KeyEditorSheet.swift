@@ -83,7 +83,7 @@ struct KeyEditorSheet: View {
     /// here, and the 401 banner tells the user to generate a new one.
     private var whereToFindCard: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(attributedInstructions)
+            Text(.markdownOrPlain(target.consoleInstructions))
                 .font(.footnote)
                 .foregroundStyle(Color.fbInkSecondary)
             Link(destination: target.consoleURL) {
@@ -100,11 +100,6 @@ struct KeyEditorSheet: View {
             RoundedRectangle(cornerRadius: FBRadius.control)
                 .strokeBorder(Color.fbBorder, lineWidth: 1)
         )
-    }
-
-    private var attributedInstructions: AttributedString {
-        (try? AttributedString(markdown: target.consoleInstructions))
-            ?? AttributedString(target.consoleInstructions)
     }
 
     private var keyField: some View {

@@ -35,14 +35,14 @@ enum APIKeyEntryFailure: Equatable {
     ///
     /// - Parameter provider: Name of the provider the attempt was made
     ///   against, or `nil` where no single one is in play — onboarding step 3
-    ///   saves up to three provider keys in one go, so only `.keychain` can
-    ///   reach it, and that case names nobody anyway.
+    ///   saves up to three provider keys in one go. Every case has to read as
+    ///   a sentence without it, so the fallback is not tied to `.keychain`.
     func title(for provider: String? = nil) -> String {
         switch self {
         case .invalidKey: return "\(Self.name(provider)) rejected this key (HTTP 401)"
         case .network: return "Could not reach \(Self.inlineName(provider))"
         case .serviceUnavailable: return "\(Self.name(provider)) is currently unavailable"
-        case .keychain: return "Could not save your key"
+        case .keychain: return "Could not save to the Keychain"
         }
     }
 
@@ -50,13 +50,15 @@ enum APIKeyEntryFailure: Equatable {
     func message(for provider: String? = nil) -> String {
         switch self {
         case .invalidKey:
-            return "The key may be revoked or mistyped. Generate a new one in your \(Self.inlineName(provider)) account, then paste it here."
+            return "The key may be revoked or mistyped. Generate a new one in your \(Self.possessiveName(provider)) account, then paste it here."
         case .network:
             return "Check your internet connection and try again."
         case .serviceUnavailable:
             return "\(Self.name(provider)) answered with an unexpected error — your key was not rejected. Please try again in a little while."
         case .keychain:
-            return "The key could not be stored on this device. Please try again."
+            // Number-neutral on purpose: onboarding step 3 writes up to three
+            // keys in one go, the other two screens write exactly one.
+            return "Storing on this device failed. Please try again."
         }
     }
 
@@ -68,5 +70,11 @@ enum APIKeyEntryFailure: Equatable {
     /// Provider name inside a sentence.
     private static func inlineName(_ provider: String?) -> String {
         provider ?? "the provider"
+    }
+
+    /// Provider name after a possessive ("in your … account"), where the
+    /// fallback must not carry an article of its own.
+    private static func possessiveName(_ provider: String?) -> String {
+        provider ?? "provider"
     }
 }

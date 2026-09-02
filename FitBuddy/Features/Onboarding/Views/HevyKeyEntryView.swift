@@ -53,7 +53,7 @@ struct HevyKeyEntryView: View {
         HStack(alignment: .top, spacing: 12) {
             screenshotPlaceholder
             VStack(alignment: .leading, spacing: 6) {
-                Text(attributedInstructions)
+                Text(.markdownOrPlain(HevyKeyPresentation.consoleInstructions))
                     .font(.footnote)
                     .foregroundStyle(Color.fbInkSecondary)
                 Link(destination: HevyKeyPresentation.consoleURL) {
@@ -71,11 +71,6 @@ struct HevyKeyEntryView: View {
             RoundedRectangle(cornerRadius: FBRadius.control)
                 .strokeBorder(Color.fbBorder, lineWidth: 1)
         )
-    }
-
-    private var attributedInstructions: AttributedString {
-        (try? AttributedString(markdown: HevyKeyPresentation.consoleInstructions))
-            ?? AttributedString(HevyKeyPresentation.consoleInstructions)
     }
 
     private var screenshotPlaceholder: some View {

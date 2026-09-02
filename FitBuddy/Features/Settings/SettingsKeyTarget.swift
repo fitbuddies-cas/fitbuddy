@@ -20,7 +20,7 @@ enum SettingsKeyTarget: Hashable, Identifiable {
     /// Keychain slot backing this credential.
     var keychainKey: KeychainKey {
         switch self {
-        case .hevy: return HevyKeyPresentation.keychainKey
+        case .hevy: return .hevyAPIKey
         case .llm(let provider): return provider.keychainKey
         }
     }

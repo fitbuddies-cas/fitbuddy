@@ -1,7 +1,7 @@
 import Foundation
 
 /// Everything the key-entry screens need to talk about the Hevy API key:
-/// its name, its Keychain slot, and where the user creates it. The LLM
+/// its name, its placeholder, and where the user creates it. The LLM
 /// equivalents live on `LLMProvider`, which has one instance per provider —
 /// Hevy is the single fixed provider, so its counterpart is a namespace.
 ///
@@ -13,9 +13,6 @@ enum HevyKeyPresentation {
 
     /// Text-field placeholder hinting at the Hevy key format.
     static let keyPlaceholder = "hv_live_…"
-
-    /// Keychain slot holding the key.
-    static let keychainKey = KeychainKey.hevyAPIKey
 
     /// Host name of the page that manages the key, for link labels.
     static let consoleName = "hevy.com"
