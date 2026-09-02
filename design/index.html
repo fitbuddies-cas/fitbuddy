@@ -49,6 +49,7 @@
       dashData:       { label: '2.1 Dashboard · 90 days', render: () => <Phone><FBDashboardScreen variant="data" /></Phone> },
       dashOffline:    { label: '2.2 Cached / offline',    render: () => <Phone><FBDashboardScreen variant="offline" /></Phone> },
       dashEmpty:      { label: '2.3 Empty state',         render: () => <Phone><FBDashboardScreen variant="empty" /></Phone> },
+      workoutDetail:  { label: '2.4 Workout detail',      render: () => <Phone><FBWorkoutDetailScreen /></Phone> },
 
       analyzePre:     { label: '3.1 Pre-analysis CTA',  render: () => <Phone><FBDashboardScreen variant="data" /></Phone> },
       analyzeLoading: { label: '3.2 Loading · 0–30 s',   render: () => <Phone><FBAnalyzeLoadingScreen /></Phone> },
@@ -215,11 +216,12 @@
           <DCSection
             id="us2"
             title="US-2 · 90 Tage Trainingsdaten im Dashboard"
-            subtitle="Eine Übersicht: Volumen, Trainingstage, Muskelverteilung, Sessions. Plus Offline-Fallback und Empty State."
+            subtitle="Eine Übersicht: Volumen, Trainingstage, Muskelverteilung, Sessions. Plus Offline-Fallback, Empty State und der Drill-down auf eine einzelne Session."
           >
             {screenArtboard('us2-1', 'dashData')}
             {screenArtboard('us2-2', 'dashOffline')}
             {screenArtboard('us2-3', 'dashEmpty')}
+            {screenArtboard('us2-4', 'workoutDetail')}
           </DCSection>
 
           <DCSection

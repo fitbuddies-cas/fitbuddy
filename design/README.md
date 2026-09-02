@@ -3,7 +3,7 @@
 High-fidelity iOS screen designs for the three Must-Have user stories from `REQUIREMENTS_PO.md`:
 
 - **US-1** · API-Key sicher speichern (5 screen states)
-- **US-2** · 90 Tage Trainingsdaten im Dashboard (3 screen states)
+- **US-2** · 90 Tage Trainingsdaten im Dashboard (4 screen states)
 - **US-3** · AI-Analyse auf Knopfdruck (6 screen states)
 - **Interactive Prototype** — clickable full-flow walkthrough
 
@@ -24,7 +24,7 @@ Open `index.html` directly in a modern browser. No build step, no install. All d
 |---|---|
 | `index.html` | Entry. Loads scripts and sets up the DesignCanvas. |
 | `fb-atoms.jsx` | FitBuddy design tokens (colors, type) + reusable primitives (`FBButton`, `FBCard`, `FBStat`, `FBBar`, `FBSpinner`). |
-| `fb-screens.jsx` | All 12 screen components (`FBWelcomeScreen`, `FBKeyEntryScreen`, `FBDashboardScreen`, `FBAnalyzeLoadingScreen`, `FBAnalysisResultScreen`). |
+| `fb-screens.jsx` | All 13 screen components (`FBWelcomeScreen`, `FBKeyEntryScreen`, `FBDashboardScreen`, `FBWorkoutDetailScreen`, `FBAnalyzeLoadingScreen`, `FBAnalysisResultScreen`). |
 | `ios-frame.jsx` | iOS 26 device frame (status bar, dynamic island, keyboard, home indicator). |
 | `design-canvas.jsx` | Pan/zoom canvas wrapper. Sections + artboards. |
 
@@ -52,6 +52,7 @@ Open `index.html` directly in a modern browser. No build step, no install. All d
 | US-2 AC1 (volume, avg/week, muscle dist, sessions) | 2.1 full dashboard |
 | US-2 AC2 (cached + sync timestamp) | 2.2 offline banner |
 | US-2 AC3 (no data text) | 2.3 empty state |
+| US-2 AC1 (Session-Drill-down: Übungen mit Sätzen) | 2.4 workout detail |
 | US-3 AC1 (spinner; cancel after 30 s) | 3.2 → 3.3 |
 | US-3 AC2/AC7 (concrete kg value) | 3.4 Bench 60 → 62.5 kg, Squat 80 → 82.5 kg |
 | US-3 AC4 (≥2 muscle groups) | 3.4 covers Chest + Legs |

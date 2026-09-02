@@ -2,7 +2,10 @@ import Foundation
 
 /// How much of a window's training load fell on one muscle group — the data
 /// behind the dashboard's distribution chart (US-2 AC1, #27).
-struct MuscleLoad: Equatable, Identifiable, Sendable {
+///
+/// `Hashable` because `WorkoutSummary` is — the dashboard pushes a summary as
+/// a `NavigationLink` value (#98).
+struct MuscleLoad: Hashable, Identifiable, Sendable {
     let group: MuscleGroup
     /// Σ (weight × reps) over the group's counted sets, in kg.
     let volumeKg: Double
