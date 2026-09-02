@@ -7,8 +7,9 @@ import Foundation
 /// type requires: a barbell set has weight and reps, a treadmill set has
 /// distance and duration, a bodyweight set has neither weight nor distance.
 struct ActivityExerciseSet: Identifiable, Equatable, Codable, Sendable {
-    let id: UUID
     /// Position of the set within its exercise, as reported by the source.
+    /// Doubles as the `Identifiable` id, for the same stability reason as
+    /// `ActivityExercise.index`.
     var index: Int
     /// Raw source set type — read it through `type`. Stored raw rather than
     /// `SetType` itself: a value a source adds later then decodes to
@@ -22,8 +23,9 @@ struct ActivityExerciseSet: Identifiable, Equatable, Codable, Sendable {
     /// Rate of perceived exertion (6–10) when the user logged it.
     var rpe: Double?
 
+    var id: Int { index }
+
     init(
-        id: UUID = UUID(),
         index: Int,
         type: SetType,
         weightKg: Double? = nil,
@@ -32,7 +34,6 @@ struct ActivityExerciseSet: Identifiable, Equatable, Codable, Sendable {
         durationSeconds: Int? = nil,
         rpe: Double? = nil
     ) {
-        self.id = id
         self.index = index
         self.typeRawValue = type.rawValue
         self.weightKg = weightKg
