@@ -46,7 +46,38 @@ final class DashboardRenderingTests: XCTestCase {
             )
         }
 
+        // Rendered without a `NavigationStack` around it: `ImageRenderer`
+        // returns nil for one, and the rows' `NavigationLink`s (#98) lay out
+        // the same either way.
         let image = try render(RecentSessionsCard(workouts: workouts, limit: 5))
+        XCTAssertGreaterThan(image.size.height, 0)
+    }
+
+    // MARK: - Workout detail (#98)
+
+    /// The exercise card lays out data-dependent content too: the volume bar
+    /// divides by the session total, and a set row builds its line from
+    /// whichever metrics happen to be logged.
+    func testExerciseCardRendersEveryKindOfExercise() throws {
+        let session = PreviewWorkoutDetailCache.session
+
+        for exercise in session.exercises {
+            let image = try render(
+                ExerciseDetailCard(exercise: exercise, sessionVolumeKg: session.volumeKg)
+            )
+            XCTAssertGreaterThan(image.size.height, 0, "\(exercise.title) did not render")
+        }
+    }
+
+    /// An all-bodyweight session has no kg to divide by — the card drops the
+    /// bar rather than dividing by zero.
+    func testExerciseCardRendersWithoutAnySessionVolume() throws {
+        let image = try render(
+            ExerciseDetailCard(
+                exercise: PreviewWorkoutDetailCache.session.exercises[2],
+                sessionVolumeKg: 0
+            )
+        )
         XCTAssertGreaterThan(image.size.height, 0)
     }
 
