@@ -238,6 +238,12 @@ final class SettingsViewModel: ObservableObject {
         switch target {
         case .hevy:
             await sessionReset.hardLogout()
+            // Reloaded here rather than left to the callback: `onHevyKeyDeleted`
+            // is optional, and a screen presented without it (a preview, a test,
+            // any surface outside the onboarding coordinator) would otherwise
+            // keep showing the mask of a key the hard logout just destroyed,
+            // still offering "Replace key" and "Delete key" for it.
+            await load()
             await onHevyKeyDeleted?()
         case .llm(let provider):
             do {

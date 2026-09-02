@@ -23,7 +23,7 @@ final class SettingsViewModelTests: XCTestCase {
         keychain = KeychainService()
         try await clearKeys()
         validator = MockHevyKeyValidator()
-        sessionReset = SessionResetSpy()
+        sessionReset = SessionResetSpy(keychain: keychain)
         dataReset = DataResetSpy()
         suiteName = "fitbuddy.tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
@@ -427,6 +427,20 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertTrue(returnedToOnboarding)
     }
 
+    /// The row must not survive the key: without a reload it keeps advertising
+    /// a mask for a credential the hard logout destroyed, and the callback that
+    /// would otherwise dismiss the screen is optional.
+    func testDeletingTheHevyKeyClearsTheRowEvenWithoutTheOnboardingCallback() async throws {
+        try await keychain.save("hv_live_abcdefghijkl", for: .hevyAPIKey)
+        await sut.load()
+        XCTAssertNotNil(sut.hevyKeyMask)
+        sut.onHevyKeyDeleted = nil
+
+        await sut.delete(.hevy)
+
+        XCTAssertNil(sut.hevyKeyMask)
+    }
+
     func testAFailedLLMDeleteReportsAnErrorAndKeepsTheRow() async throws {
         let stub = InMemoryKeychainStub(failDeletes: true)
         await stub.seed("sk-ant-abcdefghijkl", for: .claudeAPIKey)
@@ -456,13 +470,22 @@ final class SettingsViewModelTests: XCTestCase {
 
 // MARK: - Doubles
 
-/// Records how often the hard logout ran.
+/// Records how often the hard logout ran, and — like the real
+/// `SessionResetService` — actually removes the Hevy key, so a caller that
+/// re-reads the Keychain afterwards sees what the app would see.
 private actor SessionResetSpy: SessionResetting {
     private(set) var hardLogoutCount = 0
     private(set) var discardCount = 0
 
+    private let keychain: any KeychainStoring
+
+    init(keychain: any KeychainStoring) {
+        self.keychain = keychain
+    }
+
     func hardLogout() async {
         hardLogoutCount += 1
+        try? await keychain.delete(.hevyAPIKey)
     }
 
     func discardCachedWorkouts() async {

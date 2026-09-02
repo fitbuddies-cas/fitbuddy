@@ -171,6 +171,30 @@ final class HevyWorkoutDTOTests: XCTestCase {
         XCTAssertEqual(exercise.sets.map(\.index).sorted(), [0, 1])
     }
 
+    /// Hevy's `index` is optional per entry, so a payload may carry it for one
+    /// exercise and omit it for the next. Reading it would then hand two
+    /// entries the same index — and that index is `ExerciseDetail.id`, so
+    /// `ForEach` would drop a card and the sort by index would be arbitrary.
+    func testIndicesStayUniqueWhenThePayloadNumbersOnlySomeEntries() throws {
+        let dto = try decode([
+            "id": "w-1",
+            "start_time": "2021-09-14T12:00:00Z",
+            "exercises": [
+                [
+                    "index": 1,
+                    "title": "Squat (Barbell)",
+                    "sets": [["index": 1, "type": "normal"], ["type": "normal"]],
+                ],
+                ["title": "Bench Press (Barbell)", "sets": [["type": "normal"]]],
+            ],
+        ])
+
+        let workout = dto.makeWorkout()
+        XCTAssertEqual(workout.exercises.map(\.index), [0, 1])
+        let first = try XCTUnwrap(workout.exercises.first)
+        XCTAssertEqual(first.sets.map(\.index).sorted(), [0, 1])
+    }
+
     func testPageDefaultsToASinglePageWhenCountIsMissing() throws {
         let data = try JSONSerialization.data(withJSONObject: ["workouts": []])
         let page = try JSONDecoder.hevy.decode(HevyWorkoutsPage.self, from: data)

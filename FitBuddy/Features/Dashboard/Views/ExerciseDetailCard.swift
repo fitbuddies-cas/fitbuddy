@@ -71,9 +71,15 @@ struct ExerciseDetailCard: View {
     ///
     /// The exercise decides, not the session: in a mixed session the session
     /// total is greater than zero while the dips in it are still weightless.
+    ///
+    /// The session total is checked all the same, because a share of zero is
+    /// not a share: Hevy logs assisted machines with a negative `weight_kg`,
+    /// so a session can total zero while an exercise in it counted volume. The
+    /// division would then be infinite or NaN, and the set count says more
+    /// than a bar of an undefined length.
     @ViewBuilder
     private var share: some View {
-        if exercise.volumeKg > 0 {
+        if exercise.volumeKg > 0, sessionVolumeKg > 0 {
             FBBar(
                 label: CountFormatter.labelled(exercise.countedSetCount, singular: "set"),
                 fraction: exercise.volumeKg / sessionVolumeKg,
