@@ -39,8 +39,9 @@ struct HevySetDTO: Decodable, Equatable, Sendable {
     /// Hevy sends `0` rather than `null` for the metrics an exercise does not
     /// use — a machine set arrives as `distance_meters: 0, duration_seconds: 0`
     /// alongside its weight and reps. Kept as zeros they are indistinguishable
-    /// from logged values: the detail row prints `0 m · 0:00`, and the analysis
-    /// prompt hands Claude a distance the user never ran.
+    /// from logged values: the detail row prints `0 m · 0:00` on a strength
+    /// set, and the `Activity` mapping in #34 would carry the same phantom
+    /// values into the normalized model.
     ///
     /// Only these two metrics: `0 kg` is a bodyweight set and `0 reps` a set
     /// that was started and not completed — both are statements, not gaps.
