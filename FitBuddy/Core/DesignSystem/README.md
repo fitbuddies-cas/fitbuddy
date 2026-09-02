@@ -13,10 +13,10 @@ styling so onboarding (#20–24) and the dashboard (#27) stay visually consisten
 | `FBRadius.swift` | Corner radii: `.control` (14), `.card` (18), `.grouped` (26) |
 
 Colors use a **hybrid** setup: raw values live in the asset catalog, and Xcode's
-asset-symbol generation (iOS 17+, deployment target is 17.0) exposes them as
-type-safe `Color.fb…` constants. To add or change a color, edit the color set in
-`DesignSystem.xcassets`; the `Color.fb…` accessor follows automatically from the
-asset name (`FBAccent` → `Color.fbAccent`).
+asset-symbol generation (iOS 17+, well below the 26.0 deployment target)
+exposes them as type-safe `Color.fb…` constants. To add or change a color, edit
+the color set in `DesignSystem.xcassets`; the `Color.fb…` accessor follows
+automatically from the asset name (`FBAccent` → `Color.fbAccent`).
 
 Each color set defines **light + dark appearances**, so the app follows the
 system appearance with no call-site changes. The light palette is the warm
