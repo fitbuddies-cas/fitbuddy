@@ -271,7 +271,7 @@ function FBDashboardScreen({ variant = 'data', onAnalyze, syncBanner = false, an
                   Ready for a progression check?
                 </div>
                 <div style={{ marginTop: 4, fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.4 }}>
-                  Based on your last 30 days, get a concrete recommendation in ~10 s.
+                  Based on your last 4 weeks, get a concrete recommendation in ~10 s.
                 </div>
                 <button onClick={onAnalyze} style={{
                   marginTop: 14, height: 40, padding: '0 16px', borderRadius: 10,
@@ -437,7 +437,7 @@ function FBAnalyzeLoadingScreen({ longWait = false, onCancel }) {
         <div style={{
           marginTop: 6, fontSize: 24, fontWeight: 700, letterSpacing: -0.5, lineHeight: 1.2,
         }}>
-          Analyzing your<br/>last 30 days
+          Analyzing your<br/>last 4 weeks
         </div>
 
         {/* Steps */}
@@ -541,7 +541,7 @@ function FBAnalysisResultScreen({ variant = 'progression', feedback = null, cool
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
           <span style={{ width: 6, height: 6, borderRadius: 3, background: FB.accent }} />
-          Based on <strong style={{ color: FB.ink, fontWeight: 600 }}>14 Hevy workouts</strong> · last 30 days
+          Based on <strong style={{ color: FB.ink, fontWeight: 600 }}>14 Hevy workouts</strong> · last 4 weeks
         </div>
 
         {/* Recommendations */}
