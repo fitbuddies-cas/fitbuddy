@@ -3,8 +3,18 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 71;
 	objects = {
+
+/* Begin PBXContainerItemProxy section */
+		FB0000000000000000000071 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = FB00000000000000000000F0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = FB0000000000000000000030;
+			remoteInfo = FitBuddy;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		FB0000000000000000000001 /* FitBuddy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FitBuddy.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -17,9 +27,42 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		FB0000000000000000000020 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		FB0000000000000000000021 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		FB0000000000000000000020 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FB0000000000000000000021 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		FB0000000000000000000091 = {
+			isa = PBXGroup;
+			children = (
+				FB0000000000000000000010 /* FitBuddy */,
+				FB0000000000000000000011 /* FitBuddyTests */,
+				FB0000000000000000000092 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		FB0000000000000000000092 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				FB0000000000000000000001 /* FitBuddy.app */,
+				FB0000000000000000000002 /* FitBuddyTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
 		FB0000000000000000000030 /* FitBuddy */ = {
@@ -96,7 +139,6 @@
 			);
 			mainGroup = FB0000000000000000000091;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
 			productRefGroup = FB0000000000000000000092 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -107,35 +149,38 @@
 		};
 /* End PBXProject section */
 
-/* Begin PBXGroup section */
-		FB0000000000000000000091 = {
-			isa = PBXGroup;
-			children = (
-				FB0000000000000000000010 /* FitBuddy */,
-				FB0000000000000000000011 /* FitBuddyTests */,
-				FB0000000000000000000092 /* Products */,
-			);
-			sourceTree = "<group>";
-		};
-		FB0000000000000000000092 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				FB0000000000000000000001 /* FitBuddy.app */,
-				FB0000000000000000000002 /* FitBuddyTests.xctest */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
-/* End PBXGroup section */
-
 /* Begin PBXResourcesBuildPhase section */
-		FB0000000000000000000060 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		FB0000000000000000000061 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		FB0000000000000000000060 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FB0000000000000000000061 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		FB0000000000000000000050 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		FB0000000000000000000051 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		FB0000000000000000000050 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FB0000000000000000000051 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -145,16 +190,6 @@
 			targetProxy = FB0000000000000000000071 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
-
-/* Begin PBXContainerItemProxy section */
-		FB0000000000000000000071 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = FB00000000000000000000F0 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = FB0000000000000000000030;
-			remoteInfo = FitBuddy;
-		};
-/* End PBXContainerItemProxy section */
 
 /* Begin XCBuildConfiguration section */
 		FB0000000000000000000043 /* Debug */ = {
@@ -195,7 +230,7 @@
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				EXCLUDED_SOURCE_FILE_NAMES = ".gitkeep";
+				EXCLUDED_SOURCE_FILE_NAMES = .gitkeep;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -260,7 +295,7 @@
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				EXCLUDED_SOURCE_FILE_NAMES = ".gitkeep";
+				EXCLUDED_SOURCE_FILE_NAMES = .gitkeep;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;

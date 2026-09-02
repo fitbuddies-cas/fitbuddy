@@ -59,8 +59,7 @@ struct MainTabView: View {
                 DashboardView(
                     viewModel: makeDashboardViewModel(),
                     makeWorkoutDetailViewModel: makeWorkoutDetailViewModel,
-                    reloadToken: reloadToken,
-                    onOpenAnalysis: { selection = .analysis }
+                    reloadToken: reloadToken
                 )
             }
             Tab("Analysis", systemImage: "sparkles", value: MainTab.analysis) {

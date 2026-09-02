@@ -2,9 +2,8 @@ import SwiftUI
 
 /// The on-demand AI analysis screen (US-3, #32).
 ///
-/// Its own tab in `MainTabView` (#107), reached from the tab bar or from the
-/// dashboard's `AnalysisCTACard`. Renders `AnalysisViewModel`'s state and
-/// nothing else: the spinner appears the moment `start()` publishes
+/// Its own tab in `MainTabView` (#107). Renders `AnalysisViewModel`'s state
+/// and nothing else: the spinner appears the moment `start()` publishes
 /// `.loading`, the recommendation grows chunk by chunk while `.streaming`, and
 /// the cancel button joins the spinner once the run has gone 30s without a
 /// first token (US-3 AC1).

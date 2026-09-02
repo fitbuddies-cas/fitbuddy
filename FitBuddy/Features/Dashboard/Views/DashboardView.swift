@@ -17,11 +17,6 @@ struct DashboardView: View {
     /// dependencies is one no preview can stand up.
     private let makeWorkoutDetailViewModel: (String) -> WorkoutDetailViewModel
 
-    /// Tapping the `AnalysisCTACard`. The analysis lives on its own tab
-    /// (#107); the card stays as the dashboard's loud second way in, and the
-    /// tab switch itself is `MainTabView`'s job.
-    private let onOpenAnalysis: () -> Void
-
     /// Changes whenever something outside the dashboard invalidated the cache —
     /// today only a replaced Hevy key (#91). Its value carries no meaning; the
     /// change itself is the signal to sync again.
@@ -35,17 +30,14 @@ struct DashboardView: View {
     ///     row — see `.navigationDestination` below.
     ///   - reloadToken: Defaults to a constant, so a preview or a test that
     ///     has no cache-invalidating parent never re-syncs.
-    ///   - onOpenAnalysis: Defaults to a no-op so previews need no tab bar.
     init(
         viewModel: @autoclosure @escaping () -> WorkoutListViewModel,
         makeWorkoutDetailViewModel: @escaping (String) -> WorkoutDetailViewModel,
-        reloadToken: Int = 0,
-        onOpenAnalysis: @escaping () -> Void = {}
+        reloadToken: Int = 0
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
         self.makeWorkoutDetailViewModel = makeWorkoutDetailViewModel
         self.reloadToken = reloadToken
-        self.onOpenAnalysis = onOpenAnalysis
     }
 
     var body: some View {
@@ -63,14 +55,6 @@ struct DashboardView: View {
                             lastSync: viewModel.lastSync,
                             onRetry: { Task { await viewModel.refresh() } }
                         )
-                    }
-                    // Only with data behind it: an analysis of an empty or
-                    // unreadable cache has nothing to say, and the failure it
-                    // would produce is one the dashboard already explains.
-                    // Anything else the cache holds is analysable — the window
-                    // widens to reach it (#87).
-                    if viewModel.state.hasWorkouts {
-                        AnalysisCTACard(onAnalyze: onOpenAnalysis)
                     }
                     content
                 }
