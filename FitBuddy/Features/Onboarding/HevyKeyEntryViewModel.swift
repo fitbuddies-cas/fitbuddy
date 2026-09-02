@@ -8,10 +8,6 @@ final class HevyKeyEntryViewModel: ObservableObject {
     /// Hevy page where the user creates/manages API keys (AC3 error link).
     static let hevyAPISettingsURL = URL(staticString: "https://hevy.com/settings?developer")
 
-    /// Text-field placeholder hinting at the Hevy key format, shared with the
-    /// settings key editor (#83).
-    static let keyPlaceholder = "hv_live_…"
-
     /// Raw text field content. Editing after a failure returns to `.idle` so
     /// the error styling clears as soon as the user starts fixing the key.
     @Published var apiKey = "" {
@@ -105,7 +101,7 @@ final class HevyKeyEntryViewModel: ObservableObject {
     /// Maps validator errors to banner failures. Exhaustive on purpose: a new
     /// validator error case must make a conscious copy decision here instead
     /// of silently inheriting the "check your internet" advice.
-    private static func failure(for error: HevyKeyValidationError) -> HevyKeyEntryState.Failure {
+    private static func failure(for error: HevyKeyValidationError) -> APIKeyEntryFailure {
         switch error {
         case .invalidKey:
             return .invalidKey

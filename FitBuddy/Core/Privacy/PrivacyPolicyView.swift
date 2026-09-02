@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Static privacy policy reachable from the consent screen (and later from
-/// Settings). Content follows the mandatory items required by the project's
+/// Static privacy policy reachable from the consent screen (US-4) and from
+/// Settings (#83). Content follows the mandatory items required by the project's
 /// non-functional requirements: controller, processed data, purpose, third
 /// parties, third country, and data-subject rights. Styled with the shared
 /// design system (`Core/DesignSystem`).

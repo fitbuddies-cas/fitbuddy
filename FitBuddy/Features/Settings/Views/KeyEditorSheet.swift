@@ -3,9 +3,9 @@ import SwiftUI
 /// Sheet for adding or replacing one stored API key from Settings (#83).
 ///
 /// Mirrors the onboarding key screens: `FBKeyField`, the Keychain storage note,
-/// and the same failure banner copy (`HevyKeyEntryState.Failure`). The field
-/// always starts empty — the stored key is never displayed, so it cannot be
-/// pre-filled either.
+/// and the same failure banner copy (`APIKeyEntryFailure`). The field always
+/// starts empty — the stored key is never displayed, so it cannot be pre-filled
+/// either.
 struct KeyEditorSheet: View {
     @ObservedObject var viewModel: SettingsViewModel
     let target: SettingsKeyTarget
@@ -14,7 +14,7 @@ struct KeyEditorSheet: View {
 
     private var isBusy: Bool { viewModel.editorState == .validating }
 
-    private var failure: HevyKeyEntryState.Failure? {
+    private var failure: APIKeyEntryFailure? {
         if case .failed(let failure) = viewModel.editorState { return failure }
         return nil
     }
@@ -127,7 +127,7 @@ struct KeyEditorSheet: View {
             .padding(.leading, 2)
     }
 
-    private func errorBanner(for failure: HevyKeyEntryState.Failure) -> some View {
+    private func errorBanner(for failure: APIKeyEntryFailure) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(failure.title(for: target.displayName))
                 .font(.subheadline.weight(.semibold))

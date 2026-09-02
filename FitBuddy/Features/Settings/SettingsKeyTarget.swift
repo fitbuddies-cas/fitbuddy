@@ -36,7 +36,7 @@ enum SettingsKeyTarget: Hashable, Identifiable {
     /// Text-field placeholder hinting at the key format.
     var keyPlaceholder: String {
         switch self {
-        case .hevy: return HevyKeyEntryViewModel.keyPlaceholder
+        case .hevy: return HevyAPIKey.keyPlaceholder
         case .llm(let provider): return provider.keyPlaceholder
         }
     }
