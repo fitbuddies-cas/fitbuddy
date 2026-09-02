@@ -70,9 +70,9 @@ struct MainTabView: View {
                 SettingsView(viewModel: makeSettingsViewModel())
             }
         }
-        // The dashboard is the one long scroll in the app; letting the bar
-        // shrink out of the way there is the visible gain of the glass bar.
-        .tabBarMinimizeBehavior(.onScrollDown)
+        // No `.tabBarMinimizeBehavior`: on iOS 26 the minimized bar collapses
+        // into a pill on the leading edge while scrolling, which reads as the
+        // bar sliding away. The three tabs stay put instead.
         .tint(Color.fbAccent)
         // The recommendation on the analysis tab was built from the cache that
         // was just discarded, and that view model outlives the tab — without
