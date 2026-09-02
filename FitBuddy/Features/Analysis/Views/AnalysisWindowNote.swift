@@ -15,9 +15,13 @@ struct AnalysisWindowNote: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Image(systemName: "calendar.badge.clock")
                     .font(.caption2)
+                // Past tense on purpose: a restored recommendation is read
+                // days after it was written, and by then the user may well
+                // have trained again. The note describes the run, not now
+                // (#97).
                 Text("""
-                No sessions in the last \(AnalysisWindow.default.weeks) weeks — \
-                this analysis covers the last \(window.weeks) weeks.
+                This analysis covers \(window.weeks) weeks — there were no sessions \
+                in the \(AnalysisWindow.default.weeks) weeks before it.
                 """)
                 .font(.caption)
             }

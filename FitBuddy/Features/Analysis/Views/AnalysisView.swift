@@ -101,7 +101,10 @@ struct AnalysisView: View {
                 failure: failure,
                 attribution: viewModel.attribution,
                 onRetry: failure.isRetryable ? start : nil,
-                onBack: { viewModel.reset() }
+                // Not a bare `reset()`: leaving the error screen must be
+                // able to put the last stored recommendation back, so the
+                // user is not left with a countdown and an empty screen (#97).
+                onBack: { Task { await viewModel.dismissFailure() } }
             )
         }
     }

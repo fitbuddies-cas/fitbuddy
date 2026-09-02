@@ -69,10 +69,16 @@ final class AnalysisViewModel: ObservableObject {
     private var runID: UInt64 = 0
     /// Fires once `slowThreshold` has passed without a first token.
     private var slowTask: Task<Void, Never>?
-    /// Whether `restore()` already ran. Restoring exactly once per view model
-    /// keeps a reopened sheet from undoing "New analysis": the user asked for
-    /// the intro screen, and the stored recommendation is still on disk.
-    private var didRestore = false
+    /// Whether the user deliberately dismissed the stored recommendation by
+    /// tapping "New analysis". Held so a reopened sheet does not put it right
+    /// back — and cleared again as soon as the run they asked for is under
+    /// way, because a run that then fails leaves the screen with nothing to
+    /// read while the recommendation is still on disk (#97).
+    private var didDismissStoredResult = false
+    /// Guards `restore()` against overlapping itself: the view's `.task` and
+    /// `dismissFailure()` can both ask for a restore, and the store read
+    /// between them releases the main actor.
+    private var isRestoring = false
 
     private let cache: WorkoutSummaryReading
     private let inference: AnalysisStreaming
@@ -155,6 +161,11 @@ final class AnalysisViewModel: ObservableObject {
 
         feedback = nil
         window = .default
+        // The dismissal has served its purpose: the user asked for a new
+        // analysis and is getting one. If this run fails, the screen falls
+        // back to `.idle` with nothing on it, and the stored recommendation is
+        // then the most useful thing it can offer again.
+        didDismissStoredResult = false
         // The stored recommendation stays on disk until this run replaces it:
         // a run that ends in an error must not cost the user the last answer
         // they still had. Only the screen lets go of it here.
@@ -183,13 +194,34 @@ final class AnalysisViewModel: ObservableObject {
     }
 
     /// Clears a finished run, so the screen goes back to the analysis button.
+    ///
+    /// Two different taps land here. "New analysis" on a finished
+    /// recommendation is a deliberate dismissal — the user wants the intro
+    /// screen, and the stored recommendation must not come straight back.
+    /// "Back" on an error is not: it leaves the screen empty, and
+    /// `dismissFailure()` brings the stored recommendation back instead of
+    /// leaving a countdown with nothing under it (#97).
     func reset() {
         guard !state.isRunning else { return }
+        if case .result = state {
+            didDismissStoredResult = true
+        }
         attribution = nil
         feedback = nil
         window = .default
         clearResultAge()
         state = .idle
+    }
+
+    /// "Back" on the error screen: clears the failure and puts the stored
+    /// recommendation back if there is one.
+    ///
+    /// Its own entry point rather than a branch inside `reset()`: the tap
+    /// leaves the screen empty, and the restore behind it is asynchronous,
+    /// which `reset()` — called straight from a SwiftUI button — is not.
+    func dismissFailure() async {
+        reset()
+        await restore()
     }
 
     // MARK: - Restore
@@ -203,11 +235,14 @@ final class AnalysisViewModel: ObservableObject {
     /// recommendation straight back on screen.
     ///
     /// Does nothing while a run is in flight or a result is already showing —
-    /// what is on screen is at least as current as what is on disk.
+    /// what is on screen is at least as current as what is on disk — and
+    /// nothing while the user has dismissed the stored recommendation without
+    /// a run having replaced it since.
     func restore() async {
-        guard !didRestore else { return }
+        guard !didDismissStoredResult, !isRestoring else { return }
         // Claimed before the first await, like the run slot in `start()`.
-        didRestore = true
+        isRestoring = true
+        defer { isRestoring = false }
         guard case .idle = state, let resultStore else { return }
 
         let stored: AnalysisResultSnapshot?
@@ -233,9 +268,15 @@ final class AnalysisViewModel: ObservableObject {
         // to it. An older one rated a recommendation that no longer exists, and
         // showing it as selected would attribute the user's opinion to a text
         // they never saw.
-        if let last = await feedbackStore.lastFeedback(), last.date >= stored.generatedAt {
-            feedback = last.feedback
+        guard let last = await feedbackStore.lastFeedback(), last.date >= stored.generatedAt else {
+            return
         }
+        // Re-checked after that await as well: a run started in the meantime
+        // has already published its own state with `feedback` cleared, and
+        // assigning here would pre-select a verdict on a text the user has
+        // not read yet.
+        guard case .result(stored.text) = state else { return }
+        feedback = last.feedback
     }
 
     // MARK: - Feedback

@@ -857,7 +857,7 @@ extension AnalysisViewModelTests {
 
     /// "New analysis" must survive a reopened sheet: `AnalysisView.task` runs
     /// again, and a second restore would put the recommendation right back.
-    func testRestoreRunsOnlyOncePerViewModel() async throws {
+    func testRestoreDoesNotUndoADismissedRecommendation() async throws {
         try await storeRecommendation(at: Self.reference.addingTimeInterval(-2 * 3_600))
         let sut = makeSUT()
         await sut.restore()
@@ -866,6 +866,57 @@ extension AnalysisViewModelTests {
         await sut.restore()
 
         XCTAssertEqual(sut.state, .idle)
+    }
+
+    /// The dismissal only holds until the run the user asked for is under way.
+    /// A run that then fails leaves the screen empty while the recommendation
+    /// is still on disk — the dead end #97 exists to remove.
+    func testFailedRunAfterANewAnalysisTapBringsTheStoredRecommendationBack() async throws {
+        try await storeRecommendation(at: Self.reference.addingTimeInterval(-2 * 3_600))
+        await streamer.setStartError(InferenceServiceError.missingAPIKey)
+        let sut = makeSUT()
+        await sut.restore()
+        sut.reset()
+
+        await sut.start()
+        XCTAssertEqual(sut.state, .error(.missingAPIKey))
+        await sut.dismissFailure()
+
+        XCTAssertEqual(sut.state, .result("Add 2.5 kg on bench next session."))
+        XCTAssertEqual(sut.resultAge, "2 h ago")
+    }
+
+    /// "Back" on the very first run's error screen has nothing to fall back
+    /// to, and must leave the intro screen rather than an empty result.
+    func testDismissFailureWithoutAStoredRecommendationLeavesTheIntroScreen() async {
+        await streamer.setStartError(InferenceServiceError.missingAPIKey)
+        let sut = makeSUT()
+        await sut.start()
+
+        await sut.dismissFailure()
+
+        XCTAssertEqual(sut.state, .idle)
+        XCTAssertNil(sut.generatedAt)
+    }
+
+    /// The verdict belongs to the recommendation it was given for: a run
+    /// started while `restore()` is reading the feedback store must not end up
+    /// with a pre-selected rating the user never gave on its text.
+    func testRestoreDoesNotAttachAnOldVerdictToARunStartedMeanwhile() async throws {
+        let generatedAt = Self.reference.addingTimeInterval(-7 * 3_600)
+        try await storeRecommendation("Older advice.", at: generatedAt)
+        await feedbackStore.record(.helpful, at: generatedAt.addingTimeInterval(60))
+        await streamer.setChunks(["Fresh advice."])
+        let sut = makeSUT()
+
+        // Both run concurrently, the way a tap on "Analyze" lands while the
+        // view's restore task is still in flight.
+        async let restored: Void = sut.restore()
+        async let run: Void = sut.start()
+        _ = await (restored, run)
+
+        XCTAssertEqual(sut.state, .result("Fresh advice."))
+        XCTAssertNil(sut.feedback)
     }
 
     /// "New analysis" only clears the screen — the recommendation stays on
