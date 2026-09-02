@@ -48,7 +48,15 @@ actor HevyService: WorkoutSyncing {
         self.workouts = workouts
         self.timestamps = timestamps
         self.sessionReset = sessionReset
-            ?? SessionResetService(keychain: keychain, workouts: workouts, timestamps: timestamps)
+            ?? SessionResetService(
+                keychain: keychain,
+                workouts: workouts,
+                // The same container the workouts live in, so the logout drops
+                // the stored recommendation along with the cache it describes
+                // (#97).
+                results: AnalysisResultStore(modelContainer: workouts.modelContainer),
+                timestamps: timestamps
+            )
         self.calendar = calendar
         self.now = now
     }

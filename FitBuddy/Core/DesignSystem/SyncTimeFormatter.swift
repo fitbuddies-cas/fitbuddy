@@ -1,7 +1,11 @@
 import Foundation
 
-/// Formats the "last synced" timestamp the dashboard must always show
-/// (US-2 AC2).
+/// Formats a timestamp as the age the screen prints — the "last synced" line
+/// of the dashboard (US-2 AC2) and the age of a restored recommendation (US-3
+/// AC10).
+///
+/// In `Core/` rather than in `Features/Dashboard/`: a second feature reads it
+/// since #97, and a second formatter next to it would drift from this one.
 ///
 /// Hand-rolled rather than `RelativeDateTimeFormatter`, which would render an
 /// hours-old sync as "1 hour ago" and hide the minutes — exactly the precision

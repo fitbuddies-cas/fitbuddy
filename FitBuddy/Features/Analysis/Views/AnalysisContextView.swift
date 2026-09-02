@@ -60,10 +60,16 @@ struct AnalysisContextView: View {
     /// `AnalysisWindowNote`: what the user cannot work out on their own is
     /// that this recommendation reaches further back than the app normally
     /// looks, and that an empty recent window is the reason.
+    ///
+    /// Past tense and phrased around the covered window, because a restored
+    /// recommendation (#97) is read hours or days after its run: "the last
+    /// four weeks" would then mean a period the analysis never saw, and the
+    /// empty weeks are the *most recent* ones inside the widened window, not
+    /// the ones before it.
     private var widenedNote: String {
         """
-        No sessions in the last \(AnalysisWindow.default.weeks) weeks, so the \
-        window was widened.
+        This analysis covered \(context.window.weeks) weeks — its most recent \
+        \(AnalysisWindow.default.weeks) held no sessions.
         """
     }
 

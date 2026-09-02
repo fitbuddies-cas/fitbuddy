@@ -10,8 +10,13 @@ import SwiftData
 /// protection raised to `.complete` so the SQLite file is unreadable while the
 /// device is locked.
 enum ModelContainerFactory {
-    /// Every `@Model` type in the cached workout hierarchy.
-    static let schema = Schema([Workout.self, Exercise.self, ExerciseSet.self])
+    /// Every `@Model` type the app stores: the cached workout hierarchy and
+    /// the last AI recommendation (#97).
+    ///
+    /// `AnalysisResult` joined an existing schema, which SwiftData handles as a
+    /// lightweight migration — a new entity with no relationship to the others
+    /// needs no `VersionedSchema`, and an installed store keeps its workouts.
+    static let schema = Schema([Workout.self, Exercise.self, ExerciseSet.self, AnalysisResult.self])
 
     private static let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "ModelContainer")
 
