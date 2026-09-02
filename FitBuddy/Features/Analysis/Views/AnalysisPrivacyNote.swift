@@ -11,7 +11,7 @@ struct AnalysisPrivacyNote: View {
         HStack(spacing: 6) {
             Image(systemName: "lock")
                 .font(.caption2)
-            Text("Only your own training data is sent to Claude — no benchmarks.")
+            Text("Only your own training data is sent to your AI provider — no benchmarks.")
                 .font(.caption)
         }
         .foregroundStyle(Color.fbMuted)

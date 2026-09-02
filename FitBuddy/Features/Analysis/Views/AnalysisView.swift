@@ -68,20 +68,23 @@ struct AnalysisView: View {
         case .loading:
             AnalysisProgressView(
                 text: nil,
+                provider: viewModel.attribution?.provider,
                 isTakingLong: viewModel.isTakingLong,
                 onCancel: viewModel.cancel
             )
         case .streaming(let text):
             AnalysisProgressView(
                 text: text,
+                provider: viewModel.attribution?.provider,
                 isTakingLong: viewModel.isTakingLong,
                 onCancel: viewModel.cancel
             )
         case .result(let text):
-            AnalysisResultView(text: text)
+            AnalysisResultView(text: text, attribution: viewModel.attribution)
         case .error(let failure):
             AnalysisErrorView(
                 failure: failure,
+                attribution: viewModel.attribution,
                 onRetry: failure.isRetryable ? start : nil,
                 onBack: { viewModel.reset() }
             )
@@ -150,6 +153,15 @@ private struct AnalysisViewPreviewHost: View {
     AnalysisViewPreviewHost(viewModel: AnalysisViewModel(
         cache: PreviewWorkoutCache.filled,
         inference: PreviewAnalysisStreamer.recommendation
+    ))
+}
+
+/// Tapping "Analyze with AI" here has Claude give way to Gemini before the
+/// answer arrives, so the badge and the fallback notice are both visible.
+#Preview("Provider fallback") {
+    AnalysisViewPreviewHost(viewModel: AnalysisViewModel(
+        cache: PreviewWorkoutCache.filled,
+        inference: PreviewAnalysisStreamer.fallback
     ))
 }
 

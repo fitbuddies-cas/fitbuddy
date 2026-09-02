@@ -1,7 +1,11 @@
 import Foundation
 
-/// Persists the timestamp of the last Claude analysis call, so the 6h
-/// cooldown (US-3, #29) survives an app kill.
+/// Persists the timestamp of the last analysis call, so the 6h cooldown
+/// (US-3, #29) survives an app kill.
+///
+/// One window per analysis, whichever provider ends up answering it (#79):
+/// `InferenceService` writes here once, when the first provider in the chain
+/// accepts the request.
 ///
 /// `UserDefaults`, not SwiftData, mirroring `SyncTimestampStore`: a single
 /// scalar timestamp does not belong in the relational cache (ADR-001).
@@ -31,7 +35,7 @@ actor AnalysisCooldownStore {
         return Date(timeIntervalSince1970: defaults.double(forKey: Self.lastCallKey))
     }
 
-    /// Records a call that reached Claude, starting a fresh cooldown window.
+    /// Records a call a provider accepted, starting a fresh cooldown window.
     func recordCall(at date: Date) {
         defaults.set(date.timeIntervalSince1970, forKey: Self.lastCallKey)
     }

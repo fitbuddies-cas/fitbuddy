@@ -1,28 +1,30 @@
 import Foundation
 
 /// Why an analysis run did not produce a recommendation — the reason the
-/// analysis screen names (#31).
+/// analysis screen names (#31, #79).
 ///
 /// Coarser than `InferenceServiceError`, in the same spirit as `SyncFailure`:
 /// the user needs to know whether to wait, retry, or fix something. The
 /// distinctions that survive are the ones that change what they should do.
+///
+/// Every case that describes a provider's behaviour carries the provider it
+/// describes. After a fallback chain that is the *last* one tried, which is the
+/// one whose message tells the user what state they are actually in — the
+/// providers tried before it are listed separately by the error view.
 enum AnalysisFailure: Equatable {
-    /// No Claude key stored — the user has to add one in onboarding.
+    /// No provider has a key stored — the user has to add one.
     case missingAPIKey
     /// The Keychain read failed (e.g. a locked device). The key is still
     /// there, so this is a retry, not a reason to re-enter it.
     case keychainUnavailable
-    /// The user's highest-priority provider is stored, but v0 can only call
-    /// Claude. Carries that provider so the message can name it.
-    case providerNotSupported(LLMProvider)
-    /// Claude rejected the stored key (HTTP 401).
-    case unauthorized
-    /// The request never reached Claude.
-    case offline
-    /// HTTP 429, with Claude's `Retry-After` in seconds when it sent one.
-    case rateLimited(retryAfter: TimeInterval?)
-    /// Claude answered 5xx, or aborted the stream after answering 200.
-    case serviceUnavailable
+    /// The provider rejected the stored key (HTTP 401/403).
+    case unauthorized(LLMProvider?)
+    /// The request never reached the provider.
+    case offline(LLMProvider?)
+    /// HTTP 429, with the provider's `Retry-After` in seconds when it sent one.
+    case rateLimited(provider: LLMProvider?, retryAfter: TimeInterval?)
+    /// The provider answered 5xx, or aborted the stream after answering 200.
+    case serviceUnavailable(LLMProvider?)
     /// The 6h cooldown was still running when the call went out. Carries the
     /// instant it ends, so the message can name it.
     case cooldownActive(availableAt: Date)
@@ -32,18 +34,22 @@ enum AnalysisFailure: Equatable {
     case noTrainingData
     /// The local cache could not be read.
     case cacheUnavailable
-    /// Claude answered, but not with anything this version could read — an
-    /// unexpected status, or a stream that ended without a single token.
-    case unreadableResponse
+    /// The provider answered, but not with anything this version could read —
+    /// an unexpected status, or a stream that ended without a single token.
+    case unreadableResponse(LLMProvider?)
 
     /// Maps an inference or cache error onto a failure the screen can explain.
+    ///
+    /// - Parameter provider: The provider the error came from — the last one
+    ///   the fallback chain tried. `nil` when the run failed before any
+    ///   provider was picked, or when the cache, not a provider, failed.
     ///
     /// `.alreadyInProgress` has no case of its own: `AnalysisViewModel.start()`
     /// claims its slot synchronously, so a double tap cannot reach the service
     /// twice, and the actor's guard firing would mean two ViewModels share one
     /// service — a wiring bug, not something to tell the user about. It reads
     /// as `.unreadableResponse`, the generic bucket.
-    init(analysisError: Error) {
+    init(analysisError: Error, provider: LLMProvider? = nil) {
         guard let error = analysisError as? InferenceServiceError else {
             self = .cacheUnavailable
             return
@@ -51,40 +57,38 @@ enum AnalysisFailure: Equatable {
         switch error {
         case .missingAPIKey:
             self = .missingAPIKey
-        case .providerNotSupportedYet(let provider):
-            self = .providerNotSupported(provider)
         case .keychainUnavailable:
             self = .keychainUnavailable
         case .unauthorized:
-            self = .unauthorized
+            self = .unauthorized(provider)
         case .networkUnavailable:
-            self = .offline
+            self = .offline(provider)
         case .rateLimited(let retryAfter):
-            self = .rateLimited(retryAfter: retryAfter)
+            self = .rateLimited(provider: provider, retryAfter: retryAfter)
         case .serviceUnavailable, .streamInterrupted:
-            self = .serviceUnavailable
+            self = .serviceUnavailable(provider)
         case .cooldownActive(let availableAt):
             self = .cooldownActive(availableAt: availableAt)
         case .invalidResponse, .unexpectedStatus, .alreadyInProgress:
-            self = .unreadableResponse
+            self = .unreadableResponse(provider)
         }
     }
 
     /// The headline the analysis screen shows in place of a recommendation.
     var title: String {
         switch self {
-        case .missingAPIKey, .unauthorized:
-            return "Claude key problem"
-        case .providerNotSupported:
-            return "Provider not supported yet"
+        case .missingAPIKey:
+            return "No API key stored"
+        case .unauthorized(let provider):
+            return "\(Self.name(provider)) key problem"
         case .keychainUnavailable:
             return "Key not readable"
         case .offline:
             return "No connection"
         case .rateLimited:
             return "Too many requests"
-        case .serviceUnavailable:
-            return "Claude unavailable"
+        case .serviceUnavailable(let provider):
+            return "\(Self.name(provider)) unavailable"
         case .cooldownActive:
             return "Analysis on cooldown"
         case .noTrainingData:
@@ -101,22 +105,20 @@ enum AnalysisFailure: Equatable {
     var message: String {
         switch self {
         case .missingAPIKey:
-            return "No Claude API key is stored. Add your key to run an analysis."
-        case .unauthorized:
-            return "Claude rejected your API key. Check it and enter it again."
-        case .providerNotSupported(let provider):
-            return "\(provider.displayName) cannot be used for analyses yet. Add a Claude API key to run one."
+            return "No API key is stored for any provider. Add a key to run an analysis."
+        case .unauthorized(let provider):
+            return "\(Self.name(provider)) rejected your API key. Check it and enter it again."
         case .keychainUnavailable:
             return "Your key could not be read from the Keychain. Unlock your device and try again."
-        case .offline:
-            return "Your device could not reach Claude. Check your connection and try again."
-        case .rateLimited(let retryAfter):
+        case .offline(let provider):
+            return "Your device could not reach \(Self.name(provider)). Check your connection and try again."
+        case .rateLimited(let provider, let retryAfter):
             guard let wait = Self.wait(retryAfter) else {
-                return "Claude is rate-limiting your key. Try again in a few minutes."
+                return "\(Self.name(provider)) is rate-limiting your key. Try again in a few minutes."
             }
-            return "Claude is rate-limiting your key. Try again in \(wait)."
-        case .serviceUnavailable:
-            return "Claude could not complete the analysis. Try again in a few minutes."
+            return "\(Self.name(provider)) is rate-limiting your key. Try again in \(wait)."
+        case .serviceUnavailable(let provider):
+            return "\(Self.name(provider)) could not complete the analysis. Try again in a few minutes."
         case .cooldownActive(let availableAt):
             // The instant, not a countdown: this message is written once, while
             // `AnalysisViewModel.cooldownMessage` keeps ticking beside it.
@@ -126,8 +128,8 @@ enum AnalysisFailure: Equatable {
             return "There are no workouts in your cached training data to analyse. Sync it first."
         case .cacheUnavailable:
             return "Your cached training data could not be read. Try again after a sync."
-        case .unreadableResponse:
-            return "Claude's answer could not be read. Try again in a few minutes."
+        case .unreadableResponse(let provider):
+            return "\(Self.name(provider))'s answer could not be read. Try again in a few minutes."
         }
     }
 
@@ -136,8 +138,6 @@ enum AnalysisFailure: Equatable {
         switch self {
         case .missingAPIKey, .unauthorized:
             return "key.slash"
-        case .providerNotSupported:
-            return "exclamationmark.triangle"
         case .keychainUnavailable:
             return "lock.slash"
         case .offline:
@@ -159,8 +159,7 @@ enum AnalysisFailure: Equatable {
     /// key cannot be retried into working — that one needs onboarding.
     var isRetryable: Bool {
         switch self {
-        case .missingAPIKey, .unauthorized, .providerNotSupported, .cooldownActive,
-             .noTrainingData:
+        case .missingAPIKey, .unauthorized, .cooldownActive, .noTrainingData:
             return false
         case .keychainUnavailable, .offline, .rateLimited, .serviceUnavailable,
              .cacheUnavailable, .unreadableResponse:
@@ -168,8 +167,14 @@ enum AnalysisFailure: Equatable {
         }
     }
 
-    /// `30` → `"30 s"`, `180` → `"3 min"`. `nil` when Claude sent no usable
-    /// value, so the caller drops the clause instead of printing "0 s".
+    /// The provider's name, or a neutral stand-in when the run failed before
+    /// one was picked — the message still has to read as a sentence.
+    private static func name(_ provider: LLMProvider?) -> String {
+        provider?.displayName ?? "The provider"
+    }
+
+    /// `30` → `"30 s"`, `180` → `"3 min"`. `nil` when the provider sent no
+    /// usable value, so the caller drops the clause instead of printing "0 s".
     private static func wait(_ retryAfter: TimeInterval?) -> String? {
         guard let retryAfter, retryAfter >= 1 else { return nil }
         guard retryAfter >= 90 else { return "\(Int(retryAfter.rounded())) s" }

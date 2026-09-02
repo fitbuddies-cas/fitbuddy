@@ -59,16 +59,21 @@ enum LLMProvider: String, CaseIterable, Identifiable, Codable {
         }
     }
 
-    /// Whether this build can actually run an analysis call against the
-    /// provider. v0 implements the Claude endpoint only (#29) — Gemini and
-    /// Mistral keys are accepted and stored during onboarding, but their
-    /// request building and response parsing land with #79. Until then the
-    /// inference path skips them rather than sending a Claude-shaped request
-    /// to the wrong API.
-    var isCallable: Bool {
+    /// A warning about how this provider treats the data sent to it, shown
+    /// under its key field. `nil` where there is nothing the user has to act
+    /// on (ADR-007).
+    ///
+    /// Only Mistral has one today: its free Experiment tier trains on API
+    /// input by default, which for training data means health data. FitBuddy
+    /// cannot switch that off from here — only tell the user where to.
+    var dataUsageNote: String? {
         switch self {
-        case .claude: return true
-        case .gemini, .mistral: return false
+        case .claude, .gemini:
+            return nil
+        case .mistral:
+            return "Mistral's free Experiment tier uses API data for training by default. "
+                + "Enable pay-as-you-go, or turn training off under Privacy in the Mistral admin console, "
+                + "before you send workout data."
         }
     }
 

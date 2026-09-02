@@ -2,22 +2,27 @@ import Foundation
 import XCTest
 @testable import FitBuddy
 
-/// Test double for the Claude stream, so `AnalysisViewModel` can be driven
-/// through every path — a slow first token, a mid-stream failure, a
-/// cancellation — without a `URLProtocol` stub or a Keychain entry.
+/// Test double for the analysis stream, so `AnalysisViewModel` can be driven
+/// through every path — a slow first token, a mid-stream failure, a provider
+/// fallback, a cancellation — without a `URLProtocol` stub or a Keychain
+/// entry.
 ///
 /// An `actor`, mirroring `InferenceService`: `AnalysisStreaming` is a
 /// nonisolated `async` requirement, so its body runs off the main actor while
 /// the tests read `callCount` from it.
 actor StubAnalysisStreamer: AnalysisStreaming {
-    /// Chunks yielded by a successful stream, in order.
-    private var chunks: [String] = []
+    /// Events yielded by a successful stream, in order.
+    private var events: [AnalysisEvent] = []
     /// When set, `streamAnalysis` throws instead of returning a stream.
     private var startError: InferenceServiceError?
     /// When set, the stream yields `chunks` and then fails.
     private var streamError: InferenceServiceError?
     /// Holds the call before it returns a stream, until `release()`.
     private var gated = false
+    /// Keeps the stream open after its events instead of finishing it, so a
+    /// test can observe the screen mid-run rather than only its outcome. The
+    /// consumer's cancellation is what ends it.
+    private var holdsOpen = false
 
     private(set) var callCount = 0
     private(set) var systemPrompt: String?
@@ -29,8 +34,14 @@ actor StubAnalysisStreamer: AnalysisStreaming {
     private var arrival: CheckedContinuation<Void, Never>?
     private var callArrived = false
 
-    func setChunks(_ chunks: [String]) {
-        self.chunks = chunks
+    /// Convenience for the common case: one provider that answers.
+    func setChunks(_ chunks: [String], from provider: LLMProvider = .claude) {
+        events = [.attempting(provider)] + chunks.map(AnalysisEvent.text)
+    }
+
+    /// The exact event sequence, for tests about fallback ordering.
+    func setEvents(_ events: [AnalysisEvent]) {
+        self.events = events
     }
 
     func setStartError(_ error: InferenceServiceError?) {
@@ -47,7 +58,13 @@ actor StubAnalysisStreamer: AnalysisStreaming {
         gated = true
     }
 
-    func streamAnalysis(systemPrompt: String, userPrompt: String) async throws -> AsyncThrowingStream<String, Error> {
+    /// Leaves the stream open once `events` have been yielded, so the run stays
+    /// in whatever state its last event put it in until the test cancels.
+    func holdOpenAfterEvents() {
+        holdsOpen = true
+    }
+
+    func streamAnalysis(systemPrompt: String, userPrompt: String) async throws -> AsyncThrowingStream<AnalysisEvent, Error> {
         callCount += 1
         self.systemPrompt = systemPrompt
         self.userPrompt = userPrompt
@@ -61,10 +78,12 @@ actor StubAnalysisStreamer: AnalysisStreaming {
 
         if let startError { throw startError }
 
-        let chunks = chunks
+        let events = events
         let streamError = streamError
+        let holdsOpen = holdsOpen
         return AsyncThrowingStream { continuation in
-            for chunk in chunks { continuation.yield(chunk) }
+            for event in events { continuation.yield(event) }
+            guard !holdsOpen else { return }
             continuation.finish(throwing: streamError)
         }
     }

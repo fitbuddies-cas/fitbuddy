@@ -1,13 +1,15 @@
 import Foundation
 
 /// Drives the on-demand AI analysis: builds the prompt from the local cache,
-/// streams Claude's answer, and owns the 6h cooldown the user sees (US-3, #31).
+/// streams the answer of whichever provider takes the call, and owns the 6h
+/// cooldown the user sees (US-3, #31/#79).
 ///
-/// Three things are published separately because they answer different
-/// questions. `state` says what the screen shows right now, `cooldownMessage`
-/// says when the next run is allowed, and `isTakingLong` says whether this run
-/// has passed the 30s mark without a single token — the moment US-3 AC1 wants
-/// the cancel button to appear.
+/// Four things are published separately because they answer different
+/// questions. `state` says what the screen shows right now, `attribution` says
+/// who is answering it and who was asked before them, `cooldownMessage` says
+/// when the next run is allowed, and `isTakingLong` says whether this run has
+/// passed the 30s mark without a single token — the moment US-3 AC1 wants the
+/// cancel button to appear.
 ///
 /// The prompt is built from the cache only: an analysis never triggers a Hevy
 /// sync, so a tap here cannot fail on connectivity the dashboard already
@@ -22,6 +24,10 @@ final class AnalysisViewModel: ObservableObject {
     static let defaultSlowThreshold: TimeInterval = 30
 
     @Published private(set) var state: AnalysisState = .idle
+    /// Which provider is answering the run on screen, and whether the chain
+    /// had to fall back to reach them (#79). `nil` before the first provider
+    /// is tried, and whenever the screen is at rest.
+    @Published private(set) var attribution: AnalysisAttribution?
     /// `"Next analysis available in 5h 12m"`, or `nil` while a run is allowed.
     @Published private(set) var cooldownMessage: String?
     /// Whether the running call has passed `slowThreshold` without answering.
@@ -105,6 +111,11 @@ final class AnalysisViewModel: ObservableObject {
         // actor, so two taps landing in that window would otherwise both pass
         // the guard above and start a run each.
         state = .loading
+        // Cleared before the cooldown branch below can return: that branch
+        // publishes an error which `AnalysisErrorView` renders together with
+        // the attribution, and the providers of the *previous* run have nothing
+        // to do with a blocked one.
+        attribution = nil
 
         if let availableAt = await refreshCooldown() {
             // Checked here as well as inside `InferenceService`: the button is
@@ -138,12 +149,14 @@ final class AnalysisViewModel: ObservableObject {
         runTask?.cancel()
         runTask = nil
         stopSlowTimer()
+        attribution = nil
         state = .idle
     }
 
     /// Clears a finished run, so the screen goes back to the analysis button.
     func reset() {
         guard !state.isRunning else { return }
+        attribution = nil
         state = .idle
     }
 
@@ -171,23 +184,47 @@ final class AnalysisViewModel: ObservableObject {
         var text = ""
         do {
             let stream = try await inference.streamAnalysis(systemPrompt: prompt.system, userPrompt: prompt.user)
-            for try await chunk in stream {
+            for try await event in stream {
                 try Task.checkCancellation()
-                // The first token is the answer arriving: the slow hint has
-                // served its purpose, whatever the rest of the stream costs.
-                stopSlowTimer()
-                text += chunk
-                state = .streaming(text)
+                switch event {
+                case .attempting(let provider):
+                    // A provider is taking over. Everything streamed so far
+                    // came from one that has since failed, and showing it
+                    // alongside the new answer would read as one recommendation
+                    // written by two models — so it goes.
+                    text = ""
+                    if attribution != nil {
+                        attribution?.append(provider)
+                        // Back to the spinner: the new provider has not sent
+                        // anything yet.
+                        state = .loading
+                        // And the slow hint with it: the first `.text` of the
+                        // provider that gave way already stopped the timer, so
+                        // without a restart here the cancel button of US-3 AC1
+                        // never comes back while the new provider hangs.
+                        startSlowTimer()
+                    } else {
+                        attribution = AnalysisAttribution(first: provider)
+                    }
+                case .text(let chunk):
+                    // The first token is the answer arriving: the slow hint has
+                    // served its purpose, whatever the rest of the stream costs.
+                    stopSlowTimer()
+                    text += chunk
+                    state = .streaming(text)
+                }
             }
             guard !Task.isCancelled else { return await finish(id) }
             // A stream that ends without a single token is not an empty
             // recommendation — it is a response this version could not read.
-            state = text.isEmpty ? .error(.unreadableResponse) : .result(text)
+            state = text.isEmpty ? .error(.unreadableResponse(attribution?.provider)) : .result(text)
         } catch {
             // A cancelled run already published `.idle` in `cancel()`; the
             // error here is only the echo of that, and must not overwrite it.
             guard !Task.isCancelled, !error.isCancellation else { return await finish(id) }
-            state = .error(AnalysisFailure(analysisError: error))
+            // The provider named is the last one the chain tried — the one whose
+            // failure the user is actually looking at.
+            state = .error(AnalysisFailure(analysisError: error, provider: attribution?.provider))
         }
         await finish(id)
     }
@@ -209,8 +246,8 @@ final class AnalysisViewModel: ObservableObject {
             // the prompt says so. An empty *recent* window widens the window
             // instead of failing: someone returning from a six-week break has
             // training worth analysing (#87). Only a cache with nothing in the
-            // widest window at all is "no training data", and paying Claude to
-            // say so would be waste.
+            // widest window at all is "no training data", and paying a provider
+            // to say so would be waste.
             guard let window = AnalysisWindow.resolve(
                 for: summaries,
                 endingAt: reference,
@@ -234,8 +271,8 @@ final class AnalysisViewModel: ObservableObject {
     }
 
     /// Ends a run: the slow hint goes, and the cooldown label is re-read from
-    /// the store — including after a cancellation, where Claude may already
-    /// have been billed and the window already started.
+    /// the store — including after a cancellation, where a provider may
+    /// already have been billed and the window already started.
     private func finish(_ id: UInt64) async {
         // Superseded: the user started a new run while this one was letting
         // go. Its timer and its task handle belong to that run now.

@@ -11,8 +11,9 @@ enum AnalysisState: Equatable {
     /// Nothing requested yet, or the last run was cancelled — the analysis
     /// button is the only thing on screen.
     case idle
-    /// The request is on its way and Claude has not sent a first token yet:
-    /// the spinner phase (US-3 AC1).
+    /// The request is on its way and no provider has sent a first token yet:
+    /// the spinner phase (US-3 AC1). Also re-entered mid-run when the chain
+    /// falls back and the next provider starts from nothing (#79).
     case loading
     /// Text is arriving. Carries everything received so far, so the view can
     /// render the answer as it grows.
