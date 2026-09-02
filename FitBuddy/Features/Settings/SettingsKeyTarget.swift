@@ -20,7 +20,7 @@ enum SettingsKeyTarget: Hashable, Identifiable {
     /// Keychain slot backing this credential.
     var keychainKey: KeychainKey {
         switch self {
-        case .hevy: return .hevyAPIKey
+        case .hevy: return HevyKeyPresentation.keychainKey
         case .llm(let provider): return provider.keychainKey
         }
     }
@@ -28,7 +28,7 @@ enum SettingsKeyTarget: Hashable, Identifiable {
     /// User-facing provider name.
     var displayName: String {
         switch self {
-        case .hevy: return "Hevy"
+        case .hevy: return HevyKeyPresentation.displayName
         case .llm(let provider): return provider.displayName
         }
     }
@@ -36,8 +36,32 @@ enum SettingsKeyTarget: Hashable, Identifiable {
     /// Text-field placeholder hinting at the key format.
     var keyPlaceholder: String {
         switch self {
-        case .hevy: return HevyAPIKey.keyPlaceholder
+        case .hevy: return HevyKeyPresentation.keyPlaceholder
         case .llm(let provider): return provider.keyPlaceholder
+        }
+    }
+
+    /// Host name of the page that manages this key, for link labels.
+    var consoleName: String {
+        switch self {
+        case .hevy: return HevyKeyPresentation.consoleName
+        case .llm(let provider): return provider.consoleName
+        }
+    }
+
+    /// Page where the user creates/manages this key.
+    var consoleURL: URL {
+        switch self {
+        case .hevy: return HevyKeyPresentation.consoleURL
+        case .llm(let provider): return provider.consoleURL
+        }
+    }
+
+    /// Where-to-find instructions for this key (markdown).
+    var consoleInstructions: String {
+        switch self {
+        case .hevy: return HevyKeyPresentation.consoleInstructions
+        case .llm(let provider): return provider.consoleInstructions
         }
     }
 

@@ -11,7 +11,7 @@ struct LLMKeysView: View {
 
     private var isSaving: Bool { viewModel.state == .saving }
 
-    private var failure: LLMKeysState.Failure? {
+    private var failure: APIKeyEntryFailure? {
         if case .failed(let failure) = viewModel.state { return failure }
         return nil
     }
@@ -252,12 +252,16 @@ struct LLMKeysView: View {
             .padding(.leading, 2)
     }
 
-    private func errorBanner(for failure: LLMKeysState.Failure) -> some View {
+    /// Copy comes from `APIKeyEntryFailure`, like on the other two key
+    /// screens: this step can only fail on the Keychain, and that banner must
+    /// not drift from the one settings and step 2 show for the same problem.
+    /// No provider is named — the step saves up to three keys at once.
+    private func errorBanner(for failure: APIKeyEntryFailure) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Could not save your keys")
+            Text(failure.title())
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Color.fbRed)
-            Text("The keys could not be stored on this device. Please try again.")
+            Text(failure.message())
                 .font(.footnote)
                 .foregroundStyle(Color.fbInkSecondary)
         }

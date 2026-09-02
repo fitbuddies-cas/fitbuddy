@@ -5,9 +5,6 @@ import Foundation
 /// accepted it, so no unverified key is ever kept.
 @MainActor
 final class HevyKeyEntryViewModel: ObservableObject {
-    /// Hevy page where the user creates/manages API keys (AC3 error link).
-    static let hevyAPISettingsURL = URL(staticString: "https://hevy.com/settings?developer")
-
     /// Raw text field content. Editing after a failure returns to `.idle` so
     /// the error styling clears as soon as the user starts fixing the key.
     @Published var apiKey = "" {
@@ -72,7 +69,7 @@ final class HevyKeyEntryViewModel: ObservableObject {
         do {
             try await validator.validate(key)
         } catch let error as HevyKeyValidationError {
-            state = .failed(Self.failure(for: error))
+            state = .failed(APIKeyEntryFailure(error))
             return
         } catch {
             // The protocol allows arbitrary errors; without an HTTP response
@@ -96,20 +93,6 @@ final class HevyKeyEntryViewModel: ObservableObject {
     func reset() {
         apiKey = ""
         state = .idle
-    }
-
-    /// Maps validator errors to banner failures. Exhaustive on purpose: a new
-    /// validator error case must make a conscious copy decision here instead
-    /// of silently inheriting the "check your internet" advice.
-    private static func failure(for error: HevyKeyValidationError) -> APIKeyEntryFailure {
-        switch error {
-        case .invalidKey:
-            return .invalidKey
-        case .transport:
-            return .network
-        case .unexpectedStatus:
-            return .serviceUnavailable
-        }
     }
 
     /// Resets a failed attempt back to editing (the "Try again" CTA).

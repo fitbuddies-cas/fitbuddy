@@ -20,10 +20,10 @@ struct HevyKeyEntryView: View {
             VStack(alignment: .leading, spacing: 0) {
                 FBStepIndicator(current: 2)
                     .padding(.bottom, 22)
-                Text("Connect Hevy")
+                Text("Connect \(HevyKeyPresentation.displayName)")
                     .font(.largeTitle.bold())
                     .foregroundStyle(Color.fbInk)
-                Text("Paste the API key from your Hevy account. We'll verify it before saving.")
+                Text("Paste the API key from your \(HevyKeyPresentation.displayName) account. We'll verify it before saving.")
                     .font(.subheadline)
                     .foregroundStyle(Color.fbInkSecondary)
                     .padding(.top, 8)
@@ -53,11 +53,11 @@ struct HevyKeyEntryView: View {
         HStack(alignment: .top, spacing: 12) {
             screenshotPlaceholder
             VStack(alignment: .leading, spacing: 6) {
-                Text("The key is not available in the Hevy app — only on the Hevy website. Log in at **hevy.com**, open **Settings → Developer**, and tap **Generate API key**.")
+                Text(attributedInstructions)
                     .font(.footnote)
                     .foregroundStyle(Color.fbInkSecondary)
-                Link(destination: HevyKeyEntryViewModel.hevyAPISettingsURL) {
-                    Text("Open hevy.com ↗")
+                Link(destination: HevyKeyPresentation.consoleURL) {
+                    Text("Open \(HevyKeyPresentation.consoleName) ↗")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(Color.fbAccent)
                 }
@@ -71,6 +71,11 @@ struct HevyKeyEntryView: View {
             RoundedRectangle(cornerRadius: FBRadius.control)
                 .strokeBorder(Color.fbBorder, lineWidth: 1)
         )
+    }
+
+    private var attributedInstructions: AttributedString {
+        (try? AttributedString(markdown: HevyKeyPresentation.consoleInstructions))
+            ?? AttributedString(HevyKeyPresentation.consoleInstructions)
     }
 
     private var screenshotPlaceholder: some View {
@@ -91,8 +96,8 @@ struct HevyKeyEntryView: View {
 
     private var keyInput: some View {
         FBKeyField(
-            label: "HEVY API KEY",
-            placeholder: HevyAPIKey.keyPlaceholder,
+            label: "\(HevyKeyPresentation.displayName.uppercased()) API KEY",
+            placeholder: HevyKeyPresentation.keyPlaceholder,
             text: $viewModel.apiKey,
             isBusy: isValidating,
             hasError: failure == .invalidKey,
@@ -114,15 +119,15 @@ struct HevyKeyEntryView: View {
     /// `APIKeyEntryFailure` so the settings key editor (#83) says the same thing.
     private func errorBanner(for failure: APIKeyEntryFailure) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(failure.title(for: "Hevy"))
+            Text(failure.title(for: HevyKeyPresentation.displayName))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Color.fbRed)
-            Text(failure.message(for: "Hevy"))
+            Text(failure.message(for: HevyKeyPresentation.displayName))
                 .font(.footnote)
                 .foregroundStyle(Color.fbInkSecondary)
             if failure == .invalidKey {
-                Link(destination: HevyKeyEntryViewModel.hevyAPISettingsURL) {
-                    Text("Open hevy.com API settings ↗")
+                Link(destination: HevyKeyPresentation.consoleURL) {
+                    Text("Open \(HevyKeyPresentation.consoleName) API settings ↗")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(Color.fbRed)
                 }
@@ -155,7 +160,7 @@ struct HevyKeyEntryView: View {
     }
 
     private var ctaTitle: String {
-        if isValidating { return "Verifying with Hevy…" }
+        if isValidating { return "Verifying with \(HevyKeyPresentation.displayName)…" }
         if failure == .invalidKey { return "Try again" }
         return "Verify & continue"
     }
