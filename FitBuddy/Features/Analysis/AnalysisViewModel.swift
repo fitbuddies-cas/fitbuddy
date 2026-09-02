@@ -38,11 +38,11 @@ final class AnalysisViewModel: ObservableObject {
     /// `nil` while none was given (US-3 AC9). Reset with every new run: a
     /// rating belongs to the recommendation it was given for.
     @Published private(set) var feedback: AnalysisFeedback?
-    /// The window the analysis on screen actually covers. `.default` until a
-    /// run resolves it, and widened by the fallback ladder when the last four
-    /// weeks are empty (#87) — the UI names it only when it is not the
-    /// default.
-    @Published private(set) var window: AnalysisWindow = .default
+    /// What the analysis on screen rests on: how many sessions, over which
+    /// period, from which sources (US-6, #36). `nil` until a run has resolved
+    /// its window — before that there is no data basis to describe, and a
+    /// guessed one would be worse than none.
+    @Published private(set) var context: AnalysisContext?
 
     /// Whether tapping "Analyse" can start a run right now.
     var canStartAnalysis: Bool {
@@ -129,7 +129,7 @@ final class AnalysisViewModel: ObservableObject {
         guard case .loading = state else { return }
 
         feedback = nil
-        window = .default
+        context = nil
         runID &+= 1
         let id = runID
         let task = Task { await performAnalysis(id) }
@@ -256,7 +256,15 @@ final class AnalysisViewModel: ObservableObject {
                 state = .error(.noTrainingData)
                 return nil
             }
-            self.window = window
+            // Counted over the resolved window, not over everything the read
+            // returned: the cache was read wide enough for the widest rung and
+            // its comparison window, and reporting those sessions as the data
+            // basis would overstate it by a factor of six.
+            let start = window.start(endingAt: reference, calendar: calendar)
+            context = AnalysisContext(
+                sessionCount: summaries.filter { $0.startTime >= start }.count,
+                window: window
+            )
             return AnalysisPromptBuilder.make(
                 summaries: summaries,
                 window: window,

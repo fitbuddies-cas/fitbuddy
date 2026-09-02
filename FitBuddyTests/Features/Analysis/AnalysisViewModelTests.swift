@@ -116,7 +116,90 @@ final class AnalysisViewModelTests: XCTestCase {
             cache.requestedSince,
             AnalysisWindow.widest.previousStart(endingAt: Self.reference, calendar: Self.calendar)
         )
-        XCTAssertEqual(sut.window, .default)
+        XCTAssertEqual(sut.context?.window, .default)
+    }
+
+    // MARK: - Context (US-6, #36)
+
+    /// The context line counts the sessions of the *analysed* window, not
+    /// everything the cache read returned — the read reaches back 26 weeks so
+    /// one read serves every rung of the ladder (#87).
+    func testContextCountsOnlyTheSessionsInsideTheResolvedWindow() async {
+        cache.summaries = [
+            Self.workout(daysAgo: 2),
+            Self.workout(daysAgo: 20),
+            // Outside the 4-week window, inside the read.
+            Self.workout(daysAgo: 40),
+            Self.workout(daysAgo: 80)
+        ]
+        await streamer.setChunks(["ok"])
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.window, .default)
+        XCTAssertEqual(sut.context?.sessionCount, 2)
+    }
+
+    /// After a widened window the count has to follow it: the sessions the
+    /// analysis found are exactly the ones the wider rung holds.
+    func testContextCountsTheWidenedWindowWhenTheLadderMoves() async {
+        cache.summaries = [Self.workout(daysAgo: 40), Self.workout(daysAgo: 50), Self.workout(daysAgo: 80)]
+        await streamer.setChunks(["ok"])
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.window.weeks, 8)
+        XCTAssertEqual(sut.context?.sessionCount, 2)
+    }
+
+    /// A run that never resolves a window must not leave the previous run's
+    /// basis on screen.
+    func testContextIsClearedWhenARunFails() async {
+        await streamer.setChunks(["first"])
+        let clock = TestClock(Self.reference)
+        let sut = makeSUT(clock: clock)
+        XCTAssertNil(sut.context)
+
+        await sut.start()
+        XCTAssertNotNil(sut.context)
+
+        // Past the 6h cooldown, on a cache that no rung can serve.
+        clock.advance(by: 7 * 3_600)
+        cache.summaries = []
+        await sut.start()
+
+        XCTAssertEqual(sut.state, .error(.noTrainingData))
+        XCTAssertNil(sut.context)
+    }
+
+    /// The clearing has to happen at the *start* of a run, not only on its
+    /// failure path: while the second run is still loading, the first run's
+    /// basis would otherwise sit above a recommendation it does not describe.
+    func testContextIsClearedWhileANewRunIsStillLoading() async {
+        await streamer.setChunks(["first"])
+        let clock = TestClock(Self.reference)
+        let sut = makeSUT(clock: clock)
+
+        await sut.start()
+        XCTAssertNotNil(sut.context)
+
+        // Past the 6h cooldown, second run held inside the cache read — after
+        // the clearing, before the window is resolved.
+        clock.advance(by: 7 * 3_600)
+        await streamer.setChunks(["second"])
+        cache.gatesFirstCall = true
+        cache.gatedCall = 2
+        let run = Task { await sut.start() }
+        await cache.waitForFirstCall()
+
+        XCTAssertEqual(sut.state, .loading)
+        XCTAssertNil(sut.context)
+
+        cache.releaseFirstCall()
+        await run.value
+        XCTAssertNotNil(sut.context)
     }
 
     /// The state has to pass through `.loading` before any text arrives — that
@@ -147,7 +230,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await sut.start()
 
         XCTAssertEqual(sut.state, .result("Back after a break."))
-        XCTAssertEqual(sut.window.weeks, 8)
+        XCTAssertEqual(sut.context?.window.weeks, 8)
         let user = await streamer.userPrompt
         XCTAssertEqual(user?.contains("## Last 8 weeks ("), true)
     }
@@ -160,7 +243,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await sut.start()
 
         XCTAssertEqual(sut.state, .result("ok"))
-        XCTAssertEqual(sut.window.weeks, 13)
+        XCTAssertEqual(sut.context?.window.weeks, 13)
     }
 
     /// Only a cache with nothing in the widest window is genuinely empty —
@@ -199,7 +282,7 @@ final class AnalysisViewModelTests: XCTestCase {
         let sut = makeSUT(clock: clock)
 
         await sut.start()
-        XCTAssertEqual(sut.window.weeks, 8)
+        XCTAssertEqual(sut.context?.window.weeks, 8)
 
         // Past the 6h cooldown, with recent training in the cache this time.
         clock.advance(by: 7 * 3_600)
@@ -207,7 +290,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setChunks(["second"])
         await sut.start()
 
-        XCTAssertEqual(sut.window, .default)
+        XCTAssertEqual(sut.context?.window, .default)
     }
 
     func testCacheFailureIsReportedAsCacheUnavailable() async {
