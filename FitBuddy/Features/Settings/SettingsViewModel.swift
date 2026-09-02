@@ -44,9 +44,9 @@ final class SettingsViewModel: ObservableObject {
     /// Invoked after all local data was deleted: the app returns to step 1.
     var onDataDeleted: (() -> Void)?
     /// Invoked after a Hevy key was stored — a replacement as well as a first
-    /// one. Any cache of a previous key is gone by then, so the dashboard
-    /// behind this sheet has to sync again: its own `.task` does not fire when
-    /// the sheet is dismissed (#91).
+    /// one. Any cache of a previous key is gone by then, so the dashboard on
+    /// its own tab has to sync again: its own `.task` does not fire when the
+    /// user switches back to it (#91).
     var onHevyKeyStored: (() -> Void)?
 
     private let keychain: any KeychainStoring

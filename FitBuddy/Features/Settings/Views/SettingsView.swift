@@ -7,9 +7,12 @@ import SwiftUI
 /// drag-to-reorder (`.onMove`) only exists inside a `List`, and reordering the
 /// providers is one of this screen's jobs. The design-system colors are applied
 /// on top of it so it still reads as FitBuddy.
+///
+/// Its own tab in `MainTabView` (#107), so there is nothing to dismiss: a
+/// deleted Hevy key or a full wipe drops the app into onboarding, which
+/// replaces the tab bar altogether.
 struct SettingsView: View {
     @StateObject private var viewModel: SettingsViewModel
-    @Environment(\.dismiss) private var dismiss
 
     /// - Parameter viewModel: Built lazily — the autoclosure is evaluated once,
     ///   when SwiftUI first creates the view's state, so presenting this from a
@@ -24,7 +27,6 @@ struct SettingsView: View {
                 .background(Color.fbBackground)
                 .navigationTitle("Settings")
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar { toolbarContent }
         }
         .task { await viewModel.load() }
         .sheet(item: $viewModel.editorTarget) { target in
@@ -295,15 +297,7 @@ struct SettingsView: View {
         .listRowBackground(Color.fbCard)
     }
 
-    // MARK: - Toolbar & dialogs
-
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            Button("Done") { dismiss() }
-                .foregroundStyle(Color.fbInk)
-        }
-    }
+    // MARK: - Dialogs
 
     private var isConfirmingDeletion: Binding<Bool> {
         Binding(

@@ -16,7 +16,7 @@ struct AnalysisErrorView: View {
     /// same message again.
     let onRetry: (() -> Void)?
     /// Returns to the intro state — the button reads "Back", and that is what
-    /// it does; it does not close the sheet.
+    /// it does; it does not leave the analysis tab.
     let onBack: () -> Void
 
     /// `"Tried Claude, then Gemini."` — without it, a user who set up three

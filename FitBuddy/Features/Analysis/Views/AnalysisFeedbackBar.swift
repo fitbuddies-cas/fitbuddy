@@ -32,7 +32,9 @@ struct AnalysisFeedbackBar: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
-        .background(.bar)
+        // No material of its own: the view sits in `AnalysisView`'s bottom
+        // `safeAreaBar`, which fades the content underneath and shares the
+        // space with the tab bar's glass (#107).
         .animation(.easeOut(duration: 0.2), value: selected)
     }
 

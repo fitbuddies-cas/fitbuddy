@@ -2,17 +2,20 @@ import SwiftUI
 
 /// The on-demand AI analysis screen (US-3, #32).
 ///
-/// Presented as a sheet from the dashboard. Renders `AnalysisViewModel`'s
-/// state and nothing else: the spinner appears the moment `start()` publishes
+/// Its own tab in `MainTabView` (#107), reached from the tab bar or from the
+/// dashboard's `AnalysisCTACard`. Renders `AnalysisViewModel`'s state and
+/// nothing else: the spinner appears the moment `start()` publishes
 /// `.loading`, the recommendation grows chunk by chunk while `.streaming`, and
 /// the cancel button joins the spinner once the run has gone 30s without a
 /// first token (US-3 AC1).
+///
+/// Switching tabs does not cancel a running stream: in a tab bar, tapping
+/// away is not leaving the screen, and the cooldown is spent either way. The
+/// cancel button in the progress view is the only way to abort.
 struct AnalysisView: View {
-    /// Observed, not owned: the view model belongs to the presenting dashboard,
-    /// which keeps it alive across sheet presentations so a run survives a
-    /// dismissed sheet.
+    /// Observed, not owned: the view model belongs to `MainTabView`, which
+    /// keeps it alive across tab switches so a run and its countdown survive.
     @ObservedObject var viewModel: AnalysisViewModel
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
@@ -35,26 +38,13 @@ struct AnalysisView: View {
             .background(Color.fbBackground)
             .navigationTitle("AI analysis")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        // Leaving the screen must not leave a request running
-                        // in the background: the cooldown is spent either way,
-                        // but a stream nobody reads is pure cost.
-                        viewModel.cancel()
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.footnote.weight(.semibold))
-                    }
-                    .tint(Color.fbInk)
-                    .accessibilityLabel("Close")
-                }
-            }
-            .safeAreaInset(edge: .bottom) { footer }
+            // A bar rather than a plain inset: the content underneath gets the
+            // same soft scroll-edge fade the tab bar has, so the footer sits
+            // with the glass instead of stacking a second opaque strip on it.
+            .safeAreaBar(edge: .bottom) { footer }
         }
-        // Keeps the cooldown label counting down for as long as the sheet is
-        // open; cancelled with the view.
+        // Keeps the cooldown label counting down for as long as the tab is
+        // visible; cancelled with the view.
         .task { await viewModel.trackCooldown() }
         // Brings back the last recommendation, so the cooldown does not leave a
         // returning user with a countdown and nothing to read (US-3 AC10). Its
@@ -146,7 +136,6 @@ struct AnalysisView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
             .padding(.horizontal, 16)
-            .background(.bar)
     }
 
     private func start() {

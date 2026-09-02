@@ -10,11 +10,6 @@ import SwiftUI
 struct DashboardView: View {
     @StateObject private var viewModel: WorkoutListViewModel
 
-    /// Built here rather than inside the sheet's closure, so the running
-    /// analysis and its cooldown survive the sheet being dismissed and
-    /// reopened.
-    @StateObject private var analysisViewModel: AnalysisViewModel
-
     /// Builds the ViewModel behind the workout detail screen for the tapped
     /// session (#98). Handed in rather than reached for through
     /// `@Environment(\.modelContext)`: `RootView` owns the container and builds
@@ -22,40 +17,35 @@ struct DashboardView: View {
     /// dependencies is one no preview can stand up.
     private let makeWorkoutDetailViewModel: (String) -> WorkoutDetailViewModel
 
-    /// Tapping the toolbar gear. The settings screen itself is presented by
-    /// `RootView`, which owns the onboarding coordinator that a deleted key
-    /// sends the user back to (#83).
-    private let onOpenSettings: () -> Void
+    /// Tapping the `AnalysisCTACard`. The analysis lives on its own tab
+    /// (#107); the card stays as the dashboard's loud second way in, and the
+    /// tab switch itself is `MainTabView`'s job.
+    private let onOpenAnalysis: () -> Void
 
     /// Changes whenever something outside the dashboard invalidated the cache —
     /// today only a replaced Hevy key (#91). Its value carries no meaning; the
     /// change itself is the signal to sync again.
     private let reloadToken: Int
 
-    @State private var showsAnalysis = false
-
     /// - Parameters:
     ///   - viewModel: Built lazily — the autoclosure is evaluated once, when
     ///     SwiftUI first creates the view's state, so wiring it up in a
     ///     parent's `body` does not rebuild it on every render.
-    ///   - analysisViewModel: Same, for the analysis sheet (#32).
     ///   - makeWorkoutDetailViewModel: Called once per push, not per rendered
     ///     row — see `.navigationDestination` below.
     ///   - reloadToken: Defaults to a constant, so a preview or a test that
     ///     has no cache-invalidating parent never re-syncs.
-    ///   - onOpenSettings: Defaults to a no-op so previews need no coordinator.
+    ///   - onOpenAnalysis: Defaults to a no-op so previews need no tab bar.
     init(
         viewModel: @autoclosure @escaping () -> WorkoutListViewModel,
-        analysisViewModel: @autoclosure @escaping () -> AnalysisViewModel,
         makeWorkoutDetailViewModel: @escaping (String) -> WorkoutDetailViewModel,
         reloadToken: Int = 0,
-        onOpenSettings: @escaping () -> Void = {}
+        onOpenAnalysis: @escaping () -> Void = {}
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
-        _analysisViewModel = StateObject(wrappedValue: analysisViewModel())
         self.makeWorkoutDetailViewModel = makeWorkoutDetailViewModel
         self.reloadToken = reloadToken
-        self.onOpenSettings = onOpenSettings
+        self.onOpenAnalysis = onOpenAnalysis
     }
 
     var body: some View {
@@ -80,7 +70,7 @@ struct DashboardView: View {
                     // Anything else the cache holds is analysable — the window
                     // widens to reach it (#87).
                     if viewModel.state.hasWorkouts {
-                        AnalysisCTACard { showsAnalysis = true }
+                        AnalysisCTACard(onAnalyze: onOpenAnalysis)
                     }
                     content
                 }
@@ -96,34 +86,11 @@ struct DashboardView: View {
                 WorkoutDetailView(viewModel: makeWorkoutDetailViewModel(workout.id))
             }
             .refreshable { await viewModel.refresh() }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: onOpenSettings) {
-                        Image(systemName: "gearshape")
-                            .foregroundStyle(Color.fbInk)
-                    }
-                    .accessibilityLabel("Settings")
-                }
-            }
         }
         // `.task(id:)` rather than a plain `.task`: the first run is the
         // dashboard appearing, every later one is a cache another screen
         // invalidated while this view stayed alive (#91).
         .task(id: reloadToken) { await viewModel.reload() }
-        // The recommendation on the analysis sheet was built from the cache
-        // that was just discarded, and that view model outlives the sheet —
-        // without this it would keep showing the previous account's analysis,
-        // and the shared cooldown could block a new one for hours. Its stored
-        // copy is already gone by the time the token changes:
-        // `SessionResetService.discardCachedWorkouts()` drops it with the
-        // cache, so `reset()` here has nothing left to restore from (#97).
-        .onChange(of: reloadToken) { _, _ in
-            analysisViewModel.cancel()
-            analysisViewModel.reset()
-        }
-        .sheet(isPresented: $showsAnalysis) {
-            AnalysisView(viewModel: analysisViewModel)
-        }
     }
 
     @ViewBuilder
@@ -170,10 +137,6 @@ struct DashboardView: View {
 #Preview("With data") {
     DashboardView(
         viewModel: WorkoutListViewModel(cache: PreviewWorkoutCache.filled),
-        analysisViewModel: AnalysisViewModel(
-            cache: PreviewWorkoutCache.filled,
-            inference: PreviewAnalysisStreamer.recommendation
-        ),
         makeWorkoutDetailViewModel: { id in
             WorkoutDetailViewModel(cache: PreviewWorkoutDetailCache.filled, workoutID: id)
         }
@@ -183,10 +146,6 @@ struct DashboardView: View {
 #Preview("Empty") {
     DashboardView(
         viewModel: WorkoutListViewModel(cache: PreviewWorkoutCache.empty),
-        analysisViewModel: AnalysisViewModel(
-            cache: PreviewWorkoutCache.empty,
-            inference: PreviewAnalysisStreamer.recommendation
-        ),
         makeWorkoutDetailViewModel: { id in
             WorkoutDetailViewModel(cache: PreviewWorkoutDetailCache.filled, workoutID: id)
         }
