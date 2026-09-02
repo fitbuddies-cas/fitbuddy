@@ -81,12 +81,17 @@ struct RootView: View {
     /// reads — unlike the dashboard, it shares no write path with the sync.
     /// The cooldown store *is* shared with `InferenceService`, so the label on
     /// screen and the service's own 6h guard can never disagree.
+    ///
+    /// The result store goes over the same container as the two reset paths
+    /// below, so a wipe removes exactly the recommendation this screen would
+    /// otherwise restore (#97).
     private func makeAnalysisViewModel() -> AnalysisViewModel {
         let cooldown = AnalysisCooldownStore()
         return AnalysisViewModel(
             cache: WorkoutStore(modelContainer: modelContext.container),
             inference: InferenceService(cooldown: cooldown),
-            cooldown: cooldown
+            cooldown: cooldown,
+            resultStore: AnalysisResultStore(modelContainer: modelContext.container)
         )
     }
 
@@ -96,10 +101,11 @@ struct RootView: View {
     /// exactly the cache the dashboard reads back.
     private func makeSettingsViewModel() -> SettingsViewModel {
         let store = WorkoutStore(modelContainer: modelContext.container)
+        let results = AnalysisResultStore(modelContainer: modelContext.container)
         let timestamps = SyncTimestampStore()
         let viewModel = SettingsViewModel(
-            sessionReset: SessionResetService(workouts: store, timestamps: timestamps),
-            dataReset: DataResetService(workouts: store, timestamps: timestamps)
+            sessionReset: SessionResetService(workouts: store, results: results, timestamps: timestamps),
+            dataReset: DataResetService(workouts: store, results: results, timestamps: timestamps)
         )
         let coordinator = onboardingViewModel
         // The hard logout already wiped the key and the cache; all that is left
@@ -127,7 +133,9 @@ struct RootView: View {
 #Preview {
     // RootView reaches for the SwiftData container once onboarding is
     // complete; without one the preview traps on a dev machine that already
-    // has consent and both keys stored.
+    // has consent and both keys stored. `AnalysisResult` is listed too — the
+    // analysis sheet restores from it, and a container without the entity
+    // would fail that fetch (#97).
     RootView()
-        .modelContainer(for: Workout.self, inMemory: true)
+        .modelContainer(for: [Workout.self, AnalysisResult.self], inMemory: true)
 }

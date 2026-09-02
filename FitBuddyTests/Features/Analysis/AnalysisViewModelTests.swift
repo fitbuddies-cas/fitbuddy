@@ -1,3 +1,4 @@
+import SwiftData
 import XCTest
 @testable import FitBuddy
 
@@ -16,6 +17,8 @@ final class AnalysisViewModelTests: XCTestCase {
     private var suiteName: String!
     private var cooldown: AnalysisCooldownStore!
     private var feedbackStore: AnalysisFeedbackStore!
+    private var container: ModelContainer!
+    private var results: AnalysisResultStore!
 
     override func setUp() async throws {
         try await super.setUp()
@@ -26,10 +29,14 @@ final class AnalysisViewModelTests: XCTestCase {
         defaults = UserDefaults(suiteName: suiteName)
         cooldown = AnalysisCooldownStore(defaults: defaults)
         feedbackStore = AnalysisFeedbackStore(defaults: defaults)
+        container = try ModelContainerFactory.makeInMemory()
+        results = AnalysisResultStore(modelContainer: container)
     }
 
     override func tearDown() async throws {
         defaults.removePersistentDomain(forName: suiteName)
+        results = nil
+        container = nil
         cooldown = nil
         feedbackStore = nil
         defaults = nil
@@ -50,6 +57,7 @@ final class AnalysisViewModelTests: XCTestCase {
             inference: streamer,
             cooldown: cooldown,
             feedbackStore: feedbackStore,
+            resultStore: results,
             calendar: Self.calendar,
             now: { clock.date },
             slowThreshold: slowThreshold,
@@ -690,5 +698,206 @@ private final class TestClock: @unchecked Sendable {
 
     func advance(by seconds: TimeInterval) {
         date = date.addingTimeInterval(seconds)
+    }
+}
+
+// MARK: - Persistence & restore (#97)
+
+extension AnalysisViewModelTests {
+    /// Storing a recommendation as if a previous session had produced it.
+    private func storeRecommendation(
+        _ text: String = "Add 2.5 kg on bench next session.",
+        at date: Date,
+        window: AnalysisWindow = .default
+    ) async throws {
+        try await results.save(text: text, generatedAt: date, window: window)
+    }
+
+    func testFinishedRunPersistsTheRecommendation() async throws {
+        await streamer.setChunks(["Your bench ", "volume is rising."])
+        let sut = makeSUT()
+
+        await sut.start()
+
+        let latest = try await results.latest()
+        let stored = try XCTUnwrap(latest)
+        XCTAssertEqual(stored.text, "Your bench volume is rising.")
+        XCTAssertEqual(stored.generatedAt, Self.reference)
+        XCTAssertEqual(stored.window, .default)
+        XCTAssertEqual(sut.generatedAt, Self.reference)
+        XCTAssertEqual(sut.resultAge, "just now")
+    }
+
+    /// #87: the widened window is what the advice actually rests on, so it has
+    /// to be the one that is stored.
+    func testPersistedWindowIsTheOneTheRunResolved() async throws {
+        cache.summaries = [Self.workout(daysAgo: 40)]
+        await streamer.setChunks(["Back after a break."])
+        let sut = makeSUT()
+
+        await sut.start()
+
+        let stored = try await results.latest()
+        XCTAssertEqual(stored?.window.weeks, 8)
+    }
+
+    /// A cancelled run produces no recommendation, and must not cost the user
+    /// the one they already have.
+    func testCancelledRunKeepsThePreviousStoredRecommendation() async throws {
+        try await storeRecommendation(at: Self.reference.addingTimeInterval(-7 * 3_600))
+        await streamer.gateCall()
+        await streamer.setChunks(["never rendered"])
+        let sut = makeSUT()
+
+        let run = Task { await sut.start() }
+        await streamer.waitForCall()
+        sut.cancel()
+        await streamer.release()
+        await run.value
+
+        let stored = try await results.latest()
+        XCTAssertEqual(stored?.text, "Add 2.5 kg on bench next session.")
+    }
+
+    func testFailedRunKeepsThePreviousStoredRecommendation() async throws {
+        try await storeRecommendation(at: Self.reference.addingTimeInterval(-7 * 3_600))
+        await streamer.setStartError(.networkUnavailable)
+        let sut = makeSUT()
+
+        await sut.start()
+
+        let stored = try await results.latest()
+        XCTAssertEqual(stored?.text, "Add 2.5 kg on bench next session.")
+    }
+
+    /// A stream with no token is a response this build could not read — not an
+    /// empty recommendation worth storing.
+    func testUnreadableResponseKeepsThePreviousStoredRecommendation() async throws {
+        try await storeRecommendation(at: Self.reference.addingTimeInterval(-7 * 3_600))
+        await streamer.setEvents([.attempting(.claude)])
+        let sut = makeSUT()
+
+        await sut.start()
+
+        let stored = try await results.latest()
+        XCTAssertEqual(stored?.text, "Add 2.5 kg on bench next session.")
+    }
+
+    /// US-3 AC10: reopening the app during the cooldown shows the last
+    /// recommendation instead of the intro screen.
+    func testRestoreBringsBackTheStoredRecommendation() async throws {
+        try await storeRecommendation(
+            "Give legs a second slot.",
+            at: Self.reference.addingTimeInterval(-2 * 3_600),
+            window: AnalysisWindow(weeks: 8)
+        )
+        let sut = makeSUT()
+
+        await sut.restore()
+
+        XCTAssertEqual(sut.state, .result("Give legs a second slot."))
+        XCTAssertEqual(sut.window.weeks, 8)
+        XCTAssertEqual(sut.resultAge, "2 h ago")
+        // No provider is stored, so the badge falls back to the bare "AI".
+        XCTAssertNil(sut.attribution)
+    }
+
+    func testRestoreWithoutAStoredRecommendationLeavesTheIntroScreen() async {
+        let sut = makeSUT()
+
+        await sut.restore()
+
+        XCTAssertEqual(sut.state, .idle)
+        XCTAssertNil(sut.resultAge)
+    }
+
+    /// US-3 AC10: the verdict the user already gave comes back selected.
+    func testRestoreShowsAVerdictGivenOnThatRecommendation() async throws {
+        let generatedAt = Self.reference.addingTimeInterval(-2 * 3_600)
+        try await storeRecommendation(at: generatedAt)
+        await feedbackStore.record(.helpful, at: generatedAt.addingTimeInterval(60))
+        let sut = makeSUT()
+
+        await sut.restore()
+
+        XCTAssertEqual(sut.feedback, .helpful)
+    }
+
+    /// A verdict older than the recommendation rated a text that no longer
+    /// exists — showing it as selected would put the user's opinion on
+    /// something they never read.
+    func testRestoreIgnoresAVerdictOlderThanTheRecommendation() async throws {
+        let generatedAt = Self.reference.addingTimeInterval(-2 * 3_600)
+        await feedbackStore.record(.notHelpful, at: generatedAt.addingTimeInterval(-3_600))
+        try await storeRecommendation(at: generatedAt)
+        let sut = makeSUT()
+
+        await sut.restore()
+
+        XCTAssertEqual(sut.state, .result("Add 2.5 kg on bench next session."))
+        XCTAssertNil(sut.feedback)
+    }
+
+    /// What is on screen is at least as current as what is on disk.
+    func testRestoreDoesNotOverwriteARunInFlight() async throws {
+        try await storeRecommendation("Older advice.", at: Self.reference.addingTimeInterval(-7 * 3_600))
+        await streamer.gateCall()
+        await streamer.setChunks(["Fresh advice."])
+        let sut = makeSUT()
+
+        let run = Task { await sut.start() }
+        await streamer.waitForCall()
+        await sut.restore()
+        XCTAssertEqual(sut.state, .loading)
+
+        await streamer.release()
+        await run.value
+        XCTAssertEqual(sut.state, .result("Fresh advice."))
+    }
+
+    /// "New analysis" must survive a reopened sheet: `AnalysisView.task` runs
+    /// again, and a second restore would put the recommendation right back.
+    func testRestoreRunsOnlyOncePerViewModel() async throws {
+        try await storeRecommendation(at: Self.reference.addingTimeInterval(-2 * 3_600))
+        let sut = makeSUT()
+        await sut.restore()
+
+        sut.reset()
+        await sut.restore()
+
+        XCTAssertEqual(sut.state, .idle)
+    }
+
+    /// "New analysis" only clears the screen — the recommendation stays on
+    /// disk until a later run replaces it.
+    func testResetClearsTheScreenButKeepsTheStoredRecommendation() async throws {
+        try await storeRecommendation(at: Self.reference.addingTimeInterval(-2 * 3_600))
+        let sut = makeSUT()
+        await sut.restore()
+
+        sut.reset()
+
+        XCTAssertEqual(sut.state, .idle)
+        XCTAssertNil(sut.generatedAt)
+        XCTAssertNil(sut.resultAge)
+        XCTAssertNil(sut.feedback)
+        XCTAssertEqual(sut.window, .default)
+        let stored = try await results.latest()
+        XCTAssertEqual(stored?.text, "Add 2.5 kg on bench next session.")
+    }
+
+    /// The age is re-rendered by the same ticker as the cooldown label, so a
+    /// sheet left open does not keep claiming "just now".
+    func testResultAgeAgesWithTheClock() async throws {
+        let clock = TestClock(Self.reference)
+        try await storeRecommendation(at: Self.reference)
+        let sut = makeSUT(clock: clock)
+        await sut.restore()
+        XCTAssertEqual(sut.resultAge, "just now")
+
+        clock.advance(by: 2 * 3_600)
+        await sut.refreshCooldown()
+
+        XCTAssertEqual(sut.resultAge, "2 h ago")
     }
 }

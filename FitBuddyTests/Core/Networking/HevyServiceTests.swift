@@ -65,6 +65,7 @@ final class HevyServiceTests: XCTestCase {
             sessionReset: SessionResetService(
                 keychain: keychain,
                 workouts: workouts,
+                results: AnalysisResultStore(modelContainer: workouts.modelContainer),
                 timestamps: timestamps
             ),
             calendar: calendar,

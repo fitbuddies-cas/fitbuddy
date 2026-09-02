@@ -17,17 +17,22 @@ import OSLog
 actor SessionResetService {
     private let keychain: KeychainService
     private let workouts: WorkoutStore
+    private let results: AnalysisResultStore
     private let timestamps: SyncTimestampStore
 
     private let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "SessionReset")
 
+    /// - Parameter results: The stored AI recommendation, dropped with the
+    ///   cache it was derived from (#97).
     init(
         keychain: KeychainService = KeychainService(),
         workouts: WorkoutStore,
+        results: AnalysisResultStore,
         timestamps: SyncTimestampStore = SyncTimestampStore()
     ) {
         self.keychain = keychain
         self.workouts = workouts
+        self.results = results
         self.timestamps = timestamps
     }
 
@@ -51,11 +56,22 @@ actor SessionResetService {
     /// line over an empty dashboard describes a sync of somebody else's
     /// account, and leaving it behind would also let a delta sync believe it
     /// only has to fetch what changed since then.
+    ///
+    /// The stored recommendation goes too (#97): it was written about the
+    /// workouts being discarded here, and restoring it over the next account's
+    /// dashboard would present one Hevy account's training as advice for
+    /// another's. The cooldown deliberately stays — this is not a deletion
+    /// request, and clearing it would let a logout buy a fresh 6h window.
     func discardCachedWorkouts() async {
         do {
             try await workouts.deleteAll()
         } catch {
             logger.error("Workout cache not cleared: \(error, privacy: .public)")
+        }
+        do {
+            try await results.deleteAll()
+        } catch {
+            logger.error("Stored analysis not cleared: \(error, privacy: .public)")
         }
         await timestamps.clear()
     }

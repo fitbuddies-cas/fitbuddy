@@ -11,8 +11,18 @@ import SwiftUI
 struct AnalysisResultView: View {
     let text: String
     /// Who answered, and who was asked before them (#79). `nil` only in the
-    /// degenerate case of a result with no recorded attempt.
+    /// degenerate case of a result with no recorded attempt — and on a
+    /// recommendation restored from disk, which does not store the provider.
     let attribution: AnalysisAttribution?
+    /// How old the recommendation is (`"2 h ago"`), or `nil` while it has no
+    /// timestamp. Always set for a restored one, where the age is the whole
+    /// point: the user has to know they are looking at yesterday's advice
+    /// (US-3 AC10, #97).
+    var age: String? = nil
+    /// Starts over from the intro screen. `nil` while the cooldown blocks a
+    /// new run — an enabled button that cannot do anything is worse than no
+    /// button, and the cooldown label in the footer already explains the wait.
+    var onNewAnalysis: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -31,15 +41,28 @@ struct AnalysisResultView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             disclaimer
+            if let onNewAnalysis {
+                Button("New analysis", action: onNewAnalysis)
+                    .buttonStyle(FBButtonStyle(kind: .secondary))
+            }
         }
     }
 
     /// Names the model that actually wrote this, not the one the user ranked
     /// first — after a fallback those are different, and attributing the text
     /// to the wrong provider would be a lie about where their data went.
+    ///
+    /// `"AI · CLAUDE · 2 h ago"`, dropping whichever part is unknown: a
+    /// restored recommendation has an age but no provider.
     private var badge: String {
-        guard let attribution else { return "AI" }
-        return "AI · \(attribution.provider.displayName)"
+        var parts = ["AI"]
+        if let attribution {
+            parts.append(attribution.provider.displayName)
+        }
+        if let age {
+            parts.append(age)
+        }
+        return parts.joined(separator: " · ")
     }
 
     /// Shown only after a fallback: the answer is fine, but the user asked for
@@ -86,7 +109,24 @@ private let previewRecommendation = """
     ScrollView {
         AnalysisResultView(
             text: previewRecommendation,
-            attribution: AnalysisAttribution(first: .claude)
+            attribution: AnalysisAttribution(first: .claude),
+            age: "just now"
+        )
+        .padding(16)
+    }
+    .background(Color.fbBackground)
+}
+
+/// A recommendation brought back from disk after an app restart (#97): the
+/// provider is not stored, the age is, and the cooldown has since expired — so
+/// the way back to the intro screen is offered.
+#Preview("Restored") {
+    ScrollView {
+        AnalysisResultView(
+            text: previewRecommendation,
+            attribution: nil,
+            age: "7 h ago",
+            onNewAnalysis: {}
         )
         .padding(16)
     }

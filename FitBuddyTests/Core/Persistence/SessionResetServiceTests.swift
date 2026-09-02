@@ -9,6 +9,7 @@ final class SessionResetServiceTests: XCTestCase {
     private var keychain: KeychainService!
     private var container: ModelContainer!
     private var workouts: WorkoutStore!
+    private var results: AnalysisResultStore!
     private var timestamps: SyncTimestampStore!
     private var defaults: UserDefaults!
     private var suiteName: String!
@@ -20,10 +21,16 @@ final class SessionResetServiceTests: XCTestCase {
         try await clearKeys()
         container = try ModelContainerFactory.makeInMemory()
         workouts = WorkoutStore(modelContainer: container)
+        results = AnalysisResultStore(modelContainer: container)
         suiteName = "fitbuddy.tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
         timestamps = SyncTimestampStore(defaults: defaults)
-        sut = SessionResetService(keychain: keychain, workouts: workouts, timestamps: timestamps)
+        sut = SessionResetService(
+            keychain: keychain,
+            workouts: workouts,
+            results: results,
+            timestamps: timestamps
+        )
     }
 
     override func tearDown() async throws {
@@ -31,6 +38,7 @@ final class SessionResetServiceTests: XCTestCase {
         defaults.removePersistentDomain(forName: suiteName)
         sut = nil
         timestamps = nil
+        results = nil
         workouts = nil
         container = nil
         defaults = nil
@@ -136,6 +144,39 @@ final class SessionResetServiceTests: XCTestCase {
         await sut.discardCachedWorkouts()
 
         let stored = await timestamps.lastSync()
+        XCTAssertNil(stored)
+    }
+}
+
+// MARK: - Stored analysis (#97)
+
+extension SessionResetServiceTests {
+    /// A replaced Hevy key drops the cache, and the recommendation written
+    /// about that cache has to go with it — otherwise the analysis sheet
+    /// restores the previous account's advice over the new account's data.
+    func testDiscardingTheCacheAlsoDropsTheStoredAnalysis() async throws {
+        try await results.save(
+            text: "Add 2.5 kg on bench next session.",
+            generatedAt: Date(timeIntervalSince1970: 1_788_000_000),
+            window: .default
+        )
+
+        await sut.discardCachedWorkouts()
+
+        let stored = try await results.latest()
+        XCTAssertNil(stored)
+    }
+
+    func testHardLogoutDropsTheStoredAnalysis() async throws {
+        try await results.save(
+            text: "Add 2.5 kg on bench next session.",
+            generatedAt: Date(timeIntervalSince1970: 1_788_000_000),
+            window: .default
+        )
+
+        await sut.hardLogout()
+
+        let stored = try await results.latest()
         XCTAssertNil(stored)
     }
 }

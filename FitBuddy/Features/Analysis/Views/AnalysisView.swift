@@ -54,6 +54,12 @@ struct AnalysisView: View {
         // Keeps the cooldown label counting down for as long as the sheet is
         // open; cancelled with the view.
         .task { await viewModel.trackCooldown() }
+        // Brings back the last recommendation, so the cooldown does not leave a
+        // returning user with a countdown and nothing to read (US-3 AC10). Its
+        // own `.task`, because `trackCooldown()` never returns — and here
+        // rather than in `DashboardView`, whose `reloadToken` path drops
+        // exactly this state when the Hevy key changes (#91).
+        .task { await viewModel.restore() }
     }
 
     @ViewBuilder
@@ -80,7 +86,16 @@ struct AnalysisView: View {
                 onCancel: viewModel.cancel
             )
         case .result(let text):
-            AnalysisResultView(text: text, attribution: viewModel.attribution)
+            AnalysisResultView(
+                text: text,
+                attribution: viewModel.attribution,
+                age: viewModel.resultAge,
+                // Offered only while a new run is actually possible: during the
+                // cooldown the intro screen would be a dead end with the same
+                // countdown on it, and the recommendation the user still has is
+                // the more useful thing to keep on screen (#97).
+                onNewAnalysis: viewModel.canStartAnalysis ? { viewModel.reset() } : nil
+            )
         case .error(let failure):
             AnalysisErrorView(
                 failure: failure,

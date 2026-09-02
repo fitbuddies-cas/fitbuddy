@@ -96,7 +96,10 @@ struct DashboardView: View {
         // The recommendation on the analysis sheet was built from the cache
         // that was just discarded, and that view model outlives the sheet —
         // without this it would keep showing the previous account's analysis,
-        // and the shared cooldown could block a new one for hours.
+        // and the shared cooldown could block a new one for hours. Its stored
+        // copy is already gone by the time the token changes:
+        // `SessionResetService.discardCachedWorkouts()` drops it with the
+        // cache, so `reset()` here has nothing left to restore from (#97).
         .onChange(of: reloadToken) { _, _ in
             analysisViewModel.cancel()
             analysisViewModel.reset()

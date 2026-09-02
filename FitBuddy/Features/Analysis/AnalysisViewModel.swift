@@ -1,15 +1,21 @@
 import Foundation
+import OSLog
 
 /// Drives the on-demand AI analysis: builds the prompt from the local cache,
 /// streams the answer of whichever provider takes the call, and owns the 6h
 /// cooldown the user sees (US-3, #31/#79).
 ///
-/// Four things are published separately because they answer different
+/// Several things are published separately because they answer different
 /// questions. `state` says what the screen shows right now, `attribution` says
 /// who is answering it and who was asked before them, `cooldownMessage` says
-/// when the next run is allowed, and `isTakingLong` says whether this run has
-/// passed the 30s mark without a single token — the moment US-3 AC1 wants the
-/// cancel button to appear.
+/// when the next run is allowed, `resultAge` says how old the recommendation
+/// on screen is, and `isTakingLong` says whether this run has passed the 30s
+/// mark without a single token — the moment US-3 AC1 wants the cancel button
+/// to appear.
+///
+/// A finished recommendation is persisted and restored (`restore()`), so it
+/// survives an app restart: without it the 6h cooldown would leave a returning
+/// user with a countdown and no answer to read (US-3 AC10, #97).
 ///
 /// The prompt is built from the cache only: an analysis never triggers a Hevy
 /// sync, so a tap here cannot fail on connectivity the dashboard already
@@ -43,6 +49,12 @@ final class AnalysisViewModel: ObservableObject {
     /// weeks are empty (#87) — the UI names it only when it is not the
     /// default.
     @Published private(set) var window: AnalysisWindow = .default
+    /// When the recommendation on screen was produced. Set by a finished run
+    /// and by `restore()`; `nil` whenever no recommendation is showing (#97).
+    @Published private(set) var generatedAt: Date?
+    /// `generatedAt` as the screen prints it — `"2 h ago"`. Refreshed with the
+    /// cooldown label, so a sheet left open does not keep claiming "just now".
+    @Published private(set) var resultAge: String?
 
     /// Whether tapping "Analyse" can start a run right now.
     var canStartAnalysis: Bool {
@@ -57,15 +69,22 @@ final class AnalysisViewModel: ObservableObject {
     private var runID: UInt64 = 0
     /// Fires once `slowThreshold` has passed without a first token.
     private var slowTask: Task<Void, Never>?
+    /// Whether `restore()` already ran. Restoring exactly once per view model
+    /// keeps a reopened sheet from undoing "New analysis": the user asked for
+    /// the intro screen, and the stored recommendation is still on disk.
+    private var didRestore = false
 
     private let cache: WorkoutSummaryReading
     private let inference: AnalysisStreaming
     private let cooldown: AnalysisCooldownStore
     private let feedbackStore: AnalysisFeedbackStore
+    private let resultStore: (any AnalysisResultStoring)?
     private let calendar: Calendar
     private let now: () -> Date
     private let slowThreshold: TimeInterval
     private let tickInterval: TimeInterval
+
+    private let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "Analysis")
 
     /// - Parameters:
     ///   - cache: Read access to the cached window (`WorkoutStore` in the app).
@@ -74,6 +93,10 @@ final class AnalysisViewModel: ObservableObject {
     ///     writes to, so the label and the service's own guard never disagree.
     ///   - feedbackStore: Where a "Helpful" / "Not helpful" tap is persisted —
     ///     locally, with no call behind it (US-3 AC9).
+    ///   - resultStore: Where a finished recommendation is persisted, so it
+    ///     survives an app restart (US-3 AC10). `nil` — the default — turns
+    ///     persistence off, which is what SwiftUI previews need: they have no
+    ///     `ModelContainer` to build a store over.
     ///   - now: Injectable clock, so windows and cooldown math are testable.
     ///   - slowThreshold: Injectable, so tests do not wait 30 real seconds.
     ///   - tickInterval: How often `trackCooldown()` refreshes the label.
@@ -82,6 +105,7 @@ final class AnalysisViewModel: ObservableObject {
         inference: AnalysisStreaming,
         cooldown: AnalysisCooldownStore = AnalysisCooldownStore(),
         feedbackStore: AnalysisFeedbackStore = AnalysisFeedbackStore(),
+        resultStore: (any AnalysisResultStoring)? = nil,
         calendar: Calendar = .current,
         now: @escaping () -> Date = Date.init,
         slowThreshold: TimeInterval = AnalysisViewModel.defaultSlowThreshold,
@@ -91,6 +115,7 @@ final class AnalysisViewModel: ObservableObject {
         self.inference = inference
         self.cooldown = cooldown
         self.feedbackStore = feedbackStore
+        self.resultStore = resultStore
         self.calendar = calendar
         self.now = now
         self.slowThreshold = slowThreshold
@@ -130,6 +155,10 @@ final class AnalysisViewModel: ObservableObject {
 
         feedback = nil
         window = .default
+        // The stored recommendation stays on disk until this run replaces it:
+        // a run that ends in an error must not cost the user the last answer
+        // they still had. Only the screen lets go of it here.
+        clearResultAge()
         runID &+= 1
         let id = runID
         let task = Task { await performAnalysis(id) }
@@ -157,7 +186,56 @@ final class AnalysisViewModel: ObservableObject {
     func reset() {
         guard !state.isRunning else { return }
         attribution = nil
+        feedback = nil
+        window = .default
+        clearResultAge()
         state = .idle
+    }
+
+    // MARK: - Restore
+
+    /// Brings the last persisted recommendation back as the screen's landing
+    /// state (US-3 AC10, #97).
+    ///
+    /// Called from `AnalysisView.task`, not from the dashboard: the dashboard
+    /// drops this view model's state when the Hevy key is replaced (#91), and
+    /// a restore racing that teardown would put the discarded account's
+    /// recommendation straight back on screen.
+    ///
+    /// Does nothing while a run is in flight or a result is already showing —
+    /// what is on screen is at least as current as what is on disk.
+    func restore() async {
+        guard !didRestore else { return }
+        // Claimed before the first await, like the run slot in `start()`.
+        didRestore = true
+        guard case .idle = state, let resultStore else { return }
+
+        let stored: AnalysisResultSnapshot?
+        do {
+            stored = try await resultStore.latest()
+        } catch {
+            // Nothing to tell the user here: they asked for the analysis
+            // screen, not for the recommendation, and the intro state they get
+            // instead is a working screen rather than an error.
+            logger.error("Stored analysis not readable: \(error, privacy: .public)")
+            return
+        }
+        guard let stored else { return }
+        // Re-checked after the awaits: the user can have started a run in the
+        // meantime, and the restore must never overwrite it.
+        guard case .idle = state else { return }
+
+        state = .result(stored.text)
+        window = stored.window
+        generatedAt = stored.generatedAt
+        refreshResultAge()
+        // Only a verdict given after this recommendation was written can belong
+        // to it. An older one rated a recommendation that no longer exists, and
+        // showing it as selected would attribute the user's opinion to a text
+        // they never saw.
+        if let last = await feedbackStore.lastFeedback(), last.date >= stored.generatedAt {
+            feedback = last.feedback
+        }
     }
 
     // MARK: - Feedback
@@ -217,7 +295,12 @@ final class AnalysisViewModel: ObservableObject {
             guard !Task.isCancelled else { return await finish(id) }
             // A stream that ends without a single token is not an empty
             // recommendation — it is a response this version could not read.
-            state = text.isEmpty ? .error(.unreadableResponse(attribution?.provider)) : .result(text)
+            if text.isEmpty {
+                state = .error(.unreadableResponse(attribution?.provider))
+            } else {
+                state = .result(text)
+                await persist(text)
+            }
         } catch {
             // A cancelled run already published `.idle` in `cancel()`; the
             // error here is only the echo of that, and must not overwrite it.
@@ -267,6 +350,29 @@ final class AnalysisViewModel: ObservableObject {
             guard !Task.isCancelled, !error.isCancellation else { return nil }
             state = .error(.cacheUnavailable)
             return nil
+        }
+    }
+
+    /// Writes the finished recommendation to disk, so it is still there after
+    /// an app restart (US-3 AC10, #97).
+    ///
+    /// Only reached from the `.result` branch above: a cancelled, failed or
+    /// unreadable run has nothing worth keeping, and overwriting the last good
+    /// recommendation with it would cost the user an answer they already paid
+    /// a provider for.
+    ///
+    /// A failing write is logged, not surfaced: the recommendation is on screen
+    /// and readable, and an error banner over it would be about the next
+    /// launch, not about anything the user can act on now.
+    private func persist(_ text: String) async {
+        let timestamp = now()
+        generatedAt = timestamp
+        refreshResultAge()
+        guard let resultStore else { return }
+        do {
+            try await resultStore.save(text: text, generatedAt: timestamp, window: window)
+        } catch {
+            logger.error("Analysis not persisted: \(error, privacy: .public)")
         }
     }
 
@@ -332,12 +438,37 @@ final class AnalysisViewModel: ObservableObject {
         let reference = now()
         let availableAt = await cooldown.activeCooldown(now: reference)
         cooldownMessage = CooldownFormatter.message(until: availableAt, now: reference)
+        // Both labels age at the same rate and are driven by the same ticker,
+        // so they are refreshed together against one reading of the clock.
+        refreshResultAge(now: reference)
         // A cooldown message on screen outlives its reason otherwise: once the
         // window closes, the explanation is wrong and the button is back.
         if availableAt == nil, case .error(.cooldownActive) = state {
             state = .idle
         }
         return availableAt
+    }
+
+    // MARK: - Result age
+
+    /// Re-renders `resultAge` from `generatedAt`.
+    ///
+    /// Reuses `SyncTimeFormatter`, which the sync banner already uses: the two
+    /// timestamps say the same kind of thing, and a second formatter would
+    /// drift from it.
+    private func refreshResultAge(now reference: Date? = nil) {
+        guard let generatedAt else {
+            resultAge = nil
+            return
+        }
+        resultAge = SyncTimeFormatter.relative(since: generatedAt, now: reference ?? now())
+    }
+
+    /// Takes the recommendation's timestamp off the screen. Does not touch the
+    /// stored one — see `start()`.
+    private func clearResultAge() {
+        generatedAt = nil
+        resultAge = nil
     }
 
     /// Keeps the cooldown label counting down while the screen is on display —

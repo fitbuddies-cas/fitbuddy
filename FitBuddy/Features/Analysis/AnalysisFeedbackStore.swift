@@ -6,9 +6,10 @@ import Foundation
 /// scalars, and putting them in the SwiftData cache would tie them to a store
 /// that is wiped on every hard logout (ADR-001).
 ///
-/// Deliberately write-only from the app's point of view — nothing reads the
-/// tally back into a screen. It exists so the PoC evaluation can tell whether
-/// the recommendations landed at all, without a single byte leaving the device.
+/// Only the last verdict is read back, and only to re-select a button on a
+/// restored recommendation (#97). The tally is write-only from the app's point
+/// of view: it exists so the PoC evaluation can tell whether the
+/// recommendations landed at all, without a single byte leaving the device.
 actor AnalysisFeedbackStore {
     private static let lastVerdictKey = "fitbuddy.analysis.feedback.lastVerdict"
     private static let lastTimestampKey = "fitbuddy.analysis.feedback.lastTimestamp"
