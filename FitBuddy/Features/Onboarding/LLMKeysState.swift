@@ -4,12 +4,6 @@ import Foundation
 /// key (step 2), the LLM keys are optional (AC2) and are not validated against
 /// a live API before saving — they are only stored in the Keychain.
 enum LLMKeysState: Equatable {
-    /// Reasons a save attempt can fail.
-    enum Failure: Equatable {
-        /// A key could not be persisted to the Keychain.
-        case keychain
-    }
-
     /// Stored-key check (`bootstrap()`) has not finished yet — the root view
     /// shows a spinner instead of flashing the entry screen at returning users.
     case unknown
@@ -17,8 +11,10 @@ enum LLMKeysState: Equatable {
     case idle
     /// Keys are being written to the Keychain.
     case saving
-    /// The last save attempt failed.
-    case failed(Failure)
+    /// The last save attempt failed. Reuses `APIKeyEntryFailure` like the
+    /// other two key screens — only `.keychain` can occur here, since the
+    /// keys are stored without being validated against a provider.
+    case failed(APIKeyEntryFailure)
     /// At least one key was stored — onboarding can move to the dashboard.
     case saved
     /// The user chose to continue without any LLM key (AC2). AI analysis
