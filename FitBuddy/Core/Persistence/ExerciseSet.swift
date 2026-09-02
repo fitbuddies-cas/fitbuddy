@@ -11,7 +11,7 @@ import SwiftData
 final class ExerciseSet {
     /// Position of the set within its exercise, as ordered in Hevy.
     var index: Int
-    /// Raw Hevy set type — read it through `type`.
+    /// Raw source set type — read it through `type`.
     var typeRawValue: String
     var weightKg: Double?
     var reps: Int?

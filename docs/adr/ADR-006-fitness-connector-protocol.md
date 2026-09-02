@@ -53,13 +53,22 @@ Wir committen gleichzeitig einen **`MockConnector`** (konfigurierbares Test-Doub
 
 **OAuth-Token-Refresh:** Strava verwendet OAuth 2.0 mit ablaufenden Tokens. `ConnectorCredentials` muss für Strava sowohl `access_token` als auch `refresh_token` + `expires_at` halten. Der `StravaConnector` ist für den Refresh verantwortlich — `validate()` prüft Token-Ablauf und refresht bei Bedarf. Hevy-API-Keys laufen nicht ab, `HevyConnector.validate()` macht nur einen API-Ping.
 
+### Nachtrag: Abweichungen aus der Umsetzung (Issue #33, PR #81)
+
+Die Umsetzung des Protocols weicht an vier Stellen bewusst von der obigen Entscheidung ab. Sie sind hier festgehalten, damit spätere Arbeiten (#34 `HevyConnector`, #35 Strava-Stub) den tatsächlich geltenden Vertrag lesen und nicht den ursprünglich skizzierten:
+
+1. **`disconnect()` ist `async`.** Jeder Conformer ist ein `actor` (analog `HevyKeyValidator`/`KeychainService`); ein Actor kann eine Protocol-Anforderung von aussen nur erfüllen, wenn diese selbst `async` ist. Die synchrone Signatur oben ist damit überholt.
+2. **Keine Strava-Feldanalyse vor der Finalisierung, keine `metadata`-Escape-Hatch.** Das `Activity`-Modell enthält bewusst keine spekulativen Strava-only-Felder (GPS-Route, Lap-Splits, Power, HR Zones). Die Feldanalyse wird nach #35 gezogen; bis dahin gilt die Konsequenz *"Strava-Integration ist eine neue Connector-Klasse"* nur unter dem Vorbehalt, dass `Activity` dann noch um optionale Felder erweitert werden muss — ein additiver, kein struktureller Eingriff.
+3. **Kein `StravaConnectorStub` in Sprint 1.** Der Stub ist nach #35 verschoben; ausgeliefert wird vorerst nur der `MockConnector`.
+4. **Identität der Kind-Objekte ist die Quell-Reihenfolge, nicht eine generierte UUID.** `ActivityExercise.id` und `ActivityExerciseSet.id` sind der jeweilige `index`. Eine pro Mapping neu erzeugte `UUID()` würde ein inhaltlich unverändertes Workout beim Re-Sync `!=` zur gecachten Kopie machen und SwiftUI zwingen, jede `ForEach`-Zeile neu aufzubauen. `SetType` liegt aus demselben Grund im Connector-Domain-Layer (`Core/Connector/domain/`) und nicht in der Persistence-Schicht — die Konsequenz *"Dashboard und AI-Engine sehen nie Hevy-spezifische Typen"* gilt sonst nicht.
+
 ---
 
 ## Konsequenzen
 
 ### + Positiv
 
-- **Strava-Integration in v1.0 ist eine neue Connector-Klasse** — sofern das `Activity`-Modell vorab die nötigen optionalen Felder enthält (s. Strava-Feldanalyse). Dashboard und AI-Prompt-Builder bleiben unverändert.
+- **Strava-Integration in v1.0 ist eine neue Connector-Klasse** — sofern das `Activity`-Modell vorab die nötigen optionalen Felder enthält (s. Strava-Feldanalyse und Nachtrag Punkt 2). Dashboard und AI-Prompt-Builder bleiben unverändert.
 - **`MockConnector` als Test-Double** ermöglicht Unit-Tests ohne echte Hevy-API: Fehler-Injection, leere Response, zeitgesteuerte Activities — CI-freundlich und Rate-Limit-unabhängig.
 - **`ConnectorError`-Enum erzwingt einheitliches Fehlerhandling:** Alle Schichten reagieren auf denselben Fehlertyp — kein `catch`-Block mit `as? URLError`-Typ-Casting gegen connectorspezifische Implementierungsdetails.
 - **Strikte Schichttrennung:** Dashboard und AI-Engine sehen nie Hevy-spezifische Typen — nur `Activity`. Protocol-Drift zwischen Sprint 1 und v1.0 wird durch Compilation erzwungen.
