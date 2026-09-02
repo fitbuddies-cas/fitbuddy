@@ -14,9 +14,9 @@ actor WorkoutStore {
     ///
     /// The Hevy response for the 90-day window is authoritative, so the cache
     /// is rebuilt rather than merged: this avoids the `@Attribute(.unique)`
-    /// upsert path entirely, and it removes
-    /// workouts the user deleted in Hevy for free. Delete and insert share one
-    /// `save()`, so a failure leaves the previous cache intact.
+    /// upsert path entirely, and it removes workouts the user deleted in Hevy
+    /// for free. Delete and insert share one `save()`, so a failure leaves the
+    /// previous cache intact.
     func replaceCachedWorkouts(with workouts: [HevyWorkoutDTO]) throws {
         try deleteAllWorkouts()
         for dto in workouts {

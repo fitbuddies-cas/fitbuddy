@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Datum:** 2026-06-03
 
-**Nachtrag (2026-09-02, #108):** Das von [[ADR-1]] geerbte Mindest-Deployment-Target liegt inzwischen bei iOS 26 statt iOS 17; die Plattformentscheidung selbst bleibt unverändert.
+**Nachtrag (2026-09-02, #108):** Das von [[ADR-1]] geerbte Mindest-Deployment-Target liegt inzwischen bei iOS 26 statt iOS 17 ([[ADR-8]]); die Plattformentscheidung selbst bleibt unverändert. Zwei Konsequenzen unten sind damit überholt: Der Geräteausschluss endet nicht bei iPhone 8 / iPhone X, sondern umfasst alles unterhalb A13 (iPhone 11 / SE 2. Gen.), also auch XS, XS Max und XR; und das Team-Minimum ist nicht mehr Xcode 15 / macOS 14, sondern Xcode 26 mit der dafür nötigen macOS-Version. Begründung und vollständige Konsequenzen in [[ADR-8]].
 
 ---
 
