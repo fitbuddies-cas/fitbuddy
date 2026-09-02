@@ -22,6 +22,12 @@ struct DashboardView: View {
     /// change itself is the signal to sync again.
     private let reloadToken: Int
 
+    /// The `reloadToken` the dashboard last synced for. `.task(id:)` restarts
+    /// whenever the view re-appears, and inside a `TabView` that is every
+    /// return to this tab — without this, each tab switch would drop the
+    /// loaded state back to `.loading` and start a full Hevy sync.
+    @State private var loadedToken: Int?
+
     /// - Parameters:
     ///   - viewModel: Built lazily — the autoclosure is evaluated once, when
     ///     SwiftUI first creates the view's state, so wiring it up in a
@@ -73,8 +79,14 @@ struct DashboardView: View {
         }
         // `.task(id:)` rather than a plain `.task`: the first run is the
         // dashboard appearing, every later one is a cache another screen
-        // invalidated while this view stayed alive (#91).
-        .task(id: reloadToken) { await viewModel.reload() }
+        // invalidated (#91). The guard keeps it at that — a tab switch
+        // re-appears the view and restarts the task, but not the sync.
+        // Pull-to-refresh stays the manual way to sync again.
+        .task(id: reloadToken) {
+            guard loadedToken != reloadToken else { return }
+            loadedToken = reloadToken
+            await viewModel.reload()
+        }
     }
 
     @ViewBuilder

@@ -9,7 +9,7 @@
 
 [[ADR-1]] hat mit der Wahl von SwiftData iOS 17 als Untergrenze gesetzt, und [[ADR-2]] hat diese Untergrenze für die Plattformentscheidung übernommen. Seither ist der Stand ein anderer: Gebaut und getestet wird längst mit Xcode 26 gegen das iOS-26-SDK (`/build-and-test` läuft auf dem iPhone-17-Simulator), während `IPHONEOS_DEPLOYMENT_TARGET` als Relikt aus dem Projektstart auf 17.0 stehen blieb.
 
-Das kostet ab #107 konkret Substanz: Die Bottom-Navigation will die wertbasierte `Tab`-API (iOS 18+), und die Liquid-Glass-Tab-Bar samt `.tabBarMinimizeBehavior` existiert erst ab iOS 26. Mit einer Untergrenze von iOS 17 wäre jede dieser APIs nur hinter `if #available` nutzbar — also zwei parallel gepflegte UI-Varianten pro Screen, für ein 2–3-köpfiges Team im 3-Monats-PoC der teuerste denkbare Weg. Weitere Screens werden dieselben APIs wollen.
+Das kostet ab #107 konkret Substanz: Die Bottom-Navigation will die wertbasierte `Tab`-API (iOS 18+), und die Liquid-Glass-Tab-Bar existiert erst ab iOS 26. Mit einer Untergrenze von iOS 17 wäre jede dieser APIs nur hinter `if #available` nutzbar — also zwei parallel gepflegte UI-Varianten pro Screen, für ein 2–3-köpfiges Team im 3-Monats-PoC der teuerste denkbare Weg. Weitere Screens werden dieselben APIs wollen.
 
 Die Gegenseite der Rechnung ist die Reichweite: iOS 26 verlangt A13 oder neuer, also iPhone 11 / SE (2. Gen.) aufwärts. Die Distribution läuft ausschliesslich über TestFlight an das Team und einige CAS-Teilnehmende ([[ADR-2]]) — es gibt keine öffentliche Installationsbasis, die verloren gehen könnte, sondern eine überschaubare, abgleichbare Liste realer Testgeräte.
 
@@ -26,7 +26,7 @@ Die Entscheidungen aus [[ADR-1]] (SwiftData) und [[ADR-2]] (Native iOS / SwiftUI
 ### + Positiv
 
 - **(QA-3) Keine Verfügbarkeits-Zweige:** iOS-18- und iOS-26-APIs sind direkt nutzbar. #107 baut die Tab-Bar einmal statt zweimal; jeder Folge-Screen profitiert gleichermassen.
-- **Liquid Glass ohne Sonderweg:** Die iOS-26-Tab-Bar ist ausdrücklich gewollt (#107) und nicht nur geduldet — sie setzt das Deployment-Target zwingend voraus.
+- **Liquid Glass ohne Sonderweg:** Die iOS-26-Tab-Bar ist ausdrücklich gewollt (#107) und nicht nur geduldet — sie setzt das Deployment-Target zwingend voraus. Das dort ebenfalls verfügbare `.tabBarMinimizeBehavior` hat #107 nach dem Ausprobieren bewusst nicht übernommen (die minimierte Bar wirkt wie wegrutschende Navigation); es trägt die Entscheidung hier also nicht mit.
 - **Ehrlicher Projektstand:** Build-Toolchain (Xcode 26 / iOS-26-SDK) und deklariertes Minimum stimmen wieder überein.
 - **Verifiziert kostenneutral:** Build und Testsuite laufen nach dem Sprung unverändert grün (538 Tests, 0 Failures); die drei bzw. vier bestehenden Warnungen sind vorbestehend und deployment-target-unabhängig.
 
