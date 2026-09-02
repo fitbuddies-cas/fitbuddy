@@ -34,16 +34,11 @@ final class ModelContainerFactoryTests: XCTestCase {
         let storeURL = try makeTemporaryStoreURL()
         let oldSchema = Schema([Workout.self, Exercise.self, ExerciseSet.self])
 
-        // Written by a build that did not know `AnalysisResult`.
-        let oldContainer = try ModelContainer(
-            for: oldSchema,
-            configurations: ModelConfiguration(schema: oldSchema, url: storeURL, cloudKitDatabase: .none)
-        )
-        let oldContext = ModelContext(oldContainer)
-        oldContext.insert(
-            Workout(id: "w-1", title: "Morning Workout", startTime: Date(timeIntervalSince1970: 1_750_000_000))
-        )
-        try oldContext.save()
+        // Written by a build that did not know `AnalysisResult`, in a helper so
+        // the old container is released before the new one opens the same
+        // SQLite file — two live containers on one store is exactly what
+        // `makeTemporaryStoreURL()` gives every test its own file to avoid.
+        try writeLegacyStore(at: storeURL, schema: oldSchema)
 
         // Reopened by this build. A schema change SwiftData cannot migrate
         // lightly would throw right here.
@@ -57,11 +52,26 @@ final class ModelContainerFactoryTests: XCTestCase {
             AnalysisResult(
                 text: "Add 2.5 kg on bench next session.",
                 generatedAt: Date(timeIntervalSince1970: 1_788_000_000),
-                windowWeeks: 4
+                windowWeeks: 4,
+                sessionCount: 12
             )
         )
         try context.save()
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<AnalysisResult>()), 1)
+    }
+
+    /// Writes one workout under the pre-`AnalysisResult` schema and lets the
+    /// container go out of scope again.
+    private func writeLegacyStore(at storeURL: URL, schema: Schema) throws {
+        let container = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, url: storeURL, cloudKitDatabase: .none)
+        )
+        let context = ModelContext(container)
+        context.insert(
+            Workout(id: "w-1", title: "Morning Workout", startTime: Date(timeIntervalSince1970: 1_750_000_000))
+        )
+        try context.save()
     }
 
     func testPersistentStoreIsExcludedFromICloudBackup() throws {

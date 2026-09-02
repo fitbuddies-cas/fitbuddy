@@ -15,6 +15,13 @@ struct DashboardView: View {
     /// reopened.
     @StateObject private var analysisViewModel: AnalysisViewModel
 
+    /// Builds the ViewModel behind the workout detail screen for the tapped
+    /// session (#98). Handed in rather than reached for through
+    /// `@Environment(\.modelContext)`: `RootView` owns the container and builds
+    /// every other ViewModel too, and a View that assembles its own SwiftData
+    /// dependencies is one no preview can stand up.
+    private let makeWorkoutDetailViewModel: (String) -> WorkoutDetailViewModel
+
     /// Tapping the toolbar gear. The settings screen itself is presented by
     /// `RootView`, which owns the onboarding coordinator that a deleted key
     /// sends the user back to (#83).
@@ -32,17 +39,21 @@ struct DashboardView: View {
     ///     SwiftUI first creates the view's state, so wiring it up in a
     ///     parent's `body` does not rebuild it on every render.
     ///   - analysisViewModel: Same, for the analysis sheet (#32).
+    ///   - makeWorkoutDetailViewModel: Called once per push, not per rendered
+    ///     row — see `.navigationDestination` below.
     ///   - reloadToken: Defaults to a constant, so a preview or a test that
     ///     has no cache-invalidating parent never re-syncs.
     ///   - onOpenSettings: Defaults to a no-op so previews need no coordinator.
     init(
         viewModel: @autoclosure @escaping () -> WorkoutListViewModel,
         analysisViewModel: @autoclosure @escaping () -> AnalysisViewModel,
+        makeWorkoutDetailViewModel: @escaping (String) -> WorkoutDetailViewModel,
         reloadToken: Int = 0,
         onOpenSettings: @escaping () -> Void = {}
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
         _analysisViewModel = StateObject(wrappedValue: analysisViewModel())
+        self.makeWorkoutDetailViewModel = makeWorkoutDetailViewModel
         self.reloadToken = reloadToken
         self.onOpenSettings = onOpenSettings
     }
@@ -78,6 +89,12 @@ struct DashboardView: View {
             }
             .background(Color.fbBackground)
             .navigationTitle("Dashboard")
+            // By value, so the destination is built when a row is tapped
+            // rather than once per row while the list renders (#98). Reading
+            // it back costs no sync — the session is already in the cache.
+            .navigationDestination(for: WorkoutSummary.self) { workout in
+                WorkoutDetailView(viewModel: makeWorkoutDetailViewModel(workout.id))
+            }
             .refreshable { await viewModel.refresh() }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -156,7 +173,10 @@ struct DashboardView: View {
         analysisViewModel: AnalysisViewModel(
             cache: PreviewWorkoutCache.filled,
             inference: PreviewAnalysisStreamer.recommendation
-        )
+        ),
+        makeWorkoutDetailViewModel: { id in
+            WorkoutDetailViewModel(cache: PreviewWorkoutDetailCache.filled, workoutID: id)
+        }
     )
 }
 
@@ -166,7 +186,10 @@ struct DashboardView: View {
         analysisViewModel: AnalysisViewModel(
             cache: PreviewWorkoutCache.empty,
             inference: PreviewAnalysisStreamer.recommendation
-        )
+        ),
+        makeWorkoutDetailViewModel: { id in
+            WorkoutDetailViewModel(cache: PreviewWorkoutDetailCache.filled, workoutID: id)
+        }
     )
 }
 #endif

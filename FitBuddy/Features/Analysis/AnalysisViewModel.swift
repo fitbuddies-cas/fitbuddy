@@ -44,11 +44,11 @@ final class AnalysisViewModel: ObservableObject {
     /// `nil` while none was given (US-3 AC9). Reset with every new run: a
     /// rating belongs to the recommendation it was given for.
     @Published private(set) var feedback: AnalysisFeedback?
-    /// The window the analysis on screen actually covers. `.default` until a
-    /// run resolves it, and widened by the fallback ladder when the last four
-    /// weeks are empty (#87) — the UI names it only when it is not the
-    /// default.
-    @Published private(set) var window: AnalysisWindow = .default
+    /// What the analysis on screen rests on: how many sessions, over which
+    /// period, from which sources (US-6, #36). `nil` until a run has resolved
+    /// its window — before that there is no data basis to describe, and a
+    /// guessed one would be worse than none.
+    @Published private(set) var context: AnalysisContext?
     /// When the recommendation on screen was produced. Set by a finished run
     /// and by `restore()`; `nil` whenever no recommendation is showing (#97).
     @Published private(set) var generatedAt: Date?
@@ -74,6 +74,12 @@ final class AnalysisViewModel: ObservableObject {
     /// back — and cleared again as soon as the run they asked for is under
     /// way, because a run that then fails leaves the screen with nothing to
     /// read while the recommendation is still on disk (#97).
+    ///
+    /// Deliberately process-local: dismissing is not deleting, so it is not
+    /// persisted, and an app restart brings the stored recommendation back.
+    /// That is what US-3 AC10 asks for — the recommendation survives a
+    /// restart — and "New analysis" is a request for a new run, not a request
+    /// to throw the paid-for answer away.
     private var didDismissStoredResult = false
     /// Guards `restore()` against overlapping itself: the view's `.task` and
     /// `dismissFailure()` can both ask for a restore, and the store read
@@ -160,7 +166,7 @@ final class AnalysisViewModel: ObservableObject {
         guard case .loading = state else { return }
 
         feedback = nil
-        window = .default
+        context = nil
         // The dismissal has served its purpose: the user asked for a new
         // analysis and is getting one. If this run fails, the screen falls
         // back to `.idle` with nothing on it, and the stored recommendation is
@@ -208,7 +214,7 @@ final class AnalysisViewModel: ObservableObject {
         }
         attribution = nil
         feedback = nil
-        window = .default
+        context = nil
         clearResultAge()
         state = .idle
     }
@@ -261,7 +267,7 @@ final class AnalysisViewModel: ObservableObject {
         guard case .idle = state else { return }
 
         state = .result(stored.text)
-        window = stored.window
+        context = stored.context
         generatedAt = stored.generatedAt
         refreshResultAge()
         // Only a verdict given after this recommendation was written can belong
@@ -380,7 +386,15 @@ final class AnalysisViewModel: ObservableObject {
                 state = .error(.noTrainingData)
                 return nil
             }
-            self.window = window
+            // Counted over the resolved window, not over everything the read
+            // returned: the cache was read wide enough for the widest rung and
+            // its comparison window, and reporting those sessions as the data
+            // basis would overstate it by a factor of six.
+            let start = window.start(endingAt: reference, calendar: calendar)
+            context = AnalysisContext(
+                sessionCount: summaries.filter { $0.startTime >= start }.count,
+                window: window
+            )
             return AnalysisPromptBuilder.make(
                 summaries: summaries,
                 window: window,
@@ -409,9 +423,11 @@ final class AnalysisViewModel: ObservableObject {
         let timestamp = now()
         generatedAt = timestamp
         refreshResultAge()
-        guard let resultStore else { return }
+        // Both are set by the time a run reaches `.result`: the context is
+        // written when the window resolves, well before the first token.
+        guard let resultStore, let context else { return }
         do {
-            try await resultStore.save(text: text, generatedAt: timestamp, window: window)
+            try await resultStore.save(text: text, generatedAt: timestamp, context: context)
         } catch {
             logger.error("Analysis not persisted: \(error, privacy: .public)")
         }

@@ -151,6 +151,31 @@ final class InferenceServiceTests: XCTestCase {
         XCTAssertEqual(attempted(in: events), [.claude])
     }
 
+    func testUsesAStoredKeyThatThePriorityOrderDoesNotName() async throws {
+        // The Keychain outlives `UserDefaults`: after a reinstall the keys are
+        // still there while the order is gone. The stored key must still be
+        // used instead of the run failing as "no API key".
+        try await keychain.delete(.claudeAPIKey)
+        try await keychain.save("mistral-key", for: .mistralAPIKey)
+
+        let events = try await run()
+
+        XCTAssertEqual(attempted(in: events), [.mistral])
+        XCTAssertEqual(text(of: events), "Mistral answer")
+    }
+
+    func testAppendsAnUnlistedProviderBehindTheStoredOrder() async throws {
+        // A partially written order must not hide a key either — but it also
+        // must not outrank the providers the user did put in order.
+        try await keychain.save("AIza", for: .geminiAPIKey)
+        claude.startError = InferenceServiceError.unauthorized
+        sut = makeService(priority: [.claude])
+
+        let events = try await run()
+
+        XCTAssertEqual(attempted(in: events), [.claude, .gemini])
+    }
+
     // MARK: - Fallback chain (DoD: fällt ein Provider aus, übernimmt der nächste)
 
     func testFallsBackToTheNextProviderWhenTheFirstIsRejected() async throws {

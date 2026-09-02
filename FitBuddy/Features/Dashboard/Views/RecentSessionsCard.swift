@@ -4,6 +4,11 @@ import SwiftUI
 ///
 /// Caps the list instead of rendering all 90 days: the dashboard is a summary,
 /// and the full history needs a screen of its own rather than an endless card.
+///
+/// Each row pushes the workout detail screen (#98) by value rather than by
+/// destination view: `.navigationDestination(for: WorkoutSummary.self)` on the
+/// dashboard builds that screen's ViewModel once per push, whereas the closure
+/// form would build one per rendered row.
 struct RecentSessionsCard: View {
     let workouts: [WorkoutSummary]
     /// Rows rendered before the "+ n more" footer.
@@ -17,7 +22,16 @@ struct RecentSessionsCard: View {
                     if index > 0 {
                         Divider().overlay(Color.fbDivider)
                     }
-                    WorkoutSessionRow(workout: workout)
+                    NavigationLink(value: workout) {
+                        WorkoutSessionRow(workout: workout)
+                    }
+                    // Keeps the row's own styling: the default link tint would
+                    // repaint the date and the volume in accent blue.
+                    .buttonStyle(.plain)
+                    // `.plain` also costs the announcement: without this
+                    // VoiceOver reads the row as a button, and the user has no
+                    // way to tell it opens a screen.
+                    .accessibilityAddTraits(.isLink)
                 }
                 if remainingCount > 0 {
                     Divider().overlay(Color.fbDivider)
@@ -57,19 +71,21 @@ struct RecentSessionsCard: View {
 }
 
 #Preview {
-    RecentSessionsCard(
-        workouts: (0..<14).map { index in
-            WorkoutSummary(
-                id: "\(index)",
-                title: index.isMultiple(of: 2) ? "Push Day" : "Leg Day",
-                startTime: .now.addingTimeInterval(Double(-index) * 86_400),
-                volumeKg: 8_420 - Double(index) * 120,
-                exerciseCount: 6,
-                countedSetCount: 21
-            )
-        },
-        limit: 5
-    )
-    .padding()
-    .background(Color.fbBackground)
+    NavigationStack {
+        RecentSessionsCard(
+            workouts: (0..<14).map { index in
+                WorkoutSummary(
+                    id: "\(index)",
+                    title: index.isMultiple(of: 2) ? "Push Day" : "Leg Day",
+                    startTime: .now.addingTimeInterval(Double(-index) * 86_400),
+                    volumeKg: 8_420 - Double(index) * 120,
+                    exerciseCount: 6,
+                    countedSetCount: 21
+                )
+            },
+            limit: 5
+        )
+        .padding()
+        .background(Color.fbBackground)
+    }
 }

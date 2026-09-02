@@ -33,6 +33,7 @@ struct RootView: View {
                 DashboardView(
                     viewModel: makeDashboardViewModel(),
                     analysisViewModel: makeAnalysisViewModel(),
+                    makeWorkoutDetailViewModel: makeWorkoutDetailViewModel(for:),
                     reloadToken: dashboardReloadToken,
                     onOpenSettings: { showsSettings = true }
                 )
@@ -92,6 +93,19 @@ struct RootView: View {
             inference: InferenceService(cooldown: cooldown),
             cooldown: cooldown,
             resultStore: AnalysisResultStore(modelContainer: modelContext.container)
+        )
+    }
+
+    /// Wires the workout detail screen to the cache (#98).
+    ///
+    /// A factory rather than a ready-made ViewModel: the screen exists only
+    /// once a row is tapped, and the dashboard calls this per push. Its own
+    /// `WorkoutStore` over the same container, like the analysis sheet's —
+    /// the detail screen only reads.
+    private func makeWorkoutDetailViewModel(for workoutID: String) -> WorkoutDetailViewModel {
+        WorkoutDetailViewModel(
+            cache: WorkoutStore(modelContainer: modelContext.container),
+            workoutID: workoutID
         )
     }
 

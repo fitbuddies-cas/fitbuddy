@@ -9,7 +9,12 @@ struct AnalysisCTACard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("AI · Claude".uppercased())
+            // Provider-neutral: which provider answers is the user's priority
+            // order plus whatever the fallback chain reaches (#79), and it is
+            // only known once the run starts. The answering provider is named
+            // on the result itself; naming one here made the dashboard claim
+            // Claude to users who had configured Gemini or Mistral.
+            Text("AI Analysis".uppercased())
                 .font(.fbLabel)
                 .tracking(0.6)
                 .foregroundStyle(Color.fbBackground.opacity(0.6))

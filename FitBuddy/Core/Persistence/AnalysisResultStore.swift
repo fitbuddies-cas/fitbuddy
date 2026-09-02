@@ -12,10 +12,15 @@ actor AnalysisResultStore {
     ///
     /// Delete and insert share one `save()`, so a failing write leaves the
     /// previous recommendation intact rather than none at all.
-    func save(text: String, generatedAt: Date, window: AnalysisWindow) throws {
+    func save(text: String, generatedAt: Date, context: AnalysisContext) throws {
         try deleteStoredResults()
         modelContext.insert(
-            AnalysisResult(text: text, generatedAt: generatedAt, windowWeeks: window.weeks)
+            AnalysisResult(
+                text: text,
+                generatedAt: generatedAt,
+                windowWeeks: context.window.weeks,
+                sessionCount: context.sessionCount
+            )
         )
         try saveOrRollback()
     }
@@ -34,7 +39,10 @@ actor AnalysisResultStore {
         return AnalysisResultSnapshot(
             text: result.text,
             generatedAt: result.generatedAt,
-            window: AnalysisWindow(weeks: result.windowWeeks)
+            context: AnalysisContext(
+                sessionCount: result.sessionCount,
+                window: AnalysisWindow(weeks: result.windowWeeks)
+            )
         )
     }
 

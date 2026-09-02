@@ -18,11 +18,13 @@ struct AnalysisView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    // Above the answer rather than under it: the period the
+                    // Above the answer rather than under it: the basis the
                     // recommendation rests on has to be known while reading it,
-                    // not after (#87).
-                    if viewModel.state.text != nil {
-                        AnalysisWindowNote(window: viewModel.window)
+                    // not after (#87, #36) — and the thin-data warning of US-6
+                    // AC2 is worth least at the bottom of a text the user has
+                    // already believed.
+                    if viewModel.state.text != nil, let context = viewModel.context {
+                        AnalysisContextView(context: context)
                     }
                     content
                 }

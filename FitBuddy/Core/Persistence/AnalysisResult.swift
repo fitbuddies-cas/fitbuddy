@@ -25,10 +25,20 @@ final class AnalysisResult {
     /// fallback ladder widens it when the last four weeks are empty (#87), so
     /// it has to travel with the text rather than be assumed to be the default.
     var windowWeeks: Int
+    /// How many sessions that window held (#36). Stored with the text for the
+    /// same reason as `windowWeeks`: the context line above a restored
+    /// recommendation has to name the basis of the run that produced it, and
+    /// re-counting today's cache would describe a different one.
+    ///
+    /// Defaults to zero so an existing store migrates without a version plan;
+    /// a row written before #36 then reads as thin data, which is the honest
+    /// answer for a basis nobody recorded.
+    var sessionCount: Int = 0
 
-    init(text: String, generatedAt: Date, windowWeeks: Int) {
+    init(text: String, generatedAt: Date, windowWeeks: Int, sessionCount: Int) {
         self.text = text
         self.generatedAt = generatedAt
         self.windowWeeks = windowWeeks
+        self.sessionCount = sessionCount
     }
 }

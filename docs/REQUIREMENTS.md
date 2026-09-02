@@ -73,7 +73,7 @@ Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 
 | # | Given | When | Then |
 |---|---|---|---|
-| AC1 | AI-Analyse wurde abgeschlossen | Empfehlung wird angezeigt | Kompakte Zusammenfassung: welche Quellen einbezogen, welcher Zeitraum, wie viele Trainings («Basierend auf 12 Hevy-Trainings der letzten 30 Tage») |
+| AC1 | AI-Analyse wurde abgeschlossen | Empfehlung wird angezeigt | Kompakte Zusammenfassung: welche Quellen einbezogen, welcher Zeitraum, wie viele Trainings («Basierend auf 12 Hevy-Trainings der letzten 4 Wochen»). Der genannte Zeitraum ist der tatsächlich analysierte: standardmässig 4 Wochen, bei leerem Fenster die aufgeweitete Stufe (8 bzw. 13 Wochen). |
 | AC2 | Weniger als 5 Trainings lagen im Analysezeitraum | Empfehlung wird angezeigt | Kontext-Hinweis enthält explizite Warnung, dass Datenbasis dünn ist |
 
 ### 1.2.3 US-7 · Übungssuche & Filter 

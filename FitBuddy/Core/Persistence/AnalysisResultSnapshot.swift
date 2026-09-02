@@ -8,7 +8,8 @@ import Foundation
 struct AnalysisResultSnapshot: Equatable, Sendable {
     let text: String
     let generatedAt: Date
-    /// The window the recommendation covers, rebuilt from the stored week
-    /// count so the restored screen names it exactly as the live run did (#87).
-    let window: AnalysisWindow
+    /// What the recommendation rests on, rebuilt from the stored week count
+    /// and session count so the restored screen names the basis exactly as the
+    /// live run did (#87, #36).
+    let context: AnalysisContext
 }

@@ -6,7 +6,11 @@ import SwiftData
 /// `WorkoutStore` hands these out instead of `@Model` instances: a `Workout`
 /// is bound to its `ModelContext` and cannot cross an actor boundary, so the
 /// aggregation happens where the models live and only value types travel.
-struct WorkoutSummary: Equatable, Identifiable, Sendable {
+/// `Hashable` so the dashboard can push a row as a `NavigationLink` value
+/// (#98): the detail screen is addressed by the summary the user tapped, and
+/// `.navigationDestination(for:)` builds its ViewModel once per push instead
+/// of once per rendered row.
+struct WorkoutSummary: Hashable, Identifiable, Sendable {
     /// Hevy's workout id.
     let id: String
     let title: String
@@ -54,7 +58,7 @@ extension WorkoutSummary {
             let sets = exercise.sets.filter { $0.type.countsTowardsVolume }
             return MuscleLoad(
                 group: MuscleGroup.from(exerciseTitle: exercise.title),
-                volumeKg: Self.volume(of: sets),
+                volumeKg: sets.trainingVolumeKg,
                 setCount: sets.count
             )
         }
@@ -63,22 +67,10 @@ extension WorkoutSummary {
             id: workout.id,
             title: workout.title,
             startTime: workout.startTime,
-            volumeKg: Self.volume(of: countedSets),
+            volumeKg: countedSets.trainingVolumeKg,
             exerciseCount: workout.exercises.count,
             countedSetCount: countedSets.count,
             muscleLoads: MuscleLoad.merged(loads)
         )
-    }
-
-    /// Σ (weight × reps) over `sets`.
-    ///
-    /// A set contributes only with both numbers present: a bodyweight or
-    /// cardio set has no kg volume, and treating its missing weight as 0 would
-    /// be the same result with a worse intent.
-    private static func volume(of sets: [ExerciseSet]) -> Double {
-        sets.reduce(0) { total, set in
-            guard let weight = set.weightKg, let reps = set.reps else { return total }
-            return total + weight * Double(reps)
-        }
     }
 }

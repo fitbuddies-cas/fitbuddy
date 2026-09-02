@@ -158,7 +158,7 @@ extension SessionResetServiceTests {
         try await results.save(
             text: "Add 2.5 kg on bench next session.",
             generatedAt: Date(timeIntervalSince1970: 1_788_000_000),
-            window: .default
+            context: AnalysisContext(sessionCount: 12, window: .default)
         )
 
         await sut.discardCachedWorkouts()
@@ -171,7 +171,7 @@ extension SessionResetServiceTests {
         try await results.save(
             text: "Add 2.5 kg on bench next session.",
             generatedAt: Date(timeIntervalSince1970: 1_788_000_000),
-            window: .default
+            context: AnalysisContext(sessionCount: 12, window: .default)
         )
 
         await sut.hardLogout()

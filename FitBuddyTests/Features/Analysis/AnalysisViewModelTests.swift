@@ -124,7 +124,90 @@ final class AnalysisViewModelTests: XCTestCase {
             cache.requestedSince,
             AnalysisWindow.widest.previousStart(endingAt: Self.reference, calendar: Self.calendar)
         )
-        XCTAssertEqual(sut.window, .default)
+        XCTAssertEqual(sut.context?.window, .default)
+    }
+
+    // MARK: - Context (US-6, #36)
+
+    /// The context line counts the sessions of the *analysed* window, not
+    /// everything the cache read returned — the read reaches back 26 weeks so
+    /// one read serves every rung of the ladder (#87).
+    func testContextCountsOnlyTheSessionsInsideTheResolvedWindow() async {
+        cache.summaries = [
+            Self.workout(daysAgo: 2),
+            Self.workout(daysAgo: 20),
+            // Outside the 4-week window, inside the read.
+            Self.workout(daysAgo: 40),
+            Self.workout(daysAgo: 80)
+        ]
+        await streamer.setChunks(["ok"])
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.window, .default)
+        XCTAssertEqual(sut.context?.sessionCount, 2)
+    }
+
+    /// After a widened window the count has to follow it: the sessions the
+    /// analysis found are exactly the ones the wider rung holds.
+    func testContextCountsTheWidenedWindowWhenTheLadderMoves() async {
+        cache.summaries = [Self.workout(daysAgo: 40), Self.workout(daysAgo: 50), Self.workout(daysAgo: 80)]
+        await streamer.setChunks(["ok"])
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.window.weeks, 8)
+        XCTAssertEqual(sut.context?.sessionCount, 2)
+    }
+
+    /// A run that never resolves a window must not leave the previous run's
+    /// basis on screen.
+    func testContextIsClearedWhenARunFails() async {
+        await streamer.setChunks(["first"])
+        let clock = TestClock(Self.reference)
+        let sut = makeSUT(clock: clock)
+        XCTAssertNil(sut.context)
+
+        await sut.start()
+        XCTAssertNotNil(sut.context)
+
+        // Past the 6h cooldown, on a cache that no rung can serve.
+        clock.advance(by: 7 * 3_600)
+        cache.summaries = []
+        await sut.start()
+
+        XCTAssertEqual(sut.state, .error(.noTrainingData))
+        XCTAssertNil(sut.context)
+    }
+
+    /// The clearing has to happen at the *start* of a run, not only on its
+    /// failure path: while the second run is still loading, the first run's
+    /// basis would otherwise sit above a recommendation it does not describe.
+    func testContextIsClearedWhileANewRunIsStillLoading() async {
+        await streamer.setChunks(["first"])
+        let clock = TestClock(Self.reference)
+        let sut = makeSUT(clock: clock)
+
+        await sut.start()
+        XCTAssertNotNil(sut.context)
+
+        // Past the 6h cooldown, second run held inside the cache read — after
+        // the clearing, before the window is resolved.
+        clock.advance(by: 7 * 3_600)
+        await streamer.setChunks(["second"])
+        cache.gatesFirstCall = true
+        cache.gatedCall = 2
+        let run = Task { await sut.start() }
+        await cache.waitForFirstCall()
+
+        XCTAssertEqual(sut.state, .loading)
+        XCTAssertNil(sut.context)
+
+        cache.releaseFirstCall()
+        await run.value
+        XCTAssertNotNil(sut.context)
     }
 
     /// The state has to pass through `.loading` before any text arrives — that
@@ -155,7 +238,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await sut.start()
 
         XCTAssertEqual(sut.state, .result("Back after a break."))
-        XCTAssertEqual(sut.window.weeks, 8)
+        XCTAssertEqual(sut.context?.window.weeks, 8)
         let user = await streamer.userPrompt
         XCTAssertEqual(user?.contains("## Last 8 weeks ("), true)
     }
@@ -168,7 +251,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await sut.start()
 
         XCTAssertEqual(sut.state, .result("ok"))
-        XCTAssertEqual(sut.window.weeks, 13)
+        XCTAssertEqual(sut.context?.window.weeks, 13)
     }
 
     /// Only a cache with nothing in the widest window is genuinely empty —
@@ -207,7 +290,7 @@ final class AnalysisViewModelTests: XCTestCase {
         let sut = makeSUT(clock: clock)
 
         await sut.start()
-        XCTAssertEqual(sut.window.weeks, 8)
+        XCTAssertEqual(sut.context?.window.weeks, 8)
 
         // Past the 6h cooldown, with recent training in the cache this time.
         clock.advance(by: 7 * 3_600)
@@ -215,7 +298,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setChunks(["second"])
         await sut.start()
 
-        XCTAssertEqual(sut.window, .default)
+        XCTAssertEqual(sut.context?.window, .default)
     }
 
     func testCacheFailureIsReportedAsCacheUnavailable() async {
@@ -708,9 +791,14 @@ extension AnalysisViewModelTests {
     private func storeRecommendation(
         _ text: String = "Add 2.5 kg on bench next session.",
         at date: Date,
+        sessions: Int = 12,
         window: AnalysisWindow = .default
     ) async throws {
-        try await results.save(text: text, generatedAt: date, window: window)
+        try await results.save(
+            text: text,
+            generatedAt: date,
+            context: AnalysisContext(sessionCount: sessions, window: window)
+        )
     }
 
     func testFinishedRunPersistsTheRecommendation() async throws {
@@ -723,14 +811,15 @@ extension AnalysisViewModelTests {
         let stored = try XCTUnwrap(latest)
         XCTAssertEqual(stored.text, "Your bench volume is rising.")
         XCTAssertEqual(stored.generatedAt, Self.reference)
-        XCTAssertEqual(stored.window, .default)
+        // Two sessions in the default window, from the `setUp` cache.
+        XCTAssertEqual(stored.context, AnalysisContext(sessionCount: 2, window: .default))
         XCTAssertEqual(sut.generatedAt, Self.reference)
         XCTAssertEqual(sut.resultAge, "just now")
     }
 
-    /// #87: the widened window is what the advice actually rests on, so it has
-    /// to be the one that is stored.
-    func testPersistedWindowIsTheOneTheRunResolved() async throws {
+    /// #87/#36: the widened window and its count are what the advice actually
+    /// rests on, so they are what gets stored.
+    func testPersistedContextIsTheOneTheRunResolved() async throws {
         cache.summaries = [Self.workout(daysAgo: 40)]
         await streamer.setChunks(["Back after a break."])
         let sut = makeSUT()
@@ -738,7 +827,8 @@ extension AnalysisViewModelTests {
         await sut.start()
 
         let stored = try await results.latest()
-        XCTAssertEqual(stored?.window.weeks, 8)
+        XCTAssertEqual(stored?.context.window.weeks, 8)
+        XCTAssertEqual(stored?.context.sessionCount, 1)
     }
 
     /// A cancelled run produces no recommendation, and must not cost the user
@@ -789,6 +879,7 @@ extension AnalysisViewModelTests {
         try await storeRecommendation(
             "Give legs a second slot.",
             at: Self.reference.addingTimeInterval(-2 * 3_600),
+            sessions: 6,
             window: AnalysisWindow(weeks: 8)
         )
         let sut = makeSUT()
@@ -796,7 +887,9 @@ extension AnalysisViewModelTests {
         await sut.restore()
 
         XCTAssertEqual(sut.state, .result("Give legs a second slot."))
-        XCTAssertEqual(sut.window.weeks, 8)
+        // #36: the restored screen names the basis of the run that produced
+        // the text, not a basis re-counted from today's cache.
+        XCTAssertEqual(sut.context, AnalysisContext(sessionCount: 6, window: AnalysisWindow(weeks: 8)))
         XCTAssertEqual(sut.resultAge, "2 h ago")
         // No provider is stored, so the badge falls back to the bare "AI".
         XCTAssertNil(sut.attribution)
@@ -932,7 +1025,7 @@ extension AnalysisViewModelTests {
         XCTAssertNil(sut.generatedAt)
         XCTAssertNil(sut.resultAge)
         XCTAssertNil(sut.feedback)
-        XCTAssertEqual(sut.window, .default)
+        XCTAssertNil(sut.context)
         let stored = try await results.latest()
         XCTAssertEqual(stored?.text, "Add 2.5 kg on bench next session.")
     }

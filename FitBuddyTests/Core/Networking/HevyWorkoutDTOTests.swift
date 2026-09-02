@@ -78,6 +78,68 @@ final class HevyWorkoutDTOTests: XCTestCase {
         XCTAssertNil(set.durationSeconds)
     }
 
+    func testZeroDistanceAndDurationDecodeAsNotLogged() throws {
+        // Hevy sends 0 instead of null for the metrics an exercise does not
+        // use, which the detail row would otherwise print as "0 m · 0:00".
+        let dto = try decode([
+            "id": "w-1",
+            "start_time": "2021-09-14T12:00:00Z",
+            "exercises": [[
+                "index": 0,
+                "title": "Standing Calf Raise (Machine)",
+                "sets": [[
+                    "index": 0,
+                    "type": "normal",
+                    "weight_kg": 115.0,
+                    "reps": 11,
+                    "distance_meters": 0,
+                    "duration_seconds": 0,
+                ]],
+            ]],
+        ])
+
+        let set = try XCTUnwrap(dto.makeWorkout().exercises.first?.sets.first)
+        XCTAssertNil(set.distanceMeters)
+        XCTAssertNil(set.durationSeconds)
+        XCTAssertEqual(set.weightKg, 115)
+        XCTAssertEqual(set.reps, 11)
+    }
+
+    func testLoggedDistanceAndDurationSurviveDecoding() throws {
+        let dto = try decode([
+            "id": "w-1",
+            "start_time": "2021-09-14T12:00:00Z",
+            "exercises": [[
+                "index": 0,
+                "title": "Rowing Machine",
+                "sets": [["index": 0, "type": "normal", "distance_meters": 3500.0, "duration_seconds": 1206]],
+            ]],
+        ])
+
+        let set = try XCTUnwrap(dto.makeWorkout().exercises.first?.sets.first)
+        XCTAssertEqual(set.distanceMeters, 3_500)
+        XCTAssertEqual(set.durationSeconds, 1_206)
+    }
+
+    /// A zero weight is a bodyweight set and a zero rep count a set that was
+    /// started and not completed — neither is a missing value, so neither is
+    /// dropped alongside the zero distance/duration.
+    func testZeroWeightAndRepsAreKept() throws {
+        let dto = try decode([
+            "id": "w-1",
+            "start_time": "2021-09-14T12:00:00Z",
+            "exercises": [[
+                "index": 0,
+                "title": "Pull Up",
+                "sets": [["index": 0, "type": "normal", "weight_kg": 0.0, "reps": 0]],
+            ]],
+        ])
+
+        let set = try XCTUnwrap(dto.makeWorkout().exercises.first?.sets.first)
+        XCTAssertEqual(set.weightKg, 0)
+        XCTAssertEqual(set.reps, 0)
+    }
+
     func testUnknownSetTypeDoesNotFailDecoding() throws {
         let dto = try decode([
             "id": "w-1",

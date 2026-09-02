@@ -6,7 +6,7 @@ import Foundation
 /// `AnalysisResultStore`, so a preview can drive the analysis screen without a
 /// `ModelContainer` and a test can observe what was persisted.
 protocol AnalysisResultStoring: Sendable {
-    func save(text: String, generatedAt: Date, window: AnalysisWindow) async throws
+    func save(text: String, generatedAt: Date, context: AnalysisContext) async throws
     func latest() async throws -> AnalysisResultSnapshot?
     func deleteAll() async throws
 }
