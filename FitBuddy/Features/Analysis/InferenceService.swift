@@ -177,9 +177,14 @@ actor InferenceService {
     /// failure: it was never configured, so it has nothing to fall back from.
     private func resolveCandidates() async throws -> [Candidate] {
         let order = await priority.order
-        // An empty order means the Claude key predates the multi-provider step
-        // (#78) — that install has exactly one key and no stored order.
-        let providers = order.isEmpty ? [LLMProvider.claude] : order
+        // Providers the order does not name are appended rather than dropped,
+        // exactly as the settings list repairs itself: a stored key outside the
+        // order is otherwise unreachable, and the analysis reports "no API key"
+        // while the user can see their key in Settings. That happens whenever
+        // the Keychain outlives `UserDefaults` — a reinstall keeps the keys but
+        // wipes the order — and on an install whose single key predates the
+        // multi-provider step (#78), which had no stored order at all.
+        let providers = order + LLMProvider.allCases.filter { !order.contains($0) }
 
         var candidates: [Candidate] = []
         for provider in providers {
