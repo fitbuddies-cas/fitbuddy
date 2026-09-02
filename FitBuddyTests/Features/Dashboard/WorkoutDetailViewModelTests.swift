@@ -106,30 +106,25 @@ final class WorkoutDetailViewModelTests: XCTestCase {
 
     // MARK: - Fixture
 
+    private static let exercise = ExerciseDetail(
+        index: 0,
+        title: "Bench Press (Barbell)",
+        sets: [
+            SetDetail(index: 0, type: .warmup, weightKg: 60, reps: 10,
+                      distanceMeters: nil, durationSeconds: nil, rpe: nil),
+            SetDetail(index: 1, type: .normal, weightKg: 100, reps: 8,
+                      distanceMeters: nil, durationSeconds: nil, rpe: 9.5),
+        ]
+    )
+
     private static let session = WorkoutDetail(
         id: "w-1",
         title: "Push Day",
         workoutDescription: "Felt strong",
         startTime: Date(timeIntervalSince1970: 1_750_000_000),
         endTime: Date(timeIntervalSince1970: 1_750_003_600),
-        volumeKg: 800,
-        countedSetCount: 1,
-        exercises: [
-            ExerciseDetail(
-                index: 0,
-                title: "Bench Press (Barbell)",
-                notes: nil,
-                supersetID: nil,
-                muscleGroup: .chest,
-                sets: [
-                    SetDetail(index: 0, type: .warmup, weightKg: 60, reps: 10,
-                              distanceMeters: nil, durationSeconds: nil, rpe: nil),
-                    SetDetail(index: 1, type: .normal, weightKg: 100, reps: 8,
-                              distanceMeters: nil, durationSeconds: nil, rpe: 9.5),
-                ],
-                volumeKg: 800,
-                countedSetCount: 1
-            ),
-        ]
+        volumeKg: exercise.volumeKg,
+        countedSetCount: exercise.countedSetCount,
+        exercises: [exercise]
     )
 }

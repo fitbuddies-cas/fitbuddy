@@ -69,12 +69,27 @@ final class DashboardRenderingTests: XCTestCase {
         }
     }
 
-    /// An all-bodyweight session has no kg to divide by — the card drops the
-    /// bar rather than dividing by zero.
-    func testExerciseCardRendersWithoutAnySessionVolume() throws {
+    /// A weightless exercise inside a session that does have volume: the bar
+    /// gives way to the plain set count, keyed off the exercise's own volume
+    /// rather than the session's.
+    func testExerciseCardRendersAWeightlessExerciseInAMixedSession() throws {
+        let session = PreviewWorkoutDetailCache.session
+        let dips = session.exercises[2]
+        XCTAssertEqual(dips.volumeKg, 0)
+        XCTAssertGreaterThan(session.volumeKg, 0)
+
+        let image = try render(
+            ExerciseDetailCard(exercise: dips, sessionVolumeKg: session.volumeKg)
+        )
+        XCTAssertGreaterThan(image.size.height, 0)
+    }
+
+    /// An exercise created in Hevy but never logged: no sets, and no
+    /// free-standing divider under the card either.
+    func testExerciseCardRendersAnExerciseWithoutSets() throws {
         let image = try render(
             ExerciseDetailCard(
-                exercise: PreviewWorkoutDetailCache.session.exercises[2],
+                exercise: ExerciseDetail(index: 0, title: "Bench Press (Barbell)", sets: []),
                 sessionVolumeKg: 0
             )
         )

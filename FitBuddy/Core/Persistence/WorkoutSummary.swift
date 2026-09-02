@@ -58,7 +58,7 @@ extension WorkoutSummary {
             let sets = exercise.sets.filter { $0.type.countsTowardsVolume }
             return MuscleLoad(
                 group: MuscleGroup.from(exerciseTitle: exercise.title),
-                volumeKg: ExerciseSet.volume(of: sets),
+                volumeKg: sets.trainingVolumeKg,
                 setCount: sets.count
             )
         }
@@ -67,7 +67,7 @@ extension WorkoutSummary {
             id: workout.id,
             title: workout.title,
             startTime: workout.startTime,
-            volumeKg: ExerciseSet.volume(of: countedSets),
+            volumeKg: countedSets.trainingVolumeKg,
             exerciseCount: workout.exercises.count,
             countedSetCount: countedSets.count,
             muscleLoads: MuscleLoad.merged(loads)

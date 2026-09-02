@@ -34,7 +34,7 @@ extension PreviewWorkoutDetailCache {
     /// finisher logged as distance and time.
     static let session: WorkoutDetail = {
         let exercises = [
-            exercise(
+            ExerciseDetail(
                 index: 0,
                 title: "Bench Press (Barbell)",
                 notes: "Paused first rep of every set.",
@@ -49,7 +49,7 @@ extension PreviewWorkoutDetailCache {
                               distanceMeters: nil, durationSeconds: nil, rpe: 9.5),
                 ]
             ),
-            exercise(
+            ExerciseDetail(
                 index: 1,
                 title: "Shoulder Press (Dumbbell)",
                 supersetID: 1,
@@ -58,7 +58,7 @@ extension PreviewWorkoutDetailCache {
                               distanceMeters: nil, durationSeconds: nil, rpe: 8)
                 }
             ),
-            exercise(
+            ExerciseDetail(
                 index: 2,
                 title: "Dips",
                 supersetID: 1,
@@ -67,7 +67,7 @@ extension PreviewWorkoutDetailCache {
                               distanceMeters: nil, durationSeconds: nil, rpe: nil)
                 }
             ),
-            exercise(
+            ExerciseDetail(
                 index: 3,
                 title: "Treadmill",
                 sets: [
@@ -89,30 +89,5 @@ extension PreviewWorkoutDetailCache {
             exercises: exercises
         )
     }()
-
-    /// Builds one exercise and derives the two totals the same way the real
-    /// projection does, so the preview cannot show figures the app never would.
-    private static func exercise(
-        index: Int,
-        title: String,
-        notes: String? = nil,
-        supersetID: Int? = nil,
-        sets: [SetDetail]
-    ) -> ExerciseDetail {
-        let counted = sets.filter(\.countsTowardsVolume)
-        return ExerciseDetail(
-            index: index,
-            title: title,
-            notes: notes,
-            supersetID: supersetID,
-            muscleGroup: MuscleGroup.from(exerciseTitle: title),
-            sets: sets,
-            volumeKg: counted.reduce(0) { total, set in
-                guard let weight = set.weightKg, let reps = set.reps else { return total }
-                return total + weight * Double(reps)
-            },
-            countedSetCount: counted.count
-        )
-    }
 }
 #endif

@@ -4,9 +4,8 @@ import SwiftUI
 /// every set they logged (#98).
 struct ExerciseDetailCard: View {
     let exercise: ExerciseDetail
-    /// Total volume of the session, so the bar can show this exercise's share
-    /// of it. `0` for an all-bodyweight session, where there is no share to
-    /// draw.
+    /// Total volume of the session — the denominator the bar draws this
+    /// exercise's share against.
     let sessionVolumeKg: Double
 
     var body: some View {
@@ -17,8 +16,13 @@ struct ExerciseDetailCard: View {
                     note(notes)
                 }
                 share
-                Divider().overlay(Color.fbDivider)
-                sets
+                // Only with something under it: an exercise created in Hevy
+                // but never logged has no sets, and the card would end on a
+                // free-standing rule.
+                if !exercise.sets.isEmpty {
+                    Divider().overlay(Color.fbDivider)
+                    sets
+                }
             }
         }
     }
@@ -62,11 +66,14 @@ struct ExerciseDetailCard: View {
     }
 
     /// What this exercise contributed to the session, as a share of its total
-    /// volume — or just the counted sets when the session produced no kg at
-    /// all (bodyweight, cardio), where every bar would be empty.
+    /// volume — or just the counted sets when *this* exercise produced no kg
+    /// (bodyweight, cardio), where the bar would be an empty rail labelled 0.
+    ///
+    /// The exercise decides, not the session: in a mixed session the session
+    /// total is greater than zero while the dips in it are still weightless.
     @ViewBuilder
     private var share: some View {
-        if sessionVolumeKg > 0 {
+        if exercise.volumeKg > 0 {
             FBBar(
                 label: CountFormatter.labelled(exercise.countedSetCount, singular: "set"),
                 fraction: exercise.volumeKg / sessionVolumeKg,
@@ -86,25 +93,14 @@ struct ExerciseDetailCard: View {
         return "\(sets), \(VolumeFormatter.full(exercise.volumeKg)) kg"
     }
 
-    /// The logged sets in Hevy's order. Warm-ups are shown but not numbered —
-    /// `SetDetailRow` marks them, and they do not count towards the volume
-    /// above.
+    /// The logged sets in Hevy's order. Sets outside the volume are shown but
+    /// not numbered — `SetDetailRow` marks them instead. The numbering itself
+    /// belongs to `ExerciseDetail`, so it can be tested without a view.
     private var sets: some View {
         VStack(spacing: 0) {
-            ForEach(numberedSets, id: \.set.id) { entry in
+            ForEach(exercise.numberedSets, id: \.set.id) { entry in
                 SetDetailRow(set: entry.set, number: entry.number)
             }
-        }
-    }
-
-    /// Pairs each set with its number among the counted ones, so the rows read
-    /// "W, 1, 2, 3" the way the app tallies them — not "1, 2, 3, 4" with the
-    /// warm-up quietly claiming a working set's place.
-    private var numberedSets: [(set: SetDetail, number: Int)] {
-        var number = 0
-        return exercise.sets.map { set in
-            if set.countsTowardsVolume { number += 1 }
-            return (set, number)
         }
     }
 }
@@ -121,16 +117,18 @@ struct ExerciseDetailCard: View {
     .background(Color.fbBackground)
 }
 
+/// Two weightless exercises inside a session that *does* have volume — the
+/// mixed case, where the bar has to give way to the plain set count.
 #Preview("Bodyweight & cardio") {
     ScrollView {
         VStack(spacing: 12) {
             ExerciseDetailCard(
                 exercise: PreviewWorkoutDetailCache.session.exercises[2],
-                sessionVolumeKg: 0
+                sessionVolumeKg: PreviewWorkoutDetailCache.session.volumeKg
             )
             ExerciseDetailCard(
                 exercise: PreviewWorkoutDetailCache.session.exercises[3],
-                sessionVolumeKg: 0
+                sessionVolumeKg: PreviewWorkoutDetailCache.session.volumeKg
             )
         }
         .padding(16)

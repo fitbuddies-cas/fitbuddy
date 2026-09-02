@@ -8,10 +8,11 @@ import SwiftUI
 /// missing metric with a zero.
 struct SetDetailRow: View {
     let set: SetDetail
-    /// The set's position among the *displayed* sets, 1-based. Taken from the
-    /// list rather than from `set.index`, whose numbering Hevy shares with the
-    /// warm-ups.
-    let number: Int
+    /// The set's position among the *counted* sets, 1-based — `nil` for a set
+    /// that is outside the volume and therefore outside the numbering. Taken
+    /// from the list rather than from `set.index`, whose numbering Hevy shares
+    /// with the warm-ups.
+    let number: Int?
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -33,15 +34,25 @@ struct SetDetailRow: View {
         .accessibilityLabel(accessibilityLabel)
     }
 
-    /// The set number, or "W" for a warm-up: warm-ups are visible as such
-    /// because they do not count towards the volume printed above them
-    /// (`SetType.countsTowardsVolume`).
+    /// The set number, or a mark for a set that carries none.
+    ///
+    /// Both branches follow `number`, which the card derives from
+    /// `SetType.countsTowardsVolume` — the same rule that decided the volume
+    /// printed above. A warm-up gets "W"; anything else outside the volume
+    /// (`.unknown`, i.e. a missing type or one a later Hevy introduces) gets a
+    /// dash, because the app cannot say more about it than that it did not
+    /// count.
     private var marker: some View {
-        Text(set.type == .warmup ? "W" : "\(number)")
+        Text(markerText)
             .font(.caption.weight(.semibold))
             .fbTabularNumbers()
-            .foregroundStyle(set.type == .warmup ? Color.fbWarn : Color.fbMuted)
+            .foregroundStyle(number == nil ? Color.fbWarn : Color.fbMuted)
             .frame(width: 22, alignment: .leading)
+    }
+
+    private var markerText: String {
+        guard let number else { return set.type == .warmup ? "W" : "–" }
+        return "\(number)"
     }
 
     /// The logged values, in the order they are read: load, then work.
@@ -60,10 +71,17 @@ struct SetDetailRow: View {
     }
 
     private var accessibilityLabel: String {
-        let position = set.type == .warmup ? "Warm-up set" : "Set \(number)"
-        return [position, metrics.isEmpty ? nil : metrics, SetMetricFormatter.rpe(set.rpe)]
+        [position, metrics.isEmpty ? nil : metrics, SetMetricFormatter.rpe(set.rpe)]
             .compactMap { $0 }
             .joined(separator: ", ")
+    }
+
+    /// Spoken counterpart of `markerText` — "–" would be read as a hyphen.
+    private var position: String {
+        guard let number else {
+            return set.type == .warmup ? "Warm-up set" : "Set, not counted"
+        }
+        return "Set \(number)"
     }
 }
 
@@ -79,7 +97,7 @@ struct SetDetailRow: View {
                 durationSeconds: nil,
                 rpe: nil
             ),
-            number: 0
+            number: nil
         )
         SetDetailRow(
             set: SetDetail(
@@ -116,6 +134,20 @@ struct SetDetailRow: View {
                 rpe: nil
             ),
             number: 3
+        )
+        // A type this version does not know — logged, shown, but outside the
+        // volume and therefore outside the numbering.
+        SetDetailRow(
+            set: SetDetail(
+                index: 4,
+                type: .unknown,
+                weightKg: 40,
+                reps: 15,
+                distanceMeters: nil,
+                durationSeconds: nil,
+                rpe: nil
+            ),
+            number: nil
         )
     }
     .padding(16)

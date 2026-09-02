@@ -23,11 +23,19 @@ final class WorkoutDetailViewModel: ObservableObject {
         self.workoutID = workoutID
     }
 
-    /// Loads the session — the screen's `.task`.
+    /// Loads the session — the screen's `.task`, and the "Try again" button of
+    /// the failure card.
     ///
     /// Never throws: every outcome lands in `state`, so the screen always says
     /// something. A read that comes back empty is `.missing`, not `.failed`.
+    ///
+    /// Publishes `.loading` before the read rather than only after it. On the
+    /// first call that changes nothing — the state is already `.loading` — but
+    /// a retry whose read fails again would otherwise write `.failed` over
+    /// `.failed`, leaving the screen visually untouched and the user unable to
+    /// tell whether their tap did anything at all.
     func load() async {
+        state = .loading
         do {
             let detail = try await cache.workoutDetail(id: workoutID)
             guard !Task.isCancelled else { return }

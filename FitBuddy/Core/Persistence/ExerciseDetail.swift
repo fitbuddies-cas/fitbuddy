@@ -29,6 +29,53 @@ struct ExerciseDetail: Equatable, Identifiable, Sendable {
 }
 
 extension ExerciseDetail {
+    /// Builds an exercise from its sets and derives everything that follows
+    /// from them: the muscle group, the volume and the counted-set tally.
+    ///
+    /// The deriving initialiser is the only one anything outside this file
+    /// should reach for — a caller that passes its own totals is a caller that
+    /// can get them wrong, which is exactly how previews and fixtures drift
+    /// away from what the app would show.
+    init(
+        index: Int,
+        title: String,
+        notes: String? = nil,
+        supersetID: Int? = nil,
+        sets: [SetDetail]
+    ) {
+        let countedSets = sets.filter(\.countsTowardsVolume)
+
+        self.init(
+            index: index,
+            title: title,
+            notes: notes,
+            supersetID: supersetID,
+            muscleGroup: MuscleGroup.from(exerciseTitle: title),
+            sets: sets,
+            volumeKg: countedSets.trainingVolumeKg,
+            countedSetCount: countedSets.count
+        )
+    }
+
+    /// The sets paired with their number among the counted ones, so a list
+    /// reads "W, 1, 2, 3" the way the app tallies them — not "1, 2, 3, 4" with
+    /// the warm-up quietly claiming a working set's place.
+    ///
+    /// `nil` for every set outside the volume, which is more than the warm-ups:
+    /// `SetType.countsTowardsVolume` also excludes `.unknown`, and that is
+    /// where a missing `type` and every type a later Hevy adds end up. It lives
+    /// here rather than in the card so that numbering a set and marking it come
+    /// from one rule — deriving them separately is what once gave a leading
+    /// unknown set the number 0.
+    var numberedSets: [(set: SetDetail, number: Int?)] {
+        var number = 0
+        return sets.map { set in
+            guard set.countsTowardsVolume else { return (set, nil) }
+            number += 1
+            return (set, number)
+        }
+    }
+
     /// Reduces a cached exercise, sorting its sets by `index`.
     ///
     /// The sort is not cosmetic: SwiftData does not guarantee the order of a
@@ -37,18 +84,14 @@ extension ExerciseDetail {
     ///
     /// Must be called on the actor owning `exercise`.
     init(exercise: Exercise) {
-        let sets = exercise.sets.sorted { $0.index < $1.index }
-        let countedSets = sets.filter { $0.type.countsTowardsVolume }
-
         self.init(
             index: exercise.index,
             title: exercise.title,
             notes: exercise.notes,
             supersetID: exercise.supersetID,
-            muscleGroup: MuscleGroup.from(exerciseTitle: exercise.title),
-            sets: sets.map(SetDetail.init(set:)),
-            volumeKg: ExerciseSet.volume(of: countedSets),
-            countedSetCount: countedSets.count
+            sets: exercise.sets
+                .sorted { $0.index < $1.index }
+                .map(SetDetail.init(set:))
         )
     }
 }
