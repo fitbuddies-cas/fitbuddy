@@ -2,31 +2,54 @@ import SwiftData
 import SwiftUI
 
 /// Root view gating app access on the 3-step onboarding flow (US-4), which is
-/// coordinated by `OnboardingViewModel`: consent → Hevy key → Claude key →
+/// coordinated by `OnboardingViewModel`: consent → Hevy key → LLM keys →
 /// dashboard (#27).
 struct RootView: View {
     @Environment(\.modelContext) private var modelContext
 
     @StateObject private var onboardingViewModel = OnboardingViewModel()
 
+    /// Whether the settings sheet (#83) is presented. Owned here rather than in
+    /// `DashboardView`, because deleting a key sends the user back into
+    /// onboarding — a step change this view is the one to react to.
+    @State private var showsSettings = false
+
+    /// Bumped when the settings screen replaces the Hevy key, which drops the
+    /// cached workouts. The dashboard's own `.task` does not re-run when the
+    /// sheet closes, so without this it would sit on an empty cache (#91).
+    @State private var dashboardReloadToken = 0
+
     var body: some View {
         Group {
             switch onboardingViewModel.step {
             case .loading:
                 loadingView
-            case .consent, .hevyKey, .claudeKey:
+            case .consent, .hevyKey, .llmKeys:
                 OnboardingFlowView(viewModel: onboardingViewModel)
             case .completed:
                 // The autoclosure defers building the store, the service and
                 // the ViewModel until SwiftUI first creates the dashboard's
                 // state.
-                DashboardView(viewModel: makeDashboardViewModel())
+                DashboardView(
+                    viewModel: makeDashboardViewModel(),
+                    analysisViewModel: makeAnalysisViewModel(),
+                    reloadToken: dashboardReloadToken,
+                    onOpenSettings: { showsSettings = true }
+                )
             }
         }
         // Exposes the coordinator to the rest of the app; the dashboard reaches
         // it through `onUnauthorized` below rather than the environment,
         // because the ViewModel is built here and must not depend on SwiftUI.
         .environmentObject(onboardingViewModel)
+        .sheet(isPresented: $showsSettings) {
+            SettingsView(viewModel: makeSettingsViewModel())
+        }
+        // Deleting the Hevy key or all data drops the app back into
+        // onboarding; the settings sheet must not stay up over it.
+        .onChange(of: onboardingViewModel.step) { _, step in
+            if step != .completed { showsSettings = false }
+        }
         .task { await onboardingViewModel.bootstrap() }
     }
 
@@ -49,6 +72,47 @@ struct RootView: View {
         viewModel.onUnauthorized = { [weak coordinator] in
             await coordinator?.handleHevyUnauthorized()
         }
+        return viewModel
+    }
+
+    /// Wires the analysis sheet to the cache and to Claude (#32).
+    ///
+    /// Its own `WorkoutStore` over the same container, since the analysis only
+    /// reads — unlike the dashboard, it shares no write path with the sync.
+    /// The cooldown store *is* shared with `InferenceService`, so the label on
+    /// screen and the service's own 6h guard can never disagree.
+    private func makeAnalysisViewModel() -> AnalysisViewModel {
+        let cooldown = AnalysisCooldownStore()
+        return AnalysisViewModel(
+            cache: WorkoutStore(modelContainer: modelContext.container),
+            inference: InferenceService(cooldown: cooldown),
+            cooldown: cooldown
+        )
+    }
+
+    /// Wires the settings screen to the Keychain and to the two reset paths
+    /// (#83). Both resets work on the same `ModelContainer` and the same
+    /// `UserDefaults` as the dashboard's collaborators, so a wipe empties
+    /// exactly the cache the dashboard reads back.
+    private func makeSettingsViewModel() -> SettingsViewModel {
+        let store = WorkoutStore(modelContainer: modelContext.container)
+        let timestamps = SyncTimestampStore()
+        let viewModel = SettingsViewModel(
+            sessionReset: SessionResetService(workouts: store, timestamps: timestamps),
+            dataReset: DataResetService(workouts: store, timestamps: timestamps)
+        )
+        let coordinator = onboardingViewModel
+        // The hard logout already wiped the key and the cache; all that is left
+        // is returning to step 2 — the same path an HTTP 401 takes (US-1 AC3).
+        viewModel.onHevyKeyDeleted = { [weak coordinator] in
+            await coordinator?.handleHevyUnauthorized()
+        }
+        viewModel.onDataDeleted = { [weak coordinator] in
+            coordinator?.handleDataReset()
+        }
+        // A key was stored but the session did not end, so onboarding stays
+        // out of it: the dashboard simply has to refill the cache it lost.
+        viewModel.onHevyKeyStored = { dashboardReloadToken += 1 }
         return viewModel
     }
 

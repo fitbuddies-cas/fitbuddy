@@ -101,7 +101,7 @@ final class HevyKeyEntryViewModel: ObservableObject {
     /// Maps validator errors to banner failures. Exhaustive on purpose: a new
     /// validator error case must make a conscious copy decision here instead
     /// of silently inheriting the "check your internet" advice.
-    private static func failure(for error: HevyKeyValidationError) -> HevyKeyEntryState.Failure {
+    private static func failure(for error: HevyKeyValidationError) -> APIKeyEntryFailure {
         switch error {
         case .invalidKey:
             return .invalidKey

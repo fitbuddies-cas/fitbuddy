@@ -8,7 +8,7 @@ final class ConsentViewModel: ObservableObject {
     /// Version of the consent text currently shown. Bump this whenever the
     /// data processing described in the consent changes, so existing users are
     /// asked to consent again.
-    static let currentVersion = "v0"
+    static let currentVersion = "2026-08-21"
 
     /// Whether the user ticked the consent checkbox.
     @Published var hasAcceptedCheckbox = false
@@ -62,6 +62,14 @@ final class ConsentViewModel: ObservableObject {
             // user into the app without a confirmed consent.
             state = .required
         }
+    }
+
+    /// Returns to a fresh consent request after the stored consent was deleted
+    /// ("Delete all data" in Settings, #83).
+    func reset() {
+        hasAcceptedCheckbox = false
+        errorMessage = nil
+        state = .required
     }
 
     /// Persists the current consent version and an ISO8601 timestamp, then

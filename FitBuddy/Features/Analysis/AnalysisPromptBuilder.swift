@@ -8,9 +8,10 @@ import Foundation
 /// the output, and the system prompt forbids inventing them — US-3 AC3 is a
 /// property of the prompt, not of the model's goodwill.
 enum AnalysisPromptBuilder {
-    /// Sessions listed individually. Four weeks of training fits comfortably;
-    /// the cap only guards against a cache holding far more than a person can
-    /// train, where the tail adds tokens but no signal.
+    /// Sessions listed individually. Four weeks of training fits comfortably,
+    /// and even a widened 13-week window rarely fills it; the cap only guards
+    /// the tail, where sessions add tokens but no signal — the aggregates
+    /// above already carry the older ones.
     private static let maxListedSessions = 30
 
     /// Builds the prompt pair from the cached window.
@@ -19,17 +20,20 @@ enum AnalysisPromptBuilder {
     ///   - summaries: Cached workouts, in any order. Anything outside the two
     ///     analysis windows is ignored, so the dashboard's 90-day read can be
     ///     passed in unchanged.
+    ///   - window: The window actually analysed — the default, or a wider rung
+    ///     of the fallback ladder when the last four weeks are empty (#87).
     ///   - now: Injectable clock, so the windows are testable.
     ///   - calendar: Decides where a day starts, so training days follow the
     ///     user's time zone.
     static func make(
         summaries: [WorkoutSummary],
+        window: AnalysisWindow = .default,
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> AnalysisPrompt {
         AnalysisPrompt(
             system: systemPrompt,
-            user: userPrompt(summaries: summaries, now: now, calendar: calendar)
+            user: userPrompt(summaries: summaries, window: window, now: now, calendar: calendar)
         )
     }
 
@@ -80,17 +84,26 @@ enum AnalysisPromptBuilder {
 
     private static func userPrompt(
         summaries: [WorkoutSummary],
+        window: AnalysisWindow,
         now: Date,
         calendar: Calendar
     ) -> String {
-        let recentStart = AnalysisWindow.start(endingAt: now, calendar: calendar)
-        let previousStart = AnalysisWindow.previousStart(endingAt: now, calendar: calendar)
+        let recentStart = window.start(endingAt: now, calendar: calendar)
+        let previousStart = window.previousStart(endingAt: now, calendar: calendar)
 
         let recent = summaries.filter { $0.startTime >= recentStart }
         let previous = summaries.filter { $0.startTime >= previousStart && $0.startTime < recentStart }
 
         let days = DayFormatter(calendar: calendar)
-        let intro = "Here is my own training data. Analyse it and tell me what to do next."
+        var intro = "Here is my own training data. Analyse it and tell me what to do next."
+        // A widened window means the user did not train for at least the last
+        // four weeks. Left unsaid, the model reads the window as a normal one
+        // and recommends progression across a break it never noticed (#87).
+        if !window.isDefault {
+            intro += " I have not trained in the last \(AnalysisWindow.default.weeks) weeks, "
+                + "so this covers the last \(window.weeks) weeks instead. Address that break "
+                + "explicitly and treat the training before it as what I am returning from."
+        }
 
         // An empty window turns every figure into a zero, which reads as
         // "trained nothing" rather than "nothing recorded" — including the
@@ -98,7 +111,7 @@ enum AnalysisPromptBuilder {
         guard !recent.isEmpty else {
             return [
                 intro,
-                "## Last 4 weeks (\(days.string(recentStart)) to \(days.string(now)))",
+                "## Last \(window.weeks) weeks (\(days.string(recentStart)) to \(days.string(now)))",
                 "No workouts are recorded in this window. Say so plainly and do not "
                     + "infer a training history from the absence of data.",
             ].joined(separator: "\n\n")
@@ -106,13 +119,14 @@ enum AnalysisPromptBuilder {
 
         var sections: [String] = [
             intro,
-            windowSection(recent, from: recentStart, to: now, calendar: calendar, days: days),
+            windowSection(recent, window: window, from: recentStart, to: now, calendar: calendar, days: days),
         ]
-        sections.append(weeklySection(recent, now: now, calendar: calendar, days: days))
-        sections.append(muscleSection(recent))
+        sections.append(weeklySection(recent, window: window, now: now, calendar: calendar, days: days))
+        sections.append(muscleSection(recent, window: window))
         sections.append(
             comparisonSection(
                 previous,
+                window: window,
                 from: previousStart,
                 to: recentStart,
                 calendar: calendar,
@@ -126,6 +140,7 @@ enum AnalysisPromptBuilder {
 
     private static func windowSection(
         _ summaries: [WorkoutSummary],
+        window: AnalysisWindow,
         from start: Date,
         to end: Date,
         calendar: Calendar,
@@ -133,23 +148,24 @@ enum AnalysisPromptBuilder {
     ) -> String {
         let days = trainingDays(summaries, calendar: calendar)
         return """
-        ## Last 4 weeks (\(formatter.string(start)) to \(formatter.string(end)))
+        ## Last \(window.weeks) weeks (\(formatter.string(start)) to \(formatter.string(end)))
         Sessions: \(summaries.count)
-        Training days: \(days) (\(frequency(days)) per week)
+        Training days: \(days) (\(frequency(days, window: window)) per week)
         Total volume: \(kg(volume(of: summaries)))
         """
     }
 
     /// Per-week figures, newest first. The totals alone cannot show whether
-    /// four weeks of training were spread evenly or crammed into one — and
+    /// the window's training was spread evenly or crammed into one week — and
     /// that difference changes the recommendation.
     private static func weeklySection(
         _ summaries: [WorkoutSummary],
+        window: AnalysisWindow,
         now: Date,
         calendar: Calendar,
         days: DayFormatter
     ) -> String {
-        let weeks = (0..<Int(AnalysisWindow.weeks)).map { index -> String in
+        let weeks = (0..<window.weeks).map { index -> String in
             let start = AnalysisWindow.weekStart(index, endingAt: now, calendar: calendar)
             let end = calendar.date(byAdding: .day, value: 7, to: start) ?? start
             let inWeek = summaries.filter { $0.startTime >= start && $0.startTime < end }
@@ -160,7 +176,7 @@ enum AnalysisPromptBuilder {
         return (["## Volume per week"] + weeks).joined(separator: "\n")
     }
 
-    private static func muscleSection(_ summaries: [WorkoutSummary]) -> String {
+    private static func muscleSection(_ summaries: [WorkoutSummary], window: AnalysisWindow) -> String {
         let distribution = MuscleLoad.merged(summaries.flatMap(\.muscleLoads))
         guard !distribution.isEmpty else {
             return "## Muscle groups\nNo exercises in this window could be classified."
@@ -176,21 +192,23 @@ enum AnalysisPromptBuilder {
                 : ""
             return "- \(load.group.displayName): \(kg(load.volumeKg))\(share), \(load.setCount) working sets"
         }
-        return (["## Muscle groups (last 4 weeks)"] + rows).joined(separator: "\n")
+        return (["## Muscle groups (last \(window.weeks) weeks)"] + rows).joined(separator: "\n")
     }
 
-    /// The preceding four weeks, for trend only. Deliberately just the
-    /// headline figures: the model needs a direction of travel here, not a
-    /// second full breakdown competing with the recent window for attention.
+    /// The equally long window before the analysed one, for trend only.
+    /// Deliberately just the headline figures: the model needs a direction of
+    /// travel here, not a second full breakdown competing with the recent
+    /// window for attention.
     private static func comparisonSection(
         _ summaries: [WorkoutSummary],
+        window: AnalysisWindow,
         from start: Date,
         to end: Date,
         calendar: Calendar,
         days formatter: DayFormatter
     ) -> String {
-        let header =
-            "## Previous 4 weeks (\(formatter.string(start)) to \(formatter.string(end))), for comparison"
+        let header = "## Previous \(window.weeks) weeks "
+            + "(\(formatter.string(start)) to \(formatter.string(end))), for comparison"
         guard !summaries.isEmpty else {
             return header + "\nNo workouts recorded. This may be a break, or simply the "
                 + "start of the recorded history — do not assume which."
@@ -200,7 +218,7 @@ enum AnalysisPromptBuilder {
         return """
         \(header)
         Sessions: \(summaries.count)
-        Training days: \(days) (\(frequency(days)) per week)
+        Training days: \(days) (\(frequency(days, window: window)) per week)
         Total volume: \(kg(volume(of: summaries)))
         """
     }
@@ -244,8 +262,8 @@ enum AnalysisPromptBuilder {
         "\(Int(kilograms.rounded())) kg"
     }
 
-    private static func frequency(_ trainingDays: Int) -> String {
-        let perWeek = Double(trainingDays) / AnalysisWindow.weeks
+    private static func frequency(_ trainingDays: Int, window: AnalysisWindow) -> String {
+        let perWeek = Double(trainingDays) / Double(window.weeks)
         return String(format: "%.1f days", perWeek)
     }
 

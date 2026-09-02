@@ -1,7 +1,7 @@
 import Foundation
 
 /// Coordinates the 3-step onboarding flow (US-4): consent (step 1) → Hevy key
-/// (step 2) → Claude key (step 3) → dashboard. Owns the three step view models,
+/// (step 2) → LLM keys (step 3) → dashboard. Owns the three step view models,
 /// resumes at the first incomplete step on launch (app-kill safe), and advances
 /// `step` as each child reports completion.
 @MainActor
@@ -16,7 +16,7 @@ final class OnboardingViewModel: ObservableObject {
 
     let consentViewModel: ConsentViewModel
     let hevyKeyViewModel: HevyKeyEntryViewModel
-    let claudeKeyViewModel: ClaudeKeyEntryViewModel
+    let llmKeysViewModel: LLMKeysViewModel
 
     private let keychain: KeychainService
     private let launchArguments: [String]
@@ -27,18 +27,18 @@ final class OnboardingViewModel: ObservableObject {
         keychain: KeychainService = KeychainService(),
         consentViewModel: ConsentViewModel? = nil,
         hevyKeyViewModel: HevyKeyEntryViewModel? = nil,
-        claudeKeyViewModel: ClaudeKeyEntryViewModel? = nil,
+        llmKeysViewModel: LLMKeysViewModel? = nil,
         launchArguments: [String] = ProcessInfo.processInfo.arguments
     ) {
         self.keychain = keychain
         self.launchArguments = launchArguments
         self.consentViewModel = consentViewModel ?? ConsentViewModel(keychain: keychain)
         self.hevyKeyViewModel = hevyKeyViewModel ?? HevyKeyEntryViewModel(keychain: keychain)
-        self.claudeKeyViewModel = claudeKeyViewModel ?? ClaudeKeyEntryViewModel(keychain: keychain)
+        self.llmKeysViewModel = llmKeysViewModel ?? LLMKeysViewModel(keychain: keychain)
 
         self.consentViewModel.onGranted = { [weak self] in self?.step = self?.resolvedStep ?? .hevyKey }
-        self.hevyKeyViewModel.onConnected = { [weak self] in self?.step = self?.resolvedStep ?? .claudeKey }
-        self.claudeKeyViewModel.onFinished = { [weak self] in self?.step = .completed }
+        self.hevyKeyViewModel.onConnected = { [weak self] in self?.step = self?.resolvedStep ?? .llmKeys }
+        self.llmKeysViewModel.onFinished = { [weak self] in self?.step = .completed }
     }
 
     /// Resolves `.loading` by bootstrapping all three children, then resuming
@@ -54,7 +54,7 @@ final class OnboardingViewModel: ObservableObject {
         #endif
         await consentViewModel.bootstrap()
         await hevyKeyViewModel.bootstrap()
-        await claudeKeyViewModel.bootstrap()
+        await llmKeysViewModel.bootstrap()
         step = resolvedStep
     }
 
@@ -70,18 +70,29 @@ final class OnboardingViewModel: ObservableObject {
         step = .hevyKey
     }
 
+    /// Entry point for "Delete all data" in Settings (#83). `DataResetService`
+    /// has already wiped every persisted trace, so the children are returned
+    /// to their fresh-install state and the flow restarts at step 1 — consent
+    /// has to be given again (US-4 AC5).
+    func handleDataReset() {
+        consentViewModel.reset()
+        hevyKeyViewModel.reset()
+        llmKeysViewModel.reset()
+        step = .consent
+    }
+
     /// First incomplete step according to the children's persisted state.
-    /// Claude counts as complete on an explicit decision only (saved key or
-    /// persisted skip) — a user killed mid-step-3 resumes there, not on the
-    /// dashboard.
+    /// The LLM step counts as complete on an explicit decision only (saved
+    /// keys or persisted skip) — a user killed mid-step-3 resumes there, not
+    /// on the dashboard.
     private var resolvedStep: OnboardingStep {
         guard consentViewModel.state == .granted else { return .consent }
         guard hevyKeyViewModel.state == .connected else { return .hevyKey }
-        switch claudeKeyViewModel.state {
+        switch llmKeysViewModel.state {
         case .saved, .skipped:
             return .completed
         case .unknown, .idle, .saving, .failed:
-            return .claudeKey
+            return .llmKeys
         }
     }
 }

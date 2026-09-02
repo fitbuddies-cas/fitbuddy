@@ -1,9 +1,13 @@
 import XCTest
 @testable import FitBuddy
 
-/// Unit tests for `InferenceService` using a stubbed `URLProtocol` — no real
-/// network traffic. Keychain access uses the real `KeychainService` on the
-/// simulator; the cooldown timestamp lives in an isolated `UserDefaults` suite.
+/// Unit tests for `InferenceService` as the fallback orchestrator (#79).
+///
+/// Drives `StubProviderClient`s rather than stubbed endpoints: what is under
+/// test here is *who gets asked, in what order, and what the run costs* — the
+/// wire format of each provider belongs to its own client's tests. Keychain
+/// access uses the real `KeychainService` on the simulator; the cooldown
+/// timestamp lives in an isolated `UserDefaults` suite.
 final class InferenceServiceTests: XCTestCase {
     /// Fixed clock so cooldown math is deterministic.
     private static let now = Date(timeIntervalSince1970: 1_788_000_000)
@@ -12,123 +16,247 @@ final class InferenceServiceTests: XCTestCase {
     private var defaults: UserDefaults!
     private var suiteName: String!
     private var cooldown: AnalysisCooldownStore!
+    private var claude: StubProviderClient!
+    private var gemini: StubProviderClient!
+    private var mistral: StubProviderClient!
     private var sut: InferenceService!
-
-    /// Last request the stub answered.
-    nonisolated(unsafe) private static var captured: URLRequest?
 
     override func setUp() async throws {
         try await super.setUp()
-        Self.captured = nil
         keychain = KeychainService()
-        try await keychain.delete(.claudeAPIKey)
+        for provider in LLMProvider.allCases {
+            try await keychain.delete(provider.keychainKey)
+        }
         try await keychain.save("sk-ant-test", for: .claudeAPIKey)
         suiteName = "fitbuddy.tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
         cooldown = AnalysisCooldownStore(defaults: defaults)
+        claude = StubProviderClient(provider: .claude, chunks: ["Claude answer"])
+        gemini = StubProviderClient(provider: .gemini, chunks: ["Gemini answer"])
+        mistral = StubProviderClient(provider: .mistral, chunks: ["Mistral answer"])
         sut = makeService()
     }
 
     override func tearDown() async throws {
-        StubURLProtocol.handler = nil
-        Self.captured = nil
-        try await keychain.delete(.claudeAPIKey)
+        for provider in LLMProvider.allCases {
+            try await keychain.delete(provider.keychainKey)
+        }
         defaults.removePersistentDomain(forName: suiteName)
         sut = nil
+        claude = nil
+        gemini = nil
+        mistral = nil
         cooldown = nil
         defaults = nil
         keychain = nil
         try await super.tearDown()
     }
 
-    private func makeService() -> InferenceService {
-        InferenceService(session: StubURLProtocol.makeSession(), keychain: keychain, cooldown: cooldown, now: { Self.now })
+    /// - Parameter priority: Provider order to resolve keys from. Empty (the
+    ///   default) is the pre-multi-provider install: a Claude key and no stored
+    ///   order.
+    private func makeService(priority: [LLMProvider] = []) -> InferenceService {
+        let store = LLMPriorityStore(defaults: defaults)
+        if !priority.isEmpty {
+            defaults.set(priority.map(\.rawValue), forKey: LLMPriorityStore.priorityOrderKey)
+        }
+        return InferenceService(
+            keychain: keychain,
+            priority: store,
+            cooldown: cooldown,
+            clients: [.claude: claude, .gemini: gemini, .mistral: mistral],
+            now: { Self.now }
+        )
     }
 
-    // MARK: - Stubbing
+    // MARK: - Helpers
 
-    private func stubSuccess(textChunks: [String]) {
-        let body = ClaudeSSEFactory.body(textChunks: textChunks)
-        StubURLProtocol.handler = { request in
-            Self.captured = request
-            let response = HTTPURLResponse(
-                url: request.url!,
-                statusCode: 200,
-                httpVersion: nil,
-                headerFields: ["Content-Type": "text/event-stream"]
-            )!
-            return (response, body)
+    private func collect(_ stream: AsyncThrowingStream<AnalysisEvent, Error>) async throws -> [AnalysisEvent] {
+        var events: [AnalysisEvent] = []
+        for try await event in stream { events.append(event) }
+        return events
+    }
+
+    private func run(_ service: InferenceService? = nil) async throws -> [AnalysisEvent] {
+        let service = service ?? sut!
+        return try await collect(try await service.streamAnalysis(systemPrompt: "s", userPrompt: "u"))
+    }
+
+    /// Text of a run, with the `attempting` bookkeeping dropped.
+    private func text(of events: [AnalysisEvent]) -> String {
+        events.reduce(into: "") { result, event in
+            if case .text(let chunk) = event { result += chunk }
         }
     }
 
-    private func stubFailure(statusCode: Int, headers: [String: String] = [:]) {
-        StubURLProtocol.handler = { request in
-            Self.captured = request
-            let response = HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: headers)!
-            return (response, Data())
+    /// Providers announced by a run, in order.
+    private func attempted(in events: [AnalysisEvent]) -> [LLMProvider] {
+        events.compactMap { event in
+            guard case .attempting(let provider) = event else { return nil }
+            return provider
         }
-    }
-
-    private func collect(_ stream: AsyncThrowingStream<String, Error>) async throws -> [String] {
-        var chunks: [String] = []
-        for try await chunk in stream { chunks.append(chunk) }
-        return chunks
-    }
-
-    /// `URLProtocol`-backed sessions sometimes hand the body over as a stream
-    /// rather than `httpBody` — read whichever is populated.
-    private func bodyData(from request: URLRequest) -> Data? {
-        if let body = request.httpBody { return body }
-        guard let stream = request.httpBodyStream else { return nil }
-        stream.open()
-        defer { stream.close() }
-        var data = Data()
-        var buffer = [UInt8](repeating: 0, count: 4096)
-        while stream.hasBytesAvailable {
-            let read = stream.read(&buffer, maxLength: buffer.count)
-            guard read > 0 else { break }
-            data.append(buffer, count: read)
-        }
-        return data
     }
 
     // MARK: - Streaming (AC: Streaming-Output erscheint inkrementell)
 
-    func testStreamsIncrementalTextChunks() async throws {
-        stubSuccess(textChunks: ["Increase ", "squat ", "by 2.5 kg."])
+    func testStreamsIncrementalTextAfterAnnouncingTheProvider() async throws {
+        claude.chunks = ["Increase ", "squat ", "by 2.5 kg."]
 
-        let stream = try await sut.streamAnalysis(systemPrompt: "system", userPrompt: "user")
-        let chunks = try await collect(stream)
+        let events = try await run()
 
-        XCTAssertEqual(chunks, ["Increase ", "squat ", "by 2.5 kg."])
+        XCTAssertEqual(events, [
+            .attempting(.claude),
+            .text("Increase "),
+            .text("squat "),
+            .text("by 2.5 kg.")
+        ])
     }
 
-    func testRequestShapeCarriesModelKeyAndPrompts() async throws {
-        stubSuccess(textChunks: ["Hi"])
+    func testPassesThePromptsAndTheStoredKeyToTheClient() async throws {
+        _ = try await run()
 
-        _ = try await collect(try await sut.streamAnalysis(systemPrompt: "You are FitBuddy.", userPrompt: "Analyze my week."))
-
-        let request = try XCTUnwrap(Self.captured)
-        XCTAssertEqual(request.httpMethod, "POST")
-        XCTAssertEqual(request.url?.absoluteString, "https://api.anthropic.com/v1/messages")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "x-api-key"), "sk-ant-test")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "anthropic-version"), "2023-06-01")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "content-type"), "application/json")
-
-        let body = try XCTUnwrap(bodyData(from: request))
-        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
-        XCTAssertEqual(json["model"] as? String, InferenceService.model)
-        XCTAssertEqual(json["max_tokens"] as? Int, InferenceService.maxTokens)
-        XCTAssertEqual(json["stream"] as? Bool, true)
-        XCTAssertEqual(json["system"] as? String, "You are FitBuddy.")
-        let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])
-        XCTAssertEqual(messages.first?["role"] as? String, "user")
-        XCTAssertEqual(messages.first?["content"] as? String, "Analyze my week.")
+        XCTAssertEqual(claude.callCount, 1)
+        XCTAssertEqual(claude.receivedAPIKey, "sk-ant-test")
     }
 
-    // MARK: - Missing key
+    // MARK: - Priority order (US-4 step 3)
 
-    func testThrowsMissingAPIKeyBeforeAnyNetworkCall() async throws {
+    func testAsksTheHighestPriorityProviderFirst() async throws {
+        try await keychain.save("AIza-first", for: .geminiAPIKey)
+        sut = makeService(priority: [.gemini, .claude])
+
+        let events = try await run()
+
+        XCTAssertEqual(attempted(in: events), [.gemini])
+        XCTAssertEqual(text(of: events), "Gemini answer")
+        XCTAssertEqual(claude.callCount, 0, "a provider after the answering one must not be called")
+        XCTAssertEqual(gemini.receivedAPIKey, "AIza-first")
+    }
+
+    func testSkipsAProviderWithNoStoredKeyWithoutCountingItAsAFailure() async throws {
+        // Gemini ranks first but was never given a key: it was not configured,
+        // so it is not part of the chain at all.
+        sut = makeService(priority: [.gemini, .claude])
+
+        let events = try await run()
+
+        XCTAssertEqual(attempted(in: events), [.claude])
+        XCTAssertEqual(gemini.callCount, 0)
+    }
+
+    func testFallsBackToClaudeWhenNoOrderIsStored() async throws {
+        // Pre-#78 install: one Claude key, no persisted priority order.
+        let events = try await run()
+
+        XCTAssertEqual(attempted(in: events), [.claude])
+    }
+
+    // MARK: - Fallback chain (DoD: fällt ein Provider aus, übernimmt der nächste)
+
+    func testFallsBackToTheNextProviderWhenTheFirstIsRejected() async throws {
+        try await keychain.save("AIza", for: .geminiAPIKey)
+        claude.startError = InferenceServiceError.unauthorized
+        sut = makeService(priority: [.claude, .gemini])
+
+        let events = try await run()
+
+        XCTAssertEqual(attempted(in: events), [.claude, .gemini])
+        XCTAssertEqual(text(of: events), "Gemini answer")
+    }
+
+    func testFallsBackThroughAllThreeProvidersInOrder() async throws {
+        try await keychain.save("AIza", for: .geminiAPIKey)
+        try await keychain.save("mistral-key", for: .mistralAPIKey)
+        claude.startError = InferenceServiceError.serviceUnavailable
+        gemini.startError = InferenceServiceError.rateLimited(retryAfter: 30)
+        sut = makeService(priority: [.claude, .gemini, .mistral])
+
+        let events = try await run()
+
+        XCTAssertEqual(attempted(in: events), [.claude, .gemini, .mistral])
+        XCTAssertEqual(text(of: events), "Mistral answer")
+    }
+
+    /// A provider that answered 200 and then died mid-stream is still a failure
+    /// the chain has to route around — not an error the user has to see.
+    func testFallsBackWhenAProviderFailsAfterItAlreadyStartedAnswering() async throws {
+        try await keychain.save("AIza", for: .geminiAPIKey)
+        claude.chunks = ["Half an ans"]
+        claude.streamError = InferenceServiceError.streamInterrupted(message: "Overloaded")
+        sut = makeService(priority: [.claude, .gemini])
+
+        let events = try await run()
+
+        XCTAssertEqual(attempted(in: events), [.claude, .gemini])
+    }
+
+    /// The partial text of a failed provider still reaches the consumer, but
+    /// only ahead of the `attempting` that tells it to throw the text away —
+    /// so the two answers can never be shown merged.
+    func testPartialOutputOfAFailedProviderIsFollowedByTheNextAttempt() async throws {
+        try await keychain.save("AIza", for: .geminiAPIKey)
+        claude.chunks = ["Half an ans"]
+        claude.streamError = InferenceServiceError.streamInterrupted(message: "Overloaded")
+        sut = makeService(priority: [.claude, .gemini])
+
+        let events = try await run()
+
+        XCTAssertEqual(events, [
+            .attempting(.claude),
+            .text("Half an ans"),
+            .attempting(.gemini),
+            .text("Gemini answer")
+        ])
+    }
+
+    /// A provider can answer 200 and then say nothing — a thinking pass that
+    /// ate the whole token budget, or an error frame its client does not
+    /// recognise. That is not an answer, so the chain must keep going instead
+    /// of ending the run with an empty result.
+    func testFallsBackWhenAProviderAcceptsButProducesNoText() async throws {
+        try await keychain.save("AIza", for: .geminiAPIKey)
+        claude.chunks = []
+        sut = makeService(priority: [.claude, .gemini])
+
+        let events = try await run()
+
+        XCTAssertEqual(attempted(in: events), [.claude, .gemini])
+        XCTAssertEqual(text(of: events), "Gemini answer")
+    }
+
+    func testRaisesInvalidResponseWhenEveryProviderAnswersWithoutText() async throws {
+        try await keychain.save("AIza", for: .geminiAPIKey)
+        claude.chunks = []
+        gemini.chunks = []
+        sut = makeService(priority: [.claude, .gemini])
+
+        do {
+            _ = try await run()
+            XCTFail("expected invalidResponse")
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .invalidResponse)
+        }
+    }
+
+    func testRaisesTheLastProvidersErrorWhenAllOfThemFail() async throws {
+        try await keychain.save("AIza", for: .geminiAPIKey)
+        claude.startError = InferenceServiceError.unauthorized
+        gemini.startError = InferenceServiceError.serviceUnavailable
+        sut = makeService(priority: [.claude, .gemini])
+
+        do {
+            _ = try await run()
+            XCTFail("expected serviceUnavailable")
+        } catch let error as InferenceServiceError {
+            // The last provider's error, not the first: that is the state the
+            // user is actually left in.
+            XCTAssertEqual(error, .serviceUnavailable)
+        }
+    }
+
+    // MARK: - No usable key
+
+    func testThrowsMissingAPIKeyBeforeCallingAnyProvider() async throws {
         try await keychain.delete(.claudeAPIKey)
 
         do {
@@ -137,7 +265,19 @@ final class InferenceServiceTests: XCTestCase {
         } catch let error as InferenceServiceError {
             XCTAssertEqual(error, .missingAPIKey)
         }
-        XCTAssertNil(Self.captured, "a missing key must not reach the network")
+        XCTAssertEqual(claude.callCount, 0, "a missing key must not reach a provider")
+    }
+
+    func testThrowsMissingAPIKeyWhenNoConfiguredProviderHasAKey() async throws {
+        try await keychain.delete(.claudeAPIKey)
+        sut = makeService(priority: [.gemini, .mistral])
+
+        do {
+            _ = try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u")
+            XCTFail("expected missingAPIKey")
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .missingAPIKey)
+        }
     }
 
     // MARK: - Cooldown (AC: Cooldown-Timer übersteht App-Neustart)
@@ -155,44 +295,92 @@ final class InferenceServiceTests: XCTestCase {
             }
             XCTAssertEqual(availableAt, lastCall.addingTimeInterval(AnalysisCooldownStore.duration))
         }
-        XCTAssertNil(Self.captured, "an active cooldown must not reach the network")
+        XCTAssertEqual(claude.callCount, 0, "an active cooldown must not reach a provider")
     }
 
     func testSucceedsOnceCooldownHasElapsed() async throws {
         await cooldown.recordCall(at: Self.now.addingTimeInterval(-AnalysisCooldownStore.duration - 1))
-        stubSuccess(textChunks: ["Hi"])
 
-        let chunks = try await collect(try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u"))
+        let events = try await run()
 
-        XCTAssertEqual(chunks, ["Hi"])
+        XCTAssertEqual(text(of: events), "Claude answer")
     }
 
     func testRecordsCooldownAfterASuccessfulCall() async throws {
-        stubSuccess(textChunks: ["Hi"])
-
-        _ = try await collect(try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u"))
+        _ = try await run()
 
         let lastCall = await cooldown.lastCall()
         XCTAssertEqual(lastCall, Self.now)
     }
 
-    func testDoesNotRecordCooldownWhenClaudeRejectsTheKey() async throws {
-        stubFailure(statusCode: 401)
+    /// DoD: the 6h window is spent once per analysis, not once per provider —
+    /// a run that fell back twice must not cost the user three windows.
+    ///
+    /// Counted through the clock rather than by instrumenting the store: with a
+    /// clock that advances on every reading, the recorded timestamp says how
+    /// many times it was read, and therefore how many times it was written. A
+    /// fixed clock cannot tell one write from three.
+    func testRecordsTheCooldownOnlyOnceAcrossAFallbackChain() async throws {
+        try await keychain.save("AIza", for: .geminiAPIKey)
+        try await keychain.save("mistral-key", for: .mistralAPIKey)
+        // All three accept and then die mid-answer, so every one of them
+        // reaches the point where the cooldown would be written.
+        claude.streamError = InferenceServiceError.streamInterrupted(message: "boom")
+        gemini.streamError = InferenceServiceError.streamInterrupted(message: "boom")
+        mistral.streamError = InferenceServiceError.streamInterrupted(message: "boom")
+        let clock = TickingClock(start: Self.now)
+        sut = InferenceService(
+            keychain: keychain,
+            priority: LLMPriorityStore(defaults: defaults),
+            cooldown: cooldown,
+            clients: [.claude: claude, .gemini: gemini, .mistral: mistral],
+            now: clock.next
+        )
+        defaults.set([LLMProvider.claude, .gemini, .mistral].map(\.rawValue), forKey: LLMPriorityStore.priorityOrderKey)
 
-        do {
-            _ = try await collect(try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u"))
-            XCTFail("expected unauthorized")
-        } catch let error as InferenceServiceError {
-            XCTAssertEqual(error, .unauthorized)
-        }
+        _ = try? await run()
+
+        // Tick 0 is the pre-flight cooldown check, tick 1 the single write. A
+        // per-provider write would have left tick 3 behind.
         let lastCall = await cooldown.lastCall()
-        XCTAssertNil(lastCall, "a rejected request must not start the cooldown")
+        XCTAssertEqual(lastCall, Self.now.addingTimeInterval(1),
+                       "one analysis must spend exactly one cooldown window")
+    }
+
+    /// A clock that advances one second per reading, so a test can tell how
+    /// many times the code under test asked what time it is.
+    private final class TickingClock: @unchecked Sendable {
+        private let start: Date
+        private let lock = NSLock()
+        private var tick = 0
+
+        init(start: Date) {
+            self.start = start
+        }
+
+        func next() -> Date {
+            lock.lock()
+            defer { lock.unlock() }
+            defer { tick += 1 }
+            return start.addingTimeInterval(TimeInterval(tick))
+        }
+    }
+
+    func testDoesNotRecordCooldownWhenEveryProviderRejectsTheRequest() async throws {
+        try await keychain.save("AIza", for: .geminiAPIKey)
+        claude.startError = InferenceServiceError.unauthorized
+        gemini.startError = InferenceServiceError.unauthorized
+        sut = makeService(priority: [.claude, .gemini])
+
+        _ = try? await run()
+
+        let lastCall = await cooldown.lastCall()
+        XCTAssertNil(lastCall, "a request nobody accepted must not start the cooldown")
     }
 
     // MARK: - No double-submit (AC: kein zweiter Call möglich während laufendem Call)
 
     func testRejectsAConcurrentCallWhileOneIsRunning() async throws {
-        stubSuccess(textChunks: ["Hi"])
         let stream = try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u")
 
         do {
@@ -212,13 +400,11 @@ final class InferenceServiceTests: XCTestCase {
     /// sets the flag. `async let` starts both calls together, unlike a
     /// sequential `await` pair which can never exercise this race.
     func testRejectsATrulyConcurrentSecondCallStartedBeforeTheFirstAwaits() async throws {
-        stubSuccess(textChunks: ["Hi"])
-
         async let first = sut.streamAnalysis(systemPrompt: "s", userPrompt: "u")
         async let second = sut.streamAnalysis(systemPrompt: "s", userPrompt: "u")
 
         var successes = 0
-        var survivor: AsyncThrowingStream<String, Error>?
+        var survivor: AsyncThrowingStream<AnalysisEvent, Error>?
         do {
             survivor = try await first
             successes += 1
@@ -240,21 +426,21 @@ final class InferenceServiceTests: XCTestCase {
     }
 
     func testAllowsANewCallAfterThePreviousOneFinished() async throws {
-        stubSuccess(textChunks: ["First"])
-        _ = try await collect(try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u"))
+        claude.chunks = ["First"]
+        _ = try await run()
         // Isolates the `isRunning` reset from the (separately tested) cooldown:
         // the fixed clock would otherwise make this second call look like it
         // arrived seconds after the first, well inside the 6h window.
         await cooldown.clear()
 
-        stubSuccess(textChunks: ["Second"])
-        let chunks = try await collect(try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u"))
+        claude.chunks = ["Second"]
+        let events = try await run()
 
-        XCTAssertEqual(chunks, ["Second"])
+        XCTAssertEqual(text(of: events), "Second")
     }
 
     func testAllowsANewCallAfterTheConsumerCancelledThePreviousOne() async throws {
-        stubSuccess(textChunks: Array(repeating: "chunk ", count: 20))
+        claude.chunks = Array(repeating: "chunk ", count: 20)
         let stream = try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u")
         let consumer = Task {
             for try await _ in stream {}
@@ -266,10 +452,11 @@ final class InferenceServiceTests: XCTestCase {
         // races the assertion below without this: poll rather than guess a
         // fixed delay.
         await waitUntilIdle()
+        await cooldown.clear()
 
-        stubSuccess(textChunks: ["ok"])
-        let chunks = try await collect(try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u"))
-        XCTAssertEqual(chunks, ["ok"])
+        claude.chunks = ["ok"]
+        let events = try await run()
+        XCTAssertEqual(text(of: events), "ok")
     }
 
     /// A bounded poll on `isRunning` (`private(set)`, readable from tests in
@@ -279,59 +466,6 @@ final class InferenceServiceTests: XCTestCase {
         let deadline = Date().addingTimeInterval(timeout)
         while await sut.isRunning, Date() < deadline {
             try? await Task.sleep(nanoseconds: 5_000_000)
-        }
-    }
-
-    // MARK: - Stream errors (AC3: Prompt/Response-Handling darf keinen Fehler verschlucken)
-
-    func testStreamErrorEventAfterHTTP200SurfacesAsAnError() async throws {
-        StubURLProtocol.handler = { request in
-            Self.captured = request
-            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
-            return (response, ClaudeSSEFactory.errorBody(type: "overloaded_error", message: "Overloaded"))
-        }
-
-        do {
-            _ = try await collect(try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u"))
-            XCTFail("expected streamInterrupted")
-        } catch let error as InferenceServiceError {
-            XCTAssertEqual(error, .streamInterrupted(message: "Overloaded"))
-        }
-    }
-
-    // MARK: - Error mapping
-
-    func testNetworkUnavailableWhenTransportFails() async throws {
-        struct TransportFailure: Error {}
-        StubURLProtocol.handler = { _ in throw TransportFailure() }
-
-        do {
-            _ = try await collect(try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u"))
-            XCTFail("expected networkUnavailable")
-        } catch let error as InferenceServiceError {
-            XCTAssertEqual(error, .networkUnavailable)
-        }
-    }
-
-    func testRateLimitedCarriesRetryAfter() async throws {
-        stubFailure(statusCode: 429, headers: ["Retry-After": "30"])
-
-        do {
-            _ = try await collect(try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u"))
-            XCTFail("expected rateLimited")
-        } catch let error as InferenceServiceError {
-            XCTAssertEqual(error, .rateLimited(retryAfter: 30))
-        }
-    }
-
-    func testServiceUnavailableOnServerError() async throws {
-        stubFailure(statusCode: 503)
-
-        do {
-            _ = try await collect(try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u"))
-            XCTFail("expected serviceUnavailable")
-        } catch let error as InferenceServiceError {
-            XCTAssertEqual(error, .serviceUnavailable)
         }
     }
 }

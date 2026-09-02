@@ -102,4 +102,40 @@ final class SessionResetServiceTests: XCTestCase {
         let stored = try await keychain.read(.hevyAPIKey)
         XCTAssertNil(stored)
     }
+
+    // MARK: - Cache teardown without a logout (#91)
+
+    /// Replacing the Hevy key keeps the session — only the previous key's
+    /// training data has to go.
+    func testDiscardCachedWorkoutsKeepsTheHevyKey() async throws {
+        try await keychain.save("hv_live_abc", for: .hevyAPIKey)
+
+        await sut.discardCachedWorkouts()
+
+        let stored = try await keychain.read(.hevyAPIKey)
+        XCTAssertEqual(stored, "hv_live_abc")
+    }
+
+    func testDiscardCachedWorkoutsClearsTheCache() async throws {
+        let payload = HevyPayloadFactory.workout(id: "w-1", start: Date(timeIntervalSince1970: 1_750_000_000))
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        let dto = try JSONDecoder.hevy.decode(HevyWorkoutDTO.self, from: data)
+        try await workouts.replaceCachedWorkouts(with: [dto])
+
+        await sut.discardCachedWorkouts()
+
+        let count = try await workouts.workoutCount()
+        XCTAssertEqual(count, 0)
+    }
+
+    /// The timestamp goes with the cache: a "last synced" line over an empty
+    /// dashboard would describe a sync of the previous account.
+    func testDiscardCachedWorkoutsClearsTheSyncTimestamp() async {
+        await timestamps.setLastSync(Date(timeIntervalSince1970: 1_754_400_000))
+
+        await sut.discardCachedWorkouts()
+
+        let stored = await timestamps.lastSync()
+        XCTAssertNil(stored)
+    }
 }

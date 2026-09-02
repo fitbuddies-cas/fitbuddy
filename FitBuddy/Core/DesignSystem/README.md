@@ -42,4 +42,4 @@ gamut, so the catalog stores their exact sRGB values — no Display-P3 needed.
 Set the screen background to `Color.fbBackground`, group related content in
 `FBCard`, use `FBInfoRow`/`FBStat`/`FBBar` for content, and style call-to-action
 buttons with `.buttonStyle(.fb(…))`. See `Features/Onboarding/Views/ConsentView.swift`
-and `PrivacyPolicyView.swift` for a worked example.
+and `Core/Privacy/PrivacyPolicyView.swift` for a worked example.

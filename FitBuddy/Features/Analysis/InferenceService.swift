@@ -1,31 +1,26 @@
 import Foundation
 
-/// Streams an on-demand training analysis from Claude (US-3, #29).
+/// Runs an on-demand training analysis against the user's LLM providers,
+/// falling back down their priority order until one answers (US-3, #29/#79).
+///
+/// Provider-specific work — endpoints, auth, body shapes, stream formats —
+/// lives in `LLMProviderClient` implementations. This actor only decides *who*
+/// to ask, in what order, and when to stop.
 ///
 /// Rejects a call before any network request when one is already running or
 /// the 6h cooldown has not elapsed — `AnalysisViewModel` (#31) also disables
 /// the button, but the actor enforces both independently so no caller can
-/// race past them. The cooldown itself is recorded only once Claude accepts
-/// the request (HTTP 2xx): a failed attempt (missing key, offline, rate
-/// limit) must not lock the user out until the next window.
+/// race past them. The cooldown itself is recorded once per run, the moment
+/// the first provider accepts the request (HTTP 2xx): a run that never got
+/// that far (no key, offline, every provider rejecting) must not lock the user
+/// out until the next window, and a run that fell back twice must not spend
+/// three windows.
 actor InferenceService {
-    /// Model used for every analysis call.
-    static let model = "claude-opus-5"
-    /// A training recommendation is a short, focused paragraph, not a
-    /// code-generation-scale response — capped well below the model's ceiling
-    /// so a malformed prompt cannot run up an unbounded bill on the user's
-    /// own key.
-    static let maxTokens = 4096
-
-    private static let endpoint = URL(staticString: "https://api.anthropic.com/v1/messages")
-    private static let anthropicVersion = "2023-06-01"
-    private static let dataLinePrefix = "data:"
-
-    private let session: URLSession
     private let keychain: KeychainService
+    private let priority: LLMPriorityStore
     private let cooldown: AnalysisCooldownStore
+    private let clients: [LLMProvider: any LLMProviderClient]
     private let now: () -> Date
-    private let decoder = JSONDecoder()
 
     /// Whether a stream is currently in flight. `private(set)` rather than
     /// `private`: tests poll it (same module) to wait out an async cleanup
@@ -36,42 +31,55 @@ actor InferenceService {
     ///   - session: Injectable for tests (stub `URLProtocol`); defaults to
     ///     `.fitBuddyStreaming`, whose longer idle timeout (NFR: ~30s) fits a
     ///     streaming call — `.fitBuddy`'s 15s does not reliably compose with a
-    ///     per-request override.
+    ///     per-request override. Ignored when `clients` is passed explicitly.
+    ///   - priority: The provider order the user set in onboarding step 3
+    ///     (US-4), which decides who is asked first and who takes over.
+    ///   - clients: Injectable per-provider callers, so orchestrator tests can
+    ///     drive fallback without three stubbed endpoints.
     ///   - now: Injectable clock, so the cooldown window is testable.
     init(
         session: URLSession = .fitBuddyStreaming,
         keychain: KeychainService = KeychainService(),
+        priority: LLMPriorityStore = LLMPriorityStore(),
         cooldown: AnalysisCooldownStore = AnalysisCooldownStore(),
+        clients: [LLMProvider: any LLMProviderClient]? = nil,
         now: @escaping () -> Date = Date.init
     ) {
-        self.session = session
         self.keychain = keychain
+        self.priority = priority
         self.cooldown = cooldown
+        self.clients = clients ?? Self.defaultClients(session: session)
         self.now = now
     }
 
-    /// Streams incremental text chunks for `userPrompt` under `systemPrompt`
-    /// (the prompt built by #30).
+    private static func defaultClients(session: URLSession) -> [LLMProvider: any LLMProviderClient] {
+        let all: [any LLMProviderClient] = [
+            AnthropicClient(session: session),
+            GeminiClient(session: session),
+            MistralClient(session: session)
+        ]
+        return Dictionary(uniqueKeysWithValues: all.map { ($0.provider, $0) })
+    }
+
+    /// Streams one analysis for `userPrompt` under `systemPrompt` (the prompt
+    /// built by #30), trying each configured provider in priority order.
     ///
-    /// Cancelling the consuming task stops the underlying request. Reaching
-    /// the end of the stream without error is the only path that counts as a
-    /// successful call for cooldown purposes — a cancellation midway still
-    /// counts, since Claude already accepted and started billing the request;
-    /// only a rejection before that point (bad key, offline, 4xx/5xx) does not.
-    func streamAnalysis(systemPrompt: String, userPrompt: String) async throws -> AsyncThrowingStream<String, Error> {
+    /// Cancelling the consuming task stops the underlying request and ends the
+    /// run — a cancellation is never treated as a provider failure, so it does
+    /// not fall through to the next one.
+    func streamAnalysis(systemPrompt: String, userPrompt: String) async throws -> AsyncThrowingStream<AnalysisEvent, Error> {
         guard !isRunning else { throw InferenceServiceError.alreadyInProgress }
         // Claim the slot before the first `await` below: an actor releases its
         // isolation at every suspension point, so two truly concurrent callers
         // would otherwise both pass the guard above before either sets
         // `isRunning`. Released again on every early-exit path in the `catch`.
         isRunning = true
-        let request: URLRequest
+        let candidates: [Candidate]
         do {
             if let availableAt = await cooldown.activeCooldown(now: now()) {
                 throw InferenceServiceError.cooldownActive(availableAt: availableAt)
             }
-            let apiKey = try await storedAPIKey()
-            request = try makeRequest(systemPrompt: systemPrompt, userPrompt: userPrompt, apiKey: apiKey)
+            candidates = try await resolveCandidates()
         } catch {
             isRunning = false
             throw error
@@ -80,7 +88,7 @@ actor InferenceService {
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    try await self.run(request, continuation: continuation)
+                    try await self.run(candidates, systemPrompt: systemPrompt, userPrompt: userPrompt, continuation: continuation)
                     await self.finish()
                     continuation.finish()
                 } catch {
@@ -92,116 +100,109 @@ actor InferenceService {
         }
     }
 
-    // MARK: - Streaming
+    // MARK: - Fallback chain
 
-    private func run(_ request: URLRequest, continuation: AsyncThrowingStream<String, Error>.Continuation) async throws {
-        let bytes: URLSession.AsyncBytes
-        let response: URLResponse
-        do {
-            (bytes, response) = try await session.bytes(for: request)
-        } catch {
-            // A cancelled call (user tapped cancel) is not a connectivity
-            // problem and must not surface as one.
-            if error is CancellationError || (error as? URLError)?.code == .cancelled {
-                throw error
-            }
-            throw InferenceServiceError.networkUnavailable
-        }
+    /// A provider that can actually be tried: its client and its stored key.
+    private struct Candidate {
+        let client: any LLMProviderClient
+        let apiKey: String
+    }
 
-        guard let http = response as? HTTPURLResponse else {
-            throw InferenceServiceError.invalidResponse
-        }
-        try validate(http)
-        // Claude accepted the request — it is billing tokens from here on,
-        // regardless of whether the caller later cancels or a parse error
-        // cuts the stream short.
-        await cooldown.recordCall(at: now())
+    /// Walks the candidates in order until one produces an answer.
+    ///
+    /// Every failure — rejected key, no credit, rate limit, 5xx, transport
+    /// error, a stream that dies mid-answer — moves on to the next provider.
+    /// Only when the last one fails is its error raised, because that is the
+    /// one whose message describes the state the user is actually left in.
+    private func run(
+        _ candidates: [Candidate],
+        systemPrompt: String,
+        userPrompt: String,
+        continuation: AsyncThrowingStream<AnalysisEvent, Error>.Continuation
+    ) async throws {
+        var didRecordCooldown = false
+        var lastError: Error = InferenceServiceError.missingAPIKey
 
-        for try await line in bytes.lines {
+        for candidate in candidates {
             try Task.checkCancellation()
-            guard line.hasPrefix(Self.dataLinePrefix) else { continue }
-            // SSE permits `data:value` without the space `data: value` shows in
-            // every example — trim rather than assume the space is always there.
-            let payload = line.dropFirst(Self.dataLinePrefix.count).trimmingCharacters(in: .whitespaces)
-            guard let data = payload.data(using: .utf8),
-                  let event = try? decoder.decode(ClaudeStreamEvent.self, from: data) else { continue }
-            switch event.type {
-            case "content_block_delta":
-                if let text = event.delta?.text { continuation.yield(text) }
-            case "error":
-                // Claude can abort a stream after already answering 200 (e.g.
-                // an overload mid-generation) — without this, the loop simply
-                // reaches the end of input and the call looks like a normal,
-                // if short, success.
-                throw InferenceServiceError.streamInterrupted(message: event.error?.message ?? "unknown")
-            default:
-                continue
+            // Announced before the attempt, not after it succeeds: this is what
+            // tells the screen whose name to show while it waits, and what tells
+            // it to drop whatever a failed predecessor already streamed.
+            continuation.yield(.attempting(candidate.client.provider))
+            do {
+                let stream = try await candidate.client.streamAnalysis(
+                    systemPrompt: systemPrompt,
+                    userPrompt: userPrompt,
+                    apiKey: candidate.apiKey
+                )
+                // The provider accepted and is billing tokens from here on,
+                // regardless of whether the answer later fails or the user
+                // cancels — but only the first such acceptance in a run spends
+                // the window.
+                if !didRecordCooldown {
+                    await cooldown.recordCall(at: now())
+                    didRecordCooldown = true
+                }
+                var didYieldText = false
+                for try await chunk in stream {
+                    try Task.checkCancellation()
+                    guard !chunk.isEmpty else { continue }
+                    didYieldText = true
+                    continuation.yield(.text(chunk))
+                }
+                // A clean stream that never produced a token is not an answer:
+                // hand over to the next candidate rather than ending the run.
+                // The clients recognise the error frames they know, but a
+                // provider can also answer 200 and simply say nothing — that
+                // has to fall back too, or the chain stops at the first one
+                // whose response this version cannot read.
+                if didYieldText { return }
+                lastError = InferenceServiceError.invalidResponse
+            } catch {
+                // The user cancelled: not a provider problem, and asking the
+                // next one would keep spending on a run nobody is waiting for.
+                if Task.isCancelled || error.isCancellation { throw error }
+                lastError = error
             }
         }
+        throw lastError
+    }
+
+    // MARK: - Candidates
+
+    /// The providers to try, in the order the user set in onboarding step 3
+    /// (US-4), each paired with the key stored for it.
+    ///
+    /// A provider without a stored key is skipped rather than counted as a
+    /// failure: it was never configured, so it has nothing to fall back from.
+    private func resolveCandidates() async throws -> [Candidate] {
+        let order = await priority.order
+        // An empty order means the Claude key predates the multi-provider step
+        // (#78) — that install has exactly one key and no stored order.
+        let providers = order.isEmpty ? [LLMProvider.claude] : order
+
+        var candidates: [Candidate] = []
+        for provider in providers {
+            guard let client = clients[provider] else { continue }
+            let stored: String?
+            do {
+                stored = try await keychain.read(provider.keychainKey)
+            } catch {
+                // The read itself failed (e.g. `errSecInteractionNotAllowed` on
+                // a locked device) — the key is still stored, so this must not
+                // read as "no key" and send an onboarded user back to re-enter
+                // one.
+                throw InferenceServiceError.keychainUnavailable
+            }
+            guard let key = stored, !key.isEmpty else { continue }
+            candidates.append(Candidate(client: client, apiKey: key))
+        }
+
+        guard !candidates.isEmpty else { throw InferenceServiceError.missingAPIKey }
+        return candidates
     }
 
     private func finish() {
         isRunning = false
-    }
-
-    // MARK: - Request
-
-    private func makeRequest(systemPrompt: String, userPrompt: String, apiKey: String) throws -> URLRequest {
-        var request = URLRequest(url: Self.endpoint)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "content-type")
-        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-        request.setValue(Self.anthropicVersion, forHTTPHeaderField: "anthropic-version")
-        // Idle timeout (NFR: ~30s) comes from the session's
-        // `timeoutIntervalForRequest` (`.fitBuddyStreaming`), not a per-request
-        // override here — the two do not reliably compose.
-        request.httpBody = try JSONEncoder().encode(
-            ClaudeMessageRequest(
-                model: Self.model,
-                maxTokens: Self.maxTokens,
-                system: systemPrompt,
-                stream: true,
-                messages: [ClaudeMessageRequest.Message(role: "user", content: userPrompt)]
-            )
-        )
-        return request
-    }
-
-    // MARK: - Error mapping
-
-    private func validate(_ http: HTTPURLResponse) throws {
-        switch http.statusCode {
-        case 200...299:
-            return
-        case 401:
-            throw InferenceServiceError.unauthorized
-        case 429:
-            throw InferenceServiceError.rateLimited(retryAfter: Self.retryAfter(from: http))
-        case 500...599:
-            throw InferenceServiceError.serviceUnavailable
-        default:
-            throw InferenceServiceError.unexpectedStatus(http.statusCode)
-        }
-    }
-
-    private static func retryAfter(from http: HTTPURLResponse) -> TimeInterval? {
-        guard let raw = http.value(forHTTPHeaderField: "Retry-After") else { return nil }
-        return TimeInterval(raw.trimmingCharacters(in: .whitespaces))
-    }
-
-    // MARK: - Helpers
-
-    private func storedAPIKey() async throws -> String {
-        let stored: String?
-        do {
-            stored = try await keychain.read(.claudeAPIKey)
-        } catch {
-            // The read itself failed (e.g. `errSecInteractionNotAllowed` on a
-            // locked device) — the key is still stored, so this must not read
-            // as "no key" and send an onboarded user back to re-enter one.
-            throw InferenceServiceError.keychainUnavailable
-        }
-        guard let key = stored, !key.isEmpty else { throw InferenceServiceError.missingAPIKey }
-        return key
     }
 }
