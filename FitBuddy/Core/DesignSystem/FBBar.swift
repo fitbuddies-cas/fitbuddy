@@ -27,7 +27,7 @@ struct FBBar: View {
                     .overlay(alignment: .leading) {
                         Capsule()
                             .fill(color)
-                            .frame(width: geo.size.width * clampedFraction)
+                            .frame(width: geo.size.width * Self.clamped(fraction))
                     }
             }
             .frame(height: 8)
@@ -41,7 +41,15 @@ struct FBBar: View {
         .padding(.vertical, 7)
     }
 
-    private var clampedFraction: Double {
-        min(max(fraction, 0), 1)
+    /// The fill fraction as a width multiplier, in `0...1`.
+    ///
+    /// `min`/`max` alone do not clamp a NaN — in Swift `max(.nan, 0)` is
+    /// `.nan`, which would reach `geo.size.width * …` and give the capsule an
+    /// invalid frame. A fraction that is not a real number has nothing to show,
+    /// so it reads as empty. A rule rather than a computed property so it can
+    /// be tested without a view.
+    static func clamped(_ fraction: Double) -> Double {
+        guard fraction.isFinite else { return 0 }
+        return min(max(fraction, 0), 1)
     }
 }

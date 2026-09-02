@@ -5,7 +5,6 @@ import Foundation
 /// Every metric is optional in Hevy's schema — which metrics are populated
 /// depends on the exercise type (weight/reps, distance/duration, or neither).
 struct HevySetDTO: Decodable, Equatable, Sendable {
-    let index: Int?
     let type: String?
     let weightKg: Double?
     let reps: Int?
@@ -14,7 +13,6 @@ struct HevySetDTO: Decodable, Equatable, Sendable {
     let rpe: Double?
 
     private enum CodingKeys: String, CodingKey {
-        case index
         case type
         case weightKg = "weight_kg"
         case reps
@@ -25,7 +23,6 @@ struct HevySetDTO: Decodable, Equatable, Sendable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        index = try container.decodeLooseIntIfPresent(forKey: .index)
         type = try container.decodeIfPresent(String.self, forKey: .type)
         weightKg = try container.decodeIfPresent(Double.self, forKey: .weightKg)
         reps = try container.decodeLooseIntIfPresent(forKey: .reps)
@@ -49,11 +46,13 @@ struct HevySetDTO: Decodable, Equatable, Sendable {
         value == 0 ? nil : value
     }
 
-    /// Maps to the cached model. `fallbackIndex` preserves the payload order
-    /// when Hevy omits `index`.
-    func makeExerciseSet(fallbackIndex: Int) -> ExerciseSet {
+    /// Maps to the cached model, ordered by `position` in the payload.
+    ///
+    /// As for the exercise above: Hevy's own `index` is optional, and mixing it
+    /// with a positional fallback yields duplicate `SetDetail.id`s.
+    func makeExerciseSet(position: Int) -> ExerciseSet {
         ExerciseSet(
-            index: index ?? fallbackIndex,
+            index: position,
             type: SetType.from(type),
             weightKg: weightKg,
             reps: reps,
