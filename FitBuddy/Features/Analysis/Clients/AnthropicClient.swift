@@ -4,7 +4,8 @@ import Foundation
 ///
 /// The original `InferenceService` logic, unchanged in behaviour: `POST
 /// /v1/messages` with `x-api-key`, and SSE `content_block_delta` events read
-/// for their text.
+/// for their text — plus the `message_delta` stop reason, which decides
+/// whether that text is a whole answer.
 struct AnthropicClient: LLMProviderClient {
     /// Model used for every analysis call. The recommendation is short prose,
     /// but it is the one place FitBuddy asks a model to reason about a training
@@ -26,6 +27,11 @@ struct AnthropicClient: LLMProviderClient {
     /// reasoning problem — and because every thinking token is billed to the
     /// user's own key and shares the budget above.
     static let effort = "low"
+
+    /// `stop_reason` values that mean the model said everything it meant to
+    /// say. Anything else (`max_tokens`, `refusal`, …) leaves the answer
+    /// incomplete, however much text already arrived.
+    private static let completeStopReasons: Set<String> = ["end_turn", "stop_sequence"]
 
     private static let endpoint = URL(staticString: "https://api.anthropic.com/v1/messages")
     private static let anthropicVersion = "2023-06-01"
@@ -58,6 +64,19 @@ struct AnthropicClient: LLMProviderClient {
                         switch event.type {
                         case "content_block_delta":
                             if let text = event.delta?.text { continuation.yield(text) }
+                        case "message_delta":
+                            // The only event that says why the stream ended.
+                            // A run that stopped at `max_tokens` (thinking
+                            // shares this budget) or at `refusal` arrives as a
+                            // clean HTTP 200 with text already yielded — without
+                            // this the truncated prose would be published as the
+                            // final recommendation and persisted for the whole
+                            // cooldown. Treated as an interruption so the
+                            // fallback chain gets its turn.
+                            if let reason = event.delta?.stopReason,
+                               !Self.completeStopReasons.contains(reason) {
+                                throw InferenceServiceError.streamInterrupted(message: reason)
+                            }
                         case "error":
                             // Claude can abort a stream after already answering 200
                             // (e.g. an overload mid-generation) — without this, the

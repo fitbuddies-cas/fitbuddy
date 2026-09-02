@@ -134,6 +134,24 @@ final class HevyServiceTests: XCTestCase {
         XCTAssertEqual(ids, ["recent"])
     }
 
+    func testStopsAtAPageThatComesBackEmptyEvenWhenPageCountClaimsMore() async throws {
+        // A page with no workouts at all has nothing behind it. `page_count` is
+        // decoded leniently, so trusting it here would send up to `maxPages`
+        // requests on the user's key that all return nothing — and the empty
+        // result would then wipe the cache as a "successful" sync.
+        stub(pages: [
+            HevyPayloadFactory.page(page: 1, pageCount: 40, workouts: []),
+            HevyPayloadFactory.page(page: 2, pageCount: 40, workouts: [
+                HevyPayloadFactory.workout(id: "unreachable", start: daysAgo(1)),
+            ]),
+        ])
+
+        let result = try await sut.syncRecentWorkouts()
+
+        XCTAssertEqual(result.workoutCount, 0)
+        XCTAssertEqual(Self.captured.count, 1, "An empty page must end the walk")
+    }
+
     func testKeepsOnlyWorkoutsInsideTheNinetyDayWindow() async throws {
         stub(pages: [
             HevyPayloadFactory.page(page: 1, pageCount: 1, workouts: [

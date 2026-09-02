@@ -111,7 +111,14 @@ actor HevyService: WorkoutSyncing {
             // would inflate every count and volume the dashboard derives.
             collected.append(contentsOf: inWindow.filter { seenIDs.insert($0.id).inserted })
 
-            if inWindow.isEmpty && !payload.workouts.isEmpty { break }
+            // A page with no workouts at all ends the walk: there is nothing
+            // behind it, and `page_count` cannot be trusted to say so — it is
+            // decoded leniently, so a bogus value would otherwise send up to
+            // `maxPages` requests on the user's key that all return nothing,
+            // after which the empty result wipes the cache as a "successful"
+            // sync.
+            if payload.workouts.isEmpty { break }
+            if inWindow.isEmpty { break }
             if page >= max(payload.pageCount, 1) { break }
             page += 1
         }

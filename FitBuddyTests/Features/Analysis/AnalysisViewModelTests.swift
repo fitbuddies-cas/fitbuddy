@@ -50,14 +50,15 @@ final class AnalysisViewModelTests: XCTestCase {
     private func makeSUT(
         clock: TestClock = TestClock(AnalysisViewModelTests.reference),
         slowThreshold: TimeInterval = 30,
-        tickInterval: TimeInterval = 60
+        tickInterval: TimeInterval = 60,
+        resultStore: (any AnalysisResultStoring)? = nil
     ) -> AnalysisViewModel {
         AnalysisViewModel(
             cache: cache,
             inference: streamer,
             cooldown: cooldown,
             feedbackStore: feedbackStore,
-            resultStore: results,
+            resultStore: resultStore ?? results,
             calendar: Self.calendar,
             now: { clock.date },
             slowThreshold: slowThreshold,
@@ -977,6 +978,57 @@ extension AnalysisViewModelTests {
 
         XCTAssertEqual(sut.state, .result("Add 2.5 kg on bench next session."))
         XCTAssertEqual(sut.resultAge, "2 h ago")
+    }
+
+    /// A "New analysis" tap the cooldown refuses must not cost the user their
+    /// recommendation for the rest of the session: `start()` returns early on
+    /// that path, and clearing the dismissal only after that early return left
+    /// "Back" with nothing to restore — countdown on screen, recommendation
+    /// still on disk (#97).
+    func testACooldownRefusedRunStillLetsBackRestoreTheRecommendation() async throws {
+        try await storeRecommendation(at: Self.reference.addingTimeInterval(-2 * 3_600))
+        await cooldown.recordCall(at: Self.reference.addingTimeInterval(-3_600))
+        let sut = makeSUT()
+        await sut.restore()
+        sut.reset()
+
+        await sut.start()
+        let availableAt = Self.reference.addingTimeInterval(AnalysisCooldownStore.duration - 3_600)
+        XCTAssertEqual(sut.state, .error(.cooldownActive(availableAt: availableAt)))
+        await sut.dismissFailure()
+
+        XCTAssertEqual(sut.state, .result("Add 2.5 kg on bench next session."))
+        XCTAssertEqual(sut.resultAge, "2 h ago")
+        let calls = await streamer.callCount
+        XCTAssertEqual(calls, 0)
+    }
+
+    /// The result must not become visible while `cooldownMessage` still holds
+    /// the value from before the run: `canStartAnalysis` would be true, the
+    /// result screen would offer "New analysis", and the tap would replace the
+    /// recommendation the user just paid for with a cooldown error.
+    func testTheResultIsNotPublishedWhileTheCooldownLabelIsStale() async throws {
+        let gate = GatedAnalysisResultStore(wrapping: results)
+        await streamer.gateCall()
+        await streamer.setChunks(["done"])
+        let sut = makeSUT(resultStore: gate)
+
+        let run = Task { await sut.start() }
+        await streamer.waitForCall()
+        // Stands in for the service recording the window once the provider
+        // accepted the request.
+        await cooldown.recordCall(at: Self.reference)
+        await streamer.release()
+
+        await gate.waitForSave()
+        XCTAssertEqual(sut.state, .streaming("done"), "The run must still read as in flight while it persists")
+        XCTAssertFalse(sut.canStartAnalysis)
+
+        await gate.releaseSave()
+        await run.value
+        XCTAssertEqual(sut.state, .result("done"))
+        XCTAssertEqual(sut.cooldownMessage, "Next analysis available in 6h 0m")
+        XCTAssertFalse(sut.canStartAnalysis)
     }
 
     /// "Back" on the very first run's error screen has nothing to fall back
