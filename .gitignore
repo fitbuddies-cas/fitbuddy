@@ -8,6 +8,7 @@ node_modules
 xcuserdata/
 *.xcuserstate
 DerivedData/
+.derivedData/
 build/
 *.xcscmblueprint
 *.xccheckout

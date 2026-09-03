@@ -169,7 +169,7 @@ final class SettingsViewModel: ObservableObject {
             do {
                 try await validator.validate(key)
             } catch let error as HevyKeyValidationError {
-                editorState = .failed(Self.failure(for: error))
+                editorState = .failed(APIKeyEntryFailure(error))
                 return
             } catch {
                 // The protocol allows arbitrary errors; without an HTTP
@@ -207,16 +207,6 @@ final class SettingsViewModel: ObservableObject {
         }
         cancelEditing()
         await load()
-    }
-
-    /// Maps validator errors to editor failures. Exhaustive on purpose: a new
-    /// validator error case must make a conscious copy decision here.
-    private static func failure(for error: HevyKeyValidationError) -> APIKeyEntryFailure {
-        switch error {
-        case .invalidKey: return .invalidKey
-        case .transport: return .network
-        case .unexpectedStatus: return .serviceUnavailable
-        }
     }
 
     // MARK: - Priority order

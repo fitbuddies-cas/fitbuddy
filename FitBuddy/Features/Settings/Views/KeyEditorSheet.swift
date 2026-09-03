@@ -26,10 +26,8 @@ struct KeyEditorSheet: View {
                     Text(subtitle)
                         .font(.subheadline)
                         .foregroundStyle(Color.fbInkSecondary)
-                    if case .llm(let provider) = target {
-                        whereToFindCard(for: provider)
-                            .padding(.top, 18)
-                    }
+                    whereToFindCard
+                        .padding(.top, 18)
                     keyField
                         .padding(.top, 22)
                     storageNote
@@ -80,14 +78,16 @@ struct KeyEditorSheet: View {
     // MARK: - Sections
 
     /// Explains where the key lives in the provider's console — the same card
-    /// onboarding step 3 shows, so a user replacing a key gets the same help.
-    private func whereToFindCard(for provider: LLMProvider) -> some View {
+    /// the matching onboarding step shows, so a user replacing a key gets the
+    /// same help. Hevy needs it just as much: a revoked key is replaced from
+    /// here, and the 401 banner tells the user to generate a new one.
+    private var whereToFindCard: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(attributedInstructions(for: provider))
+            Text(.markdownOrPlain(target.consoleInstructions))
                 .font(.footnote)
                 .foregroundStyle(Color.fbInkSecondary)
-            Link(destination: provider.consoleURL) {
-                Text("Open \(provider.consoleName) ↗")
+            Link(destination: target.consoleURL) {
+                Text("Open \(target.consoleName) ↗")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(Color.fbAccent)
             }
@@ -102,18 +102,15 @@ struct KeyEditorSheet: View {
         )
     }
 
-    private func attributedInstructions(for provider: LLMProvider) -> AttributedString {
-        (try? AttributedString(markdown: provider.consoleInstructions))
-            ?? AttributedString(provider.consoleInstructions)
-    }
-
     private var keyField: some View {
         FBKeyField(
             label: "\(target.displayName.uppercased()) API KEY",
             placeholder: target.keyPlaceholder,
             text: $viewModel.editorKey,
             isBusy: isBusy,
-            hasError: failure != nil,
+            // Only a rejected key marks the field itself as wrong — a network
+            // or Keychain failure says nothing about what the user typed.
+            hasError: failure == .invalidKey,
             focus: $keyFieldIsFocused
         ) {
             Task { await viewModel.submitEditor() }

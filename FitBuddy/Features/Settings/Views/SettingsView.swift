@@ -123,7 +123,7 @@ struct SettingsView: View {
     private var hevySection: some View {
         Section {
             keyRow(
-                title: "Hevy",
+                title: SettingsKeyTarget.hevy.displayName,
                 subtitle: viewModel.hevyKeyMask ?? "No key stored",
                 isMasked: viewModel.hevyKeyMask != nil,
                 target: .hevy,
