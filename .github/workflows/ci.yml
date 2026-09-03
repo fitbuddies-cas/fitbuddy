@@ -39,7 +39,7 @@ jobs:
       SIMULATOR_NAME: iPhone 17
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Fails with a readable message instead of a wall of xcodebuild output
       # when the runner lacks Xcode, the iOS runtime or the simulator.
@@ -60,17 +60,47 @@ jobs:
             -scheme FitBuddy \
             -destination "platform=iOS Simulator,name=$SIMULATOR_NAME" \
             -derivedDataPath "$DERIVED_DATA" \
-            -resultBundlePath "$DERIVED_DATA/TestResults.xcresult"
+            -resultBundlePath "$DERIVED_DATA/TestResults.xcresult" \
+            -enableCodeCoverage YES
 
-      # The result bundle carries the failing test names and their assertion
-      # messages — worth having without shell access to the runner.
+      # Directly after the test step on purpose: further down, a failing
+      # Release build would also trigger `failure()` and upload a bundle in
+      # which everything is green.
       - name: Upload test results
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: TestResults
           path: ${{ env.DERIVED_DATA }}/TestResults.xcresult
           retention-days: 7
+
+      # Reported, never enforced: a coverage threshold buys tests that cover
+      # lines instead of tests that check behaviour.
+      - name: Coverage summary
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo '### Coverage'
+            echo '```'
+            xcrun xccov view --report --only-targets "$DERIVED_DATA/TestResults.xcresult"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Everyone builds Debug locally, TestFlight ships Release — and all of
+      # Core/MockData plus the SwiftUI previews sit behind `#if DEBUG`, so the
+      # non-DEBUG side of the code compiles nowhere else. The simulator
+      # destination keeps this unsigned; an archive against a real device would
+      # need certificates and stays out of scope.
+      - name: Build Release
+        shell: bash
+        run: |
+          xcodebuild build \
+            -project FitBuddy.xcodeproj \
+            -scheme FitBuddy \
+            -configuration Release \
+            -destination "platform=iOS Simulator,name=$SIMULATOR_NAME" \
+            -derivedDataPath "$DERIVED_DATA"
 
       # The runner keeps its workspace between jobs; build output would grow
       # without bound on a machine that is also someone's desk computer.
