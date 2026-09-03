@@ -63,6 +63,17 @@ jobs:
             -resultBundlePath "$DERIVED_DATA/TestResults.xcresult" \
             -enableCodeCoverage YES
 
+      # Directly after the test step on purpose: further down, a failing
+      # Release build would also trigger `failure()` and upload a bundle in
+      # which everything is green.
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: TestResults
+          path: ${{ env.DERIVED_DATA }}/TestResults.xcresult
+          retention-days: 7
+
       # Reported, never enforced: a coverage threshold buys tests that cover
       # lines instead of tests that check behaviour.
       - name: Coverage summary
@@ -90,16 +101,6 @@ jobs:
             -configuration Release \
             -destination "platform=iOS Simulator,name=$SIMULATOR_NAME" \
             -derivedDataPath "$DERIVED_DATA"
-
-      # The result bundle carries the failing test names and their assertion
-      # messages — worth having without shell access to the runner.
-      - name: Upload test results
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: TestResults
-          path: ${{ env.DERIVED_DATA }}/TestResults.xcresult
-          retention-days: 7
 
       # The runner keeps its workspace between jobs; build output would grow
       # without bound on a machine that is also someone's desk computer.
