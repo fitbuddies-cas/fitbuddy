@@ -294,7 +294,10 @@ final class WorkoutListViewModelTests: XCTestCase {
         await syncer.gateFirstCall()
         let sut = makeSUT(withSyncer: true)
         await sut.load()
-        XCTAssertTrue(sut.state.hasWorkouts)
+        guard case let .loaded(workouts, _) = sut.state else {
+            return XCTFail("Expected .loaded, got \(sut.state)")
+        }
+        XCTAssertEqual(workouts.map(\.id), ["old-account"])
 
         let reload = Task { await sut.reload() }
         await syncer.waitForFirstCall()
