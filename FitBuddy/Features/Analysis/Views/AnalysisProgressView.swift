@@ -17,10 +17,11 @@ struct AnalysisProgressView: View {
             header
             if let text, !text.isEmpty {
                 FBCard(padding: 18) {
-                    Text(text)
-                        .font(.body)
-                        .foregroundStyle(Color.fbInk)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    // The same formatter the finished result uses, so the
+                    // answer does not re-flow the moment the run ends — and so
+                    // a marker the stream has not closed yet stays invisible
+                    // instead of flashing up as a stray asterisk (#117).
+                    AnalysisFormattedText(text: text)
                 }
                 .transition(.opacity)
             }
@@ -93,7 +94,7 @@ struct AnalysisProgressView: View {
 
 #Preview("Streaming") {
     AnalysisProgressView(
-        text: "Your last four weeks show 14 sessions with steady volume on chest and back",
+        text: "Your last four weeks show 14 sessions with steady volume.\n\n**Progressive over",
         provider: .claude,
         isTakingLong: false,
         onCancel: {}

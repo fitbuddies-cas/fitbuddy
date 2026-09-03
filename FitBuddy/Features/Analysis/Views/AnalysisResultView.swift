@@ -4,10 +4,12 @@ import SwiftUI
 /// (#32).
 ///
 /// Every provider answers in prose under 200 words (see
-/// `AnalysisPromptBuilder`), so
-/// the text is rendered as it comes rather than parsed into cards: a layout
-/// that promises structured fields would misrepresent what the model was asked
-/// for.
+/// `AnalysisPromptBuilder`), and structures that prose with Markdown even
+/// though nothing asked it to. So what is parsed here is the model's own
+/// outline — heading, paragraph, bullet — and nothing beyond it (#117): a card
+/// raster with fields we invented would misrepresent what the model was asked
+/// for, and rendering the markers verbatim made the paid-for answer the least
+/// readable text on screen.
 struct AnalysisResultView: View {
     let text: String
     /// Who answered, and who was asked before them (#79). `nil` only in the
@@ -26,19 +28,13 @@ struct AnalysisResultView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(badge.uppercased())
-                .font(.fbLabel)
-                .tracking(0.6)
-                .foregroundStyle(Color.fbMuted)
+            header
             if let notice = attribution?.fallbackNotice {
                 fallbackNotice(notice)
             }
             FBCard(padding: 18) {
-                Text(text)
-                    .font(.body)
-                    .foregroundStyle(Color.fbInk)
+                AnalysisFormattedText(text: text)
                     .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             disclaimer
             if let onNewAnalysis {
@@ -48,21 +44,36 @@ struct AnalysisResultView: View {
         }
     }
 
+    /// When it was written on the left, who wrote it on the right.
+    ///
+    /// Split apart from the badge it used to share (#117): with a history, the
+    /// age is what tells one recommendation from another, and "AI · CLAUDE ·
+    /// 2 h ago" buried it at the end of a string most readers stop reading
+    /// after the provider's name.
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            if let age {
+                Text(age)
+                    .font(.fbLabel)
+                    .foregroundStyle(Color.fbInkSecondary)
+            }
+            Spacer(minLength: 8)
+            Text(badge.uppercased())
+                .font(.fbLabel)
+                .tracking(0.6)
+                .foregroundStyle(Color.fbMuted)
+        }
+    }
+
     /// Names the model that actually wrote this, not the one the user ranked
     /// first — after a fallback those are different, and attributing the text
     /// to the wrong provider would be a lie about where their data went.
     ///
-    /// `"AI · CLAUDE · 2 h ago"`, dropping whichever part is unknown: a
-    /// restored recommendation has an age but no provider.
+    /// `"AI · CLAUDE"`, or a bare `"AI"` on a recommendation restored from
+    /// disk, which does not store the provider.
     private var badge: String {
-        var parts = ["AI"]
-        if let attribution {
-            parts.append(attribution.provider.displayName)
-        }
-        if let age {
-            parts.append(age)
-        }
-        return parts.joined(separator: " · ")
+        guard let attribution else { return "AI" }
+        return "AI · \(attribution.provider.displayName)"
     }
 
     /// Shown only after a fallback: the answer is fine, but the user asked for
@@ -99,10 +110,12 @@ private let previewRecommendation = """
     Across the last four weeks you trained 14 times, with chest and back \
     carrying most of the volume while legs appeared in only 3 sessions.
 
+    **Progressive overload**
     Bench press has sat at 60 kg for five sessions at the same rep count — \
-    that is a clean overload signal. Add 2.5 kg on your next session and \
-    keep the reps where they are. Give legs a second slot in the week \
-    before you push upper-body volume any further.
+    that is a clean overload signal.
+
+    - Add 2.5 kg on your next session and keep the reps where they are
+    - Give legs a second slot before you push upper-body volume further
     """
 
 #Preview("Answered first try") {

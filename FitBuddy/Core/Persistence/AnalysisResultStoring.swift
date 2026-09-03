@@ -1,13 +1,20 @@
 import Foundation
 
-/// Read/write access to the persisted AI recommendation (#97).
+/// Read/write access to the persisted AI recommendations (#97, #117).
 ///
-/// `AnalysisViewModel` depends on this protocol rather than on
-/// `AnalysisResultStore`, so a preview can drive the analysis screen without a
-/// `ModelContainer` and a test can observe what was persisted.
+/// `AnalysisViewModel` and `AnalysisHistoryViewModel` depend on this protocol
+/// rather than on `AnalysisResultStore`, so a preview can drive the analysis
+/// screen without a `ModelContainer` and a test can observe what was persisted.
 protocol AnalysisResultStoring: Sendable {
-    func save(text: String, generatedAt: Date, context: AnalysisContext) async throws
+    /// Stores a finished recommendation and returns its identity, so the
+    /// caller can attach a verdict to exactly this row later.
+    @discardableResult
+    func save(text: String, generatedAt: Date, context: AnalysisContext) async throws -> UUID
     func latest() async throws -> AnalysisResultSnapshot?
+    /// The newest `limit` recommendations, newest first.
+    func recent(limit: Int) async throws -> [AnalysisResultSnapshot]
+    func delete(id: UUID) async throws
+    func setFeedback(_ feedback: AnalysisFeedback?, for id: UUID) async throws
     func deleteAll() async throws
 }
 

@@ -15,7 +15,8 @@ enum InferenceServiceError: Error, Equatable {
     /// `.missingAPIKey`: the key is still stored, so routing the user back
     /// into onboarding to re-enter it would be wrong.
     case keychainUnavailable
-    /// The 6h cooldown has not elapsed yet. Carries the instant it will.
+    /// The lock after the last run has not lifted yet. Carries the instant it
+    /// does.
     case cooldownActive(availableAt: Date)
     /// A call is already streaming; the analysis button must stay disabled
     /// until it finishes, but the actor enforces this independently.

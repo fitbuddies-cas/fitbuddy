@@ -70,15 +70,15 @@ struct AnthropicClient: LLMProviderClient {
                             // The only event that says why the stream ended. A
                             // run that stopped at `refusal` arrives as a clean
                             // HTTP 200 — without this it would be published as
-                            // the final recommendation and persisted for the
-                            // whole cooldown. Treated as an interruption so the
-                            // fallback chain gets its turn.
+                            // the final recommendation and kept as the newest
+                            // entry in the history. Treated as an interruption
+                            // so the fallback chain gets its turn.
                             //
                             // `max_tokens` is deliberately not one of those: a
                             // truncated recommendation is still usable, and for
                             // the Claude-only setup there is no chain to fall
                             // back to — the run would surface as an error with
-                            // the cooldown already spent. A run whose thinking
+                            // the tokens already spent. A run whose thinking
                             // ate the whole budget yields no text at all, and
                             // `InferenceService.run()` already falls through on
                             // `didYieldText == false`.

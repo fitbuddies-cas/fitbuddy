@@ -10,7 +10,7 @@ import SwiftUI
 struct AnalysisFeedbackBar: View {
     /// The verdict already given for this recommendation, if any.
     let selected: AnalysisFeedback?
-    /// `"Next analysis available in 5h 12m"`, or `nil` while a run is allowed.
+    /// `"New analysis available in 45s"`, or `nil` while a run is allowed.
     let cooldownMessage: String?
     let onSelect: (AnalysisFeedback) -> Void
 
@@ -120,14 +120,14 @@ private struct AnalysisFeedbackBarPreview: View {
 #Preview("Rated") {
     AnalysisFeedbackBarPreview(
         selected: .helpful,
-        cooldownMessage: "Next analysis available in 5h 42m"
+        cooldownMessage: "New analysis available in 45s"
     )
 }
 
 #Preview("Rated not helpful") {
     AnalysisFeedbackBarPreview(
         selected: .notHelpful,
-        cooldownMessage: "Next analysis available in 5h 42m"
+        cooldownMessage: "New analysis available in 45s"
     )
 }
 #endif

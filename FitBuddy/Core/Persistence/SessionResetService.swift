@@ -57,11 +57,12 @@ actor SessionResetService {
     /// account, and leaving it behind would also let a delta sync believe it
     /// only has to fetch what changed since then.
     ///
-    /// The stored recommendation goes too (#97): it was written about the
-    /// workouts being discarded here, and restoring it over the next account's
-    /// dashboard would present one Hevy account's training as advice for
-    /// another's. The cooldown deliberately stays — this is not a deletion
-    /// request, and clearing it would let a logout buy a fresh 6h window.
+    /// The whole analysis history goes too (#97, #117): every one of those
+    /// texts was written about the workouts being discarded here, and showing
+    /// them over the next account's dashboard would present one Hevy account's
+    /// training as advice for another's. The rate-limit timestamp deliberately
+    /// stays — this is not a deletion request, and clearing it would make a
+    /// logout a way around the lock.
     func discardCachedWorkouts() async {
         do {
             try await workouts.deleteAll()
