@@ -1,0 +1,80 @@
+name: CI
+
+# Runs the build and the XCTest suite on every PR into develop, on the team's
+# own macOS runner (#113, ADR-9). An iOS build needs macOS and Xcode, so this
+# workflow cannot fall back to a GitHub-hosted Linux runner.
+on:
+  # `branches` filters on the *base*: with develop alone, the weekly
+  # develop -> main release PR would be the one merge without a check.
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+# One self-hosted runner works through jobs serially, so superseded runs of the
+# same PR are pointless queue time. Pushes are exempt: on develop every run
+# shares one group, and cancelling would leave merged commits without a
+# verdict — which is what a later bisect needs.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: Build & test
+    runs-on: [self-hosted, macOS, ARM64]
+    # A hung simulator would otherwise hold the only runner indefinitely.
+    timeout-minutes: 30
+    env:
+      # launchd gives the runner no shell profile, so the toolchain is pinned
+      # here as well as system-wide via `xcode-select -s`.
+      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+      # Keep build output inside the workspace: the runner user's own
+      # ~/Library/Developer/Xcode/DerivedData is never touched, and cleaning up
+      # is one directory rather than a shared one.
+      DERIVED_DATA: ${{ github.workspace }}/.derivedData
+      SIMULATOR_NAME: iPhone 17
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Fails with a readable message instead of a wall of xcodebuild output
+      # when the runner lacks Xcode, the iOS runtime or the simulator.
+      - name: Verify toolchain
+        shell: bash
+        run: |
+          xcodebuild -version
+          xcrun simctl list runtimes available | grep -q "iOS 26" \
+            || { echo "::error::No iOS 26 simulator runtime installed — run: xcodebuild -downloadPlatform iOS"; exit 1; }
+          xcrun simctl list devices available | grep -q "$SIMULATOR_NAME (" \
+            || { echo "::error::No '$SIMULATOR_NAME' simulator — run: xcrun simctl create \"$SIMULATOR_NAME\" \"$SIMULATOR_NAME\""; exit 1; }
+
+      - name: Test
+        shell: bash
+        run: |
+          xcodebuild test \
+            -project FitBuddy.xcodeproj \
+            -scheme FitBuddy \
+            -destination "platform=iOS Simulator,name=$SIMULATOR_NAME" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -resultBundlePath "$DERIVED_DATA/TestResults.xcresult"
+
+      # The result bundle carries the failing test names and their assertion
+      # messages — worth having without shell access to the runner.
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TestResults
+          path: ${{ env.DERIVED_DATA }}/TestResults.xcresult
+          retention-days: 7
+
+      # The runner keeps its workspace between jobs; build output would grow
+      # without bound on a machine that is also someone's desk computer.
+      - name: Clean build output
+        if: always()
+        shell: bash
+        run: rm -rf "$DERIVED_DATA"
