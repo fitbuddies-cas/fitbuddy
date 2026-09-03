@@ -87,15 +87,21 @@ actor AnalysisResultStore {
 
     /// Deletes everything past `historyLimit`, newest kept, without saving.
     ///
+    /// The surplus is taken with `dropFirst` rather than with the descriptor's
+    /// `fetchOffset`: on a context holding the freshly inserted row, that
+    /// offset does not narrow the result, and the fetch comes back with every
+    /// row — which this loop would then delete, the new one included.
+    ///
     /// A failing fetch must propagate: swallowing it would let the store grow
     /// past the limit unnoticed, and the one thing this cap protects is how
     /// much health-derived text the device keeps.
     private func trimToLimit() throws {
-        var descriptor = FetchDescriptor<AnalysisResult>(
+        let descriptor = FetchDescriptor<AnalysisResult>(
             sortBy: [SortDescriptor(\.generatedAt, order: .reverse)]
         )
-        descriptor.fetchOffset = Self.historyLimit
-        for surplus in try modelContext.fetch(descriptor) {
+        let stored = try modelContext.fetch(descriptor)
+        guard stored.count > Self.historyLimit else { return }
+        for surplus in stored.dropFirst(Self.historyLimit) {
             modelContext.delete(surplus)
         }
     }

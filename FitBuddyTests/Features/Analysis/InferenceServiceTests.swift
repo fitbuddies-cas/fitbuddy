@@ -308,7 +308,7 @@ final class InferenceServiceTests: XCTestCase {
     // MARK: - Rate limit (#117: 60s Doppeltipp-Sperre)
 
     func testThrowsCooldownActiveWhenCalledTooSoon() async throws {
-        let lastCall = Self.now.addingTimeInterval(-1_000)
+        let lastCall = Self.now.addingTimeInterval(-30)
         await rateLimit.recordCall(at: lastCall)
 
         do {
