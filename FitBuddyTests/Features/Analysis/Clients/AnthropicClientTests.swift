@@ -78,6 +78,40 @@ final class AnthropicClientTests: LLMClientTestCase {
         }
     }
 
+    func testStopReasonMaxTokensKeepsTheTruncatedTextAsAnAnswer() async throws {
+        // Thinking shares `max_tokens` with the prose, so a reasoning-heavy run
+        // can stop mid-sentence while HTTP 200 and a few chunks already
+        // arrived. That text is still the model's own recommendation, so it is
+        // kept — matching Gemini's `MAX_TOKENS` and Mistral's `length`. Throwing
+        // here would, for the Claude-only setup, turn a usable answer into an
+        // error with the cooldown already spent.
+        stub(body: ClaudeSSEFactory.body(textChunks: ["Increase squat"], stopReason: "max_tokens"))
+
+        let chunks = try await collect(try await stream())
+
+        XCTAssertEqual(chunks, ["Increase squat"])
+    }
+
+    func testStopReasonRefusalIsReportedAsAnInterruption() async throws {
+        // A refusal arrives as a clean 200 as well.
+        stub(body: ClaudeSSEFactory.body(textChunks: ["I cannot"], stopReason: "refusal"))
+
+        do {
+            _ = try await collect(try await stream())
+            XCTFail("expected streamInterrupted")
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .streamInterrupted(message: "refusal"))
+        }
+    }
+
+    func testStopSequenceCountsAsACompleteAnswer() async throws {
+        stub(body: ClaudeSSEFactory.body(textChunks: ["Done."], stopReason: "stop_sequence"))
+
+        let chunks = try await collect(try await stream())
+
+        XCTAssertEqual(chunks, ["Done."])
+    }
+
     // MARK: - Rejection before acceptance
 
     func testUnauthorizedThrowsBeforeReturningAStream() async throws {

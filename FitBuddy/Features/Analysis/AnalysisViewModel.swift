@@ -153,6 +153,13 @@ final class AnalysisViewModel: ObservableObject {
         // the attribution, and the providers of the *previous* run have nothing
         // to do with a blocked one.
         attribution = nil
+        // Cleared before the cooldown branch below can return, too: that branch
+        // publishes an error, and `dismissFailure()` then calls `restore()` to
+        // put the stored recommendation back. Clearing this only on the path
+        // that actually starts a run would leave a refused tap holding the flag
+        // for the rest of the session — countdown on screen, recommendation
+        // still on disk, unreachable until the app restarts (#97).
+        didDismissStoredResult = false
 
         if let availableAt = await refreshCooldown() {
             // Checked here as well as inside `InferenceService`: the button is
@@ -167,11 +174,6 @@ final class AnalysisViewModel: ObservableObject {
 
         feedback = nil
         context = nil
-        // The dismissal has served its purpose: the user asked for a new
-        // analysis and is getting one. If this run fails, the screen falls
-        // back to `.idle` with nothing on it, and the stored recommendation is
-        // then the most useful thing it can offer again.
-        didDismissStoredResult = false
         // The stored recommendation stays on disk until this run replaces it:
         // a run that ends in an error must not cost the user the last answer
         // they still had. Only the screen lets go of it here.
@@ -345,8 +347,19 @@ final class AnalysisViewModel: ObservableObject {
             if text.isEmpty {
                 state = .error(.unreadableResponse(attribution?.provider))
             } else {
-                state = .result(text)
                 await persist(text)
+                // Before `.result`, not after: `canStartAnalysis` reads
+                // `cooldownMessage`, and a value still nil from before the run
+                // makes `AnalysisResultView` offer "New analysis" for a run
+                // that `start()` would immediately refuse — replacing the
+                // recommendation that just arrived with a cooldown error. While
+                // these awaits run the state stays `.streaming`, so the button
+                // is never enabled in between.
+                await refreshCooldown()
+                // A `cancel()` during the awaits above already published a
+                // resting state; it wins over the run it stopped.
+                guard !Task.isCancelled else { return await finish(id) }
+                state = .result(text)
             }
         } catch {
             // A cancelled run already published `.idle` in `cancel()`; the
