@@ -17,8 +17,8 @@ struct ClaudeStreamEvent: Decodable {
         let type: String?
         let text: String?
         /// Present on `message_delta` only, and the only place a stream says
-        /// *why* it ended. Without it a response cut off at `max_tokens` is
-        /// indistinguishable from a complete one.
+        /// *why* it ended. Without it a `refusal` is indistinguishable from a
+        /// complete answer.
         let stopReason: String?
 
         enum CodingKeys: String, CodingKey {

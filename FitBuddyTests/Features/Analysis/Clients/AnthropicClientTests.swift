@@ -78,20 +78,18 @@ final class AnthropicClientTests: LLMClientTestCase {
         }
     }
 
-    func testStopReasonMaxTokensIsReportedAsAnInterruptionDespiteTheTextAlreadySent() async throws {
+    func testStopReasonMaxTokensKeepsTheTruncatedTextAsAnAnswer() async throws {
         // Thinking shares `max_tokens` with the prose, so a reasoning-heavy run
         // can stop mid-sentence while HTTP 200 and a few chunks already
-        // arrived. Without the `message_delta` check that truncated text would
-        // be published as the final recommendation and persisted for the whole
-        // cooldown, instead of handing over to the next provider.
+        // arrived. That text is still the model's own recommendation, so it is
+        // kept — matching Gemini's `MAX_TOKENS` and Mistral's `length`. Throwing
+        // here would, for the Claude-only setup, turn a usable answer into an
+        // error with the cooldown already spent.
         stub(body: ClaudeSSEFactory.body(textChunks: ["Increase squat"], stopReason: "max_tokens"))
 
-        do {
-            _ = try await collect(try await stream())
-            XCTFail("expected streamInterrupted")
-        } catch let error as InferenceServiceError {
-            XCTAssertEqual(error, .streamInterrupted(message: "max_tokens"))
-        }
+        let chunks = try await collect(try await stream())
+
+        XCTAssertEqual(chunks, ["Increase squat"])
     }
 
     func testStopReasonRefusalIsReportedAsAnInterruption() async throws {
