@@ -39,7 +39,7 @@ jobs:
       SIMULATOR_NAME: iPhone 17
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Fails with a readable message instead of a wall of xcodebuild output
       # when the runner lacks Xcode, the iOS runtime or the simulator.
@@ -60,7 +60,36 @@ jobs:
             -scheme FitBuddy \
             -destination "platform=iOS Simulator,name=$SIMULATOR_NAME" \
             -derivedDataPath "$DERIVED_DATA" \
-            -resultBundlePath "$DERIVED_DATA/TestResults.xcresult"
+            -resultBundlePath "$DERIVED_DATA/TestResults.xcresult" \
+            -enableCodeCoverage YES
+
+      # Reported, never enforced: a coverage threshold buys tests that cover
+      # lines instead of tests that check behaviour.
+      - name: Coverage summary
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo '### Coverage'
+            echo '```'
+            xcrun xccov view --report --only-targets "$DERIVED_DATA/TestResults.xcresult"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Everyone builds Debug locally, TestFlight ships Release — and all of
+      # Core/MockData plus the SwiftUI previews sit behind `#if DEBUG`, so the
+      # non-DEBUG side of the code compiles nowhere else. The simulator
+      # destination keeps this unsigned; an archive against a real device would
+      # need certificates and stays out of scope.
+      - name: Build Release
+        shell: bash
+        run: |
+          xcodebuild build \
+            -project FitBuddy.xcodeproj \
+            -scheme FitBuddy \
+            -configuration Release \
+            -destination "platform=iOS Simulator,name=$SIMULATOR_NAME" \
+            -derivedDataPath "$DERIVED_DATA"
 
       # The result bundle carries the failing test names and their assertion
       # messages — worth having without shell access to the runner.
