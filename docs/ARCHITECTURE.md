@@ -118,7 +118,7 @@ flowchart TB
 
     USER["User\n[Person]"]:::person
 
-    subgraph IPHONE["FitBuddy — iPhone (iOS 17+)"]
+    subgraph IPHONE["FitBuddy — iPhone (iOS 26+)"]
         APP["iOS App\nSwift · SwiftUI · MVVM · Swift Concurrency\nURLSession · Swift Charts"]:::system
         SWIFTDATA[("SwiftData Store\n[SQLite · on-device]\nActivity-Cache 90 Tage")]:::storage
         KEYCHAIN[("iOS Keychain\n[Keychain Services]\nAPI-Keys + Consent")]:::storage
@@ -173,13 +173,14 @@ flowchart TB
 ### Kritischer Datenfluss — «Analysieren» (US-3)
 
 ```
-[1] Keychain Read      → Claude API-Key lesen (<1ms, async — KeychainService ist actor, await)
-[2] SwiftData Query    → Workouts 90 Tage laden (async, ModelActor)
-[3] Prompt-Build       → Daten serialisieren (kein Token-Limit definiert ⚠)
-[4] HTTPS POST         → api.anthropic.com (5–30s, kein Streaming, kein Retry ⚠)
-[5] Response parsen    → AI-Empfehlung extrahieren
-[6] SwiftData Write    → Cooldown-Timestamp speichern (Race Condition ⚠)
-[7] @MainActor Update  → SwiftUI re-rendert Ergebnis
+[1] Prioritätsreihenfolge lesen → LLMPriorityStore (UserDefaults, kein Key-Material)
+[2] Keychain Read      → Key je konfiguriertem Provider lesen (async — KeychainService ist actor)
+[3] SwiftData Query    → Workouts der letzten 4 + 4 Wochen laden (async, ModelActor)
+[4] Prompt-Build       → Daten serialisieren (max_tokens serverseitig gedeckelt)
+[5] HTTPS POST (SSE)   → Provider 1 (api.anthropic.com / generativelanguage.googleapis.com /
+                          api.mistral.ai), Streaming; jeder Fehler → Provider 2, dann 3 (#79)
+[6] Cooldown-Write     → UserDefaults, genau einmal pro Durchlauf, sobald ein Provider annimmt
+[7] @MainActor Update  → SwiftUI rendert Text inkrementell + Provider-Badge
 ```
 
 | Lücke | Konsequenz |
@@ -250,7 +251,10 @@ Alle asynchronen Zugriffe folgen drei fixen Ausführungskontexten — gilt schic
 | [ADR-003](adr/ADR-003-keychain-this-device-only.md) | API-Keys im iOS Keychain mit `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` | Proposed |
 | [ADR-004](adr/ADR-004-no-backend-proxy-poc.md) | Kein Backend-Proxy im PoC — Direkter API-Call vom iOS-Client | Proposed |
 | [ADR-005](adr/ADR-005-claude-api-usa-with-dpa.md) | Claude API (USA) via Anthropic Commercial Terms im PoC, EU-Hosting vor v1.0 | Proposed |
-| [ADR-006](adr/ADR-006-fitness-connector-protocol.md) | `FitnessConnector`-Protocol als Abstraktion ab Sprint 1 | Proposed |
+| [ADR-006](adr/ADR-006-fitness-connector-protocol.md) | `FitnessConnector`-Protocol als Abstraktion ab Sprint 1 | Accepted |
+| [ADR-007](adr/ADR-007-multi-provider-llm-byo-key.md) | Multi-Provider-LLM (Claude / Gemini / Mistral) im BYO-Key-Modell | Proposed |
+| [ADR-008](adr/ADR-008-ios26-deployment-target.md) | Mindest-Deployment-Target iOS 26 | Accepted |
+| [ADR-009](adr/ADR-009-self-hosted-ci-runner.md) | CI auf selbst gehostetem macOS-Runner | Accepted |
 
 ---
 
@@ -273,7 +277,8 @@ Bekannte Lücken im PoC-Design — vor Sprint 3 (AI-Integration) adressieren:
 |---|---|---|---|
 | TD-1 | **Kein Token-Limit im Prompt-Build** | `400 context_length_exceeded` bei 90 Tagen × vollem Trainingsvolumen | Prompt-Fenster als Konstante definieren (→ W-2); Daten vor API-Call kürzen |
 | TD-2 | **Cooldown-Write nach API-Call** | Crash-Window → doppelte Analyse-Kosten möglich | Cooldown-Timestamp **vor** dem API-Call schreiben; bei Fehler zurücksetzen |
-| TD-3 | **Kein Backgrounding-Handling beim Claude-Call** | iOS beendet URLSession-Task nach ~30s — Analyse verloren, kein Benutzer-Feedback | `URLSession` mit `background`-Konfiguration oder explizites Timeout + Benutzer-Feedback |
+| TD-3 | **Kein Backgrounding-Handling beim Analyse-Call** | iOS beendet URLSession-Task nach ~30s — Analyse verloren, kein Benutzer-Feedback | `URLSession` mit `background`-Konfiguration oder explizites Timeout + Benutzer-Feedback |
+| TD-4 | **Cert-Pinning für keinen Host umgesetzt** (QA-1, ADR-004) — mit #79 kommen `generativelanguage.googleapis.com` und `api.mistral.ai` zu `api.anthropic.com` und `api.hevyapp.com` dazu | MITM im offenen WLAN kann API-Keys und Gesundheitsdaten abgreifen | `URLSessionDelegate` mit Public-Key-Pinning für alle vier Hosts |
 
 ---
 

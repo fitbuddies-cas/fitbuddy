@@ -3,6 +3,8 @@
 **Status:** Accepted
 **Datum:** 2026-06-03
 
+**Nachtrag (2026-09-02, #108):** Das Mindest-Deployment-Target liegt inzwischen bei iOS 26 ([[ADR-8]]) — SwiftData bleibt als Persistenzschicht unverändert gewählt, nur die damals daraus abgeleitete Untergrenze iOS 17 ist überholt. Damit verschiebt sich auch die Gerätekonsequenz unten: Nicht mehr das iPhone 8, sondern alles unterhalb A13 (iPhone 11 / SE 2. Gen.) fällt weg — iPhone X/XS/XR eingeschlossen. Zusätzlich verlangt das iOS-26-SDK Xcode 26 als Team-Minimum. Kontext und Konsequenzen des Sprungs stehen vollständig in [[ADR-8]]. Beim offenen Punkt «Dedup/Upsert-Strategie» unten ist die iOS-17.x-Bug-Begründung hinfällig; der Punkt selbst wird in [[ADR-8]] mit neuer Priorität (Niedrig, Folge-Issue) weitergeführt, weil das tragende Argument gegen `@Attribute(.unique)` — der Cache wird bewusst ersetzt statt gemerged — davon unberührt bleibt.
+
 ---
 
 ## Kontext

@@ -1,7 +1,12 @@
 import SwiftUI
 
 /// A single labelled progress bar with a trailing value, matching the `FBBar`
-/// primitive from `design/fb-atoms.jsx`. Used for muscle-group distribution.
+/// primitive from `design/fb-atoms.jsx`.
+///
+/// Used by `ExerciseDetailCard` (#98) for an exercise's share of its session's
+/// volume. Deliberately not the dashboard's muscle-group distribution (#27),
+/// which is a Swift Charts bar chart as that task requires — this is the plain
+/// share bar for the places that need one outside a chart.
 struct FBBar: View {
     let label: String
     /// Fill fraction in the range `0...1`.

@@ -8,7 +8,7 @@ final class ConsentViewModel: ObservableObject {
     /// Version of the consent text currently shown. Bump this whenever the
     /// data processing described in the consent changes, so existing users are
     /// asked to consent again.
-    static let currentVersion = "v0"
+    static let currentVersion = "2026-08-21"
 
     /// Whether the user ticked the consent checkbox.
     @Published var hasAcceptedCheckbox = false
@@ -22,6 +22,10 @@ final class ConsentViewModel: ObservableObject {
     /// The confirm button is enabled only with a ticked checkbox and no
     /// in-flight save.
     var canConfirm: Bool { hasAcceptedCheckbox && !isSaving }
+
+    /// Invoked when the user actively confirms consent (not on a bootstrap
+    /// restore) — lets the onboarding coordinator advance to step 2.
+    var onGranted: (() -> Void)?
 
     private let keychain: KeychainService
     private let firstLaunchReset: FirstLaunchResetService
@@ -60,6 +64,14 @@ final class ConsentViewModel: ObservableObject {
         }
     }
 
+    /// Returns to a fresh consent request after the stored consent was deleted
+    /// ("Delete all data" in Settings, #83).
+    func reset() {
+        hasAcceptedCheckbox = false
+        errorMessage = nil
+        state = .required
+    }
+
     /// Persists the current consent version and an ISO8601 timestamp, then
     /// transitions to `.granted`. No-op without a ticked checkbox.
     func confirm() async {
@@ -73,6 +85,7 @@ final class ConsentViewModel: ObservableObject {
             try await keychain.save(Self.currentVersion, for: .consentVersion)
             try await keychain.save(timestamp, for: .consentTimestamp)
             state = .granted
+            onGranted?()
         } catch {
             errorMessage = "Consent could not be saved. Please try again."
         }

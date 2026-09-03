@@ -8,6 +8,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 * Always use the term "PoC" (Proof of Concept) — never "MVP" — when referring to the project scope.
 * If you want to mention a Version (e.g. v1 or v0) - always use v0 for our PoC. Anything beyond our PoC is v1. Do not use v1.1!
 
+## Language Policy
+
+FitBuddy is bilingual by design — English and German each have a fixed scope, never interchangeable:
+
+| Artifact | Language |
+|---|---|
+| Swift code — identifiers, comments | English |
+| In-app UI text | English |
+| Branch & file names | English |
+| Commit messages | English |
+| `README.md`, `docs/*.md`, `docs/adr/` | German |
+| GitHub Issues (titles & bodies) | German |
+| PR titles & descriptions, PR / code reviews (`/code-review`, `/pr-review`) | German — the verdict label (`approve` / `approve-after-fixes` / `request changes`) stays the fixed English tag |
+
+Rule of thumb: code and what sits directly on top of it (comments, commits) is English; anything the team reads as documentation, planning, or review discussion (docs, issues, PRs, reviews) is German.
+
 ## Project
 **FitBuddy** is a CAS (ADAI 2026, BFH Biel) Proof of Concept Project. The app to be built is a native iOS (SwiftUI) training assistant aggregating Hevy API data and delivering on-demand AI recommendations via Claude API.
 
@@ -62,7 +78,7 @@ re-raise DPA/DSFA/AUP as PoC blockers.
 
 - **MVVM:** View (SwiftUI, no logic) → ViewModel (`@MainActor final class ObservableObject`) → Service (`actor`, API/Keychain) → Model (`struct Codable`)
 - **Naming:** `WorkoutListView`, `WorkoutListViewModel`, `HevyService`, `Workout`
-- **Folder-Structure (feature-first):** Each feature gets `Features/<Name>/` containing its `Views/` + ViewModel (e.g. `Features/Onboarding/`, `Features/Dashboard/`, `Features/Analysis/`). Cross-cutting code lives in `Core/` (`Keychain/`, `Connector/`, `Networking/`, `Persistence/`, `DesignSystem/`); app entry & root navigation in `App/`. Add a `domain/`+`data/` split inside a folder **only where it genuinely has both** — for v0 that is only `Core/Connector/` (normalized `Activity` model vs `HevyConnector`/DTOs), not every feature. **Services** follow the same rule: a feature-specific service (e.g. `InferenceService`) lives in its feature folder; a shared/cross-feature service (e.g. `KeychainService`, `HevyConnector`, API client) lives under `Core/` in the matching subfolder.
+- **Folder-Structure (feature-first):** Each feature gets `Features/<Name>/` containing its `Views/` + ViewModel (e.g. `Features/Onboarding/`, `Features/Dashboard/`, `Features/Analysis/`). Cross-cutting code lives in `Core/` (`Keychain/`, `Connector/`, `Networking/`, `Persistence/`, `DesignSystem/`, `Concurrency/`, `LLM/`, `KeyEntry/`, `Privacy/`, `MockData/`); app entry & root navigation in `App/`. Add a `domain/`+`data/` split inside a folder **only where it genuinely has both** — for v0 that is only `Core/Connector/` (normalized `Activity` model vs `HevyConnector`/DTOs), not every feature. **Services** follow the same rule: a feature-specific service (e.g. `InferenceService`) lives in its feature folder; a shared/cross-feature service (e.g. `KeychainService`, `HevyConnector`, API client) lives under `Core/` in the matching subfolder.
 - No force-unwrap. Async/await, not Combine. Keychain only in Services. One type per file.
 - For every new `ViewModel` and `Service`, write corresponding unit tests in `FitBuddyTests/` using XCTest. Views do not require unit tests.
 - All comments in the iOS code base must be in English, no other languages

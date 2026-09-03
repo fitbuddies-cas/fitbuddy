@@ -2,20 +2,31 @@ import SwiftUI
 
 /// Button style matching the `FBButton` primitive from `design/fb-atoms.jsx`.
 /// Full-width by default, 52 pt tall, `FBRadius.control` corners, with a subtle
-/// press animation. Pick a `kind` for the visual treatment. A disabled button
-/// is dimmed (opacity 0.4) so it reads as non-interactive, matching the design.
+/// press animation. Pick a `kind` for the visual treatment, and `height` where
+/// the design calls for a shorter button (the 44 pt feedback pair). A disabled
+/// button is dimmed (opacity 0.4) so it reads as non-interactive, matching the
+/// design.
 struct FBButtonStyle: ButtonStyle {
     enum Kind {
         case primary, accent, secondary, ghost, danger
     }
 
+    /// The default control height from `design/fb-atoms.jsx`.
+    static let defaultHeight: CGFloat = 52
+
     var kind: Kind = .primary
     var fullWidth = true
+    var height: CGFloat = FBButtonStyle.defaultHeight
 
     func makeBody(configuration: Configuration) -> some View {
         // Routed through an inner view so the style can read `isEnabled` from
         // the environment (a ButtonStyle's configuration does not expose it).
-        FBButtonBody(kind: kind, fullWidth: fullWidth, configuration: configuration)
+        FBButtonBody(
+            kind: kind,
+            fullWidth: fullWidth,
+            height: height,
+            configuration: configuration
+        )
     }
 
     private struct FBButtonBody: View {
@@ -23,6 +34,7 @@ struct FBButtonStyle: ButtonStyle {
 
         let kind: Kind
         let fullWidth: Bool
+        let height: CGFloat
         let configuration: Configuration
 
         var body: some View {
@@ -31,7 +43,7 @@ struct FBButtonStyle: ButtonStyle {
                 .font(.headline)
                 .foregroundStyle(foreground)
                 .frame(maxWidth: fullWidth ? .infinity : nil)
-                .frame(height: 52)
+                .frame(height: height)
                 .padding(.horizontal, fullWidth ? 0 : 20)
                 .background(background)
                 .overlay(
@@ -87,7 +99,11 @@ struct FBButtonStyle: ButtonStyle {
 
 extension ButtonStyle where Self == FBButtonStyle {
     /// `Button("…") { }.buttonStyle(.fb(.primary))`
-    static func fb(_ kind: FBButtonStyle.Kind = .primary, fullWidth: Bool = true) -> FBButtonStyle {
-        FBButtonStyle(kind: kind, fullWidth: fullWidth)
+    static func fb(
+        _ kind: FBButtonStyle.Kind = .primary,
+        fullWidth: Bool = true,
+        height: CGFloat = FBButtonStyle.defaultHeight
+    ) -> FBButtonStyle {
+        FBButtonStyle(kind: kind, fullWidth: fullWidth, height: height)
     }
 }

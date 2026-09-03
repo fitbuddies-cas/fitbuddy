@@ -10,7 +10,7 @@ struct HevyKeyEntryView: View {
 
     private var isValidating: Bool { viewModel.state == .validating }
 
-    private var failure: HevyKeyEntryState.Failure? {
+    private var failure: APIKeyEntryFailure? {
         if case .failed(let failure) = viewModel.state { return failure }
         return nil
     }
@@ -18,12 +18,12 @@ struct HevyKeyEntryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                stepIndicator
+                FBStepIndicator(current: 2)
                     .padding(.bottom, 22)
-                Text("Connect Hevy")
+                Text("Connect \(HevyKeyPresentation.displayName)")
                     .font(.largeTitle.bold())
                     .foregroundStyle(Color.fbInk)
-                Text("Paste the API key from your Hevy account. We'll verify it before saving.")
+                Text("Paste the API key from your \(HevyKeyPresentation.displayName) account. We'll verify it before saving.")
                     .font(.subheadline)
                     .foregroundStyle(Color.fbInkSecondary)
                     .padding(.top, 8)
@@ -47,35 +47,17 @@ struct HevyKeyEntryView: View {
 
     // MARK: - Sections
 
-    /// Three-segment progress bar; this screen is always step 2 of 3.
-    private var stepIndicator: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<3) { index in
-                Capsule()
-                    .fill(index <= 1 ? Color.fbInk : Color.fbBorder)
-                    .frame(height: 3)
-            }
-            Text("Step 2 of 3")
-                .font(.fbLabel)
-                .foregroundStyle(Color.fbMuted)
-                .padding(.leading, 8)
-                .fixedSize()
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Onboarding step 2 of 3")
-    }
-
     /// Explains where the key lives in Hevy (AC1). The dashed box is a
     /// placeholder for the Hevy settings screenshot, as in the design mock.
     private var whereToFindCard: some View {
         HStack(alignment: .top, spacing: 12) {
             screenshotPlaceholder
             VStack(alignment: .leading, spacing: 6) {
-                Text("The key is not available in the Hevy app — only on the Hevy website. Log in at **hevy.com**, open **Settings → Developer**, and tap **Generate API key**.")
+                Text(.markdownOrPlain(HevyKeyPresentation.consoleInstructions))
                     .font(.footnote)
                     .foregroundStyle(Color.fbInkSecondary)
-                Link(destination: HevyKeyEntryViewModel.hevyAPISettingsURL) {
-                    Text("Open hevy.com ↗")
+                Link(destination: HevyKeyPresentation.consoleURL) {
+                    Text("Open \(HevyKeyPresentation.consoleName) ↗")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(Color.fbAccent)
                 }
@@ -108,47 +90,16 @@ struct HevyKeyEntryView: View {
     }
 
     private var keyInput: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("HEVY API KEY")
-                .font(.fbLabel)
-                .foregroundStyle(Color.fbMuted)
-            HStack(spacing: 8) {
-                Image(systemName: "lock")
-                    .font(.system(size: 14))
-                    .foregroundStyle(viewModel.apiKey.isEmpty ? Color.fbMuted : Color.fbInkSecondary)
-                TextField("hv_live_…", text: $viewModel.apiKey)
-                    .font(.system(.subheadline, design: .monospaced))
-                    .foregroundStyle(Color.fbInk)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.asciiCapable)
-                    .submitLabel(.go)
-                    .focused($keyFieldIsFocused)
-                    .disabled(isValidating)
-                    .onSubmit { Task { await viewModel.connect() } }
-                if isValidating {
-                    FBSpinner(size: 18, color: .fbMuted)
-                }
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 56)
-            .background(Color.fbCard)
-            .clipShape(RoundedRectangle(cornerRadius: FBRadius.control))
-            .overlay(
-                RoundedRectangle(cornerRadius: FBRadius.control)
-                    .strokeBorder(inputBorderColor, lineWidth: inputBorderWidth)
-            )
+        FBKeyField(
+            label: "\(HevyKeyPresentation.displayName.uppercased()) API KEY",
+            placeholder: HevyKeyPresentation.keyPlaceholder,
+            text: $viewModel.apiKey,
+            isBusy: isValidating,
+            hasError: failure == .invalidKey,
+            focus: $keyFieldIsFocused
+        ) {
+            Task { await viewModel.connect() }
         }
-    }
-
-    private var inputBorderColor: Color {
-        if failure == .invalidKey { return .fbRed }
-        return viewModel.apiKey.isEmpty ? .fbBorder : .fbInk
-    }
-
-    private var inputBorderWidth: CGFloat {
-        if failure == .invalidKey { return 2 }
-        return viewModel.apiKey.isEmpty ? 1 : 1.5
     }
 
     private var storageNote: some View {
@@ -159,18 +110,19 @@ struct HevyKeyEntryView: View {
     }
 
     /// Failure banner (AC3): explains what went wrong and, for a rejected key,
-    /// links straight to Hevy's API-key page.
-    private func errorBanner(for failure: HevyKeyEntryState.Failure) -> some View {
+    /// links straight to Hevy's API-key page. The copy lives on
+    /// `APIKeyEntryFailure` so the settings key editor (#83) says the same thing.
+    private func errorBanner(for failure: APIKeyEntryFailure) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(bannerTitle(for: failure))
+            Text(failure.title(for: HevyKeyPresentation.displayName))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Color.fbRed)
-            Text(bannerMessage(for: failure))
+            Text(failure.message(for: HevyKeyPresentation.displayName))
                 .font(.footnote)
                 .foregroundStyle(Color.fbInkSecondary)
             if failure == .invalidKey {
-                Link(destination: HevyKeyEntryViewModel.hevyAPISettingsURL) {
-                    Text("Open hevy.com API settings ↗")
+                Link(destination: HevyKeyPresentation.consoleURL) {
+                    Text("Open \(HevyKeyPresentation.consoleName) API settings ↗")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(Color.fbRed)
                 }
@@ -185,28 +137,6 @@ struct HevyKeyEntryView: View {
             RoundedRectangle(cornerRadius: FBRadius.control)
                 .strokeBorder(Color.fbRedBorder, lineWidth: 1)
         )
-    }
-
-    private func bannerTitle(for failure: HevyKeyEntryState.Failure) -> String {
-        switch failure {
-        case .invalidKey: return "Hevy rejected this key (HTTP 401)"
-        case .network: return "Could not reach Hevy"
-        case .serviceUnavailable: return "Hevy is currently unavailable"
-        case .keychain: return "Could not save your key"
-        }
-    }
-
-    private func bannerMessage(for failure: HevyKeyEntryState.Failure) -> String {
-        switch failure {
-        case .invalidKey:
-            return "The key may be revoked or mistyped. Generate a new one on hevy.com (Settings → Developer), then paste it here."
-        case .network:
-            return "Check your internet connection and try again."
-        case .serviceUnavailable:
-            return "Hevy answered with an unexpected error — your key was not rejected. Please try again in a little while."
-        case .keychain:
-            return "The key could not be stored on this device. Please try again."
-        }
     }
 
     private var ctaButton: some View {
@@ -225,7 +155,7 @@ struct HevyKeyEntryView: View {
     }
 
     private var ctaTitle: String {
-        if isValidating { return "Verifying with Hevy…" }
+        if isValidating { return "Verifying with \(HevyKeyPresentation.displayName)…" }
         if failure == .invalidKey { return "Try again" }
         return "Verify & continue"
     }

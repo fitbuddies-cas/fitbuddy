@@ -5,9 +5,6 @@ import Foundation
 /// accepted it, so no unverified key is ever kept.
 @MainActor
 final class HevyKeyEntryViewModel: ObservableObject {
-    /// Hevy page where the user creates/manages API keys (AC3 error link).
-    static let hevyAPISettingsURL = URL(staticString: "https://hevy.com/settings?developer")
-
     /// Raw text field content. Editing after a failure returns to `.idle` so
     /// the error styling clears as soon as the user starts fixing the key.
     @Published var apiKey = "" {
@@ -16,6 +13,10 @@ final class HevyKeyEntryViewModel: ObservableObject {
         }
     }
     @Published private(set) var state: HevyKeyEntryState = .unknown
+
+    /// Invoked when a key was actively validated and stored (not on a
+    /// bootstrap restore) — lets the onboarding coordinator advance to step 3.
+    var onConnected: (() -> Void)?
 
     private let validator: HevyKeyValidating
     private let keychain: KeychainService
@@ -68,7 +69,7 @@ final class HevyKeyEntryViewModel: ObservableObject {
         do {
             try await validator.validate(key)
         } catch let error as HevyKeyValidationError {
-            state = .failed(Self.failure(for: error))
+            state = .failed(APIKeyEntryFailure(error))
             return
         } catch {
             // The protocol allows arbitrary errors; without an HTTP response
@@ -80,23 +81,18 @@ final class HevyKeyEntryViewModel: ObservableObject {
         do {
             try await keychain.save(key, for: .hevyAPIKey)
             state = .connected
+            onConnected?()
         } catch {
             state = .failed(.keychain)
         }
     }
 
-    /// Maps validator errors to banner failures. Exhaustive on purpose: a new
-    /// validator error case must make a conscious copy decision here instead
-    /// of silently inheriting the "check your internet" advice.
-    private static func failure(for error: HevyKeyValidationError) -> HevyKeyEntryState.Failure {
-        switch error {
-        case .invalidKey:
-            return .invalidKey
-        case .transport:
-            return .network
-        case .unexpectedStatus:
-            return .serviceUnavailable
-        }
+    /// Returns to fresh input after the stored key was invalidated (HTTP 401
+    /// anywhere in the app). Clears the field so the rejected key cannot be
+    /// resubmitted by accident.
+    func reset() {
+        apiKey = ""
+        state = .idle
     }
 
     /// Resets a failed attempt back to editing (the "Try again" CTA).

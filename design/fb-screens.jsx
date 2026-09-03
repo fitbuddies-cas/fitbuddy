@@ -271,7 +271,7 @@ function FBDashboardScreen({ variant = 'data', onAnalyze, syncBanner = false, an
                   Ready for a progression check?
                 </div>
                 <div style={{ marginTop: 4, fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.4 }}>
-                  Based on your last 30 days, get a concrete recommendation in ~10 s.
+                  Based on your last 4 weeks, get a concrete recommendation in ~10 s.
                 </div>
                 <button onClick={onAnalyze} style={{
                   marginTop: 14, height: 40, padding: '0 16px', borderRadius: 10,
@@ -341,7 +341,7 @@ function FBDashboardScreen({ variant = 'data', onAnalyze, syncBanner = false, an
           <FBCard pad={0} style={{ overflow: 'hidden' }}>
             <div style={{ padding: '14px 16px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <FBLabel>Recent sessions</FBLabel>
-              <div style={{ fontSize: 12, color: FB.accent, fontWeight: 600 }}>See all 42</div>
+              <div style={{ fontSize: 12, color: FB.muted }}>42 total</div>
             </div>
             {RECENT_SESSIONS.map((s, i) => (
               <div key={i} style={{
@@ -406,6 +406,184 @@ function FBDashboardEmpty() {
 
 
 // ─────────────────────────────────────────────────────────────────────
+// US-2 · Workout-Detail (2.4) — Drill-down aus «Recent sessions»
+// ─────────────────────────────────────────────────────────────────────
+
+const DETAIL_EXERCISES = [
+  {
+    muscle: 'Chest',
+    title: 'Bench Press (Barbell)',
+    note: 'Paused first rep of every set.',
+    volume: '2.4k', pct: 74, counted: 3,
+    sets: [
+      { n: 'W', metrics: '60 kg · 10 reps', rpe: null },
+      { n: '1', metrics: '102.5 kg · 8 reps', rpe: 'RPE 8' },
+      { n: '2', metrics: '102.5 kg · 8 reps', rpe: 'RPE 9' },
+      { n: '3', metrics: '102.5 kg · 7 reps', rpe: 'RPE 9.5' },
+    ],
+  },
+  {
+    muscle: 'Shoulders',
+    title: 'Shoulder Press (Dumbbell)',
+    superset: 1,
+    volume: '780', pct: 24, counted: 3,
+    sets: [
+      { n: '1', metrics: '26 kg · 10 reps', rpe: 'RPE 8' },
+      { n: '2', metrics: '26 kg · 10 reps', rpe: 'RPE 8' },
+      { n: '3', metrics: '26 kg · 10 reps', rpe: 'RPE 8' },
+    ],
+  },
+  {
+    // Bodyweight: no weight was logged, so none is shown — never "0 kg".
+    muscle: 'Chest',
+    title: 'Dips',
+    superset: 1,
+    volume: '0', pct: 0, counted: 3,
+    sets: [
+      { n: '1', metrics: '12 reps', rpe: null },
+      { n: '2', metrics: '11 reps', rpe: null },
+      { n: '3', metrics: '10 reps', rpe: null },
+    ],
+  },
+  {
+    // Cardio: distance and time, again with no weight column invented.
+    muscle: 'Other',
+    title: 'Treadmill',
+    volume: '0', pct: 0, counted: 1,
+    sets: [
+      { n: '1', metrics: '2.4 km · 13:00', rpe: null },
+    ],
+  },
+];
+
+function FBWorkoutDetailScreen({ onBack }) {
+  return (
+    <FBScreen padding="0">
+      {/* Inline nav bar — the screen is pushed, not presented */}
+      <div style={{
+        position: 'sticky', top: 0, zIndex: 2,
+        padding: '54px 16px 10px',
+        background: 'rgba(242,241,237,0.92)',
+        backdropFilter: 'blur(16px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+        borderBottom: `1px solid ${FB.border}`,
+        display: 'flex', alignItems: 'center', gap: 8,
+      }}>
+        <button onClick={onBack} style={{
+          display: 'flex', alignItems: 'center', gap: 4,
+          border: 'none', background: 'transparent', cursor: 'pointer',
+          fontFamily: FB.font, fontSize: 15, fontWeight: 500, color: FB.ink, padding: 0,
+        }}>
+          <svg width="9" height="15" viewBox="0 0 9 15">
+            <path d="M7.5 1L1 7.5 7.5 14" stroke={FB.ink} strokeWidth="2" fill="none"
+              strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Dashboard
+        </button>
+        <div style={{
+          flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 600,
+          letterSpacing: -0.2, marginRight: 76,
+        }}>Push Day</div>
+      </div>
+
+      <div style={{ padding: '12px 16px 40px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {/* Session header */}
+        <FBCard pad={18}>
+          <FBLabel>Monday, 25 May 2026</FBLabel>
+          <div style={{ marginTop: 8, fontSize: 20, fontWeight: 600, letterSpacing: -0.4 }}>
+            Push Day
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <FBStat label="Volume" value="3,138" unit="kg" />
+          </div>
+          <div style={{
+            marginTop: 10, fontSize: 13, color: FB.ink2,
+            fontVariantNumeric: 'tabular-nums',
+          }}>
+            4 exercises · 10 sets · 1 h 12 min
+          </div>
+        </FBCard>
+
+        {/* Hevy's own session note */}
+        <FBCard pad={16}>
+          <div style={{ fontSize: 14, color: FB.ink2, lineHeight: 1.45 }}>
+            Felt strong, bar speed held up across all top sets.
+          </div>
+        </FBCard>
+
+        {DETAIL_EXERCISES.map(ex => (
+          <FBExerciseCard key={ex.title} {...ex} />
+        ))}
+      </div>
+    </FBScreen>
+  );
+}
+
+function FBExerciseCard({ muscle, title, note, superset, volume, pct, counted, sets }) {
+  const hasVolume = pct > 0;
+
+  return (
+    <FBCard pad={16}>
+      <FBLabel>{muscle}</FBLabel>
+      <div style={{
+        marginTop: 4, display: 'flex', alignItems: 'baseline', gap: 8,
+      }}>
+        <div style={{ flex: 1, fontSize: 17, fontWeight: 600, letterSpacing: -0.3 }}>{title}</div>
+        {superset && (
+          <div style={{
+            padding: '3px 8px', borderRadius: 999,
+            background: FB.accentSoft, color: FB.accentInk,
+            fontSize: 11, fontWeight: 500,
+          }}>Superset {superset}</div>
+        )}
+      </div>
+
+      {note && (
+        <div style={{
+          marginTop: 10, padding: 10, borderRadius: 14,
+          background: FB.cardSubtle, fontSize: 12, color: FB.ink2, lineHeight: 1.4,
+        }}>{note}</div>
+      )}
+
+      {/* Share of the session's volume — the FBBar primitive */}
+      <div style={{ marginTop: 6 }}>
+        {hasVolume ? (
+          <FBBar label={`${counted} sets`} pct={pct} value={volume} />
+        ) : (
+          <div style={{ padding: '7px 0', fontSize: 12, color: FB.muted }}>
+            {counted} counted sets
+          </div>
+        )}
+      </div>
+
+      <div style={{ borderTop: `1px solid ${FB.divider}`, marginTop: 4, paddingTop: 4 }}>
+        {sets.map((s, i) => (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'baseline', gap: 12, padding: '7px 0',
+          }}>
+            <div style={{
+              width: 22, fontSize: 12, fontWeight: 600,
+              fontVariantNumeric: 'tabular-nums',
+              // Warm-ups are marked, not numbered: they do not count towards
+              // the volume printed above.
+              color: s.n === 'W' ? FB.warn : FB.muted,
+            }}>{s.n}</div>
+            <div style={{
+              flex: 1, fontSize: 14, fontVariantNumeric: 'tabular-nums', letterSpacing: -0.2,
+            }}>{s.metrics}</div>
+            {s.rpe && (
+              <div style={{ fontSize: 12, color: FB.muted, fontVariantNumeric: 'tabular-nums' }}>
+                {s.rpe}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </FBCard>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // US-3 · AI-Analyse auf Knopfdruck
 // ─────────────────────────────────────────────────────────────────────
 
@@ -437,7 +615,7 @@ function FBAnalyzeLoadingScreen({ longWait = false, onCancel }) {
         <div style={{
           marginTop: 6, fontSize: 24, fontWeight: 700, letterSpacing: -0.5, lineHeight: 1.2,
         }}>
-          Analyzing your<br/>last 30 days
+          Analyzing your<br/>last 4 weeks
         </div>
 
         {/* Steps */}
@@ -541,7 +719,7 @@ function FBAnalysisResultScreen({ variant = 'progression', feedback = null, cool
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
           <span style={{ width: 6, height: 6, borderRadius: 3, background: FB.accent }} />
-          Based on <strong style={{ color: FB.ink, fontWeight: 600 }}>14 Hevy workouts</strong> · last 30 days
+          Based on <strong style={{ color: FB.ink, fontWeight: 600 }}>14 Hevy workouts</strong> · last 4 weeks
         </div>
 
         {/* Recommendations */}
@@ -779,6 +957,6 @@ function RecoveryRecCard() {
 
 Object.assign(window, {
   FBWelcomeScreen, FBKeyEntryScreen,
-  FBDashboardScreen,
+  FBDashboardScreen, FBWorkoutDetailScreen,
   FBAnalyzeLoadingScreen, FBAnalysisResultScreen,
 });
