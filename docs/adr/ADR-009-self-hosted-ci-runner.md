@@ -26,6 +26,8 @@ Bewusst nicht Teil des Umfangs:
 - **Keine Secrets.** Durch das BYO-Key-Modell braucht die Testsuite weder Hevy- noch LLM-Keys. Der Runner bekommt keine und soll nie welche sehen.
 - **Kein Code-Signing, kein Archive-, kein TestFlight-Job.** Simulator-Builds signieren nicht; der gesamte Zertifikats- und Provisioning-Komplex bleibt draussen. TestFlight-Builds werden weiterhin von Hand erzeugt.
 
+**Der Status-Check läuft vorerst informativ, nicht verbindlich.** Ein erforderlicher Check würde jeden Merge blockieren, sobald der Mac mini schläft, ausgeschaltet ist oder das Heimnetz klemmt — bei einem Rechner, der zugleich Arbeitsgerät ist, ist das ein realistischer Alltag und kein Randfall. Verbindlich (Branch-Protection) wird er, sobald die Verfügbarkeit über einige Wochen Betrieb belegt ist.
+
 Der Runner läuft als LaunchAgent unter einem eigenen Benutzer ohne Admin-Rechte. Build-Output landet unter `$GITHUB_WORKSPACE/.derivedData` statt im geteilten `~/Library/Developer/Xcode/DerivedData` und wird nach jedem Job gelöscht.
 
 ## Konsequenzen
@@ -50,6 +52,6 @@ Der Runner läuft als LaunchAgent unter einem eigenen Benutzer ohne Admin-Rechte
 
 | Frage | Priorität | Fällig |
 |---|---|---|
-| Status-Check auf `develop` verbindlich (Branch-Protection) oder vorerst nur informativ? | Hoch | mit #113 |
+| Status-Check verbindlich schalten (Branch-Protection), sobald die Runner-Verfügbarkeit belegt ist | Mittel | nach ~4 Wochen Betrieb |
 | Zweiter Runner, falls die Warteschlange stört | Niedrig | bei Bedarf |
 | Ephemere Runner, falls geteilter Zustand zu Fehlschlägen führt | Niedrig | bei Bedarf |

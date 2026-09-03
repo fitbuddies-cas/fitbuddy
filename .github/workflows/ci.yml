@@ -4,8 +4,10 @@ name: CI
 # own macOS runner (#113, ADR-9). An iOS build needs macOS and Xcode, so this
 # workflow cannot fall back to a GitHub-hosted Linux runner.
 on:
+  # `branches` filters on the *base*: with develop alone, the weekly
+  # develop -> main release PR would be the one merge without a check.
   pull_request:
-    branches: [develop]
+    branches: [develop, main]
   push:
     branches: [develop]
 
@@ -13,10 +15,12 @@ permissions:
   contents: read
 
 # One self-hosted runner works through jobs serially, so superseded runs of the
-# same branch are pointless queue time.
+# same PR are pointless queue time. Pushes are exempt: on develop every run
+# shares one group, and cancelling would leave merged commits without a
+# verdict — which is what a later bisect needs.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -43,7 +47,7 @@ jobs:
         shell: bash
         run: |
           xcodebuild -version
-          xcrun simctl list runtimes | grep -q "iOS 26" \
+          xcrun simctl list runtimes available | grep -q "iOS 26" \
             || { echo "::error::No iOS 26 simulator runtime installed — run: xcodebuild -downloadPlatform iOS"; exit 1; }
           xcrun simctl list devices available | grep -q "$SIMULATOR_NAME (" \
             || { echo "::error::No '$SIMULATOR_NAME' simulator — run: xcrun simctl create \"$SIMULATOR_NAME\" \"$SIMULATOR_NAME\""; exit 1; }
