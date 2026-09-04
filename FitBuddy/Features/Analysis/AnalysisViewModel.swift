@@ -650,7 +650,13 @@ final class AnalysisViewModel: ObservableObject {
     /// passes the view's own cancellation through, so closing the screen still
     /// ends the wait immediately rather than a minute later.
     private func tick(after interval: TimeInterval) async {
-        let sleeper = Task { try? await Task.sleep(for: .seconds(interval)) }
+        let sleeper = Task {
+            // Discarded on purpose, and `_ =` rather than `try?` as the
+            // closure's result: a cancelled sleep ends the wait exactly like
+            // an elapsed one, and the optional would make this a
+            // `Task<Void?, Never>`.
+            _ = try? await Task.sleep(for: .seconds(interval))
+        }
         tickerSleep = sleeper
         await withTaskCancellationHandler {
             await sleeper.value
