@@ -32,7 +32,7 @@ final class AnalysisHistoryViewModel: ObservableObject {
     /// delete, so the list never drifts from the store.
     func load() async {
         do {
-            entries = try await store.recent(limit: AnalysisResultStore.historyLimit)
+            entries = try await store.recent(limit: AnalysisHistoryLimit.rows)
             failure = nil
         } catch {
             logger.error("Analysis history not readable: \(error, privacy: .public)")

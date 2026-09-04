@@ -73,6 +73,9 @@ final class AnalysisViewModel: ObservableObject {
     private var runID: UInt64 = 0
     /// Fires once `slowThreshold` has passed without a first token.
     private var slowTask: Task<Void, Never>?
+    /// The ticker's current sleep, held so a lock that starts while the ticker
+    /// is resting can cut that sleep short (#117).
+    private var tickerSleep: Task<Void, Never>?
     /// Whether the user deliberately dismissed the stored recommendation by
     /// tapping "New analysis". Held so a reopened sheet does not put it right
     /// back — and cleared again as soon as the run they asked for is under
@@ -577,7 +580,17 @@ final class AnalysisViewModel: ObservableObject {
     func refreshCooldown() async -> Date? {
         let reference = now()
         let availableAt = await rateLimit.activeLock(now: reference)
+        let wasResting = cooldownMessage == nil
         cooldownMessage = CooldownFormatter.message(until: availableAt, now: reference)
+        // The lock starts mid-call, which is almost always while the ticker is
+        // resting — and a resting sleep is a minute long. Without this the
+        // countdown would stand still for most of the 60s it is counting down,
+        // which is exactly the second-by-second stretch the fast rate exists
+        // for. Cutting the sleep short here puts the loop back on `tickInterval`
+        // on its next pass.
+        if wasResting, cooldownMessage != nil {
+            tickerSleep?.cancel()
+        }
         // Both labels age at the same rate and are driven by the same ticker,
         // so they are refreshed together against one reading of the clock.
         refreshResultAge(now: reference)
@@ -625,11 +638,25 @@ final class AnalysisViewModel: ObservableObject {
     func trackCooldown() async {
         while !Task.isCancelled {
             let availableAt = await refreshCooldown()
-            do {
-                try await Task.sleep(for: .seconds(availableAt == nil ? restingTickInterval : tickInterval))
-            } catch {
-                return
-            }
+            await tick(after: availableAt == nil ? restingTickInterval : tickInterval)
         }
+    }
+
+    /// Waits out one tick — or less, when `refreshCooldown()` sees a lock start
+    /// and cancels the sleep.
+    ///
+    /// Its own task rather than a bare `Task.sleep`, because that is what makes
+    /// the sleep interruptible from outside the loop. The cancellation handler
+    /// passes the view's own cancellation through, so closing the screen still
+    /// ends the wait immediately rather than a minute later.
+    private func tick(after interval: TimeInterval) async {
+        let sleeper = Task { try? await Task.sleep(for: .seconds(interval)) }
+        tickerSleep = sleeper
+        await withTaskCancellationHandler {
+            await sleeper.value
+        } onCancel: {
+            sleeper.cancel()
+        }
+        tickerSleep = nil
     }
 }

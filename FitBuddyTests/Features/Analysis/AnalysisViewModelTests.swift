@@ -699,6 +699,35 @@ final class AnalysisViewModelTests: XCTestCase {
         ticker.cancel()
     }
 
+    /// The lock starts mid-call, which is almost always while the ticker is
+    /// resting. If the resting sleep had to run out first, the countdown would
+    /// stand still for most of the 60s it counts down — the stretch the fast
+    /// rate exists for.
+    func testALockStartedWhileTheTickerRestsCutsTheRestingSleepShort() async {
+        let clock = TestClock(Self.reference)
+        // A resting interval far beyond the test's own timeout: if the loop
+        // had to wait it out, the countdown below would never move.
+        let sut = makeSUT(clock: clock, tickInterval: 0.01, restingTickInterval: 600)
+
+        let ticker = Task { await sut.trackCooldown() }
+        await waitUntil("the ticker has settled with no lock") {
+            sut.cooldownMessage == nil
+        }
+
+        // Stands in for the service recording the call once a provider
+        // accepted the request, mid-run.
+        await rateLimit.recordCall(at: Self.reference)
+        await sut.refreshCooldown()
+        XCTAssertEqual(sut.cooldownMessage, "New analysis available in 60s")
+
+        clock.advance(by: 15)
+        await waitUntil("the countdown moves without waiting out the resting sleep") {
+            sut.cooldownMessage == "New analysis available in 45s"
+        }
+
+        ticker.cancel()
+    }
+
     /// `InferenceService` starts the lock mid-call, so the label has to be
     /// re-read when the run ends — not only when the screen is next opened.
     func testTheLabelIsRefreshedAfterARun() async {

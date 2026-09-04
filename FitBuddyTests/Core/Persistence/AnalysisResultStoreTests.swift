@@ -108,7 +108,7 @@ final class AnalysisResultStoreTests: XCTestCase {
     /// The cap is what keeps the device from accumulating health-derived text
     /// nobody ever scrolls back to.
     func testTheStoreNeverHoldsMoreThanTwentyAnalyses() async throws {
-        for index in 0..<(AnalysisResultStore.historyLimit + 5) {
+        for index in 0..<(AnalysisHistoryLimit.rows + 5) {
             try await sut.save(
                 text: "Analysis \(index)",
                 generatedAt: Self.reference.addingTimeInterval(Double(index) * 3_600),
@@ -119,10 +119,10 @@ final class AnalysisResultStoreTests: XCTestCase {
         let context = ModelContext(container)
         XCTAssertEqual(
             try context.fetchCount(FetchDescriptor<AnalysisResult>()),
-            AnalysisResultStore.historyLimit
+            AnalysisHistoryLimit.rows
         )
         // The newest survive the trim, the oldest are the ones dropped.
-        let recent = try await sut.recent(limit: AnalysisResultStore.historyLimit)
+        let recent = try await sut.recent(limit: AnalysisHistoryLimit.rows)
         XCTAssertEqual(recent.first?.text, "Analysis 24")
         XCTAssertEqual(recent.last?.text, "Analysis 5")
     }

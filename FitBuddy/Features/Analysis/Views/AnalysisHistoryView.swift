@@ -30,7 +30,11 @@ struct AnalysisHistoryView: View {
 
     @ViewBuilder
     private var content: some View {
-        if viewModel.entries.isEmpty && viewModel.isLoaded {
+        // A failed read goes to the list, empty or not: it is the only place
+        // that renders `failure`, and "No saved analyses" over a store that
+        // could not be read tells the user their analyses are gone when they
+        // are still on the device.
+        if viewModel.entries.isEmpty && viewModel.isLoaded && viewModel.failure == nil {
             emptyState
         } else {
             list

@@ -8,14 +8,6 @@ import SwiftData
 /// the `@MainActor`, and only value types leave this actor.
 @ModelActor
 actor AnalysisResultStore {
-    /// How many recommendations are kept. Everything past this is dropped on
-    /// the next save, newest kept.
-    ///
-    /// Twenty rather than everything: the history is there to look a few weeks
-    /// back, not to be an archive, and a prose recommendation the user never
-    /// scrolls to is still health-derived data sitting on the device.
-    static let historyLimit = 20
-
     /// Appends a finished recommendation and returns its identity.
     ///
     /// Insert and trim share one `save()`, so a failing write leaves the
@@ -85,7 +77,8 @@ actor AnalysisResultStore {
         return try modelContext.fetch(descriptor).first
     }
 
-    /// Deletes everything past `historyLimit`, newest kept, without saving.
+    /// Deletes everything past `AnalysisHistoryLimit.rows`, newest kept,
+    /// without saving.
     ///
     /// The surplus is taken with `dropFirst` rather than with the descriptor's
     /// `fetchOffset`: on a context holding the freshly inserted row, that
@@ -100,8 +93,8 @@ actor AnalysisResultStore {
             sortBy: [SortDescriptor(\.generatedAt, order: .reverse)]
         )
         let stored = try modelContext.fetch(descriptor)
-        guard stored.count > Self.historyLimit else { return }
-        for surplus in stored.dropFirst(Self.historyLimit) {
+        guard stored.count > AnalysisHistoryLimit.rows else { return }
+        for surplus in stored.dropFirst(AnalysisHistoryLimit.rows) {
             modelContext.delete(surplus)
         }
     }

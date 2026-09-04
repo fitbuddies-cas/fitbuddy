@@ -40,11 +40,24 @@ struct AnalysisHistoryRow: View {
         .accessibilityLabel(accessibilityLabel)
     }
 
-    /// The marker-free opening of the recommendation: the raw text would put
-    /// asterisks into the preview and read them out in VoiceOver.
+    /// The marker-free recommendation: the raw text would put asterisks into
+    /// the preview and read them out in VoiceOver.
     private var preview: String {
         AnalysisTextFormatter.plainText(from: entry.text)
     }
+
+    /// What VoiceOver reads — the opening of the recommendation, not all of
+    /// it. `.lineLimit(2)` shortens the row visually but not for a screen
+    /// reader, which would otherwise read some 200 words per row on a list of
+    /// twenty. The whole text is one tap away in `AnalysisHistoryDetailView`.
+    private var previewSnippet: String {
+        let flattened = preview.replacingOccurrences(of: "\n", with: " ")
+        guard flattened.count > Self.snippetLength else { return flattened }
+        return String(flattened.prefix(Self.snippetLength)) + "…"
+    }
+
+    /// Roughly the two lines the row shows.
+    private static let snippetLength = 120
 
     private var age: String {
         SyncTimeFormatter.relative(since: entry.generatedAt, now: now)
@@ -55,7 +68,7 @@ struct AnalysisHistoryRow: View {
         if let feedback = entry.feedback {
             parts.append("rated \(feedback.label)")
         }
-        parts.append(preview)
+        parts.append(previewSnippet)
         return parts.joined(separator: ", ")
     }
 }

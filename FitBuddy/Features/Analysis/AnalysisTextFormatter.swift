@@ -32,7 +32,7 @@ enum AnalysisTextFormatter {
             paragraph = []
         }
 
-        for line in withoutDanglingEmphasis(raw).components(separatedBy: .newlines) {
+        for line in normalizedEmphasis(raw).components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty {
                 flushParagraph()
@@ -123,27 +123,40 @@ enum AnalysisTextFormatter {
     ///
     /// Inline-only: a full Markdown pass would re-interpret the line breaks and
     /// list markers this formatter has already decided about. A text the parser
-    /// rejects falls back to itself unchanged — an unreadable answer is still
-    /// the answer the user paid for, and no `try!` belongs on a provider's
-    /// output.
+    /// rejects falls back to itself, minus the escapes that were only ever for
+    /// that parser — an unreadable answer is still the answer the user paid
+    /// for, and no `try!` belongs on a provider's output.
     private static func inline(_ text: String) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .inlineOnlyPreservingWhitespace
         )
-        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
+        guard let parsed = try? AttributedString(markdown: text, options: options) else {
+            // The escapes `normalizedEmphasis(_:)` added are for the parser
+            // that just refused the text; showing them raw would put a
+            // backslash on screen instead of the asterisk they protect.
+            return AttributedString(text.replacingOccurrences(of: "\\*", with: "*"))
+        }
+        return parsed
     }
 
-    /// Drops an emphasis marker the text never closes — the half-written
-    /// `**` at the end of a streaming answer.
+    /// Settles every `*` in the text before the parser sees it: the ones that
+    /// are markers, the ones that are not, and the one the stream has not
+    /// finished writing.
     ///
-    /// Only the marker goes; the words after it stay visible and simply grow as
-    /// the stream continues, so the line does not jump when the pair completes.
-    ///
-    /// A `*` surrounded by spaces is not a marker at all ("5 * 5 sets"): it is
-    /// left alone, so arithmetic in a recommendation survives this pass.
-    private static func withoutDanglingEmphasis(_ text: String) -> String {
+    /// - A marker the text never closes — the half-written `**` at the end of a
+    ///   streaming answer — is dropped. Only the marker goes; the words after
+    ///   it stay visible and simply grow as the stream continues, so the line
+    ///   does not jump when the pair completes.
+    /// - A `*` between two digits is a set scheme ("3*5"), and is escaped so
+    ///   the parser leaves it alone. Escaped rather than merely skipped: two of
+    ///   them in one answer ("3*5 and 4*8") are a valid emphasis pair to
+    ///   Markdown, which would render them as "35 and 48".
+    /// - A `*` surrounded by spaces ("5 * 5 sets") is no delimiter to Markdown
+    ///   either way, and is left exactly as it is.
+    private static func normalizedEmphasis(_ text: String) -> String {
         var doubles: [Range<String.Index>] = []
         var singles: [Range<String.Index>] = []
+        var literals: [Range<String.Index>] = []
         var index = text.startIndex
 
         while index < text.endIndex {
@@ -155,28 +168,45 @@ enum AnalysisTextFormatter {
             while end < text.endIndex, text[end] == "*" {
                 end = text.index(after: end)
             }
+            let run = index..<end
             if text.distance(from: index, to: end) >= 2 {
                 doubles.append(index..<text.index(index, offsetBy: 2))
-            } else if isFlanking(runAt: index..<end, in: text) {
-                singles.append(index..<end)
+            } else if isBetweenDigits(runAt: run, in: text) {
+                literals.append(run)
+            } else if isFlanking(runAt: run, in: text) {
+                singles.append(run)
             }
             index = end
         }
 
-        var removals: [Range<String.Index>] = []
+        var edits: [(range: Range<String.Index>, replacement: String)] = []
         if doubles.count.isMultiple(of: 2) == false, let last = doubles.last {
-            removals.append(last)
+            edits.append((last, ""))
         }
         if singles.count.isMultiple(of: 2) == false, let last = singles.last {
-            removals.append(last)
+            edits.append((last, ""))
         }
-        guard !removals.isEmpty else { return text }
+        edits.append(contentsOf: literals.map { ($0, "\\*") })
+        guard !edits.isEmpty else { return text }
 
         var result = text
-        for range in removals.sorted(by: { $0.lowerBound > $1.lowerBound }) {
-            result.removeSubrange(range)
+        // Back to front, so an earlier edit cannot invalidate a later range.
+        for edit in edits.sorted(by: { $0.range.lowerBound > $1.range.lowerBound }) {
+            result.replaceSubrange(edit.range, with: edit.replacement)
         }
         return result
+    }
+
+    /// Whether a `*` run sits between two digits — "3*5", a set scheme rather
+    /// than emphasis.
+    ///
+    /// False at the very end of the text: there the digit is simply the last
+    /// thing that has arrived, and the asterisk is a marker mid-stream.
+    private static func isBetweenDigits(runAt range: Range<String.Index>, in text: String) -> Bool {
+        guard range.upperBound < text.endIndex, text[range.upperBound].isNumber,
+              range.lowerBound > text.startIndex
+        else { return false }
+        return text[text.index(before: range.lowerBound)].isNumber
     }
 
     /// Whether a `*` run touches a word on either side — Markdown's condition

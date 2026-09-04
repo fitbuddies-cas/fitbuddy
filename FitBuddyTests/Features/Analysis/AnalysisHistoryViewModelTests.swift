@@ -62,7 +62,7 @@ final class AnalysisHistoryViewModelTests: XCTestCase {
 
         await sut.load()
 
-        XCTAssertEqual(sut.entries.count, AnalysisResultStore.historyLimit)
+        XCTAssertEqual(sut.entries.count, AnalysisHistoryLimit.rows)
     }
 
     func testAFailedReadIsReportedAndLeavesTheListEmpty() async {

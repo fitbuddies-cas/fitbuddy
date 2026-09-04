@@ -123,6 +123,19 @@ final class AnalysisTextFormatterTests: XCTestCase {
         assertRenders("Run 5 * 5 on squats.", as: [("paragraph", "Run 5 * 5 on squats.")])
     }
 
+    /// The unspaced set scheme is just as plausible in a training
+    /// recommendation — and dropping that asterisk would turn "3*5" into "35".
+    func testAnAsteriskBetweenDigitsIsLeftAlone() {
+        assertRenders("Do 3*5 on bench.", as: [("paragraph", "Do 3*5 on bench.")])
+        assertRenders("Do 3*5 and 4*8.", as: [("paragraph", "Do 3*5 and 4*8.")])
+    }
+
+    /// …but a trailing one is still a marker whose word has not streamed in
+    /// yet, digit in front of it or not.
+    func testATrailingAsteriskAfterADigitIsStillDropped() {
+        assertRenders("Do 3*", as: [("paragraph", "Do 3")])
+    }
+
     // MARK: - Streaming
 
     /// The half-written marker at the end of a partial answer must show
