@@ -5,7 +5,7 @@ import SwiftUI
 ///
 /// Pure layout. The ViewModels are wired up in `RootView`, which owns the
 /// SwiftData container; this view only holds the one that has to outlive a
-/// tab switch — `AnalysisViewModel`, whose running stream and cooldown must
+/// tab switch — `AnalysisViewModel`, whose running stream and countdown must
 /// not restart because the user glanced at the dashboard.
 ///
 /// The bar itself is left to the system: no appearance override and no
@@ -22,6 +22,7 @@ struct MainTabView: View {
     private let makeDashboardViewModel: () -> WorkoutListViewModel
     private let makeSettingsViewModel: () -> SettingsViewModel
     private let makeWorkoutDetailViewModel: (String) -> WorkoutDetailViewModel
+    private let makeAnalysisHistoryViewModel: () -> AnalysisHistoryViewModel
 
     /// Changes whenever something outside the dashboard invalidated the cache —
     /// today only a replaced Hevy key (#91). Passed through to the dashboard,
@@ -36,6 +37,8 @@ struct MainTabView: View {
     ///     result as its own state — see its initializer.
     ///   - makeSettingsViewModel: Same, for `SettingsView`.
     ///   - makeWorkoutDetailViewModel: Called once per pushed session (#98).
+    ///   - makeAnalysisHistoryViewModel: Called once per push of the saved
+    ///     analyses (#117).
     ///   - reloadToken: Defaults to a constant, so a preview never re-syncs.
     init(
         selection: Binding<MainTab>,
@@ -43,6 +46,7 @@ struct MainTabView: View {
         makeDashboardViewModel: @escaping () -> WorkoutListViewModel,
         makeSettingsViewModel: @escaping () -> SettingsViewModel,
         makeWorkoutDetailViewModel: @escaping (String) -> WorkoutDetailViewModel,
+        makeAnalysisHistoryViewModel: @escaping () -> AnalysisHistoryViewModel,
         reloadToken: Int = 0
     ) {
         _selection = selection
@@ -50,6 +54,7 @@ struct MainTabView: View {
         self.makeDashboardViewModel = makeDashboardViewModel
         self.makeSettingsViewModel = makeSettingsViewModel
         self.makeWorkoutDetailViewModel = makeWorkoutDetailViewModel
+        self.makeAnalysisHistoryViewModel = makeAnalysisHistoryViewModel
         self.reloadToken = reloadToken
     }
 
@@ -63,7 +68,10 @@ struct MainTabView: View {
                 )
             }
             Tab("Analysis", systemImage: "sparkles", value: MainTab.analysis) {
-                AnalysisView(viewModel: analysisViewModel)
+                AnalysisView(
+                    viewModel: analysisViewModel,
+                    makeHistoryViewModel: makeAnalysisHistoryViewModel
+                )
             }
             Tab("Settings", systemImage: "gearshape", value: MainTab.settings) {
                 SettingsView(viewModel: makeSettingsViewModel())
@@ -75,11 +83,11 @@ struct MainTabView: View {
         .tint(Color.fbAccent)
         // The recommendation on the analysis tab was built from the cache that
         // was just discarded, and that view model outlives the tab — without
-        // this it would keep showing the previous account's analysis, and the
-        // shared cooldown could block a new one for hours. Its stored copy is
-        // already gone by the time the token changes:
-        // `SessionResetService.discardCachedWorkouts()` drops it with the
-        // cache, so `reset()` here has nothing left to restore from (#97).
+        // this it would keep showing the previous account's analysis. Its
+        // stored copy is already gone by the time the token changes:
+        // `SessionResetService.discardCachedWorkouts()` drops the whole history
+        // with the cache, so `reset()` here has nothing left to restore from
+        // (#97, #117).
         .onChange(of: reloadToken) { _, _ in
             analysisViewModel.cancel()
             analysisViewModel.reset()
@@ -113,6 +121,9 @@ private struct MainTabViewPreviewHost: View {
             },
             makeWorkoutDetailViewModel: { id in
                 WorkoutDetailViewModel(cache: PreviewWorkoutDetailCache.filled, workoutID: id)
+            },
+            makeAnalysisHistoryViewModel: {
+                AnalysisHistoryViewModel(store: PreviewAnalysisResultStore())
             }
         )
     }

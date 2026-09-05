@@ -37,6 +37,7 @@ struct RootView: View {
                     makeDashboardViewModel: makeDashboardViewModel,
                     makeSettingsViewModel: makeSettingsViewModel,
                     makeWorkoutDetailViewModel: makeWorkoutDetailViewModel(for:),
+                    makeAnalysisHistoryViewModel: makeAnalysisHistoryViewModel,
                     reloadToken: dashboardReloadToken
                 )
             }
@@ -80,20 +81,30 @@ struct RootView: View {
     ///
     /// Its own `WorkoutStore` over the same container, since the analysis only
     /// reads — unlike the dashboard, it shares no write path with the sync.
-    /// The cooldown store *is* shared with `InferenceService`, so the label on
-    /// screen and the service's own 6h guard can never disagree.
+    /// The rate-limit store *is* shared with `InferenceService`, so the label
+    /// on screen and the service's own guard can never disagree.
     ///
     /// The result store goes over the same container as the two reset paths
-    /// below, so a wipe removes exactly the recommendation this screen would
-    /// otherwise restore (#97).
+    /// below, so a wipe removes exactly the history this screen would
+    /// otherwise restore from (#97, #117).
     private func makeAnalysisViewModel() -> AnalysisViewModel {
-        let cooldown = AnalysisCooldownStore()
+        let rateLimit = AnalysisRateLimitStore()
         return AnalysisViewModel(
             cache: WorkoutStore(modelContainer: modelContext.container),
-            inference: InferenceService(cooldown: cooldown),
-            cooldown: cooldown,
+            inference: InferenceService(rateLimit: rateLimit),
+            rateLimit: rateLimit,
             resultStore: AnalysisResultStore(modelContainer: modelContext.container)
         )
+    }
+
+    /// Wires the saved-analyses screen to the same store the analysis tab
+    /// writes to (#117).
+    ///
+    /// A factory rather than a ready-made ViewModel: the screen exists only
+    /// while the user is in it, and each push has to read the store fresh —
+    /// a run in between adds a row, and a swipe in there removes one.
+    private func makeAnalysisHistoryViewModel() -> AnalysisHistoryViewModel {
+        AnalysisHistoryViewModel(store: AnalysisResultStore(modelContainer: modelContext.container))
     }
 
     /// Wires the workout detail screen to the cache (#98).

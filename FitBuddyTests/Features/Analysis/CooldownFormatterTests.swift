@@ -1,8 +1,8 @@
 import XCTest
 @testable import FitBuddy
 
-/// Unit tests for `CooldownFormatter` — the «Next analysis available in Xh Ym»
-/// label (#31 AC3).
+/// Unit tests for `CooldownFormatter` — the «New analysis available in 45s»
+/// label (#31 AC3, #117).
 final class CooldownFormatterTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_788_000_000)
 
@@ -10,27 +10,19 @@ final class CooldownFormatterTests: XCTestCase {
         CooldownFormatter.remaining(until: now.addingTimeInterval(seconds), now: now)
     }
 
-    func testFormatsHoursAndMinutes() {
-        XCTAssertEqual(remaining(5 * 3600 + 12 * 60), "5h 12m")
+    func testFormatsSeconds() {
+        XCTAssertEqual(remaining(45), "45s")
     }
 
-    func testFormatsFullCooldownWindow() {
-        XCTAssertEqual(remaining(AnalysisCooldownStore.duration), "6h 0m")
+    func testFormatsTheFullLock() {
+        XCTAssertEqual(remaining(AnalysisRateLimitStore.duration), "60s")
     }
 
-    func testDropsHoursBelowOneHour() {
-        XCTAssertEqual(remaining(12 * 60), "12m")
-    }
-
-    /// Rounded up, so the label never reads "0m" while the button is still
+    /// Rounded up, so the label never reads "0s" while the button is still
     /// disabled.
-    func testRoundsPartialMinutesUp() {
-        XCTAssertEqual(remaining(61), "2m")
-        XCTAssertEqual(remaining(1), "1m")
-    }
-
-    func testCarriesRoundedMinutesIntoHours() {
-        XCTAssertEqual(remaining(3600 + 59 * 60 + 30), "2h 0m")
+    func testRoundsPartialSecondsUp() {
+        XCTAssertEqual(remaining(0.2), "1s")
+        XCTAssertEqual(remaining(44.1), "45s")
     }
 
     func testReturnsNilOnceElapsed() {
@@ -38,14 +30,20 @@ final class CooldownFormatterTests: XCTestCase {
         XCTAssertNil(remaining(-60))
     }
 
+    /// Nothing counts in minutes or hours any more: the lock is 60s, and an
+    /// "Xh Ym" label over it could never move.
+    func testEvenALongLeftoverStaysInSeconds() {
+        XCTAssertEqual(remaining(3_600), "3600s")
+    }
+
     func testMessageWrapsRemainingTime() {
         XCTAssertEqual(
-            CooldownFormatter.message(until: now.addingTimeInterval(2 * 3600), now: now),
-            "Next analysis available in 2h 0m"
+            CooldownFormatter.message(until: now.addingTimeInterval(45), now: now),
+            "New analysis available in 45s"
         )
     }
 
-    func testMessageIsNilWithoutCooldown() {
+    func testMessageIsNilWithoutAnActiveLock() {
         XCTAssertNil(CooldownFormatter.message(until: nil, now: now))
         XCTAssertNil(CooldownFormatter.message(until: now.addingTimeInterval(-1), now: now))
     }

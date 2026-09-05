@@ -1,18 +1,18 @@
 import XCTest
 @testable import FitBuddy
 
-/// Unit tests for `AnalysisCooldownStore`, each on an isolated `UserDefaults`
-/// suite.
-final class AnalysisCooldownStoreTests: XCTestCase {
+/// Unit tests for `AnalysisRateLimitStore` (#117), each on an isolated
+/// `UserDefaults` suite.
+final class AnalysisRateLimitStoreTests: XCTestCase {
     private var defaults: UserDefaults!
     private var suiteName: String!
-    private var sut: AnalysisCooldownStore!
+    private var sut: AnalysisRateLimitStore!
 
     override func setUp() async throws {
         try await super.setUp()
         suiteName = "fitbuddy.tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
-        sut = AnalysisCooldownStore(defaults: defaults)
+        sut = AnalysisRateLimitStore(defaults: defaults)
     }
 
     override func tearDown() async throws {
@@ -57,32 +57,38 @@ final class AnalysisCooldownStoreTests: XCTestCase {
         await sut.recordCall(at: date)
 
         // A fresh store on the same suite stands in for the next app launch.
-        let reopened = AnalysisCooldownStore(defaults: try XCTUnwrap(UserDefaults(suiteName: suiteName)))
+        let reopened = AnalysisRateLimitStore(defaults: try XCTUnwrap(UserDefaults(suiteName: suiteName)))
         let stored = await reopened.lastCall()
         XCTAssertEqual(stored, date)
     }
 
-    // MARK: - activeCooldown
+    // MARK: - activeLock
 
-    func testActiveCooldownIsNilBeforeAnyCall() async {
-        let availableAt = await sut.activeCooldown(now: Date(timeIntervalSince1970: 1_754_400_000))
+    /// The lock is a double-submit guard, not a cost limit — one minute, and
+    /// the spending limit in the user's own account does the rest (#117).
+    func testTheLockIsOneMinuteLong() {
+        XCTAssertEqual(AnalysisRateLimitStore.duration, 60)
+    }
+
+    func testActiveLockIsNilBeforeAnyCall() async {
+        let availableAt = await sut.activeLock(now: Date(timeIntervalSince1970: 1_754_400_000))
         XCTAssertNil(availableAt)
     }
 
-    func testActiveCooldownReturnsTheEndOfTheWindowWhileStillWithinIt() async {
+    func testActiveLockReturnsTheEndOfTheLockWhileStillWithinIt() async {
         let lastCall = Date(timeIntervalSince1970: 1_754_400_000)
         await sut.recordCall(at: lastCall)
 
-        let availableAt = await sut.activeCooldown(now: lastCall.addingTimeInterval(1))
+        let availableAt = await sut.activeLock(now: lastCall.addingTimeInterval(1))
 
-        XCTAssertEqual(availableAt, lastCall.addingTimeInterval(AnalysisCooldownStore.duration))
+        XCTAssertEqual(availableAt, lastCall.addingTimeInterval(AnalysisRateLimitStore.duration))
     }
 
-    func testActiveCooldownIsNilOnceTheDurationHasFullyElapsed() async {
+    func testActiveLockIsNilOnceTheDurationHasFullyElapsed() async {
         let lastCall = Date(timeIntervalSince1970: 1_754_400_000)
         await sut.recordCall(at: lastCall)
 
-        let availableAt = await sut.activeCooldown(now: lastCall.addingTimeInterval(AnalysisCooldownStore.duration + 1))
+        let availableAt = await sut.activeLock(now: lastCall.addingTimeInterval(AnalysisRateLimitStore.duration + 1))
 
         XCTAssertNil(availableAt)
     }
@@ -90,11 +96,11 @@ final class AnalysisCooldownStoreTests: XCTestCase {
     /// Boundary: exactly `duration` elapsed must already count as expired —
     /// the check is `>`, not `>=`, so a caller landing exactly on the edge is
     /// not locked out for an extra instant.
-    func testActiveCooldownIsNilAtExactlyTheDurationBoundary() async {
+    func testActiveLockIsNilAtExactlyTheDurationBoundary() async {
         let lastCall = Date(timeIntervalSince1970: 1_754_400_000)
         await sut.recordCall(at: lastCall)
 
-        let availableAt = await sut.activeCooldown(now: lastCall.addingTimeInterval(AnalysisCooldownStore.duration))
+        let availableAt = await sut.activeLock(now: lastCall.addingTimeInterval(AnalysisRateLimitStore.duration))
 
         XCTAssertNil(availableAt)
     }

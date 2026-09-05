@@ -2,8 +2,8 @@ import Foundation
 import OSLog
 
 /// Drives the on-demand AI analysis: builds the prompt from the local cache,
-/// streams the answer of whichever provider takes the call, and owns the 6h
-/// cooldown the user sees (US-3, #31/#79).
+/// streams the answer of whichever provider takes the call, and owns the short
+/// lock between two runs (US-3, #31/#79/#117).
 ///
 /// Several things are published separately because they answer different
 /// questions. `state` says what the screen shows right now, `attribution` says
@@ -13,9 +13,9 @@ import OSLog
 /// mark without a single token — the moment US-3 AC1 wants the cancel button
 /// to appear.
 ///
-/// A finished recommendation is persisted and restored (`restore()`), so it
-/// survives an app restart: without it the 6h cooldown would leave a returning
-/// user with a countdown and no answer to read (US-3 AC10, #97).
+/// Every finished recommendation is persisted, and the newest one is restored
+/// (`restore()`), so it survives an app restart and the ones before it stay
+/// reachable on the history screen (US-3 AC10/AC11, #97/#117).
 ///
 /// The prompt is built from the cache only: an analysis never triggers a Hevy
 /// sync, so a tap here cannot fail on connectivity the dashboard already
@@ -25,8 +25,8 @@ final class AnalysisViewModel: ObservableObject {
     /// How long a run may go without a first token before the screen offers to
     /// cancel it (US-3 AC1). Not a deadline: the request keeps running, and
     /// `URLSession`'s own idle timeout still applies underneath. Killing a slow
-    /// but healthy stream automatically would spend the cooldown on nothing —
-    /// the user decides.
+    /// but healthy stream automatically would spend the user's tokens on
+    /// nothing — the user decides.
     static let defaultSlowThreshold: TimeInterval = 30
 
     @Published private(set) var state: AnalysisState = .idle
@@ -34,7 +34,7 @@ final class AnalysisViewModel: ObservableObject {
     /// had to fall back to reach them (#79). `nil` before the first provider
     /// is tried, and whenever the screen is at rest.
     @Published private(set) var attribution: AnalysisAttribution?
-    /// `"Next analysis available in 5h 12m"`, or `nil` while a run is allowed.
+    /// `"New analysis available in 45s"`, or `nil` while a run is allowed.
     @Published private(set) var cooldownMessage: String?
     /// Whether the running call has passed `slowThreshold` without answering.
     /// Cleared as soon as the first token arrives, and on every state change
@@ -55,6 +55,10 @@ final class AnalysisViewModel: ObservableObject {
     /// `generatedAt` as the screen prints it — `"2 h ago"`. Refreshed with the
     /// cooldown label, so a sheet left open does not keep claiming "just now".
     @Published private(set) var resultAge: String?
+    /// Whether more than one analysis is stored, and the history is therefore
+    /// worth opening (US-3 AC11, #117). With a single one the screen already
+    /// shows it, and a link to a list of exactly that would be a detour.
+    @Published private(set) var hasHistory = false
 
     /// Whether tapping "Analyse" can start a run right now.
     var canStartAnalysis: Bool {
@@ -69,6 +73,9 @@ final class AnalysisViewModel: ObservableObject {
     private var runID: UInt64 = 0
     /// Fires once `slowThreshold` has passed without a first token.
     private var slowTask: Task<Void, Never>?
+    /// The ticker's current sleep, held so a lock that starts while the ticker
+    /// is resting can cut that sleep short (#117).
+    private var tickerSleep: Task<Void, Never>?
     /// Whether the user deliberately dismissed the stored recommendation by
     /// tapping "New analysis". Held so a reopened sheet does not put it right
     /// back — and cleared again as soon as the run they asked for is under
@@ -81,6 +88,11 @@ final class AnalysisViewModel: ObservableObject {
     /// restart — and "New analysis" is a request for a new run, not a request
     /// to throw the paid-for answer away.
     private var didDismissStoredResult = false
+    /// The stored row the recommendation on screen came from, so a verdict is
+    /// written to the analysis it was given for (#117). `nil` whenever nothing
+    /// persisted is showing — a preview without a store, or a run whose write
+    /// failed.
+    private var currentResultID: UUID?
     /// Guards `restore()` against overlapping itself: the view's `.task` and
     /// `dismissFailure()` can both ask for a restore, and the store read
     /// between them releases the main actor.
@@ -88,21 +100,22 @@ final class AnalysisViewModel: ObservableObject {
 
     private let cache: WorkoutSummaryReading
     private let inference: AnalysisStreaming
-    private let cooldown: AnalysisCooldownStore
+    private let rateLimit: AnalysisRateLimitStore
     private let feedbackStore: AnalysisFeedbackStore
     private let resultStore: (any AnalysisResultStoring)?
     private let calendar: Calendar
     private let now: () -> Date
     private let slowThreshold: TimeInterval
     private let tickInterval: TimeInterval
+    private let restingTickInterval: TimeInterval
 
     private let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "Analysis")
 
     /// - Parameters:
     ///   - cache: Read access to the cached window (`WorkoutStore` in the app).
     ///   - inference: The streaming call (`InferenceService` in the app).
-    ///   - cooldown: The shared 6h window store — the same one the service
-    ///     writes to, so the label and the service's own guard never disagree.
+    ///   - rateLimit: The shared lock store — the same one the service writes
+    ///     to, so the label and the service's own guard never disagree.
     ///   - feedbackStore: Where a "Helpful" / "Not helpful" tap is persisted —
     ///     locally, with no call behind it (US-3 AC9).
     ///   - resultStore: Where a finished recommendation is persisted, so it
@@ -111,27 +124,33 @@ final class AnalysisViewModel: ObservableObject {
     ///     `ModelContainer` to build a store over.
     ///   - now: Injectable clock, so windows and cooldown math are testable.
     ///   - slowThreshold: Injectable, so tests do not wait 30 real seconds.
-    ///   - tickInterval: How often `trackCooldown()` refreshes the label.
+    ///   - tickInterval: How often `trackCooldown()` refreshes the label while
+    ///     the lock is running. One second, because a 60s lock counted down in
+    ///     minute steps would never visibly move.
+    ///   - restingTickInterval: The same, once no lock is active — only the
+    ///     recommendation's age still changes, and it changes slowly.
     init(
         cache: WorkoutSummaryReading,
         inference: AnalysisStreaming,
-        cooldown: AnalysisCooldownStore = AnalysisCooldownStore(),
+        rateLimit: AnalysisRateLimitStore = AnalysisRateLimitStore(),
         feedbackStore: AnalysisFeedbackStore = AnalysisFeedbackStore(),
         resultStore: (any AnalysisResultStoring)? = nil,
         calendar: Calendar = .current,
         now: @escaping () -> Date = Date.init,
         slowThreshold: TimeInterval = AnalysisViewModel.defaultSlowThreshold,
-        tickInterval: TimeInterval = 60
+        tickInterval: TimeInterval = 1,
+        restingTickInterval: TimeInterval = 60
     ) {
         self.cache = cache
         self.inference = inference
-        self.cooldown = cooldown
+        self.rateLimit = rateLimit
         self.feedbackStore = feedbackStore
         self.resultStore = resultStore
         self.calendar = calendar
         self.now = now
         self.slowThreshold = slowThreshold
         self.tickInterval = tickInterval
+        self.restingTickInterval = restingTickInterval
     }
 
     // MARK: - Run
@@ -173,6 +192,7 @@ final class AnalysisViewModel: ObservableObject {
         guard case .loading = state else { return }
 
         feedback = nil
+        currentResultID = nil
         context = nil
         // The stored recommendation stays on disk until this run replaces it:
         // a run that ends in an error must not cost the user the last answer
@@ -216,6 +236,7 @@ final class AnalysisViewModel: ObservableObject {
         }
         attribution = nil
         feedback = nil
+        currentResultID = nil
         context = nil
         clearResultAge()
         state = .idle
@@ -242,6 +263,9 @@ final class AnalysisViewModel: ObservableObject {
     /// a restore racing that teardown would put the discarded account's
     /// recommendation straight back on screen.
     ///
+    /// Refreshes the history entry point on the way, so a returning user sees
+    /// the link to their earlier analyses without a run in between.
+    ///
     /// Does nothing while a run is in flight or a result is already showing —
     /// what is on screen is at least as current as what is on disk — and
     /// nothing while the user has dismissed the stored recommendation without
@@ -255,7 +279,12 @@ final class AnalysisViewModel: ObservableObject {
 
         let stored: AnalysisResultSnapshot?
         do {
-            stored = try await resultStore.latest()
+            // Two rather than one: the second row is all the toolbar link needs
+            // to know, and reading the whole history to count it would load
+            // twenty recommendations nobody asked to see.
+            let newest = try await resultStore.recent(limit: 2)
+            hasHistory = newest.count > 1
+            stored = newest.first
         } catch {
             // Nothing to tell the user here: they asked for the analysis
             // screen, not for the recommendation, and the intro state they get
@@ -271,20 +300,41 @@ final class AnalysisViewModel: ObservableObject {
         state = .result(stored.text)
         context = stored.context
         generatedAt = stored.generatedAt
+        currentResultID = stored.id
+        // The verdict travels with the row, so it needs no matching by
+        // timestamp: what comes back is the rating given on exactly this
+        // recommendation, or nothing (#117).
+        feedback = stored.feedback
         refreshResultAge()
-        // Only a verdict given after this recommendation was written can belong
-        // to it. An older one rated a recommendation that no longer exists, and
-        // showing it as selected would attribute the user's opinion to a text
-        // they never saw.
-        guard let last = await feedbackStore.lastFeedback(), last.date >= stored.generatedAt else {
+    }
+
+    /// Re-reads what the history holds, after the user has been in it (#117).
+    ///
+    /// Two things can have changed in there: whether a history still exists at
+    /// all, and whether the recommendation on this screen is one of the rows
+    /// the user swiped away. A deleted analysis must not stay on screen — it
+    /// would be the one text in the app that "delete" did not remove — so the
+    /// screen falls back to whatever is newest now, or to the intro.
+    func refreshHistory() async {
+        guard let resultStore else { return }
+        let newest: [AnalysisResultSnapshot]
+        do {
+            newest = try await resultStore.recent(limit: 2)
+        } catch {
+            logger.error("Analysis history not readable: \(error, privacy: .public)")
             return
         }
-        // Re-checked after that await as well: a run started in the meantime
-        // has already published its own state with `feedback` cleared, and
-        // assigning here would pre-select a verdict on a text the user has
-        // not read yet.
-        guard case .result(stored.text) = state else { return }
-        feedback = last.feedback
+        hasHistory = newest.count > 1
+        guard case .result = state,
+              let currentResultID,
+              !newest.contains(where: { $0.id == currentResultID })
+        else { return }
+        reset()
+        // `reset()` counts as a dismissal, but this one is not the user asking
+        // for the intro screen — it is their deletion taking effect, and what
+        // is left of the history belongs back on screen.
+        didDismissStoredResult = false
+        await restore()
     }
 
     // MARK: - Feedback
@@ -294,12 +344,25 @@ final class AnalysisViewModel: ObservableObject {
     /// Only meaningful while a finished recommendation is showing: rating a
     /// spinner or an error message would attach the verdict to something the
     /// user never read. Purely local — there is no request behind this tap.
+    ///
+    /// Written to the recommendation's own row, so the history shows each
+    /// verdict on the analysis it was given for (#117), and counted in the
+    /// tally, which is about the PoC rather than about one analysis.
     func submitFeedback(_ feedback: AnalysisFeedback) async {
         guard case .result = state else { return }
         // Published first: the button has to look selected on the same run
         // loop as the tap, not after the store's actor hop.
         self.feedback = feedback
-        await feedbackStore.record(feedback, at: now())
+        await feedbackStore.record(feedback)
+        guard let resultStore, let currentResultID else { return }
+        do {
+            try await resultStore.setFeedback(feedback, for: currentResultID)
+        } catch {
+            // The button is filled and the tally counted; a failed write costs
+            // the verdict on the next launch and nothing the user can act on
+            // now.
+            logger.error("Analysis feedback not persisted: \(error, privacy: .public)")
+        }
     }
 
     private func performAnalysis(_ id: UInt64) async {
@@ -421,13 +484,13 @@ final class AnalysisViewModel: ObservableObject {
         }
     }
 
-    /// Writes the finished recommendation to disk, so it is still there after
-    /// an app restart (US-3 AC10, #97).
+    /// Appends the finished recommendation to the history, so it is still there
+    /// after an app restart and the ones before it stay readable (US-3
+    /// AC10/AC11, #97/#117).
     ///
     /// Only reached from the `.result` branch above: a cancelled, failed or
-    /// unreadable run has nothing worth keeping, and overwriting the last good
-    /// recommendation with it would cost the user an answer they already paid
-    /// a provider for.
+    /// unreadable run has nothing worth keeping, and an empty row between two
+    /// real recommendations would be noise in the history.
     ///
     /// A failing write is logged, not surfaced: the recommendation is on screen
     /// and readable, and an error banner over it would be about the next
@@ -440,7 +503,17 @@ final class AnalysisViewModel: ObservableObject {
         // written when the window resolves, well before the first token.
         guard let resultStore, let context else { return }
         do {
-            try await resultStore.save(text: text, generatedAt: timestamp, context: context)
+            // The id is kept, so a "Helpful" tap on this screen lands on the
+            // row that was just written rather than on whatever is newest by
+            // the time it happens (#117).
+            currentResultID = try await resultStore.save(
+                text: text,
+                generatedAt: timestamp,
+                context: context
+            )
+            // This run's own recommendation is now the newest, so anything that
+            // was there before it is history.
+            hasHistory = try await resultStore.recent(limit: 2).count > 1
         } catch {
             logger.error("Analysis not persisted: \(error, privacy: .public)")
         }
@@ -497,7 +570,7 @@ final class AnalysisViewModel: ObservableObject {
     // MARK: - Cooldown
 
     /// Recomputes `cooldownMessage` from the stored timestamp and returns the
-    /// instant the window ends, or `nil` while a run is allowed.
+    /// instant the lock lifts, or `nil` while a run is allowed.
     ///
     /// Callers that need the decision as well as the label take it from here
     /// rather than asking the store again: one reading of the clock and one of
@@ -506,13 +579,23 @@ final class AnalysisViewModel: ObservableObject {
     @discardableResult
     func refreshCooldown() async -> Date? {
         let reference = now()
-        let availableAt = await cooldown.activeCooldown(now: reference)
+        let availableAt = await rateLimit.activeLock(now: reference)
+        let wasResting = cooldownMessage == nil
         cooldownMessage = CooldownFormatter.message(until: availableAt, now: reference)
+        // The lock starts mid-call, which is almost always while the ticker is
+        // resting — and a resting sleep is a minute long. Without this the
+        // countdown would stand still for most of the 60s it is counting down,
+        // which is exactly the second-by-second stretch the fast rate exists
+        // for. Cutting the sleep short here puts the loop back on `tickInterval`
+        // on its next pass.
+        if wasResting, cooldownMessage != nil {
+            tickerSleep?.cancel()
+        }
         // Both labels age at the same rate and are driven by the same ticker,
         // so they are refreshed together against one reading of the clock.
         refreshResultAge(now: reference)
-        // A cooldown message on screen outlives its reason otherwise: once the
-        // window closes, the explanation is wrong and the button is back.
+        // A lock message on screen outlives its reason otherwise: once the
+        // lock lifts, the explanation is wrong and the button is back.
         if availableAt == nil, case .error(.cooldownActive) = state {
             state = .idle
         }
@@ -541,20 +624,45 @@ final class AnalysisViewModel: ObservableObject {
         resultAge = nil
     }
 
-    /// Keeps the cooldown label counting down while the screen is on display —
-    /// the analysis view's `.task`.
+    /// Keeps the label counting down while the screen is on display — the
+    /// analysis view's `.task`.
     ///
-    /// Runs until cancelled rather than until the window closes: the label has
-    /// to appear the moment a run finishes, not only the next time the screen
-    /// is opened.
+    /// Runs until cancelled rather than until the lock lifts: the label has to
+    /// appear the moment a run finishes, not only the next time the screen is
+    /// opened.
+    ///
+    /// Two rates, because there are two things being refreshed. While the lock
+    /// runs, the label is a second-by-second countdown over a 60s window. Once
+    /// it lifts, only the recommendation's age is still changing, and that is
+    /// worth a wake-up a minute rather than one a second.
     func trackCooldown() async {
         while !Task.isCancelled {
-            await refreshCooldown()
-            do {
-                try await Task.sleep(for: .seconds(tickInterval))
-            } catch {
-                return
-            }
+            let availableAt = await refreshCooldown()
+            await tick(after: availableAt == nil ? restingTickInterval : tickInterval)
         }
+    }
+
+    /// Waits out one tick — or less, when `refreshCooldown()` sees a lock start
+    /// and cancels the sleep.
+    ///
+    /// Its own task rather than a bare `Task.sleep`, because that is what makes
+    /// the sleep interruptible from outside the loop. The cancellation handler
+    /// passes the view's own cancellation through, so closing the screen still
+    /// ends the wait immediately rather than a minute later.
+    private func tick(after interval: TimeInterval) async {
+        let sleeper = Task {
+            // Discarded on purpose, and `_ =` rather than `try?` as the
+            // closure's result: a cancelled sleep ends the wait exactly like
+            // an elapsed one, and the optional would make this a
+            // `Task<Void?, Never>`.
+            _ = try? await Task.sleep(for: .seconds(interval))
+        }
+        tickerSleep = sleeper
+        await withTaskCancellationHandler {
+            await sleeper.value
+        } onCancel: {
+            sleeper.cancel()
+        }
+        tickerSleep = nil
     }
 }

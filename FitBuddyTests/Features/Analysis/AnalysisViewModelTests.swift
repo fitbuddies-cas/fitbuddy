@@ -2,9 +2,9 @@ import SwiftData
 import XCTest
 @testable import FitBuddy
 
-/// Unit tests for `AnalysisViewModel` (#31): the state machine, the cancel
-/// path, and the 6h cooldown label. No network and no Keychain — the stream
-/// comes from `StubAnalysisStreamer`, the cooldown from an isolated
+/// Unit tests for `AnalysisViewModel` (#31, #117): the state machine, the
+/// cancel path, and the countdown label. No network and no Keychain — the
+/// stream comes from `StubAnalysisStreamer`, the rate limit from an isolated
 /// `UserDefaults` suite.
 @MainActor
 final class AnalysisViewModelTests: XCTestCase {
@@ -15,7 +15,7 @@ final class AnalysisViewModelTests: XCTestCase {
     private var streamer: StubAnalysisStreamer!
     private var defaults: UserDefaults!
     private var suiteName: String!
-    private var cooldown: AnalysisCooldownStore!
+    private var rateLimit: AnalysisRateLimitStore!
     private var feedbackStore: AnalysisFeedbackStore!
     private var container: ModelContainer!
     private var results: AnalysisResultStore!
@@ -27,7 +27,7 @@ final class AnalysisViewModelTests: XCTestCase {
         streamer = StubAnalysisStreamer()
         suiteName = "fitbuddy.tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
-        cooldown = AnalysisCooldownStore(defaults: defaults)
+        rateLimit = AnalysisRateLimitStore(defaults: defaults)
         feedbackStore = AnalysisFeedbackStore(defaults: defaults)
         container = try ModelContainerFactory.makeInMemory()
         results = AnalysisResultStore(modelContainer: container)
@@ -37,7 +37,7 @@ final class AnalysisViewModelTests: XCTestCase {
         defaults.removePersistentDomain(forName: suiteName)
         results = nil
         container = nil
-        cooldown = nil
+        rateLimit = nil
         feedbackStore = nil
         defaults = nil
         streamer = nil
@@ -51,18 +51,20 @@ final class AnalysisViewModelTests: XCTestCase {
         clock: TestClock = TestClock(AnalysisViewModelTests.reference),
         slowThreshold: TimeInterval = 30,
         tickInterval: TimeInterval = 60,
+        restingTickInterval: TimeInterval = 60,
         resultStore: (any AnalysisResultStoring)? = nil
     ) -> AnalysisViewModel {
         AnalysisViewModel(
             cache: cache,
             inference: streamer,
-            cooldown: cooldown,
+            rateLimit: rateLimit,
             feedbackStore: feedbackStore,
             resultStore: resultStore ?? results,
             calendar: Self.calendar,
             now: { clock.date },
             slowThreshold: slowThreshold,
-            tickInterval: tickInterval
+            tickInterval: tickInterval,
+            restingTickInterval: restingTickInterval
         )
     }
 
@@ -313,15 +315,15 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(calls, 0)
     }
 
-    func testActiveCooldownBlocksTheRun() async {
-        await cooldown.recordCall(at: Self.reference.addingTimeInterval(-3_600))
+    func testAnActiveLockBlocksTheRun() async {
+        await rateLimit.recordCall(at: Self.reference.addingTimeInterval(-15))
         let sut = makeSUT()
 
         await sut.start()
 
-        let availableAt = Self.reference.addingTimeInterval(AnalysisCooldownStore.duration - 3_600)
+        let availableAt = Self.reference.addingTimeInterval(AnalysisRateLimitStore.duration - 15)
         XCTAssertEqual(sut.state, .error(.cooldownActive(availableAt: availableAt)))
-        XCTAssertEqual(sut.cooldownMessage, "Next analysis available in 5h 0m")
+        XCTAssertEqual(sut.cooldownMessage, "New analysis available in 45s")
         XCTAssertFalse(sut.canStartAnalysis)
         let calls = await streamer.callCount
         XCTAssertEqual(calls, 0)
@@ -374,17 +376,17 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(calls, 0)
     }
 
-    /// The explanation must not outlive its reason: once the 6h window closes,
-    /// the cooldown error clears on the next refresh.
-    func testCooldownErrorClearsOnceTheWindowCloses() async {
+    /// The explanation must not outlive its reason: once the lock lifts, the
+    /// error clears on the next refresh.
+    func testTheLockErrorClearsOnceTheLockLifts() async {
         let clock = TestClock(Self.reference)
-        await cooldown.recordCall(at: Self.reference.addingTimeInterval(-AnalysisCooldownStore.duration + 60))
+        await rateLimit.recordCall(at: Self.reference.addingTimeInterval(-30))
         let sut = makeSUT(clock: clock)
 
         await sut.start()
-        XCTAssertEqual(sut.state, .error(.cooldownActive(availableAt: Self.reference.addingTimeInterval(60))))
+        XCTAssertEqual(sut.state, .error(.cooldownActive(availableAt: Self.reference.addingTimeInterval(30))))
 
-        clock.advance(by: 61)
+        clock.advance(by: 31)
         await sut.refreshCooldown()
 
         XCTAssertEqual(sut.state, .idle)
@@ -486,15 +488,15 @@ final class AnalysisViewModelTests: XCTestCase {
     }
 
     /// A blocked run has no providers of its own; showing the previous run's
-    /// under a cooldown message would read as "we tried Claude, then Gemini,
-    /// and the answer is: come back in five hours".
+    /// under a "wait a moment" message would read as "we tried Claude, then
+    /// Gemini, and the answer is: come back later".
     func testACooldownErrorDoesNotInheritThePreviousRunsAttribution() async {
         await streamer.setEvents([.attempting(.claude), .attempting(.gemini), .text("Recommendation")])
         let sut = makeSUT()
         await sut.start()
         XCTAssertEqual(sut.attribution?.attempted, [.claude, .gemini])
 
-        await cooldown.recordCall(at: Self.reference)
+        await rateLimit.recordCall(at: Self.reference)
         await sut.start()
 
         XCTAssertNil(sut.attribution)
@@ -649,23 +651,23 @@ final class AnalysisViewModelTests: XCTestCase {
 
     // MARK: - Cooldown label (#31 AC3)
 
-    func testCooldownLabelCountsDownWithTheClock() async {
-        await cooldown.recordCall(at: Self.reference.addingTimeInterval(-AnalysisCooldownStore.duration + 130))
+    func testTheLabelCountsDownWithTheClock() async {
+        await rateLimit.recordCall(at: Self.reference.addingTimeInterval(-15))
         let clock = TestClock(Self.reference)
-        let sut = makeSUT(clock: clock, tickInterval: 0.01)
+        let sut = makeSUT(clock: clock, tickInterval: 0.01, restingTickInterval: 0.01)
 
         let ticker = Task { await sut.trackCooldown() }
         await waitUntil("the initial label appears") {
-            sut.cooldownMessage == "Next analysis available in 3m"
+            sut.cooldownMessage == "New analysis available in 45s"
         }
 
-        clock.advance(by: 120)
+        clock.advance(by: 30)
         await waitUntil("the label counts down") {
-            sut.cooldownMessage == "Next analysis available in 1m"
+            sut.cooldownMessage == "New analysis available in 15s"
         }
 
-        clock.advance(by: 60)
-        await waitUntil("the label disappears once the window closes") {
+        clock.advance(by: 15)
+        await waitUntil("the label disappears once the lock lifts") {
             sut.cooldownMessage == nil
         }
         XCTAssertTrue(sut.canStartAnalysis)
@@ -673,29 +675,82 @@ final class AnalysisViewModelTests: XCTestCase {
         ticker.cancel()
     }
 
-    /// `InferenceService` starts the window mid-call, so the label has to be
+    /// A 60s lock counted down once a minute would never visibly move, so the
+    /// ticker runs at a second while it is on — and drops back to a slower
+    /// beat once there is only the recommendation's age left to refresh.
+    func testTheTickerSlowsDownOnceTheLockHasLifted() async {
+        let clock = TestClock(Self.reference)
+        await rateLimit.recordCall(at: Self.reference.addingTimeInterval(-59))
+        // A resting interval far beyond the test's own timeout: if the loop
+        // took it while the lock is still running, the label below never
+        // appears.
+        let sut = makeSUT(clock: clock, tickInterval: 0.01, restingTickInterval: 600)
+
+        let ticker = Task { await sut.trackCooldown() }
+        await waitUntil("the countdown is running") {
+            sut.cooldownMessage == "New analysis available in 1s"
+        }
+
+        clock.advance(by: 1)
+        await waitUntil("the label disappears once the lock lifts") {
+            sut.cooldownMessage == nil
+        }
+
+        ticker.cancel()
+    }
+
+    /// The lock starts mid-call, which is almost always while the ticker is
+    /// resting. If the resting sleep had to run out first, the countdown would
+    /// stand still for most of the 60s it counts down — the stretch the fast
+    /// rate exists for.
+    func testALockStartedWhileTheTickerRestsCutsTheRestingSleepShort() async {
+        let clock = TestClock(Self.reference)
+        // A resting interval far beyond the test's own timeout: if the loop
+        // had to wait it out, the countdown below would never move.
+        let sut = makeSUT(clock: clock, tickInterval: 0.01, restingTickInterval: 600)
+
+        let ticker = Task { await sut.trackCooldown() }
+        await waitUntil("the ticker has settled with no lock") {
+            sut.cooldownMessage == nil
+        }
+
+        // Stands in for the service recording the call once a provider
+        // accepted the request, mid-run.
+        await rateLimit.recordCall(at: Self.reference)
+        await sut.refreshCooldown()
+        XCTAssertEqual(sut.cooldownMessage, "New analysis available in 60s")
+
+        clock.advance(by: 15)
+        await waitUntil("the countdown moves without waiting out the resting sleep") {
+            sut.cooldownMessage == "New analysis available in 45s"
+        }
+
+        ticker.cancel()
+    }
+
+    /// `InferenceService` starts the lock mid-call, so the label has to be
     /// re-read when the run ends — not only when the screen is next opened.
-    func testCooldownLabelIsRefreshedAfterARun() async {
+    func testTheLabelIsRefreshedAfterARun() async {
         await streamer.gateCall()
         await streamer.setChunks(["done"])
         let sut = makeSUT()
 
         let run = Task { await sut.start() }
         await streamer.waitForCall()
-        // Stands in for the service recording the window once Claude accepted
-        // the request — after the run's own cooldown check has passed.
-        await cooldown.recordCall(at: Self.reference)
+        // Stands in for the service recording the call once Claude accepted
+        // the request — after the run's own rate-limit check has passed.
+        await rateLimit.recordCall(at: Self.reference)
         await streamer.release()
         await run.value
 
         XCTAssertEqual(sut.state, .result("done"))
-        XCTAssertEqual(sut.cooldownMessage, "Next analysis available in 6h 0m")
+        XCTAssertEqual(sut.cooldownMessage, "New analysis available in 60s")
         XCTAssertFalse(sut.canStartAnalysis)
     }
 
     // MARK: - Feedback (US-3 AC9)
 
-    func testFeedbackOnAResultIsPublishedAndStored() async {
+    func testFeedbackOnAResultIsPublishedAndStored() async throws {
         await streamer.setChunks(["done"])
         let sut = makeSUT()
         await sut.start()
@@ -703,9 +758,32 @@ final class AnalysisViewModelTests: XCTestCase {
         await sut.submitFeedback(.helpful)
 
         XCTAssertEqual(sut.feedback, .helpful)
-        let stored = await feedbackStore.lastFeedback()
+        // On the row this run wrote, not in a key beside it: with a history,
+        // that is the only place a verdict can say which text it belongs to
+        // (#117).
+        let stored = try await results.latest()
         XCTAssertEqual(stored?.feedback, .helpful)
-        XCTAssertEqual(stored?.date, Self.reference)
+        let tally = await feedbackStore.count(of: .helpful)
+        XCTAssertEqual(tally, 1)
+    }
+
+    /// The verdict has to land on the analysis that was on screen when it was
+    /// given — not on whatever is newest by the time the write happens.
+    func testFeedbackLandsOnTheAnalysisItWasGivenOn() async throws {
+        await streamer.setChunks(["first"])
+        let clock = TestClock(Self.reference)
+        let sut = makeSUT(clock: clock)
+        await sut.start()
+        await sut.submitFeedback(.helpful)
+
+        clock.advance(by: AnalysisRateLimitStore.duration + 1)
+        await streamer.setChunks(["second"])
+        await sut.start()
+
+        let history = try await results.recent(limit: 10)
+        XCTAssertEqual(history.map(\.text), ["second", "first"])
+        XCTAssertNil(history.first?.feedback)
+        XCTAssertEqual(history.last?.feedback, .helpful)
     }
 
     /// A tap must not reach the network — US-3 AC9 is "stored locally, no
@@ -727,8 +805,8 @@ final class AnalysisViewModelTests: XCTestCase {
         await sut.submitFeedback(.helpful)
 
         XCTAssertNil(sut.feedback)
-        let stored = await feedbackStore.lastFeedback()
-        XCTAssertNil(stored)
+        let tally = await feedbackStore.count(of: .helpful)
+        XCTAssertEqual(tally, 0)
     }
 
     /// A verdict belongs to the recommendation it was given for, so the next
@@ -740,7 +818,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await sut.start()
         await sut.submitFeedback(.helpful)
 
-        clock.advance(by: AnalysisCooldownStore.duration + 1)
+        clock.advance(by: AnalysisRateLimitStore.duration + 1)
         await streamer.setChunks(["second"])
         await sut.start()
 
@@ -789,12 +867,13 @@ private final class TestClock: @unchecked Sendable {
 
 extension AnalysisViewModelTests {
     /// Storing a recommendation as if a previous session had produced it.
+    @discardableResult
     private func storeRecommendation(
         _ text: String = "Add 2.5 kg on bench next session.",
         at date: Date,
         sessions: Int = 12,
         window: AnalysisWindow = .default
-    ) async throws {
+    ) async throws -> UUID {
         try await results.save(
             text: text,
             generatedAt: date,
@@ -908,8 +987,8 @@ extension AnalysisViewModelTests {
     /// US-3 AC10: the verdict the user already gave comes back selected.
     func testRestoreShowsAVerdictGivenOnThatRecommendation() async throws {
         let generatedAt = Self.reference.addingTimeInterval(-2 * 3_600)
-        try await storeRecommendation(at: generatedAt)
-        await feedbackStore.record(.helpful, at: generatedAt.addingTimeInterval(60))
+        let id = try await storeRecommendation(at: generatedAt)
+        try await results.setFeedback(.helpful, for: id)
         let sut = makeSUT()
 
         await sut.restore()
@@ -917,19 +996,105 @@ extension AnalysisViewModelTests {
         XCTAssertEqual(sut.feedback, .helpful)
     }
 
-    /// A verdict older than the recommendation rated a text that no longer
-    /// exists — showing it as selected would put the user's opinion on
-    /// something they never read.
-    func testRestoreIgnoresAVerdictOlderThanTheRecommendation() async throws {
-        let generatedAt = Self.reference.addingTimeInterval(-2 * 3_600)
-        await feedbackStore.record(.notHelpful, at: generatedAt.addingTimeInterval(-3_600))
-        try await storeRecommendation(at: generatedAt)
+    /// A verdict given on an *older* analysis stays with that one: it travels
+    /// in its own row, so nothing has to be guessed from timestamps any more
+    /// (#117).
+    func testRestoreShowsNoVerdictWhenOnlyAnOlderAnalysisWasRated() async throws {
+        let older = try await storeRecommendation(
+            "Older advice.",
+            at: Self.reference.addingTimeInterval(-9 * 3_600)
+        )
+        try await results.setFeedback(.notHelpful, for: older)
+        try await storeRecommendation(at: Self.reference.addingTimeInterval(-2 * 3_600))
         let sut = makeSUT()
 
         await sut.restore()
 
         XCTAssertEqual(sut.state, .result("Add 2.5 kg on bench next session."))
         XCTAssertNil(sut.feedback)
+    }
+
+    // MARK: - History entry point (#117)
+
+    func testASingleStoredAnalysisIsNoHistory() async throws {
+        try await storeRecommendation(at: Self.reference.addingTimeInterval(-2 * 3_600))
+        let sut = makeSUT()
+
+        await sut.restore()
+
+        XCTAssertFalse(sut.hasHistory)
+    }
+
+    func testASecondStoredAnalysisOpensTheHistory() async throws {
+        try await storeRecommendation("Older advice.", at: Self.reference.addingTimeInterval(-9 * 3_600))
+        try await storeRecommendation(at: Self.reference.addingTimeInterval(-2 * 3_600))
+        let sut = makeSUT()
+
+        await sut.restore()
+
+        XCTAssertTrue(sut.hasHistory)
+    }
+
+    /// The run that finishes here is the second stored analysis, so the link
+    /// has to appear without the screen being reopened.
+    func testAFinishedRunOpensTheHistoryOnTheFirstRepeat() async throws {
+        try await storeRecommendation("Older advice.", at: Self.reference.addingTimeInterval(-9 * 3_600))
+        await streamer.setChunks(["Fresh advice."])
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertTrue(sut.hasHistory)
+    }
+
+    /// Deleting everything but the recommendation on screen closes the link
+    /// again — there is nothing behind it any more.
+    func testRefreshHistoryClosesTheLinkOnceOnlyOneAnalysisIsLeft() async throws {
+        let older = try await storeRecommendation(
+            "Older advice.",
+            at: Self.reference.addingTimeInterval(-9 * 3_600)
+        )
+        try await storeRecommendation(at: Self.reference.addingTimeInterval(-2 * 3_600))
+        let sut = makeSUT()
+        await sut.restore()
+        XCTAssertTrue(sut.hasHistory)
+
+        try await results.delete(id: older)
+        await sut.refreshHistory()
+
+        XCTAssertFalse(sut.hasHistory)
+        XCTAssertEqual(sut.state, .result("Add 2.5 kg on bench next session."))
+    }
+
+    /// Deleting the analysis on screen from the history must take it off the
+    /// screen too — it is the one text in the app whose deletion the user can
+    /// watch not happening.
+    func testDeletingTheShownAnalysisFallsBackToTheOneBehindIt() async throws {
+        try await storeRecommendation("Older advice.", at: Self.reference.addingTimeInterval(-9 * 3_600))
+        let newest = try await storeRecommendation(at: Self.reference.addingTimeInterval(-2 * 3_600))
+        let sut = makeSUT()
+        await sut.restore()
+        XCTAssertEqual(sut.state, .result("Add 2.5 kg on bench next session."))
+
+        try await results.delete(id: newest)
+        await sut.refreshHistory()
+
+        XCTAssertEqual(sut.state, .result("Older advice."))
+        XCTAssertFalse(sut.hasHistory)
+    }
+
+    /// The last one deleted leaves the intro screen, not a recommendation that
+    /// is no longer stored.
+    func testDeletingTheOnlyAnalysisLeavesTheIntroScreen() async throws {
+        let only = try await storeRecommendation(at: Self.reference.addingTimeInterval(-2 * 3_600))
+        let sut = makeSUT()
+        await sut.restore()
+
+        try await results.delete(id: only)
+        await sut.refreshHistory()
+
+        XCTAssertEqual(sut.state, .idle)
+        XCTAssertNil(sut.resultAge)
     }
 
     /// What is on screen is at least as current as what is on disk.
@@ -987,13 +1152,13 @@ extension AnalysisViewModelTests {
     /// still on disk (#97).
     func testACooldownRefusedRunStillLetsBackRestoreTheRecommendation() async throws {
         try await storeRecommendation(at: Self.reference.addingTimeInterval(-2 * 3_600))
-        await cooldown.recordCall(at: Self.reference.addingTimeInterval(-3_600))
+        await rateLimit.recordCall(at: Self.reference.addingTimeInterval(-30))
         let sut = makeSUT()
         await sut.restore()
         sut.reset()
 
         await sut.start()
-        let availableAt = Self.reference.addingTimeInterval(AnalysisCooldownStore.duration - 3_600)
+        let availableAt = Self.reference.addingTimeInterval(AnalysisRateLimitStore.duration - 30)
         XCTAssertEqual(sut.state, .error(.cooldownActive(availableAt: availableAt)))
         await sut.dismissFailure()
 
@@ -1017,7 +1182,7 @@ extension AnalysisViewModelTests {
         await streamer.waitForCall()
         // Stands in for the service recording the window once the provider
         // accepted the request.
-        await cooldown.recordCall(at: Self.reference)
+        await rateLimit.recordCall(at: Self.reference)
         await streamer.release()
 
         await gate.waitForSave()
@@ -1027,7 +1192,7 @@ extension AnalysisViewModelTests {
         await gate.releaseSave()
         await run.value
         XCTAssertEqual(sut.state, .result("done"))
-        XCTAssertEqual(sut.cooldownMessage, "Next analysis available in 6h 0m")
+        XCTAssertEqual(sut.cooldownMessage, "New analysis available in 60s")
         XCTAssertFalse(sut.canStartAnalysis)
     }
 
@@ -1049,8 +1214,8 @@ extension AnalysisViewModelTests {
     /// with a pre-selected rating the user never gave on its text.
     func testRestoreDoesNotAttachAnOldVerdictToARunStartedMeanwhile() async throws {
         let generatedAt = Self.reference.addingTimeInterval(-7 * 3_600)
-        try await storeRecommendation("Older advice.", at: generatedAt)
-        await feedbackStore.record(.helpful, at: generatedAt.addingTimeInterval(60))
+        let older = try await storeRecommendation("Older advice.", at: generatedAt)
+        try await results.setFeedback(.helpful, for: older)
         await streamer.setChunks(["Fresh advice."])
         let sut = makeSUT()
 

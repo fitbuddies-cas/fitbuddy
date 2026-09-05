@@ -11,7 +11,7 @@ final class DataResetServiceTests: XCTestCase {
     private var workouts: WorkoutStore!
     private var results: AnalysisResultStore!
     private var timestamps: SyncTimestampStore!
-    private var cooldown: AnalysisCooldownStore!
+    private var rateLimit: AnalysisRateLimitStore!
     private var feedback: AnalysisFeedbackStore!
     private var priority: LLMPriorityStore!
     private var skip: LLMKeysSkipStore!
@@ -29,7 +29,7 @@ final class DataResetServiceTests: XCTestCase {
         suiteName = "fitbuddy.tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
         timestamps = SyncTimestampStore(defaults: defaults)
-        cooldown = AnalysisCooldownStore(defaults: defaults)
+        rateLimit = AnalysisRateLimitStore(defaults: defaults)
         feedback = AnalysisFeedbackStore(defaults: defaults)
         priority = LLMPriorityStore(defaults: defaults)
         skip = LLMKeysSkipStore(defaults: defaults)
@@ -38,7 +38,7 @@ final class DataResetServiceTests: XCTestCase {
             workouts: workouts,
             results: results,
             timestamps: timestamps,
-            cooldown: cooldown,
+            rateLimit: rateLimit,
             feedback: feedback,
             priority: priority,
             skip: skip
@@ -52,7 +52,7 @@ final class DataResetServiceTests: XCTestCase {
         skip = nil
         priority = nil
         feedback = nil
-        cooldown = nil
+        rateLimit = nil
         timestamps = nil
         results = nil
         workouts = nil
@@ -167,7 +167,7 @@ final class DataResetServiceTests: XCTestCase {
             workouts: workouts,
             results: results,
             timestamps: timestamps,
-            cooldown: cooldown,
+            rateLimit: rateLimit,
             feedback: feedback,
             priority: priority,
             skip: skip
@@ -199,45 +199,46 @@ private actor FailingDeleteKeychainStub: KeychainStoring {
     func exists(_ key: KeychainKey) throws -> Bool { false }
 }
 
-// MARK: - Analysis leftovers (#97)
+// MARK: - Analysis leftovers (#97, #117)
 
 extension DataResetServiceTests {
     /// The deletion right covers everything the analysis leaves behind, not
-    /// just the workouts: recommendation, verdict, tally and cooldown.
-    func testDeleteAllDataRemovesTheStoredAnalysis() async throws {
-        try await results.save(
-            text: "Add 2.5 kg on bench next session.",
-            generatedAt: Date(timeIntervalSince1970: 1_788_000_000),
-            context: AnalysisContext(sessionCount: 12, window: .default)
-        )
+    /// just the workouts: the whole history, the tally and the rate limit.
+    func testDeleteAllDataRemovesTheWholeAnalysisHistory() async throws {
+        let reference = Date(timeIntervalSince1970: 1_788_000_000)
+        for index in 0..<3 {
+            try await results.save(
+                text: "Analysis \(index)",
+                generatedAt: reference.addingTimeInterval(Double(index) * 3_600),
+                context: AnalysisContext(sessionCount: 12, window: .default)
+            )
+        }
 
         await sut.deleteAllData()
 
-        let stored = try await results.latest()
-        XCTAssertNil(stored)
+        let stored = try await results.recent(limit: 20)
+        XCTAssertTrue(stored.isEmpty)
     }
 
-    func testDeleteAllDataRemovesTheFeedbackVerdictAndTally() async throws {
-        await feedback.record(.helpful, at: Date(timeIntervalSince1970: 1_788_000_000))
+    func testDeleteAllDataRemovesTheFeedbackTally() async throws {
+        await feedback.record(.helpful)
 
         await sut.deleteAllData()
 
-        let last = await feedback.lastFeedback()
         let tally = await feedback.count(of: .helpful)
-        XCTAssertNil(last?.feedback)
         XCTAssertEqual(tally, 0)
     }
 
-    /// Losing the 6h window is accepted collateral: the same call wipes both
-    /// API keys and the whole cache, so nobody reaches this path to buy a
-    /// fresh analysis (#97).
-    func testDeleteAllDataRemovesTheAnalysisCooldown() async throws {
+    /// Losing the 60s lock is accepted collateral: the same call wipes both
+    /// API keys and the whole cache, so nobody reaches this path to skip a
+    /// wait (#97).
+    func testDeleteAllDataRemovesTheAnalysisRateLimit() async throws {
         let reference = Date(timeIntervalSince1970: 1_788_000_000)
-        await cooldown.recordCall(at: reference)
+        await rateLimit.recordCall(at: reference)
 
         await sut.deleteAllData()
 
-        let active = await cooldown.activeCooldown(now: reference)
+        let active = await rateLimit.activeLock(now: reference)
         XCTAssertNil(active)
     }
 }

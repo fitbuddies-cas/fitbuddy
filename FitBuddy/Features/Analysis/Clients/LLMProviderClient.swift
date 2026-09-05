@@ -12,7 +12,7 @@ import Foundation
 /// the request** (bad key, offline, 4xx/5xx). An error delivered *through* the
 /// stream means it accepted and then failed mid-answer. The orchestrator falls
 /// back in both cases, but only the second one has cost the user tokens — which
-/// is what decides whether the 6h cooldown is spent.
+/// is what decides whether the lock between two runs is started.
 protocol LLMProviderClient: Sendable {
     /// Which provider this client speaks to, so the orchestrator can label a
     /// run without keeping a parallel mapping.

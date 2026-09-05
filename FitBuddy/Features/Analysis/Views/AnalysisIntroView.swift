@@ -3,7 +3,7 @@ import SwiftUI
 /// The resting state of the analysis screen: what the analysis is, what it
 /// sends, and the button that starts it (#32).
 struct AnalysisIntroView: View {
-    /// `"Next analysis available in 5h 12m"`, or `nil` while a run is allowed.
+    /// `"New analysis available in 45s"`, or `nil` while a run is allowed.
     let cooldownMessage: String?
     let canStart: Bool
     let onStart: () -> Void
@@ -58,7 +58,7 @@ struct AnalysisIntroView: View {
 
 #Preview("On cooldown") {
     AnalysisIntroView(
-        cooldownMessage: "Next analysis available in 5h 12m",
+        cooldownMessage: "New analysis available in 45s",
         canStart: false,
         onStart: {}
     )

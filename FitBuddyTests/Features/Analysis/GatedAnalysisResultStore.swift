@@ -30,18 +30,31 @@ actor GatedAnalysisResultStore: AnalysisResultStoring {
         release = nil
     }
 
-    func save(text: String, generatedAt: Date, context: AnalysisContext) async throws {
+    @discardableResult
+    func save(text: String, generatedAt: Date, context: AnalysisContext) async throws -> UUID {
         didEnter = true
         entered?.resume()
         entered = nil
         if !isReleased {
             await withCheckedContinuation { release = $0 }
         }
-        try await wrapped.save(text: text, generatedAt: generatedAt, context: context)
+        return try await wrapped.save(text: text, generatedAt: generatedAt, context: context)
     }
 
     func latest() async throws -> AnalysisResultSnapshot? {
         try await wrapped.latest()
+    }
+
+    func recent(limit: Int) async throws -> [AnalysisResultSnapshot] {
+        try await wrapped.recent(limit: limit)
+    }
+
+    func delete(id: UUID) async throws {
+        try await wrapped.delete(id: id)
+    }
+
+    func setFeedback(_ feedback: AnalysisFeedback?, for id: UUID) async throws {
+        try await wrapped.setFeedback(feedback, for: id)
     }
 
     func deleteAll() async throws {
