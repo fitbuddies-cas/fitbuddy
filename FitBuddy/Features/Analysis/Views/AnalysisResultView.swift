@@ -21,9 +21,9 @@ struct AnalysisResultView: View {
     /// point: the user has to know they are looking at yesterday's advice
     /// (US-3 AC10, #97).
     var age: String? = nil
-    /// Starts over from the intro screen. `nil` while the cooldown blocks a
+    /// Starts over from the intro screen. `nil` while the lock blocks a
     /// new run — an enabled button that cannot do anything is worse than no
-    /// button, and the cooldown label in the footer already explains the wait.
+    /// button, and the lock label in the footer already explains the wait.
     var onNewAnalysis: (() -> Void)? = nil
 
     var body: some View {
@@ -131,7 +131,7 @@ private let previewRecommendation = """
 }
 
 /// A recommendation brought back from disk after an app restart (#97): the
-/// provider is not stored, the age is, and the cooldown has since expired — so
+/// provider is not stored, the age is, and the lock has since expired — so
 /// the way back to the intro screen is offered.
 #Preview("Restored") {
     ScrollView {

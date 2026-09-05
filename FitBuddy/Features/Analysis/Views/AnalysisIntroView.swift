@@ -4,7 +4,7 @@ import SwiftUI
 /// sends, and the button that starts it (#32).
 struct AnalysisIntroView: View {
     /// `"New analysis available in 45s"`, or `nil` while a run is allowed.
-    let cooldownMessage: String?
+    let lockMessage: String?
     let canStart: Bool
     let onStart: () -> Void
 
@@ -36,8 +36,8 @@ struct AnalysisIntroView: View {
                 .buttonStyle(.fb(.accent))
                 .disabled(!canStart)
 
-            if let cooldownMessage {
-                Text(cooldownMessage)
+            if let lockMessage {
+                Text(lockMessage)
                     .font(.footnote)
                     .fbTabularNumbers()
                     .foregroundStyle(Color.fbMuted)
@@ -51,14 +51,14 @@ struct AnalysisIntroView: View {
 
 #if DEBUG
 #Preview("Ready") {
-    AnalysisIntroView(cooldownMessage: nil, canStart: true, onStart: {})
+    AnalysisIntroView(lockMessage: nil, canStart: true, onStart: {})
         .padding(16)
         .background(Color.fbBackground)
 }
 
-#Preview("On cooldown") {
+#Preview("Locked") {
     AnalysisIntroView(
-        cooldownMessage: "New analysis available in 45s",
+        lockMessage: "New analysis available in 45s",
         canStart: false,
         onStart: {}
     )

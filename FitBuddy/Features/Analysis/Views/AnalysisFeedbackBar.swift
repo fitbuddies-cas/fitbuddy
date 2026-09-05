@@ -5,13 +5,13 @@ import SwiftUI
 /// A tap is stored on the device and nothing else happens — no request, no
 /// backend. The buttons stay put after the tap, with the chosen verdict filled:
 /// the store is built to take a changed mind, so the UI has to let the user
-/// change it. Below them sits the cooldown label, which is what the user
+/// change it. Below them sits the lock label, which is what the user
 /// actually needs next.
 struct AnalysisFeedbackBar: View {
     /// The verdict already given for this recommendation, if any.
     let selected: AnalysisFeedback?
     /// `"New analysis available in 45s"`, or `nil` while a run is allowed.
-    let cooldownMessage: String?
+    let lockMessage: String?
     let onSelect: (AnalysisFeedback) -> Void
 
     var body: some View {
@@ -22,8 +22,8 @@ struct AnalysisFeedbackBar: View {
                     button(for: verdict)
                 }
             }
-            if let cooldownMessage {
-                Text(cooldownMessage)
+            if let lockMessage {
+                Text(lockMessage)
                     .font(.subheadline.weight(.semibold))
                     .fbTabularNumbers()
                     .foregroundStyle(Color.fbInk)
@@ -93,7 +93,7 @@ struct AnalysisFeedbackBar: View {
 /// neither the scroll-edge fade nor the contrast it actually renders against.
 private struct AnalysisFeedbackBarPreview: View {
     let selected: AnalysisFeedback?
-    let cooldownMessage: String?
+    let lockMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -105,7 +105,7 @@ private struct AnalysisFeedbackBarPreview: View {
             .safeAreaBar(edge: .bottom) {
                 AnalysisFeedbackBar(
                     selected: selected,
-                    cooldownMessage: cooldownMessage,
+                    lockMessage: lockMessage,
                     onSelect: { _ in }
                 )
             }
@@ -114,20 +114,20 @@ private struct AnalysisFeedbackBarPreview: View {
 }
 
 #Preview("Unrated") {
-    AnalysisFeedbackBarPreview(selected: nil, cooldownMessage: nil)
+    AnalysisFeedbackBarPreview(selected: nil, lockMessage: nil)
 }
 
 #Preview("Rated") {
     AnalysisFeedbackBarPreview(
         selected: .helpful,
-        cooldownMessage: "New analysis available in 45s"
+        lockMessage: "New analysis available in 45s"
     )
 }
 
 #Preview("Rated not helpful") {
     AnalysisFeedbackBarPreview(
         selected: .notHelpful,
-        cooldownMessage: "New analysis available in 45s"
+        lockMessage: "New analysis available in 45s"
     )
 }
 #endif

@@ -6,9 +6,9 @@ import Foundation
 /// without three stubbed endpoints.
 ///
 /// Distinguishes the two failure shapes the orchestrator treats differently:
-/// `startError` means the provider never accepted the request (no cooldown is
-/// spent), `streamError` means it accepted and then died mid-answer (the
-/// cooldown is).
+/// `startError` means the provider never accepted the request (no lock is
+/// started), `streamError` means it accepted and then died mid-answer (the
+/// lock is).
 final class StubProviderClient: LLMProviderClient, @unchecked Sendable {
     let provider: LLMProvider
 

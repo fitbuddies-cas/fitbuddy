@@ -1,13 +1,13 @@
 import XCTest
 @testable import FitBuddy
 
-/// Unit tests for `CooldownFormatter` — the «New analysis available in 45s»
+/// Unit tests for `RateLimitFormatter` — the «New analysis available in 45s»
 /// label (#31 AC3, #117).
-final class CooldownFormatterTests: XCTestCase {
+final class RateLimitFormatterTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_788_000_000)
 
     private func remaining(_ seconds: TimeInterval) -> String? {
-        CooldownFormatter.remaining(until: now.addingTimeInterval(seconds), now: now)
+        RateLimitFormatter.remaining(until: now.addingTimeInterval(seconds), now: now)
     }
 
     func testFormatsSeconds() {
@@ -38,13 +38,13 @@ final class CooldownFormatterTests: XCTestCase {
 
     func testMessageWrapsRemainingTime() {
         XCTAssertEqual(
-            CooldownFormatter.message(until: now.addingTimeInterval(45), now: now),
+            RateLimitFormatter.message(until: now.addingTimeInterval(45), now: now),
             "New analysis available in 45s"
         )
     }
 
     func testMessageIsNilWithoutAnActiveLock() {
-        XCTAssertNil(CooldownFormatter.message(until: nil, now: now))
-        XCTAssertNil(CooldownFormatter.message(until: now.addingTimeInterval(-1), now: now))
+        XCTAssertNil(RateLimitFormatter.message(until: nil, now: now))
+        XCTAssertNil(RateLimitFormatter.message(until: now.addingTimeInterval(-1), now: now))
     }
 }

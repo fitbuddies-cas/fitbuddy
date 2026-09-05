@@ -56,7 +56,7 @@
       analyzeLong:    { label: '3.3 Long wait · cancel', render: () => <Phone><FBAnalyzeLoadingScreen longWait /></Phone> },
       resultProg:     { label: '3.4 Result · progression', render: () => <Phone><FBAnalysisResultScreen variant="progression" /></Phone> },
       resultRec:      { label: '3.5 Result · recovery',  render: () => <Phone><FBAnalysisResultScreen variant="recovery" /></Phone> },
-      cooldown:       { label: '3.6 Feedback + cooldown', render: () => <Phone><FBAnalysisResultScreen variant="progression" feedback="yes" cooldown /></Phone> },
+      rateLimit:      { label: '3.6 Feedback + rate limit', render: () => <Phone><FBAnalysisResultScreen variant="progression" feedback="yes" rateLimited /></Phone> },
     };
 
     // ─── Interactive prototype controller ──────────────────────────
@@ -79,7 +79,7 @@
         { id: 'analyzeLong',   lane: 'US-3', label: 'Long wait · cancel' },
         { id: 'resultProg',    lane: 'US-3', label: 'Result · progression' },
         { id: 'resultRec',     lane: 'US-3', label: 'Result · recovery' },
-        { id: 'cooldown',      lane: 'US-3', label: 'Feedback + cooldown' },
+        { id: 'rateLimit',     lane: 'US-3', label: 'Feedback + rate limit' },
       ];
 
       const [i, setI] = useState(0);
@@ -101,9 +101,9 @@
         if (id === 'dashEmpty')      return <FBDashboardScreen variant="empty" />;
         if (id === 'analyzeLoading') return <FBAnalyzeLoadingScreen />;
         if (id === 'analyzeLong')    return <FBAnalyzeLoadingScreen longWait onCancel={() => setI(flow.findIndex(f => f.id === 'dashData2'))} />;
-        if (id === 'resultProg')     return <FBAnalysisResultScreen variant="progression" onFeedback={() => setI(flow.findIndex(f => f.id === 'cooldown'))} onClose={() => setI(flow.findIndex(f => f.id === 'dashData2'))} />;
-        if (id === 'resultRec')      return <FBAnalysisResultScreen variant="recovery" onFeedback={() => setI(flow.findIndex(f => f.id === 'cooldown'))} onClose={() => setI(flow.findIndex(f => f.id === 'dashData2'))} />;
-        if (id === 'cooldown')       return <FBAnalysisResultScreen variant="progression" feedback="yes" cooldown onClose={() => setI(flow.findIndex(f => f.id === 'dashData2'))} />;
+        if (id === 'resultProg')     return <FBAnalysisResultScreen variant="progression" onFeedback={() => setI(flow.findIndex(f => f.id === 'rateLimit'))} onClose={() => setI(flow.findIndex(f => f.id === 'dashData2'))} />;
+        if (id === 'resultRec')      return <FBAnalysisResultScreen variant="recovery" onFeedback={() => setI(flow.findIndex(f => f.id === 'rateLimit'))} onClose={() => setI(flow.findIndex(f => f.id === 'dashData2'))} />;
+        if (id === 'rateLimit')      return <FBAnalysisResultScreen variant="progression" feedback="yes" rateLimited onClose={() => setI(flow.findIndex(f => f.id === 'dashData2'))} />;
         return null;
       })();
 
@@ -227,14 +227,14 @@
           <DCSection
             id="us3"
             title="US-3 · AI-Analyse auf Knopfdruck"
-            subtitle="Spinner sofort, Cancel nach 30 s, konkrete Empfehlung mit Werten, Recovery-Variante, Feedback + Cooldown."
+            subtitle="Spinner sofort, Cancel nach 30 s, konkrete Empfehlung mit Werten, Recovery-Variante, Feedback + Rate-Limit."
           >
             {screenArtboard('us3-1', 'analyzePre')}
             {screenArtboard('us3-2', 'analyzeLoading')}
             {screenArtboard('us3-3', 'analyzeLong')}
             {screenArtboard('us3-4', 'resultProg')}
             {screenArtboard('us3-5', 'resultRec')}
-            {screenArtboard('us3-6', 'cooldown')}
+            {screenArtboard('us3-6', 'rateLimit')}
           </DCSection>
 
           <DCSection

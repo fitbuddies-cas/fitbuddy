@@ -7,7 +7,7 @@ import OSLog
 ///
 /// Several things are published separately because they answer different
 /// questions. `state` says what the screen shows right now, `attribution` says
-/// who is answering it and who was asked before them, `cooldownMessage` says
+/// who is answering it and who was asked before them, `lockMessage` says
 /// when the next run is allowed, `resultAge` says how old the recommendation
 /// on screen is, and `isTakingLong` says whether this run has passed the 30s
 /// mark without a single token — the moment US-3 AC1 wants the cancel button
@@ -35,7 +35,7 @@ final class AnalysisViewModel: ObservableObject {
     /// is tried, and whenever the screen is at rest.
     @Published private(set) var attribution: AnalysisAttribution?
     /// `"New analysis available in 45s"`, or `nil` while a run is allowed.
-    @Published private(set) var cooldownMessage: String?
+    @Published private(set) var lockMessage: String?
     /// Whether the running call has passed `slowThreshold` without answering.
     /// Cleared as soon as the first token arrives, and on every state change
     /// out of a running state.
@@ -53,7 +53,7 @@ final class AnalysisViewModel: ObservableObject {
     /// and by `restore()`; `nil` whenever no recommendation is showing (#97).
     @Published private(set) var generatedAt: Date?
     /// `generatedAt` as the screen prints it — `"2 h ago"`. Refreshed with the
-    /// cooldown label, so a sheet left open does not keep claiming "just now".
+    /// lock label, so a sheet left open does not keep claiming "just now".
     @Published private(set) var resultAge: String?
     /// Whether more than one analysis is stored, and the history is therefore
     /// worth opening (US-3 AC11, #117). With a single one the screen already
@@ -62,14 +62,14 @@ final class AnalysisViewModel: ObservableObject {
 
     /// Whether tapping "Analyse" can start a run right now.
     var canStartAnalysis: Bool {
-        !state.isRunning && cooldownMessage == nil
+        !state.isRunning && lockMessage == nil
     }
 
     /// The run currently in flight, held so `cancel()` can stop it.
     private var runTask: Task<Void, Never>?
     /// Counts runs, so a superseded one cannot clean up after the run that
-    /// replaced it. A finished run refreshes the cooldown before it lets go,
-    /// and the user can start the next one during exactly that await.
+    /// replaced it. A finished run refreshes the lock label before it lets
+    /// go, and the user can start the next one during exactly that await.
     private var runID: UInt64 = 0
     /// Fires once `slowThreshold` has passed without a first token.
     private var slowTask: Task<Void, Never>?
@@ -122,9 +122,9 @@ final class AnalysisViewModel: ObservableObject {
     ///     survives an app restart (US-3 AC10). `nil` — the default — turns
     ///     persistence off, which is what SwiftUI previews need: they have no
     ///     `ModelContainer` to build a store over.
-    ///   - now: Injectable clock, so windows and cooldown math are testable.
+    ///   - now: Injectable clock, so windows and lock math are testable.
     ///   - slowThreshold: Injectable, so tests do not wait 30 real seconds.
-    ///   - tickInterval: How often `trackCooldown()` refreshes the label while
+    ///   - tickInterval: How often `trackLock()` refreshes the label while
     ///     the lock is running. One second, because a 60s lock counted down in
     ///     minute steps would never visibly move.
     ///   - restingTickInterval: The same, once no lock is active — only the
@@ -167,12 +167,12 @@ final class AnalysisViewModel: ObservableObject {
         // actor, so two taps landing in that window would otherwise both pass
         // the guard above and start a run each.
         state = .loading
-        // Cleared before the cooldown branch below can return: that branch
+        // Cleared before the lock branch below can return: that branch
         // publishes an error which `AnalysisErrorView` renders together with
         // the attribution, and the providers of the *previous* run have nothing
         // to do with a blocked one.
         attribution = nil
-        // Cleared before the cooldown branch below can return, too: that branch
+        // Cleared before the lock branch below can return, too: that branch
         // publishes an error, and `dismissFailure()` then calls `restore()` to
         // put the stored recommendation back. Clearing this only on the path
         // that actually starts a run would leave a refused tap holding the flag
@@ -180,11 +180,11 @@ final class AnalysisViewModel: ObservableObject {
         // still on disk, unreachable until the app restarts (#97).
         didDismissStoredResult = false
 
-        if let availableAt = await refreshCooldown() {
+        if let availableAt = await refreshLock() {
             // Checked here as well as inside `InferenceService`: the button is
             // already disabled, but a stale label plus a fast tap must produce
             // an explanation, not a silent no-op.
-            state = .error(.cooldownActive(availableAt: availableAt))
+            state = .error(.lockActive(availableAt: availableAt))
             return
         }
         // A `cancel()` that landed during the await above already published a
@@ -210,7 +210,7 @@ final class AnalysisViewModel: ObservableObject {
     /// Returns to `.idle` rather than keeping the half-written text: a
     /// recommendation cut off mid-sentence is not a recommendation, and
     /// presenting one as a result would be worse than showing none. The
-    /// cooldown may still have started, so `cooldownMessage` explains why the
+    /// lock may still have started, so `lockMessage` explains why the
     /// button does not immediately come back.
     func cancel() {
         guard state.isRunning else { return }
@@ -412,13 +412,13 @@ final class AnalysisViewModel: ObservableObject {
             } else {
                 await persist(text)
                 // Before `.result`, not after: `canStartAnalysis` reads
-                // `cooldownMessage`, and a value still nil from before the run
+                // `lockMessage`, and a value still nil from before the run
                 // makes `AnalysisResultView` offer "New analysis" for a run
                 // that `start()` would immediately refuse — replacing the
-                // recommendation that just arrived with a cooldown error. While
+                // recommendation that just arrived with a lock error. While
                 // these awaits run the state stays `.streaming`, so the button
                 // is never enabled in between.
-                await refreshCooldown()
+                await refreshLock()
                 // A `cancel()` during the awaits above already published a
                 // resting state; it wins over the run it stopped.
                 guard !Task.isCancelled else { return await finish(id) }
@@ -519,7 +519,7 @@ final class AnalysisViewModel: ObservableObject {
         }
     }
 
-    /// Ends a run: the slow hint goes, and the cooldown label is re-read from
+    /// Ends a run: the slow hint goes, and the lock label is re-read from
     /// the store — including after a cancellation, where a provider may
     /// already have been billed and the window already started.
     private func finish(_ id: UInt64) async {
@@ -535,7 +535,7 @@ final class AnalysisViewModel: ObservableObject {
         if Task.isCancelled && state.isRunning {
             state = .idle
         }
-        await refreshCooldown()
+        await refreshLock()
     }
 
     // MARK: - Slow-run hint
@@ -567,9 +567,9 @@ final class AnalysisViewModel: ObservableObject {
         isTakingLong = false
     }
 
-    // MARK: - Cooldown
+    // MARK: - Rate limit
 
-    /// Recomputes `cooldownMessage` from the stored timestamp and returns the
+    /// Recomputes `lockMessage` from the stored timestamp and returns the
     /// instant the lock lifts, or `nil` while a run is allowed.
     ///
     /// Callers that need the decision as well as the label take it from here
@@ -577,18 +577,18 @@ final class AnalysisViewModel: ObservableObject {
     /// the store, so message and decision can never describe different
     /// instants.
     @discardableResult
-    func refreshCooldown() async -> Date? {
+    func refreshLock() async -> Date? {
         let reference = now()
         let availableAt = await rateLimit.activeLock(now: reference)
-        let wasResting = cooldownMessage == nil
-        cooldownMessage = CooldownFormatter.message(until: availableAt, now: reference)
+        let wasResting = lockMessage == nil
+        lockMessage = RateLimitFormatter.message(until: availableAt, now: reference)
         // The lock starts mid-call, which is almost always while the ticker is
         // resting — and a resting sleep is a minute long. Without this the
         // countdown would stand still for most of the 60s it is counting down,
         // which is exactly the second-by-second stretch the fast rate exists
         // for. Cutting the sleep short here puts the loop back on `tickInterval`
         // on its next pass.
-        if wasResting, cooldownMessage != nil {
+        if wasResting, lockMessage != nil {
             tickerSleep?.cancel()
         }
         // Both labels age at the same rate and are driven by the same ticker,
@@ -596,7 +596,7 @@ final class AnalysisViewModel: ObservableObject {
         refreshResultAge(now: reference)
         // A lock message on screen outlives its reason otherwise: once the
         // lock lifts, the explanation is wrong and the button is back.
-        if availableAt == nil, case .error(.cooldownActive) = state {
+        if availableAt == nil, case .error(.lockActive) = state {
             state = .idle
         }
         return availableAt
@@ -635,14 +635,14 @@ final class AnalysisViewModel: ObservableObject {
     /// runs, the label is a second-by-second countdown over a 60s window. Once
     /// it lifts, only the recommendation's age is still changing, and that is
     /// worth a wake-up a minute rather than one a second.
-    func trackCooldown() async {
+    func trackLock() async {
         while !Task.isCancelled {
-            let availableAt = await refreshCooldown()
+            let availableAt = await refreshLock()
             await tick(after: availableAt == nil ? restingTickInterval : tickInterval)
         }
     }
 
-    /// Waits out one tick — or less, when `refreshCooldown()` sees a lock start
+    /// Waits out one tick — or less, when `refreshLock()` sees a lock start
     /// and cancels the sleep.
     ///
     /// Its own task rather than a bare `Task.sleep`, because that is what makes
