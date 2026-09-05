@@ -79,7 +79,12 @@ enum AnalysisTextFormatter {
         if line.hasPrefix("#") {
             let title = line.drop(while: { $0 == "#" }).trimmingCharacters(in: .whitespaces)
             guard !title.isEmpty else { return nil }
-            return withoutTrailingColon(unwrappingBold(title))
+            // Unescaped here, unlike every other block: a heading is rendered
+            // as plain text and never reaches the parser the escapes were for,
+            // so "# Do 3*5" would otherwise show its backslash. The `**` branch
+            // below needs none — an escape contains a `*`, which its guard
+            // already turns into a paragraph.
+            return unescapingAsterisks(withoutTrailingColon(unwrappingBold(title)))
         }
         guard line.hasPrefix("**") else { return nil }
         // Everything after the opening marker has to be one bold run: a line
@@ -117,6 +122,14 @@ enum AnalysisTextFormatter {
         text.hasSuffix(":") ? String(text.dropLast()) : text
     }
 
+    /// Undoes what `normalizedEmphasis(_:)` escaped for the Markdown parser.
+    ///
+    /// Only for text that bypasses that parser; everything it does read
+    /// resolves the escapes itself.
+    private static func unescapingAsterisks(_ text: String) -> String {
+        text.replacingOccurrences(of: "\\*", with: "*")
+    }
+
     // MARK: - Inline
 
     /// Resolves `**bold**` and `*italic*` inside one block.
@@ -134,7 +147,7 @@ enum AnalysisTextFormatter {
             // The escapes `normalizedEmphasis(_:)` added are for the parser
             // that just refused the text; showing them raw would put a
             // backslash on screen instead of the asterisk they protect.
-            return AttributedString(text.replacingOccurrences(of: "\\*", with: "*"))
+            return AttributedString(unescapingAsterisks(text))
         }
         return parsed
     }

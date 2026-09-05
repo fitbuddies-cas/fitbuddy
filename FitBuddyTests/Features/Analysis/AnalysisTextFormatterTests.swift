@@ -136,6 +136,14 @@ final class AnalysisTextFormatterTests: XCTestCase {
         assertRenders("Do 3*", as: [("paragraph", "Do 3")])
     }
 
+    /// A heading is rendered as plain text and never reaches the Markdown
+    /// parser, so the escape has to come off before it is handed over — or the
+    /// backslash shows up in its place.
+    func testAHeadingKeepsItsDigitAsteriskWithoutTheEscape() {
+        assertRenders("# Do 3*5 on bench", as: [("heading", "Do 3*5 on bench")])
+        XCTAssertEqual(AnalysisTextFormatter.plainText(from: "# Do 3*5"), "Do 3*5")
+    }
+
     // MARK: - Streaming
 
     /// The half-written marker at the end of a partial answer must show
