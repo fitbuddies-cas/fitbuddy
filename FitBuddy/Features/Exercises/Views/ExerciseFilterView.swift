@@ -28,6 +28,7 @@ struct ExerciseFilterView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 4)
         }
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("Filter by muscle group")
     }
 
@@ -52,9 +53,12 @@ struct ExerciseFilterView: View {
                         Capsule().strokeBorder(Color.fbBorder, lineWidth: isSelected ? 0 : 1)
                     )
                     .clipShape(Capsule())
+                    // The pill keeps its ~30 pt height; the hit target is padded
+                    // out to the 44 pt HIG minimum without inflating the visual.
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(title)
             .accessibilityAddTraits(isSelected ? .isSelected : [])
         }
     }

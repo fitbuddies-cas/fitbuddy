@@ -35,7 +35,7 @@ struct ExerciseListView: View {
     /// the user already knows from every other iOS list.
     @ViewBuilder
     private var scrollView: some View {
-        if viewModel.isSearchable {
+        if viewModel.showsFilterControls {
             baseScrollView
                 .searchable(
                     text: $viewModel.searchText,
@@ -63,7 +63,7 @@ struct ExerciseListView: View {
     /// condition as the search field.
     @ViewBuilder
     private var filterRow: some View {
-        if viewModel.isSearchable {
+        if viewModel.showsFilterControls {
             ExerciseFilterView(
                 groups: viewModel.filterGroups,
                 selection: viewModel.selectedMuscleGroups,
@@ -134,7 +134,7 @@ struct ExerciseListView: View {
             FBInfoRow(
                 icon: "line.3.horizontal.decrease",
                 title: "No exercises found",
-                text: "Nothing in the last 90 days matches your filter. Try a shorter term or fewer muscle groups."
+                text: "Nothing in the last 90 days matches your filter. Try a shorter term, or turn off a muscle group."
             )
         }
         .padding(.top, 40)

@@ -62,7 +62,7 @@ final class ExerciseListViewModel: ObservableObject {
     /// Whether the search field and the filter row belong on screen: only once
     /// the window has loaded with movements in it. Over an empty or failed
     /// window they would be controls with nothing to act on.
-    var isSearchable: Bool {
+    var showsFilterControls: Bool {
         guard case .loaded = state else { return false }
         return true
     }
