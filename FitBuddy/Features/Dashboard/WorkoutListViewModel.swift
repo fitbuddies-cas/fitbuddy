@@ -32,6 +32,13 @@ final class WorkoutListViewModel: ObservableObject {
     /// The sync currently in flight, so repeated pull-to-refresh does not
     /// stack up parallel windows fetches on Hevy.
     private var syncTask: Task<Void, Never>?
+    /// Identifies the sync that owns `syncStatus`, bumped once per sync.
+    ///
+    /// `Task.isCancelled` cannot stand in for this. It is true both when a
+    /// newer sync superseded this one and when the cancellation came from
+    /// outside — SwiftUI tearing down the `.refreshable` task as the user
+    /// leaves the tab mid-pull — and the two need opposite responses.
+    private var syncGeneration = 0
 
     private let cache: WorkoutSummaryReading
     private let syncer: WorkoutSyncing?
@@ -159,20 +166,32 @@ final class WorkoutListViewModel: ObservableObject {
     private func sync(announcingFailure: Bool) async {
         guard let syncer else { return }
         syncTask?.cancel()
-        let task = Task { await performSync(with: syncer, announcingFailure: announcingFailure) }
+        syncGeneration &+= 1
+        let generation = syncGeneration
+        let task = Task {
+            await performSync(
+                with: syncer,
+                announcingFailure: announcingFailure,
+                generation: generation
+            )
+        }
         syncTask = task
         await task.awaitingCancellation()
     }
 
-    private func performSync(with syncer: WorkoutSyncing, announcingFailure: Bool) async {
+    private func performSync(
+        with syncer: WorkoutSyncing,
+        announcingFailure: Bool,
+        generation: Int
+    ) async {
         // Closes the window in which a superseded task publishes `.syncing`
         // over the newer one's result. The main actor runs task bodies FIFO,
         // so this is not reachable today — but it costs one line.
-        guard !Task.isCancelled else { return }
+        guard isCurrentSync(generation) else { return }
         syncStatus = .syncing
         do {
             try await syncer.syncRecentWorkouts()
-            guard !Task.isCancelled else { return }
+            guard isCurrentSync(generation) else { return }
             // Clears the banner (#28 AC3) before the reload, so the cached
             // window and the "up to date" claim land in the same render pass.
             // The toast goes with it: a message about a failure that has just
@@ -183,7 +202,9 @@ final class WorkoutListViewModel: ObservableObject {
         } catch {
             // Superseded by a newer sync: that one owns `syncStatus` now, so
             // this one publishes nothing at all — not even the idle reset.
-            guard !Task.isCancelled else { return }
+            // Every other way out of this block, cancellation included, has to
+            // leave `.syncing` behind it.
+            guard isCurrentSync(generation) else { return }
 
             // A cancelled request says nothing about connectivity, so it gets
             // no banner. It still has to clear `.syncing`, or the strip would
@@ -211,6 +232,16 @@ final class WorkoutListViewModel: ObservableObject {
             }
             await resolveHeldSpinner()
         }
+    }
+
+    /// Whether this sync is still the one `syncStatus` belongs to.
+    ///
+    /// False only once a newer sync has taken over, which is the single case
+    /// where staying silent is right — the newer one publishes instead. A sync
+    /// that was cancelled from outside is still the current one, so it reports
+    /// its outcome and clears the spinner on its way out.
+    private func isCurrentSync(_ generation: Int) -> Bool {
+        generation == syncGeneration
     }
 
     /// Publishes the empty state that the pre-sync read held back when the

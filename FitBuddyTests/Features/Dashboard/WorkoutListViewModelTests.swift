@@ -401,6 +401,26 @@ final class WorkoutListViewModelTests: XCTestCase {
         XCTAssertNil(sut.refreshNotice)
     }
 
+    /// SwiftUI cancels the `.refreshable` task when the view goes away — a
+    /// tab switch while the pull is still running. That cancellation reaches
+    /// the sync, and nothing newer is behind it to publish an outcome, so the
+    /// sync itself has to clear `.syncing` before it gives up. Otherwise the
+    /// strip claims "Syncing with Hevy…" for the rest of the app's life.
+    func testRefreshCancelledFromOutsideDoesNotLeaveTheStripSyncing() async {
+        await syncer.gateFirstCall()
+        let sut = makeSUT(withSyncer: true)
+
+        let pull = Task { await sut.retry() }
+        await syncer.waitForFirstCall()
+        XCTAssertEqual(sut.syncStatus, .syncing)
+
+        pull.cancel()
+        await syncer.releaseFirstCall()
+        await pull.value
+
+        XCTAssertNotEqual(sut.syncStatus, .syncing)
+    }
+
     // MARK: - Reload after a discarded cache (#91)
 
     /// The window belongs to a Hevy key that was just replaced. Neither the
