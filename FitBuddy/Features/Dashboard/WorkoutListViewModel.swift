@@ -16,6 +16,10 @@ final class WorkoutListViewModel: ObservableObject {
     @Published private(set) var lastSync: Date?
     /// Whether a sync is running and how the last one ended (#28).
     @Published private(set) var syncStatus: SyncStatus = .idle
+    /// The failed pull-to-refresh still waiting to be announced, or `nil` when
+    /// there is nothing to say (#43). Only ever set by `retry()` — the
+    /// automatic sync behind `reload()` has the banner and nothing to confirm.
+    @Published private(set) var refreshNotice: RefreshNotice?
 
     /// Called when Hevy rejected the stored key, which `HevyService` has
     /// already wiped. The dashboard cannot recover from this on its own — the
@@ -55,13 +59,33 @@ final class WorkoutListViewModel: ObservableObject {
         self.now = now
     }
 
+    /// The user asked for fresh data: pull-to-refresh, or one of the retry
+    /// buttons (#43, US-10 AC1).
+    ///
+    /// Does the same work as `refresh()` and adds one thing — a failure is
+    /// also announced once through `refreshNotice`. The banner alone cannot
+    /// carry that: it is already up when the user pulls, and a second failure
+    /// of the same kind leaves it looking exactly as it did, so nothing on
+    /// screen would confirm that the retry ran at all (US-10 AC2).
+    func retry() async {
+        await refresh(announcingFailure: true)
+    }
+
+    /// Drops the toast — its timeout elapsed, or the user tapped it away.
+    func dismissRefreshNotice() {
+        refreshNotice = nil
+    }
+
     /// Shows what is cached, then brings it up to date from Hevy — the
     /// dashboard's `.task` and its pull-to-refresh.
     ///
     /// The cache read comes first on purpose: an offline device then has the
     /// full dashboard on screen before the request has even timed out, and the
     /// failed sync only adds the banner on top (#28 AC1).
-    func refresh() async {
+    ///
+    /// - Parameter announcingFailure: Raises a `refreshNotice` if the sync
+    ///   fails. Only the user-triggered path passes `true` — see `retry()`.
+    func refresh(announcingFailure: Bool = false) async {
         // An empty cache while the sync behind it is still running is not an
         // answer about the user's training yet: the window may simply have
         // been discarded (#91) or never filled. The spinner stays up and the
@@ -69,7 +93,7 @@ final class WorkoutListViewModel: ObservableObject {
         // `.loading`, so pull-to-refresh keeps its content on screen.
         let holdsSpinner = syncer != nil && state == .loading
         await load(keepingSpinnerWhenEmpty: holdsSpinner)
-        await sync()
+        await sync(announcingFailure: announcingFailure)
     }
 
     /// The dashboard's own load: its first appearance, and every time another
@@ -132,15 +156,15 @@ final class WorkoutListViewModel: ObservableObject {
     ///
     /// Never throws and never clears the screen: a failed sync leaves the
     /// cached dashboard exactly as it was and only sets `syncStatus`.
-    private func sync() async {
+    private func sync(announcingFailure: Bool) async {
         guard let syncer else { return }
         syncTask?.cancel()
-        let task = Task { await performSync(with: syncer) }
+        let task = Task { await performSync(with: syncer, announcingFailure: announcingFailure) }
         syncTask = task
         await task.awaitingCancellation()
     }
 
-    private func performSync(with syncer: WorkoutSyncing) async {
+    private func performSync(with syncer: WorkoutSyncing, announcingFailure: Bool) async {
         // Closes the window in which a superseded task publishes `.syncing`
         // over the newer one's result. The main actor runs task bodies FIFO,
         // so this is not reachable today — but it costs one line.
@@ -151,7 +175,10 @@ final class WorkoutListViewModel: ObservableObject {
             guard !Task.isCancelled else { return }
             // Clears the banner (#28 AC3) before the reload, so the cached
             // window and the "up to date" claim land in the same render pass.
+            // The toast goes with it: a message about a failure that has just
+            // been made good would contradict the timestamp above it (#43).
             syncStatus = .idle
+            refreshNotice = nil
             await load()
         } catch {
             // Superseded by a newer sync: that one owns `syncStatus` now, so
@@ -171,10 +198,17 @@ final class WorkoutListViewModel: ObservableObject {
                 // The key is gone. The banner would be pointless: the next
                 // screen is onboarding, not the dashboard.
                 syncStatus = .idle
+                refreshNotice = nil
                 await onUnauthorized?()
                 return
             }
             syncStatus = .failed(failure)
+            // US-10 AC2: the toast is what tells the user their pull happened
+            // and did not work. Raised after the banner, so both describe the
+            // same failure in one render pass.
+            if announcingFailure {
+                refreshNotice = RefreshNotice(failure: failure)
+            }
             await resolveHeldSpinner()
         }
     }

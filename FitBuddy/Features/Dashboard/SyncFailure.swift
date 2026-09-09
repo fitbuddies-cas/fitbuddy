@@ -77,6 +77,35 @@ enum SyncFailure: Equatable {
         }
     }
 
+    /// The single line the toast shows after a refresh the user asked for
+    /// failed (#43, US-10 AC2).
+    ///
+    /// Written to stand on its own, unlike `summary`, which is a fragment glued
+    /// behind the sync timestamp. It names what went wrong and, where there is
+    /// one, what the user can do about it: this toast is the only feedback a
+    /// repeated failure gives them, so "something went wrong" would waste it.
+    var refreshMessage: String {
+        switch self {
+        case .offline:
+            return "No connection. Your cached data is still here."
+        case .serviceUnavailable:
+            return "Hevy is unavailable right now. Your cached data is still here."
+        case .rateLimited(let retryAfter):
+            guard let wait = Self.wait(retryAfter) else {
+                return "Too many requests to Hevy. Try again in a moment."
+            }
+            return "Too many requests to Hevy. Try again in \(wait)."
+        case .keychainUnavailable:
+            return "Your Hevy key could not be read. Unlock this device and try again."
+        case .unreadableResponse:
+            return "Hevy sent something FitBuddy could not read."
+        case .cacheWriteFailed:
+            return "Your workouts arrived but could not be saved on this device."
+        case .unknown:
+            return "The refresh did not go through. Your cached data is still here."
+        }
+    }
+
     /// The symbol shown next to the banner text.
     ///
     /// Per reason, not one offline glyph for all of them: a crossed-out
