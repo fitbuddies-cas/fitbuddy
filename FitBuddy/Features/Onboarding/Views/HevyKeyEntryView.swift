@@ -43,6 +43,13 @@ struct HevyKeyEntryView: View {
         .background(Color.fbBackground)
         .safeAreaInset(edge: .bottom) { ctaButton.padding(16) }
         .animation(.easeOut(duration: 0.15), value: viewModel.state)
+        // A failed attempt has something to read: the reason, and for a
+        // rejected key the link to fix it. The keyboard covers both, and the
+        // next move is reading rather than typing — "Try again" puts the
+        // cursor back.
+        .onChange(of: failure) { _, failure in
+            if failure != nil { keyFieldIsFocused = false }
+        }
     }
 
     // MARK: - Sections

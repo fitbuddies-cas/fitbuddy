@@ -76,18 +76,53 @@ struct OnboardingApp {
     /// Ticks the consent checkbox and confirms — step 1 done.
     func grantConsent(file: StaticString = #filePath, line: UInt = #line) {
         assertAppears(consentToggle, file: file, line: line)
-        consentToggle.tap()
+        switchOn(consentToggle, file: file, line: line)
         assertEnabled(consentConfirmButton, file: file, line: line)
         consentConfirmButton.tap()
     }
 
-    /// Types `key` into step 2 and submits it.
+    /// Types `key` into step 2 and submits it with the keyboard's Go key.
+    ///
+    /// Submitting from the keyboard rather than by tapping the CTA on purpose:
+    /// the button lives in a bottom safe-area inset, so with the software
+    /// keyboard up a tap at its centre can land on a key instead — which is
+    /// exactly what happened on CI, where no hardware keyboard is attached.
+    /// The field's `.submitLabel(.go)` runs the same `connect()` the button
+    /// does, and it is what a user with the keyboard open actually presses.
     func submitKey(_ key: String, file: StaticString = #filePath, line: UInt = #line) {
         assertAppears(keyField, file: file, line: line)
         keyField.tap()
-        keyField.typeText(key)
-        assertEnabled(keyCTAButton, file: file, line: line)
-        keyCTAButton.tap()
+        keyField.typeText(key + "\n")
+    }
+
+    // MARK: - Interactions
+
+    /// Ticks a switch and makes sure it stayed ticked.
+    ///
+    /// A plain `tap()` is not enough right after a screen appears: the element
+    /// query resolves a frame, and if the layout is still settling behind the
+    /// launch — the consent screen arrives once the Keychain bootstrap
+    /// resolves — the synthesized tap lands where the control no longer is.
+    /// The failure then surfaces one step later as "the confirm button stayed
+    /// disabled", which says nothing about the cause.
+    private func switchOn(
+        _ element: XCUIElement,
+        attempts: Int = 3,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        for _ in 0..<attempts {
+            guard element.value as? String != "1" else { return }
+            element.tap()
+            _ = element.waitForExistence(timeout: 1)
+        }
+        XCTAssertEqual(
+            element.value as? String,
+            "1",
+            "\(element.identifier) did not switch on",
+            file: file,
+            line: line
+        )
     }
 
     // MARK: - Assertions

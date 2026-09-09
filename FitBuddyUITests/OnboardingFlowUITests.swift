@@ -49,7 +49,8 @@ final class OnboardingFlowUITests: XCTestCase {
         )
 
         // The CTA turns into the way back into editing (`retry()`), so the
-        // screen offers a next move rather than a dead end.
+        // screen offers a next move rather than a dead end. It is reachable
+        // because the failed attempt gave up the keyboard.
         sut.assertEnabled(sut.keyCTAButton)
         XCTAssertEqual(sut.keyCTAButton.label, "Try again")
         sut.keyCTAButton.tap()
