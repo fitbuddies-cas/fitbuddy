@@ -1,18 +1,20 @@
 import Foundation
 
-/// Stores the "Helpful" / "Not helpful" taps locally (US-3 AC9, #32).
+/// Counts the "Helpful" / "Not helpful" taps locally (US-3 AC9, #32).
 ///
-/// `UserDefaults`, like `AnalysisCooldownStore`: a verdict and two counters are
-/// scalars, and putting them in the SwiftData cache would tie them to a store
-/// that is wiped on every hard logout (ADR-001).
+/// The verdict itself lives with the recommendation it was given for, in the
+/// SwiftData row (#117): with a history on screen, a single last-verdict key
+/// could no longer say which text it belonged to. What stays here is the
+/// tally, which is about the PoC and not about any one analysis.
 ///
-/// Only the last verdict is read back, and only to re-select a button on a
-/// restored recommendation (#97). The tally is write-only from the app's point
-/// of view: it exists so the PoC evaluation can tell whether the
+/// `UserDefaults`, like `AnalysisRateLimitStore`: two counters are scalars, and
+/// putting them in the SwiftData cache would tie them to a store that is wiped
+/// on every hard logout (ADR-001).
+///
+/// Write-only from the app's point of view: nothing reads the tally back into
+/// the UI. It exists so the PoC evaluation can tell whether the
 /// recommendations landed at all, without a single byte leaving the device.
 actor AnalysisFeedbackStore {
-    private static let lastVerdictKey = "fitbuddy.analysis.feedback.lastVerdict"
-    private static let lastTimestampKey = "fitbuddy.analysis.feedback.lastTimestamp"
     private static let tallyKey = "fitbuddy.analysis.feedback.tally"
 
     private let defaults: UserDefaults
@@ -22,25 +24,13 @@ actor AnalysisFeedbackStore {
         self.defaults = defaults
     }
 
-    /// Records one tap. Overwrites the last verdict — a user changing their
-    /// mind on the same recommendation replaces it rather than adding a second
-    /// opinion — but both taps count in the tally, because both happened.
-    func record(_ feedback: AnalysisFeedback, at date: Date) {
-        defaults.set(feedback.rawValue, forKey: Self.lastVerdictKey)
-        defaults.set(date.timeIntervalSince1970, forKey: Self.lastTimestampKey)
+    /// Counts one tap. A user changing their mind on the same recommendation
+    /// counts twice here, because both taps happened — the row holding the
+    /// verdict is what replaces one opinion with the other.
+    func record(_ feedback: AnalysisFeedback) {
         var tally = storedTally()
         tally[feedback.rawValue, default: 0] += 1
         defaults.set(tally, forKey: Self.tallyKey)
-    }
-
-    /// The most recent verdict and when it was given, or `nil` if the user has
-    /// never rated a recommendation.
-    func lastFeedback() -> (feedback: AnalysisFeedback, date: Date)? {
-        guard let raw = defaults.string(forKey: Self.lastVerdictKey),
-              let feedback = AnalysisFeedback(rawValue: raw),
-              defaults.object(forKey: Self.lastTimestampKey) != nil
-        else { return nil }
-        return (feedback, Date(timeIntervalSince1970: defaults.double(forKey: Self.lastTimestampKey)))
     }
 
     /// How many times `feedback` has been given on this device.
@@ -50,8 +40,6 @@ actor AnalysisFeedbackStore {
 
     /// Drops everything recorded ("delete my data").
     func clear() {
-        defaults.removeObject(forKey: Self.lastVerdictKey)
-        defaults.removeObject(forKey: Self.lastTimestampKey)
         defaults.removeObject(forKey: Self.tallyKey)
     }
 

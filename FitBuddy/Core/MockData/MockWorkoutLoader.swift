@@ -12,6 +12,10 @@ import Foundation
 /// format; they are decoded through the same `HevyWorkoutDTO` path as live
 /// data, so anything built against them — SwiftUI previews, dashboard metrics
 /// (#26), a stubbed `URLProtocol` — sees exactly what the API delivers. The
+/// wire types are the one place outside `HevyConnector` that names Hevy, and
+/// deliberately so: these are recorded Hevy payloads, and a fixture that
+/// decoded them through anything else would stop proving what it exists to
+/// prove. The file is DEBUG-only and never ships (#44). The
 /// `page`/`page_count` envelope is not stored, it is built per request in
 /// `pageData(for:page:pageSize:)`, so a file can never claim a page count that
 /// contradicts the request it answers.
@@ -60,7 +64,7 @@ struct MockWorkoutLoader {
     /// Every workout of `profile`, newest first, as cache models ready to be
     /// inserted into a `ModelContext` or handed to a view.
     func workouts(for profile: MockWorkoutProfile) throws -> [Workout] {
-        try page(for: profile).workouts.map { $0.makeWorkout() }
+        try page(for: profile).workouts.map { $0.makeActivity().makeWorkout() }
     }
 
     /// The profile's whole history as a single decoded page.

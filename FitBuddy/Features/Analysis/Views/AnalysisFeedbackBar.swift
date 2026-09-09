@@ -5,13 +5,13 @@ import SwiftUI
 /// A tap is stored on the device and nothing else happens — no request, no
 /// backend. The buttons stay put after the tap, with the chosen verdict filled:
 /// the store is built to take a changed mind, so the UI has to let the user
-/// change it. Below them sits the cooldown label, which is what the user
-/// actually needs next.
+/// change it. Below them sits the lock label, which is what the user actually
+/// needs next.
 struct AnalysisFeedbackBar: View {
     /// The verdict already given for this recommendation, if any.
     let selected: AnalysisFeedback?
-    /// `"Next analysis available in 5h 12m"`, or `nil` while a run is allowed.
-    let cooldownMessage: String?
+    /// `"New analysis available in 45s"`, or `nil` while a run is allowed.
+    let lockMessage: String?
     let onSelect: (AnalysisFeedback) -> Void
 
     var body: some View {
@@ -22,8 +22,8 @@ struct AnalysisFeedbackBar: View {
                     button(for: verdict)
                 }
             }
-            if let cooldownMessage {
-                Text(cooldownMessage)
+            if let lockMessage {
+                Text(lockMessage)
                     .font(.subheadline.weight(.semibold))
                     .fbTabularNumbers()
                     .foregroundStyle(Color.fbInk)
@@ -32,7 +32,9 @@ struct AnalysisFeedbackBar: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
-        .background(.bar)
+        // No material of its own: the view sits in `AnalysisView`'s bottom
+        // `safeAreaBar`, which fades the content underneath and shares the
+        // space with the tab bar's glass (#107).
         .animation(.easeOut(duration: 0.2), value: selected)
     }
 
@@ -86,23 +88,46 @@ struct AnalysisFeedbackBar: View {
 }
 
 #if DEBUG
+/// Mimics `AnalysisView`: scrollable text under a bottom `safeAreaBar`. The bar
+/// brings no material of its own, so previewing it on bare ground would show
+/// neither the scroll-edge fade nor the contrast it actually renders against.
+private struct AnalysisFeedbackBarPreview: View {
+    let selected: AnalysisFeedback?
+    let lockMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                Text(String(repeating: "Your volume is trending up. ", count: 40))
+                    .padding(16)
+            }
+            .background(Color.fbBackground)
+            .safeAreaBar(edge: .bottom) {
+                AnalysisFeedbackBar(
+                    selected: selected,
+                    lockMessage: lockMessage,
+                    onSelect: { _ in }
+                )
+            }
+        }
+    }
+}
+
 #Preview("Unrated") {
-    AnalysisFeedbackBar(selected: nil, cooldownMessage: nil, onSelect: { _ in })
+    AnalysisFeedbackBarPreview(selected: nil, lockMessage: nil)
 }
 
 #Preview("Rated") {
-    AnalysisFeedbackBar(
+    AnalysisFeedbackBarPreview(
         selected: .helpful,
-        cooldownMessage: "Next analysis available in 5h 42m",
-        onSelect: { _ in }
+        lockMessage: "New analysis available in 45s"
     )
 }
 
 #Preview("Rated not helpful") {
-    AnalysisFeedbackBar(
+    AnalysisFeedbackBarPreview(
         selected: .notHelpful,
-        cooldownMessage: "Next analysis available in 5h 42m",
-        onSelect: { _ in }
+        lockMessage: "New analysis available in 45s"
     )
 }
 #endif

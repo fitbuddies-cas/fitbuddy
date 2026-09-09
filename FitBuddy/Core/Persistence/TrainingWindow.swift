@@ -1,6 +1,6 @@
 import Foundation
 
-/// The dashboard window US-2 defines, shared by the fetch (`HevyService`) and
+/// The dashboard window US-2 defines, shared by the fetch (`WorkoutSyncService`) and
 /// the cache read (`WorkoutStore+Summaries`) so the two cannot drift apart on
 /// the window length or on where a day starts.
 enum TrainingWindow {

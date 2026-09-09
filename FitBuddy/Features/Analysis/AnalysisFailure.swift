@@ -25,9 +25,10 @@ enum AnalysisFailure: Equatable {
     case rateLimited(provider: LLMProvider?, retryAfter: TimeInterval?)
     /// The provider answered 5xx, or aborted the stream after answering 200.
     case serviceUnavailable(LLMProvider?)
-    /// The 6h cooldown was still running when the call went out. Carries the
-    /// instant it ends, so the message can name it.
-    case cooldownActive(availableAt: Date)
+    /// The short lock after the last run had not lifted when the call went
+    /// out. Carries the instant it does, so the label beside the message can
+    /// count it down.
+    case lockActive(availableAt: Date)
     /// The cached window holds no workouts at all — not even in the widest
     /// rung of the fallback ladder (#87). There is nothing to analyse, and
     /// sending an empty prompt would spend the user's tokens on it.
@@ -67,8 +68,8 @@ enum AnalysisFailure: Equatable {
             self = .rateLimited(provider: provider, retryAfter: retryAfter)
         case .serviceUnavailable, .streamInterrupted:
             self = .serviceUnavailable(provider)
-        case .cooldownActive(let availableAt):
-            self = .cooldownActive(availableAt: availableAt)
+        case .lockActive(let availableAt):
+            self = .lockActive(availableAt: availableAt)
         case .invalidResponse, .unexpectedStatus, .alreadyInProgress:
             self = .unreadableResponse(provider)
         }
@@ -89,8 +90,8 @@ enum AnalysisFailure: Equatable {
             return "Too many requests"
         case .serviceUnavailable(let provider):
             return "\(Self.name(provider)) unavailable"
-        case .cooldownActive:
-            return "Analysis on cooldown"
+        case .lockActive:
+            return "Analysis just ran"
         case .noTrainingData:
             return "No training data"
         case .cacheUnavailable:
@@ -119,11 +120,10 @@ enum AnalysisFailure: Equatable {
             return "\(Self.name(provider)) is rate-limiting your key. Try again in \(wait)."
         case .serviceUnavailable(let provider):
             return "\(Self.name(provider)) could not complete the analysis. Try again in a few minutes."
-        case .cooldownActive(let availableAt):
-            // The instant, not a countdown: this message is written once, while
-            // `AnalysisViewModel.cooldownMessage` keeps ticking beside it.
-            return "You have already run an analysis in the last 6 hours. "
-                + "The next one is available at \(Self.clockTime(availableAt))."
+        case .lockActive:
+            // No countdown in here: this message is written once, while
+            // `AnalysisViewModel.lockMessage` keeps ticking beside it.
+            return "An analysis has just been sent off. The next one is available in a moment."
         case .noTrainingData:
             return "There are no workouts in your cached training data to analyse. Sync it first."
         case .cacheUnavailable:
@@ -144,7 +144,7 @@ enum AnalysisFailure: Equatable {
             return "antenna.radiowaves.left.and.right.slash"
         case .rateLimited, .serviceUnavailable:
             return "exclamationmark.icloud"
-        case .cooldownActive:
+        case .lockActive:
             return "hourglass"
         case .noTrainingData:
             return "figure.strengthtraining.traditional"
@@ -159,7 +159,7 @@ enum AnalysisFailure: Equatable {
     /// key cannot be retried into working — that one needs onboarding.
     var isRetryable: Bool {
         switch self {
-        case .missingAPIKey, .unauthorized, .cooldownActive, .noTrainingData:
+        case .missingAPIKey, .unauthorized, .lockActive, .noTrainingData:
             return false
         case .keychainUnavailable, .offline, .rateLimited, .serviceUnavailable,
              .cacheUnavailable, .unreadableResponse:
@@ -181,17 +181,4 @@ enum AnalysisFailure: Equatable {
         return "\(Int((retryAfter / 60).rounded())) min"
     }
 
-    /// Wall-clock time of day, in the user's own locale — the one place in the
-    /// analysis screen where a device-local format is right, because the user
-    /// reads it against their own clock.
-    ///
-    /// Built per call rather than cached in a `static let`: this renders once
-    /// per failed run at most, and a shared mutable `DateFormatter` is not
-    /// worth the concurrency caveat for that.
-    private static func clockTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        formatter.dateStyle = .none
-        return formatter.string(from: date)
-    }
 }

@@ -3,20 +3,22 @@ import SwiftUI
 
 /// Root view gating app access on the 3-step onboarding flow (US-4), which is
 /// coordinated by `OnboardingViewModel`: consent → Hevy key → LLM keys →
-/// dashboard (#27).
+/// the tab bar with dashboard, analysis and settings (#27, #107).
 struct RootView: View {
     @Environment(\.modelContext) private var modelContext
 
     @StateObject private var onboardingViewModel = OnboardingViewModel()
 
-    /// Whether the settings sheet (#83) is presented. Owned here rather than in
-    /// `DashboardView`, because deleting a key sends the user back into
-    /// onboarding — a step change this view is the one to react to.
-    @State private var showsSettings = false
+    /// The visible tab. Owned here rather than in `MainTabView`, because
+    /// deleting a key sends the user back into onboarding — a step change this
+    /// view is the one to react to, and the next start must not land on the
+    /// settings tab (#107).
+    @State private var selectedTab: MainTab = .dashboard
 
     /// Bumped when the settings screen replaces the Hevy key, which drops the
-    /// cached workouts. The dashboard's own `.task` does not re-run when the
-    /// sheet closes, so without this it would sit on an empty cache (#91).
+    /// cached workouts. The dashboard stays alive on its tab and its own
+    /// `.task` does not re-run, so without this it would sit on an empty
+    /// cache (#91).
     @State private var dashboardReloadToken = 0
 
     var body: some View {
@@ -27,15 +29,17 @@ struct RootView: View {
             case .consent, .hevyKey, .llmKeys:
                 OnboardingFlowView(viewModel: onboardingViewModel)
             case .completed:
-                // The autoclosure defers building the store, the service and
-                // the ViewModel until SwiftUI first creates the dashboard's
-                // state.
-                DashboardView(
-                    viewModel: makeDashboardViewModel(),
+                // The factories defer building the stores, the services and
+                // the ViewModels until SwiftUI first creates each tab's state.
+                MainTabView(
+                    selection: $selectedTab,
                     analysisViewModel: makeAnalysisViewModel(),
+                    makeDashboardViewModel: makeDashboardViewModel,
+                    makeSettingsViewModel: makeSettingsViewModel,
                     makeWorkoutDetailViewModel: makeWorkoutDetailViewModel(for:),
-                    reloadToken: dashboardReloadToken,
-                    onOpenSettings: { showsSettings = true }
+                    makeExerciseListViewModel: makeExerciseListViewModel,
+                    makeAnalysisHistoryViewModel: makeAnalysisHistoryViewModel,
+                    reloadToken: dashboardReloadToken
                 )
             }
         }
@@ -43,13 +47,11 @@ struct RootView: View {
         // it through `onUnauthorized` below rather than the environment,
         // because the ViewModel is built here and must not depend on SwiftUI.
         .environmentObject(onboardingViewModel)
-        .sheet(isPresented: $showsSettings) {
-            SettingsView(viewModel: makeSettingsViewModel())
-        }
         // Deleting the Hevy key or all data drops the app back into
-        // onboarding; the settings sheet must not stay up over it.
+        // onboarding; the tab bar goes with it, and the selection is put back
+        // so the next start lands on the dashboard, not in settings.
         .onChange(of: onboardingViewModel.step) { _, step in
-            if step != .completed { showsSettings = false }
+            if step != .completed { selectedTab = .dashboard }
         }
         .task { await onboardingViewModel.bootstrap() }
     }
@@ -64,10 +66,10 @@ struct RootView: View {
         let timestamps = SyncTimestampStore()
         let viewModel = WorkoutListViewModel(
             cache: store,
-            syncer: HevyService(workouts: store, timestamps: timestamps),
+            syncer: WorkoutSyncService(workouts: store, timestamps: timestamps),
             timestamps: timestamps
         )
-        // Hevy rejected the stored key: `HevyService` has already wiped it, so
+        // Hevy rejected the stored key: `WorkoutSyncService` has already wiped it, so
         // the only thing left is to send the user back to step 2 (US-1 AC3).
         let coordinator = onboardingViewModel
         viewModel.onUnauthorized = { [weak coordinator] in
@@ -76,37 +78,57 @@ struct RootView: View {
         return viewModel
     }
 
-    /// Wires the analysis sheet to the cache and to Claude (#32).
+    /// Wires the analysis tab to the cache and to Claude (#32).
     ///
     /// Its own `WorkoutStore` over the same container, since the analysis only
     /// reads — unlike the dashboard, it shares no write path with the sync.
-    /// The cooldown store *is* shared with `InferenceService`, so the label on
-    /// screen and the service's own 6h guard can never disagree.
+    /// The rate-limit store *is* shared with `InferenceService`, so the label
+    /// on screen and the service's own guard can never disagree.
     ///
     /// The result store goes over the same container as the two reset paths
-    /// below, so a wipe removes exactly the recommendation this screen would
-    /// otherwise restore (#97).
+    /// below, so a wipe removes exactly the history this screen would
+    /// otherwise restore from (#97, #117).
     private func makeAnalysisViewModel() -> AnalysisViewModel {
-        let cooldown = AnalysisCooldownStore()
+        let rateLimit = AnalysisRateLimitStore()
         return AnalysisViewModel(
             cache: WorkoutStore(modelContainer: modelContext.container),
-            inference: InferenceService(cooldown: cooldown),
-            cooldown: cooldown,
+            inference: InferenceService(rateLimit: rateLimit),
+            rateLimit: rateLimit,
             resultStore: AnalysisResultStore(modelContainer: modelContext.container)
         )
+    }
+
+    /// Wires the saved-analyses screen to the same store the analysis tab
+    /// writes to (#117).
+    ///
+    /// A factory rather than a ready-made ViewModel: the screen exists only
+    /// while the user is in it, and each push has to read the store fresh —
+    /// a run in between adds a row, and a swipe in there removes one.
+    private func makeAnalysisHistoryViewModel() -> AnalysisHistoryViewModel {
+        AnalysisHistoryViewModel(store: AnalysisResultStore(modelContainer: modelContext.container))
     }
 
     /// Wires the workout detail screen to the cache (#98).
     ///
     /// A factory rather than a ready-made ViewModel: the screen exists only
     /// once a row is tapped, and the dashboard calls this per push. Its own
-    /// `WorkoutStore` over the same container, like the analysis sheet's —
+    /// `WorkoutStore` over the same container, like the analysis tab's —
     /// the detail screen only reads.
     private func makeWorkoutDetailViewModel(for workoutID: String) -> WorkoutDetailViewModel {
         WorkoutDetailViewModel(
             cache: WorkoutStore(modelContainer: modelContext.container),
             workoutID: workoutID
         )
+    }
+
+    /// Wires the exercise list to the cache (#37).
+    ///
+    /// A factory rather than a ready-made ViewModel: the screen exists only
+    /// while the user is in it, and each push has to read the cache fresh — a
+    /// sync in between changes what the window holds. Its own `WorkoutStore`
+    /// over the same container, like the detail screen's — this one only reads.
+    private func makeExerciseListViewModel() -> ExerciseListViewModel {
+        ExerciseListViewModel(cache: WorkoutStore(modelContainer: modelContext.container))
     }
 
     /// Wires the settings screen to the Keychain and to the two reset paths
@@ -148,7 +170,7 @@ struct RootView: View {
     // RootView reaches for the SwiftData container once onboarding is
     // complete; without one the preview traps on a dev machine that already
     // has consent and both keys stored. `AnalysisResult` is listed too — the
-    // analysis sheet restores from it, and a container without the entity
+    // analysis tab restores from it, and a container without the entity
     // would fail that fetch (#97).
     RootView()
         .modelContainer(for: [Workout.self, AnalysisResult.self], inMemory: true)

@@ -155,7 +155,7 @@ flowchart TB
 
     PRES["Presentation Layer\nSwiftUI Views · @State · @Binding\nDashboard (US-2) · Onboarding (US-4) · AI-Result-View (US-3)"]:::layer
     VM["ViewModel Layer · @MainActor\n@Observable ViewModels\nDashboardViewModel · AnalysisViewModel · OnboardingViewModel"]:::layer
-    SVC["Service / Domain Layer\nInferenceService · Prompt-Build · 6h-Cooldown\nConnectorLayer · FitnessConnector-Protocol · Delta-Sync · Error-Routing"]:::layer
+    SVC["Service / Domain Layer\nInferenceService · Prompt-Build · 60s-Rate-Limit\nConnectorLayer · FitnessConnector-Protocol · Delta-Sync · Error-Routing"]:::layer
     DATA["Data Layer\nHevyConnector · URLSession · Pagination\nKeychainService · SecItemAdd / CopyMatching\nSwiftData Store · ModelActor · Activity / Exercise / ExerciseSet\nExerciseTemplateCache · SwiftData"]:::layer
 
     PRES --> VM --> SVC --> DATA
@@ -179,14 +179,13 @@ flowchart TB
 [4] Prompt-Build       → Daten serialisieren (max_tokens serverseitig gedeckelt)
 [5] HTTPS POST (SSE)   → Provider 1 (api.anthropic.com / generativelanguage.googleapis.com /
                           api.mistral.ai), Streaming; jeder Fehler → Provider 2, dann 3 (#79)
-[6] Cooldown-Write     → UserDefaults, genau einmal pro Durchlauf, sobald ein Provider annimmt
+[6] Rate-Limit-Write   → UserDefaults, genau einmal pro Durchlauf, sobald ein Provider annimmt
 [7] @MainActor Update  → SwiftUI rendert Text inkrementell + Provider-Badge
 ```
 
 | Lücke | Konsequenz |
 |---|---|
 | Kein Token-Limit (Schritt 3) | `400 context_length_exceeded` bei 90 Tagen × vollem Trainingsvolumen |
-| Cooldown-Write nach API-Call (Schritt 6 nach 4) | Crash-Window → doppelte Analyse-Kosten möglich |
 | Kein Backgrounding-Handling (Schritt 4) | iOS beendet URLSession-Task nach ~30s — Analyse verloren, kein User-Feedback |
 
 ### Caching-Strategie
@@ -271,12 +270,15 @@ Alle asynchronen Zugriffe folgen drei fixen Ausführungskontexten — gilt schic
 
 ### Technische Schulden
 
-Bekannte Lücken im PoC-Design — vor Sprint 3 (AI-Integration) adressieren:
+Bekannte Lücken im PoC-Design — vor Sprint 3 (AI-Integration) adressieren.
+
+> TD-2 («Cooldown-Write nach API-Call») ist mit #117 hinfällig: Der 6h-Cooldown ist durch eine
+> 60-s-Doppeltipp-Sperre ersetzt, ein Crash-Window kostet damit höchstens eine Wartesekunde und
+> keine doppelte Analyse. Das Kostenlimit ist das Spending Limit im Account des Users (ADR-004).
 
 | # | Lücke | Konsequenz | Handlungsbedarf |
 |---|---|---|---|
 | TD-1 | **Kein Token-Limit im Prompt-Build** | `400 context_length_exceeded` bei 90 Tagen × vollem Trainingsvolumen | Prompt-Fenster als Konstante definieren (→ W-2); Daten vor API-Call kürzen |
-| TD-2 | **Cooldown-Write nach API-Call** | Crash-Window → doppelte Analyse-Kosten möglich | Cooldown-Timestamp **vor** dem API-Call schreiben; bei Fehler zurücksetzen |
 | TD-3 | **Kein Backgrounding-Handling beim Analyse-Call** | iOS beendet URLSession-Task nach ~30s — Analyse verloren, kein Benutzer-Feedback | `URLSession` mit `background`-Konfiguration oder explizites Timeout + Benutzer-Feedback |
 | TD-4 | **Cert-Pinning für keinen Host umgesetzt** (QA-1, ADR-004) — mit #79 kommen `generativelanguage.googleapis.com` und `api.mistral.ai` zu `api.anthropic.com` und `api.hevyapp.com` dazu | MITM im offenen WLAN kann API-Keys und Gesundheitsdaten abgreifen | `URLSessionDelegate` mit Public-Key-Pinning für alle vier Hosts |
 
@@ -288,10 +290,13 @@ Bekannte Lücken im PoC-Design — vor Sprint 3 (AI-Integration) adressieren:
 
 *Vor Sprint 1 auflösen.*
 
+> W-4 («6h-Cooldown-Speicherort undefiniert») ist mit #117 aufgelöst: Die Sperre ist auf 60 s
+> verkürzt und liegt als `fitbuddy.analysis.lastCallTimestamp` in `UserDefaults`
+> (`AnalysisRateLimitStore`) — ein einzelner Skalar, wie der Sync-Zeitstempel (ADR-001).
+
 | # | Widerspruch / Unklarheit | Betroffene Dokumente | Handlungsbedarf |
 |---|---|---|---|
 | W-3 | **Certificate Pinning: als aktiv formuliert, laut ADR noch nicht implementiert.** ADR-004 markiert es als «Pflicht in Sprint 2». | `ADR-004` | Formulierung korrigieren: «geplant, Sprint 2». |
-| W-4 | **6h-Cooldown-Speicherort undefiniert.** ADR-004 nennt «6h via UserDefaults». ADR-001 reserviert UserDefaults nur für den Sync-Zeitstempel. Kein Dokument definiert den konkreten Key. | `ADR-004`, `ADR-001` | UserDefaults-Key-Konvention (`fitbuddy.analysis.lastCooldownTimestamp`) in ADR-001 oder ADR-004 ergänzen. |
 | W-5 | **HealthKit: Entscheid gefordert, aber nirgends getroffen.** Das `Activity`-Modell ist deshalb noch nicht finalisierbar. | `ADR-006` | Entscheid blockiert Protocol-Design und Datenmodell. Empfehlung: OUT für PoC. |
 | W-6 | **Strava OAuth-Secret ohne Backend strukturell unlösbar.** Secret in App einbetten ist nicht akzeptabel. Polar Accesslink (PKCE, kein Secret) ist eine Backend-freie Alternative — Entscheid steht aus. | `ADR-004`, `ADR-006` | Vor v1-Implementierung: Strava (Backend nötig) oder Polar (kein Backend) als zweite Quelle festlegen — eigener ADR. |
 

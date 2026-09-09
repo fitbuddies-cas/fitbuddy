@@ -1,8 +1,11 @@
 import XCTest
 @testable import FitBuddy
 
-/// Unit tests for `AnalysisFeedbackStore` (US-3 AC9, #32), each on an isolated
-/// `UserDefaults` suite.
+/// Unit tests for `AnalysisFeedbackStore` (US-3 AC9, #32, #117), each on an
+/// isolated `UserDefaults` suite.
+///
+/// Only the tally lives here since #117 — the verdict itself is stored on the
+/// analysis it was given for, and `AnalysisResultStoreTests` covers that.
 final class AnalysisFeedbackStoreTests: XCTestCase {
     private var defaults: UserDefaults!
     private var suiteName: String!
@@ -22,34 +25,27 @@ final class AnalysisFeedbackStoreTests: XCTestCase {
         try await super.tearDown()
     }
 
-    func testNoFeedbackBeforeAnyTap() async {
-        let stored = await sut.lastFeedback()
-        XCTAssertNil(stored)
+    func testNoCountsBeforeAnyTap() async {
         let helpful = await sut.count(of: .helpful)
+        let notHelpful = await sut.count(of: .notHelpful)
         XCTAssertEqual(helpful, 0)
+        XCTAssertEqual(notHelpful, 0)
     }
 
-    func testRecordRoundTrips() async {
-        let date = Date(timeIntervalSince1970: 1_788_000_000)
+    func testRecordCountsTheTap() async {
+        await sut.record(.helpful)
 
-        await sut.record(.helpful, at: date)
-
-        let stored = await sut.lastFeedback()
-        XCTAssertEqual(stored?.feedback, .helpful)
-        XCTAssertEqual(stored?.date, date)
         let count = await sut.count(of: .helpful)
         XCTAssertEqual(count, 1)
     }
 
-    /// Changing your mind replaces the verdict — but both taps happened, so
-    /// both are counted.
-    func testChangedVerdictReplacesTheLastButKeepsBothCounts() async {
-        await sut.record(.helpful, at: Date(timeIntervalSince1970: 100))
-        await sut.record(.notHelpful, at: Date(timeIntervalSince1970: 200))
+    /// Changing your mind is two taps, and the tally is about taps — which
+    /// recommendation ends up carrying which verdict is the store's business,
+    /// not this one's.
+    func testAChangedVerdictCountsOnBothSides() async {
+        await sut.record(.helpful)
+        await sut.record(.notHelpful)
 
-        let stored = await sut.lastFeedback()
-        XCTAssertEqual(stored?.feedback, .notHelpful)
-        XCTAssertEqual(stored?.date, Date(timeIntervalSince1970: 200))
         let helpful = await sut.count(of: .helpful)
         let notHelpful = await sut.count(of: .notHelpful)
         XCTAssertEqual(helpful, 1)
@@ -57,23 +53,31 @@ final class AnalysisFeedbackStoreTests: XCTestCase {
     }
 
     func testCountsAccumulatePerVerdict() async {
-        for index in 0..<3 {
-            await sut.record(.helpful, at: Date(timeIntervalSince1970: Double(index)))
+        for _ in 0..<3 {
+            await sut.record(.helpful)
         }
 
         let count = await sut.count(of: .helpful)
         XCTAssertEqual(count, 3)
     }
 
-    func testClearDropsEverything() async {
-        await sut.record(.helpful, at: Date(timeIntervalSince1970: 100))
+    func testClearDropsTheTally() async {
+        await sut.record(.helpful)
 
         await sut.clear()
 
-        let stored = await sut.lastFeedback()
-        XCTAssertNil(stored)
         let count = await sut.count(of: .helpful)
         XCTAssertEqual(count, 0)
+    }
+
+    func testTheTallySurvivesANewStoreOnTheSameSuite() async throws {
+        await sut.record(.notHelpful)
+
+        // A fresh store on the same suite stands in for the next app launch.
+        let reopened = AnalysisFeedbackStore(defaults: try XCTUnwrap(UserDefaults(suiteName: suiteName)))
+
+        let count = await reopened.count(of: .notHelpful)
+        XCTAssertEqual(count, 1)
     }
 
     /// A foreign value under the tally key must restart the count instead of
@@ -81,19 +85,9 @@ final class AnalysisFeedbackStoreTests: XCTestCase {
     func testCorruptedTallyIsIgnored() async {
         defaults.set(["helpful": "not a number"], forKey: "fitbuddy.analysis.feedback.tally")
 
-        await sut.record(.helpful, at: Date(timeIntervalSince1970: 100))
+        await sut.record(.helpful)
 
         let count = await sut.count(of: .helpful)
         XCTAssertEqual(count, 1)
-    }
-
-    /// The epoch is a real timestamp, not "never rated" — `UserDefaults`
-    /// returns 0 for a missing key either way, so the verdict key decides.
-    func testEpochTimestampIsDistinctFromNeverRated() async {
-        await sut.record(.notHelpful, at: Date(timeIntervalSince1970: 0))
-
-        let stored = await sut.lastFeedback()
-        XCTAssertEqual(stored?.feedback, .notHelpful)
-        XCTAssertEqual(stored?.date, Date(timeIntervalSince1970: 0))
     }
 }

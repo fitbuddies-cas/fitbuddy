@@ -5,28 +5,33 @@ import XCTest
 /// failure distinguishable from an HTTP failure in the banner.
 final class SyncFailureTests: XCTestCase {
     func testNetworkFailureMapsToOffline() {
-        XCTAssertEqual(SyncFailure(syncError: HevyServiceError.networkUnavailable), .offline)
+        XCTAssertEqual(SyncFailure(syncError: WorkoutSyncError.networkUnavailable), .offline)
     }
 
     func testServerFailuresStaySeparateFromTheNetworkCase() {
-        XCTAssertEqual(SyncFailure(syncError: HevyServiceError.serviceUnavailable), .serviceUnavailable)
+        XCTAssertEqual(SyncFailure(syncError: WorkoutSyncError.serviceUnavailable), .serviceUnavailable)
         XCTAssertEqual(
-            SyncFailure(syncError: HevyServiceError.rateLimited(retryAfter: 30)),
+            SyncFailure(syncError: WorkoutSyncError.rateLimited(retryAfter: 30)),
             .rateLimited(retryAfter: 30)
         )
-        XCTAssertEqual(SyncFailure(syncError: HevyServiceError.unexpectedStatus(403)), .unreadableResponse)
-        XCTAssertEqual(SyncFailure(syncError: HevyServiceError.invalidResponse), .unreadableResponse)
+        XCTAssertEqual(SyncFailure(syncError: WorkoutSyncError.invalidResponse), .unreadableResponse)
     }
 
     func testLocalFailuresKeepTheirOwnReason() {
-        XCTAssertEqual(SyncFailure(syncError: HevyServiceError.keychainUnavailable), .keychainUnavailable)
-        XCTAssertEqual(SyncFailure(syncError: HevyServiceError.persistenceFailed), .cacheWriteFailed)
+        XCTAssertEqual(SyncFailure(syncError: WorkoutSyncError.keychainUnavailable), .keychainUnavailable)
+        XCTAssertEqual(SyncFailure(syncError: WorkoutSyncError.persistenceFailed), .cacheWriteFailed)
     }
 
     /// The auth failures are not banner material — they route to onboarding.
     func testAuthFailuresProduceNoBannerReason() {
-        XCTAssertNil(SyncFailure(syncError: HevyServiceError.unauthorized))
-        XCTAssertNil(SyncFailure(syncError: HevyServiceError.missingAPIKey))
+        XCTAssertNil(SyncFailure(syncError: WorkoutSyncError.unauthorized))
+        XCTAssertNil(SyncFailure(syncError: WorkoutSyncError.missingAPIKey))
+    }
+
+    /// A source that cannot sync yet is nothing the user can act on — it gets
+    /// the generic banner rather than a reason of its own.
+    func testANotImplementedSourceFallsBackToTheGenericReason() {
+        XCTAssertEqual(SyncFailure(syncError: WorkoutSyncError.notImplemented), .unknown)
     }
 
     func testUnknownErrorsStillProduceABanner() {
@@ -62,6 +67,32 @@ final class SyncFailureTests: XCTestCase {
     func testRateLimitWithoutARetryAfterDropsTheClause() {
         XCTAssertEqual(SyncFailure.rateLimited(retryAfter: nil).summary, "too many requests")
         XCTAssertEqual(SyncFailure.rateLimited(retryAfter: 0).summary, "too many requests")
+    }
+
+    // MARK: - Refresh toast (#43)
+
+    /// The toast after a failed pull is a whole sentence on its own, not the
+    /// banner fragment — "sync failed" as a standalone message says nothing.
+    func testEveryFailureHasAStandaloneRefreshMessage() {
+        for failure in Self.allFailures {
+            let message = failure.refreshMessage
+            XCTAssertFalse(message.isEmpty, "\(failure) has no refresh message")
+            XCTAssertTrue(message.hasSuffix("."), "\(failure) is not a sentence: \(message)")
+            XCTAssertNotEqual(message, failure.summary, "\(failure) just reuses the banner fragment")
+        }
+    }
+
+    /// The wait Hevy sent is the one thing that makes the message actionable,
+    /// so it survives into the toast too.
+    func testRateLimitedRefreshMessageNamesTheWait() {
+        XCTAssertEqual(
+            SyncFailure.rateLimited(retryAfter: 180).refreshMessage,
+            "Too many requests to Hevy. Try again in 3 min."
+        )
+        XCTAssertEqual(
+            SyncFailure.rateLimited(retryAfter: nil).refreshMessage,
+            "Too many requests to Hevy. Try again in a moment."
+        )
     }
 
     // MARK: - Symbols

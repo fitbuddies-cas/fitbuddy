@@ -36,6 +36,11 @@ gamut, so the catalog stores their exact sRGB values — no Display-P3 needed.
 | `FBStat` | Labelled stat with large tabular value, optional unit + delta |
 | `FBBar` | Labelled progress bar with trailing value (muscle distribution) |
 | `FBSpinner` | Indeterminate loading ring |
+| `FBToast` | Transient message over the content, dismisses itself (failed pull-to-refresh) |
+
+`FBToast` has no counterpart in `design/fb-atoms.jsx` yet — it came out of
+US-10 (#43), after the screen designs were drawn. Port it back when the
+prototype next gets touched.
 
 ## How screens consume it
 

@@ -3,7 +3,7 @@ import Foundation
 /// Who answered the analysis on screen, and who was asked before them (#79).
 ///
 /// Published beside `AnalysisState` rather than folded into it, in the same
-/// spirit as `cooldownMessage` and `isTakingLong`: attribution outlives the
+/// spirit as `lockMessage` and `isTakingLong`: attribution outlives the
 /// state transitions it spans — the same provider is named while loading,
 /// while streaming, and on the finished result — so threading it through every
 /// case would repeat one fact four times.

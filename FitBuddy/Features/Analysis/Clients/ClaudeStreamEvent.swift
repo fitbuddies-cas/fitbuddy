@@ -2,12 +2,12 @@ import Foundation
 
 /// One `data:` payload from Claude's streaming Messages API SSE response.
 ///
-/// Only the fields `InferenceService` needs are modeled: incremental text,
-/// and the `error` event Claude can send mid-stream after already answering
-/// HTTP 200 (e.g. `overloaded_error`) — every other event type
-/// (`message_start`, `content_block_stop`, `message_delta`, `message_stop`,
-/// `ping`) decodes with both `delta` and `error` as `nil` and is skipped by
-/// the caller.
+/// Only the fields `InferenceService` needs are modeled: incremental text, the
+/// `stop_reason` the `message_delta` event carries, and the `error` event
+/// Claude can send mid-stream after already answering HTTP 200 (e.g.
+/// `overloaded_error`) — every other event type (`message_start`,
+/// `content_block_stop`, `message_stop`, `ping`) decodes with `delta` and
+/// `error` as `nil` and is skipped by the caller.
 struct ClaudeStreamEvent: Decodable {
     let type: String
     let delta: Delta?
@@ -16,6 +16,16 @@ struct ClaudeStreamEvent: Decodable {
     struct Delta: Decodable {
         let type: String?
         let text: String?
+        /// Present on `message_delta` only, and the only place a stream says
+        /// *why* it ended. Without it a `refusal` is indistinguishable from a
+        /// complete answer.
+        let stopReason: String?
+
+        enum CodingKeys: String, CodingKey {
+            case type
+            case text
+            case stopReason = "stop_reason"
+        }
     }
 
     struct StreamError: Decodable {

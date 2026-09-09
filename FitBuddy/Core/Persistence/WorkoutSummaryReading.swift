@@ -2,7 +2,7 @@ import Foundation
 
 /// Read access to the cached workout window.
 ///
-/// The dashboard depends on this protocol, never on `HevyService`: the
+/// The dashboard depends on this protocol, never on `WorkoutSyncService`: the
 /// ViewModel reads the cache only and never triggers an API call itself (#26),
 /// and a test double replaces the SwiftData container wholesale.
 protocol WorkoutSummaryReading: Sendable {

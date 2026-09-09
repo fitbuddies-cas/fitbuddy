@@ -176,7 +176,7 @@ final class WorkoutListViewModelTests: XCTestCase {
     /// #28 AC1: an unreachable API leaves the cached dashboard on screen.
     func testFailedSyncKeepsTheCachedDashboardAndRaisesTheBanner() async {
         cache.summaries = [summary(id: "cached", daysAgo: 3, volume: 700)]
-        await syncer.setError(HevyServiceError.networkUnavailable)
+        await syncer.setError(WorkoutSyncError.networkUnavailable)
 
         let sut = makeSUT(withSyncer: true)
         await sut.refresh()
@@ -192,7 +192,7 @@ final class WorkoutListViewModelTests: XCTestCase {
     /// A network failure and an HTTP failure must not collapse into one
     /// message — the issue asks for exactly this distinction.
     func testHTTPFailureIsReportedSeparatelyFromANetworkFailure() async {
-        await syncer.setError(HevyServiceError.serviceUnavailable)
+        await syncer.setError(WorkoutSyncError.serviceUnavailable)
 
         let sut = makeSUT(withSyncer: true)
         await sut.refresh()
@@ -202,7 +202,7 @@ final class WorkoutListViewModelTests: XCTestCase {
 
     /// #28 AC3.
     func testBannerDisappearsAfterASuccessfulSync() async {
-        await syncer.setError(HevyServiceError.networkUnavailable)
+        await syncer.setError(WorkoutSyncError.networkUnavailable)
         let sut = makeSUT(withSyncer: true)
         await sut.refresh()
         XCTAssertEqual(sut.syncStatus, .failed(.offline))
@@ -218,7 +218,7 @@ final class WorkoutListViewModelTests: XCTestCase {
     func testFailedSyncKeepsThePreviousTimestamp() async throws {
         let syncedAt = reference.addingTimeInterval(-7_200)
         await timestamps.setLastSync(syncedAt)
-        await syncer.setError(HevyServiceError.networkUnavailable)
+        await syncer.setError(WorkoutSyncError.networkUnavailable)
 
         let sut = makeSUT(withSyncer: true)
         await sut.refresh()
@@ -227,10 +227,10 @@ final class WorkoutListViewModelTests: XCTestCase {
         XCTAssertEqual(stored.timeIntervalSince1970, syncedAt.timeIntervalSince1970, accuracy: 0.001)
     }
 
-    /// HTTP 401: `HevyService` has already wiped the key, so the dashboard
+    /// HTTP 401: `WorkoutSyncService` has already wiped the key, so the dashboard
     /// hands over to onboarding instead of showing a banner.
     func testUnauthorizedRoutesToOnboardingWithoutABanner() async {
-        await syncer.setError(HevyServiceError.unauthorized)
+        await syncer.setError(WorkoutSyncError.unauthorized)
         let sut = makeSUT(withSyncer: true)
         var routed = false
         sut.onUnauthorized = { routed = true }
@@ -256,7 +256,7 @@ final class WorkoutListViewModelTests: XCTestCase {
     /// screen after the newer one already answered.
     func testSupersededSyncDoesNotOverwriteTheNewerOutcome() async {
         await syncer.gateFirstCall()
-        await syncer.setError(HevyServiceError.networkUnavailable)
+        await syncer.setError(WorkoutSyncError.networkUnavailable)
         let sut = makeSUT(withSyncer: true)
 
         let first = Task { await sut.refresh() }
@@ -284,6 +284,175 @@ final class WorkoutListViewModelTests: XCTestCase {
         XCTAssertEqual(sut.syncStatus, .idle)
     }
 
+    // MARK: - Pull-to-refresh (#43, US-10)
+
+    /// US-10 AC1: the pull goes all the way to Hevy and the timestamp the
+    /// sync wrote is what the dashboard shows afterwards.
+    func testRetrySyncsAndRenewsTheTimestamp() async throws {
+        let previous = reference.addingTimeInterval(-7_200)
+        let syncedAt = reference.addingTimeInterval(-30)
+        await timestamps.setLastSync(previous)
+        await syncer.setResult(SyncResult(workoutCount: 3, syncedAt: syncedAt, windowStart: reference))
+        await syncer.recordSyncs(in: timestamps)
+        cache.summaries = [summary(id: "w-1", daysAgo: 1, volume: 900)]
+
+        let sut = makeSUT(withSyncer: true)
+        await sut.retry()
+
+        let syncCount = await syncer.callCount
+        XCTAssertEqual(syncCount, 1)
+        let stored = try XCTUnwrap(sut.lastSync)
+        XCTAssertEqual(stored.timeIntervalSince1970, syncedAt.timeIntervalSince1970, accuracy: 0.001)
+        XCTAssertEqual(sut.syncStatus, .idle)
+    }
+
+    /// US-10 AC2: the failure is announced, and the cached window it was
+    /// supposed to replace stays exactly where it was.
+    func testFailedRetryAnnouncesTheFailureAndKeepsTheCachedData() async throws {
+        cache.summaries = [summary(id: "cached", daysAgo: 3, volume: 700)]
+        await syncer.setError(WorkoutSyncError.networkUnavailable)
+
+        let sut = makeSUT(withSyncer: true)
+        await sut.retry()
+
+        let notice = try XCTUnwrap(sut.refreshNotice)
+        XCTAssertEqual(notice.failure, .offline)
+        guard case let .loaded(workouts, _) = sut.state else {
+            return XCTFail("Expected .loaded, got \(sut.state)")
+        }
+        XCTAssertEqual(workouts.map(\.id), ["cached"])
+    }
+
+    /// The case the AC is actually about: the banner already says "offline"
+    /// and does not move when the same failure repeats, so the second pull
+    /// needs a notice of its own or nothing on screen changes at all.
+    func testASecondFailedRetryRaisesAFreshNotice() async throws {
+        await syncer.setError(WorkoutSyncError.networkUnavailable)
+        let sut = makeSUT(withSyncer: true)
+
+        await sut.retry()
+        let first = try XCTUnwrap(sut.refreshNotice)
+        sut.dismissRefreshNotice()
+        await sut.retry()
+        let second = try XCTUnwrap(sut.refreshNotice)
+
+        XCTAssertEqual(second.failure, first.failure)
+        XCTAssertNotEqual(second.id, first.id)
+    }
+
+    /// The dashboard's own sync has the banner and nothing to confirm — a
+    /// toast for a refresh nobody asked for would be noise on every tab
+    /// switch and cold start.
+    func testAutomaticRefreshRaisesNoNotice() async {
+        await syncer.setError(WorkoutSyncError.networkUnavailable)
+        let sut = makeSUT(withSyncer: true)
+
+        await sut.reload()
+
+        XCTAssertEqual(sut.syncStatus, .failed(.offline))
+        XCTAssertNil(sut.refreshNotice)
+    }
+
+    /// A message about a failure that has since been made good would
+    /// contradict the fresh timestamp printed above it.
+    func testSuccessfulRetryClearsAStandingNotice() async {
+        await syncer.setError(WorkoutSyncError.networkUnavailable)
+        let sut = makeSUT(withSyncer: true)
+        await sut.retry()
+        XCTAssertNotNil(sut.refreshNotice)
+
+        await syncer.setError(nil)
+        await sut.retry()
+
+        XCTAssertNil(sut.refreshNotice)
+    }
+
+    /// The next screen is onboarding, not the dashboard — a toast on the way
+    /// out has nowhere to appear.
+    func testUnauthorizedRetryRaisesNoNotice() async {
+        await syncer.setError(WorkoutSyncError.unauthorized)
+        let sut = makeSUT(withSyncer: true)
+        sut.onUnauthorized = {}
+
+        await sut.retry()
+
+        XCTAssertNil(sut.refreshNotice)
+    }
+
+    /// A cancelled request says nothing about the refresh, so it gets no more
+    /// of a toast than it gets a banner.
+    func testCancelledRetryRaisesNoNotice() async {
+        await syncer.setError(URLError(.cancelled))
+        let sut = makeSUT(withSyncer: true)
+
+        await sut.retry()
+
+        XCTAssertNil(sut.refreshNotice)
+    }
+
+    func testDismissDropsTheNotice() async {
+        await syncer.setError(WorkoutSyncError.networkUnavailable)
+        let sut = makeSUT(withSyncer: true)
+        await sut.retry()
+        XCTAssertNotNil(sut.refreshNotice)
+
+        sut.dismissRefreshNotice()
+
+        XCTAssertNil(sut.refreshNotice)
+    }
+
+    /// SwiftUI cancels the `.refreshable` task when the view goes away — a
+    /// tab switch while the pull is still running. That cancellation reaches
+    /// the sync, and nothing newer is behind it to publish an outcome, so the
+    /// sync itself has to clear `.syncing` before it gives up. Otherwise the
+    /// strip claims "Syncing with Hevy…" for the rest of the app's life.
+    func testRefreshCancelledFromOutsideDoesNotLeaveTheStripSyncing() async {
+        await syncer.gateFirstCall()
+        let sut = makeSUT(withSyncer: true)
+
+        let pull = Task { await sut.retry() }
+        await syncer.waitForFirstCall()
+        XCTAssertEqual(sut.syncStatus, .syncing)
+
+        pull.cancel()
+        await syncer.releaseFirstCall()
+        await pull.value
+
+        // `.idle`, not merely "not syncing": a cancelled request says nothing
+        // about connectivity, so publishing `.failed(.offline)` here would be
+        // the very thing `performSync`'s `isCancellation` guard prevents.
+        XCTAssertEqual(sut.syncStatus, .idle)
+    }
+
+    /// The same teardown, but the sync got through before it was cancelled.
+    /// The workouts are in the cache by then, so the read that follows has to
+    /// publish them — dropping it would leave the dashboard showing the old
+    /// window under a stale timestamp until the user pulls a second time.
+    func testSyncCancelledFromOutsideStillPublishesWhatItCached() async throws {
+        let syncedAt = reference.addingTimeInterval(-30)
+        cache.results = [
+            [summary(id: "old", daysAgo: 5, volume: 400)],
+            [summary(id: "fresh", daysAgo: 0, volume: 900)],
+        ]
+        await syncer.setResult(SyncResult(workoutCount: 1, syncedAt: syncedAt, windowStart: reference))
+        await syncer.recordSyncs(in: timestamps)
+        await syncer.gateFirstCall()
+        let sut = makeSUT(withSyncer: true)
+
+        let pull = Task { await sut.retry() }
+        await syncer.waitForFirstCall()
+        pull.cancel()
+        await syncer.releaseFirstCall()
+        await pull.value
+
+        guard case let .loaded(workouts, _) = sut.state else {
+            return XCTFail("Expected .loaded, got \(sut.state)")
+        }
+        XCTAssertEqual(workouts.map(\.id), ["fresh"])
+        let stored = try XCTUnwrap(sut.lastSync)
+        XCTAssertEqual(stored.timeIntervalSince1970, syncedAt.timeIntervalSince1970, accuracy: 0.001)
+    }
+
     // MARK: - Reload after a discarded cache (#91)
 
     /// The window belongs to a Hevy key that was just replaced. Neither the
@@ -294,7 +463,10 @@ final class WorkoutListViewModelTests: XCTestCase {
         await syncer.gateFirstCall()
         let sut = makeSUT(withSyncer: true)
         await sut.load()
-        XCTAssertTrue(sut.state.hasWorkouts)
+        guard case let .loaded(workouts, _) = sut.state else {
+            return XCTFail("Expected .loaded, got \(sut.state)")
+        }
+        XCTAssertEqual(workouts.map(\.id), ["old-account"])
 
         let reload = Task { await sut.reload() }
         await syncer.waitForFirstCall()
@@ -309,7 +481,7 @@ final class WorkoutListViewModelTests: XCTestCase {
     /// A sync that fails has no reload of its own — the held-back empty state
     /// must still reach the screen instead of leaving the spinner up forever.
     func testFailedSyncResolvesTheHeldSpinnerToTheEmptyState() async {
-        await syncer.setError(HevyServiceError.networkUnavailable)
+        await syncer.setError(WorkoutSyncError.networkUnavailable)
         let sut = makeSUT(withSyncer: true)
 
         await sut.reload()

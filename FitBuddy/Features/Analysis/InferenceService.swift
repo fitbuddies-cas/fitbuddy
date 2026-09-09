@@ -8,17 +8,17 @@ import Foundation
 /// to ask, in what order, and when to stop.
 ///
 /// Rejects a call before any network request when one is already running or
-/// the 6h cooldown has not elapsed — `AnalysisViewModel` (#31) also disables
-/// the button, but the actor enforces both independently so no caller can
-/// race past them. The cooldown itself is recorded once per run, the moment
-/// the first provider accepts the request (HTTP 2xx): a run that never got
-/// that far (no key, offline, every provider rejecting) must not lock the user
-/// out until the next window, and a run that fell back twice must not spend
-/// three windows.
+/// the 60s lock after the last run has not elapsed — `AnalysisViewModel` (#31)
+/// also disables the button, but the actor enforces both independently so no
+/// caller can race past them. The lock itself is recorded once per run, the
+/// moment the first provider accepts the request (HTTP 2xx): a run that never
+/// got that far (no key, offline, every provider rejecting) must not lock the
+/// user out at all, and a run that fell back twice must not lock them out
+/// three times over.
 actor InferenceService {
     private let keychain: KeychainService
     private let priority: LLMPriorityStore
-    private let cooldown: AnalysisCooldownStore
+    private let rateLimit: AnalysisRateLimitStore
     private let clients: [LLMProvider: any LLMProviderClient]
     private let now: () -> Date
 
@@ -36,18 +36,18 @@ actor InferenceService {
     ///     (US-4), which decides who is asked first and who takes over.
     ///   - clients: Injectable per-provider callers, so orchestrator tests can
     ///     drive fallback without three stubbed endpoints.
-    ///   - now: Injectable clock, so the cooldown window is testable.
+    ///   - now: Injectable clock, so the lock is testable.
     init(
         session: URLSession = .fitBuddyStreaming,
         keychain: KeychainService = KeychainService(),
         priority: LLMPriorityStore = LLMPriorityStore(),
-        cooldown: AnalysisCooldownStore = AnalysisCooldownStore(),
+        rateLimit: AnalysisRateLimitStore = AnalysisRateLimitStore(),
         clients: [LLMProvider: any LLMProviderClient]? = nil,
         now: @escaping () -> Date = Date.init
     ) {
         self.keychain = keychain
         self.priority = priority
-        self.cooldown = cooldown
+        self.rateLimit = rateLimit
         self.clients = clients ?? Self.defaultClients(session: session)
         self.now = now
     }
@@ -76,8 +76,8 @@ actor InferenceService {
         isRunning = true
         let candidates: [Candidate]
         do {
-            if let availableAt = await cooldown.activeCooldown(now: now()) {
-                throw InferenceServiceError.cooldownActive(availableAt: availableAt)
+            if let availableAt = await rateLimit.activeLock(now: now()) {
+                throw InferenceServiceError.lockActive(availableAt: availableAt)
             }
             candidates = try await resolveCandidates()
         } catch {
@@ -120,7 +120,7 @@ actor InferenceService {
         userPrompt: String,
         continuation: AsyncThrowingStream<AnalysisEvent, Error>.Continuation
     ) async throws {
-        var didRecordCooldown = false
+        var didRecordCall = false
         var lastError: Error = InferenceServiceError.missingAPIKey
 
         for candidate in candidates {
@@ -137,11 +137,11 @@ actor InferenceService {
                 )
                 // The provider accepted and is billing tokens from here on,
                 // regardless of whether the answer later fails or the user
-                // cancels — but only the first such acceptance in a run spends
-                // the window.
-                if !didRecordCooldown {
-                    await cooldown.recordCall(at: now())
-                    didRecordCooldown = true
+                // cancels — but only the first such acceptance in a run starts
+                // the lock.
+                if !didRecordCall {
+                    await rateLimit.recordCall(at: now())
+                    didRecordCall = true
                 }
                 var didYieldText = false
                 for try await chunk in stream {

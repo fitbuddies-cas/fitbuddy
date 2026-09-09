@@ -6,7 +6,7 @@ enum ClaudeSSEFactory {
     /// A complete successful stream: `message_start`, one `content_block_delta`
     /// per entry in `textChunks`, then `content_block_stop` / `message_delta` /
     /// `message_stop` — mirroring what a real analysis response looks like.
-    static func body(textChunks: [String]) -> Data {
+    static func body(textChunks: [String], stopReason: String = "end_turn") -> Data {
         var lines: [String] = [
             event("message_start", data: #"{"type":"message_start","message":{"id":"msg_test","type":"message","role":"assistant","content":[],"model":"claude-opus-5"}}"#),
             event("content_block_start", data: #"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#),
@@ -15,7 +15,7 @@ enum ClaudeSSEFactory {
             lines.append(event("content_block_delta", data: deltaPayload(text: chunk)))
         }
         lines.append(event("content_block_stop", data: #"{"type":"content_block_stop","index":0}"#))
-        lines.append(event("message_delta", data: #"{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":12}}"#))
+        lines.append(event("message_delta", data: messageDeltaPayload(stopReason: stopReason)))
         lines.append(event("message_stop", data: #"{"type":"message_stop"}"#))
         return Data(lines.joined(separator: "\n").utf8)
     }
@@ -34,6 +34,16 @@ enum ClaudeSSEFactory {
 
     private static func errorPayload(type: String, message: String) -> String {
         let json = ["type": "error", "error": ["type": type, "message": message]] as [String: Any]
+        let data = try! JSONSerialization.data(withJSONObject: json)
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private static func messageDeltaPayload(stopReason: String) -> String {
+        let json = [
+            "type": "message_delta",
+            "delta": ["stop_reason": stopReason],
+            "usage": ["output_tokens": 12],
+        ] as [String: Any]
         let data = try! JSONSerialization.data(withJSONObject: json)
         return String(decoding: data, as: UTF8.self)
     }

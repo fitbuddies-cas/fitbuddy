@@ -44,9 +44,9 @@ final class SettingsViewModel: ObservableObject {
     /// Invoked after all local data was deleted: the app returns to step 1.
     var onDataDeleted: (() -> Void)?
     /// Invoked after a Hevy key was stored — a replacement as well as a first
-    /// one. Any cache of a previous key is gone by then, so the dashboard
-    /// behind this sheet has to sync again: its own `.task` does not fire when
-    /// the sheet is dismissed (#91).
+    /// one. Any cache of a previous key is gone by then, so the dashboard on
+    /// its own tab has to sync again: its own `.task` does not fire when the
+    /// user switches back to it (#91).
     var onHevyKeyStored: (() -> Void)?
 
     private let keychain: any KeychainStoring
@@ -228,6 +228,12 @@ final class SettingsViewModel: ObservableObject {
         switch target {
         case .hevy:
             await sessionReset.hardLogout()
+            // Reloaded here rather than left to the callback: `onHevyKeyDeleted`
+            // is optional, and a screen presented without it (a preview, a test,
+            // any surface outside the onboarding coordinator) would otherwise
+            // keep showing the mask of a key the hard logout just destroyed,
+            // still offering "Replace key" and "Delete key" for it.
+            await load()
             await onHevyKeyDeleted?()
         case .llm(let provider):
             do {

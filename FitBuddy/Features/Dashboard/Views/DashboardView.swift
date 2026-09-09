@@ -10,11 +10,6 @@ import SwiftUI
 struct DashboardView: View {
     @StateObject private var viewModel: WorkoutListViewModel
 
-    /// Built here rather than inside the sheet's closure, so the running
-    /// analysis and its cooldown survive the sheet being dismissed and
-    /// reopened.
-    @StateObject private var analysisViewModel: AnalysisViewModel
-
     /// Builds the ViewModel behind the workout detail screen for the tapped
     /// session (#98). Handed in rather than reached for through
     /// `@Environment(\.modelContext)`: `RootView` owns the container and builds
@@ -22,40 +17,41 @@ struct DashboardView: View {
     /// dependencies is one no preview can stand up.
     private let makeWorkoutDetailViewModel: (String) -> WorkoutDetailViewModel
 
-    /// Tapping the toolbar gear. The settings screen itself is presented by
-    /// `RootView`, which owns the onboarding coordinator that a deleted key
-    /// sends the user back to (#83).
-    private let onOpenSettings: () -> Void
+    /// Builds the ViewModel behind the exercise list (#37) — same reasoning,
+    /// and likewise called once per push rather than once per render.
+    private let makeExerciseListViewModel: () -> ExerciseListViewModel
 
     /// Changes whenever something outside the dashboard invalidated the cache —
     /// today only a replaced Hevy key (#91). Its value carries no meaning; the
     /// change itself is the signal to sync again.
     private let reloadToken: Int
 
-    @State private var showsAnalysis = false
+    /// The `reloadToken` the dashboard last synced for. `.task(id:)` restarts
+    /// whenever the view re-appears, and inside a `TabView` that is every
+    /// return to this tab — without this, each tab switch would drop the
+    /// loaded state back to `.loading` and start a full Hevy sync.
+    @State private var loadedToken: Int?
 
     /// - Parameters:
     ///   - viewModel: Built lazily — the autoclosure is evaluated once, when
     ///     SwiftUI first creates the view's state, so wiring it up in a
     ///     parent's `body` does not rebuild it on every render.
-    ///   - analysisViewModel: Same, for the analysis sheet (#32).
     ///   - makeWorkoutDetailViewModel: Called once per push, not per rendered
     ///     row — see `.navigationDestination` below.
+    ///   - makeExerciseListViewModel: Called once per push of the exercise
+    ///     list (#37).
     ///   - reloadToken: Defaults to a constant, so a preview or a test that
     ///     has no cache-invalidating parent never re-syncs.
-    ///   - onOpenSettings: Defaults to a no-op so previews need no coordinator.
     init(
         viewModel: @autoclosure @escaping () -> WorkoutListViewModel,
-        analysisViewModel: @autoclosure @escaping () -> AnalysisViewModel,
         makeWorkoutDetailViewModel: @escaping (String) -> WorkoutDetailViewModel,
-        reloadToken: Int = 0,
-        onOpenSettings: @escaping () -> Void = {}
+        makeExerciseListViewModel: @escaping () -> ExerciseListViewModel,
+        reloadToken: Int = 0
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
-        _analysisViewModel = StateObject(wrappedValue: analysisViewModel())
         self.makeWorkoutDetailViewModel = makeWorkoutDetailViewModel
+        self.makeExerciseListViewModel = makeExerciseListViewModel
         self.reloadToken = reloadToken
-        self.onOpenSettings = onOpenSettings
     }
 
     var body: some View {
@@ -71,16 +67,8 @@ struct DashboardView: View {
                         SyncStatusView(
                             status: viewModel.syncStatus,
                             lastSync: viewModel.lastSync,
-                            onRetry: { Task { await viewModel.refresh() } }
+                            onRetry: { Task { await viewModel.retry() } }
                         )
-                    }
-                    // Only with data behind it: an analysis of an empty or
-                    // unreadable cache has nothing to say, and the failure it
-                    // would produce is one the dashboard already explains.
-                    // Anything else the cache holds is analysable — the window
-                    // widens to reach it (#87).
-                    if viewModel.state.hasWorkouts {
-                        AnalysisCTACard { showsAnalysis = true }
                     }
                     content
                 }
@@ -95,34 +83,48 @@ struct DashboardView: View {
             .navigationDestination(for: WorkoutSummary.self) { workout in
                 WorkoutDetailView(viewModel: makeWorkoutDetailViewModel(workout.id))
             }
-            .refreshable { await viewModel.refresh() }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: onOpenSettings) {
-                        Image(systemName: "gearshape")
-                            .foregroundStyle(Color.fbInk)
-                    }
-                    .accessibilityLabel("Settings")
+            .navigationDestination(for: DashboardRoute.self) { route in
+                switch route {
+                case .exercises:
+                    ExerciseListView(viewModel: makeExerciseListViewModel())
                 }
             }
+            .toolbar { exercisesLink }
+            // The gesture's own spinner retracts when this returns, and
+            // `retry()` returns only once the Hevy call has answered — so it
+            // stands for the sync, not just for the cache read underneath it
+            // (US-10 AC1/AC2).
+            .refreshable { await viewModel.retry() }
+            .overlay(alignment: .bottom) { refreshToast }
+            // The toast's own timer dies with the view. Without this the
+            // notice would be parked by a tab switch mid-message and shown
+            // again on return, long after the pull it describes.
+            .onDisappear { viewModel.dismissRefreshNotice() }
+            .animation(.snappy, value: viewModel.refreshNotice)
         }
         // `.task(id:)` rather than a plain `.task`: the first run is the
         // dashboard appearing, every later one is a cache another screen
-        // invalidated while this view stayed alive (#91).
-        .task(id: reloadToken) { await viewModel.reload() }
-        // The recommendation on the analysis sheet was built from the cache
-        // that was just discarded, and that view model outlives the sheet —
-        // without this it would keep showing the previous account's analysis,
-        // and the shared cooldown could block a new one for hours. Its stored
-        // copy is already gone by the time the token changes:
-        // `SessionResetService.discardCachedWorkouts()` drops it with the
-        // cache, so `reset()` here has nothing left to restore from (#97).
-        .onChange(of: reloadToken) { _, _ in
-            analysisViewModel.cancel()
-            analysisViewModel.reset()
+        // invalidated (#91). The guard keeps it at that — a tab switch
+        // re-appears the view and restarts the task, but not the sync.
+        // Pull-to-refresh stays the manual way to sync again.
+        .task(id: reloadToken) {
+            guard loadedToken != reloadToken else { return }
+            loadedToken = reloadToken
+            await viewModel.reload()
         }
-        .sheet(isPresented: $showsAnalysis) {
-            AnalysisView(viewModel: analysisViewModel)
+    }
+
+    /// Opens the searchable exercise list (US-7). Only with data behind it:
+    /// over an empty or unreadable cache the list has nothing to search, and
+    /// the dashboard underneath already explains why.
+    @ToolbarContentBuilder
+    private var exercisesLink: some ToolbarContent {
+        if case .loaded = viewModel.state {
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink(value: DashboardRoute.exercises) {
+                    Label("Exercises", systemImage: "list.bullet")
+                }
+            }
         }
     }
 
@@ -142,6 +144,28 @@ struct DashboardView: View {
         }
     }
 
+    /// Says that the refresh the user just asked for failed (US-10 AC2).
+    ///
+    /// On top of the content rather than in the layout: the point of the
+    /// message is that the cached dashboard underneath it is still there and
+    /// still valid, and a toast that pushed the cards down would undercut it.
+    @ViewBuilder
+    private var refreshToast: some View {
+        if let notice = viewModel.refreshNotice {
+            FBToast(
+                symbolName: notice.failure.symbolName,
+                message: notice.failure.refreshMessage,
+                onDismiss: viewModel.dismissRefreshNotice
+            )
+            // Per announcement, so a second failed pull restarts the toast's
+            // own dismissal timer instead of inheriting the first one's.
+            .id(notice.id)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
     /// The cache could not be read. Kept distinct from the empty state on
     /// purpose: claiming "no training data" for a broken store would tell the
     /// user something false about their own training.
@@ -157,7 +181,7 @@ struct DashboardView: View {
                     """
                 )
                 Button("Try again") {
-                    Task { await viewModel.refresh() }
+                    Task { await viewModel.retry() }
                 }
                 .buttonStyle(FBButtonStyle(kind: .secondary))
             }
@@ -170,26 +194,20 @@ struct DashboardView: View {
 #Preview("With data") {
     DashboardView(
         viewModel: WorkoutListViewModel(cache: PreviewWorkoutCache.filled),
-        analysisViewModel: AnalysisViewModel(
-            cache: PreviewWorkoutCache.filled,
-            inference: PreviewAnalysisStreamer.recommendation
-        ),
         makeWorkoutDetailViewModel: { id in
             WorkoutDetailViewModel(cache: PreviewWorkoutDetailCache.filled, workoutID: id)
-        }
+        },
+        makeExerciseListViewModel: { ExerciseListViewModel(cache: PreviewExerciseCache.filled) }
     )
 }
 
 #Preview("Empty") {
     DashboardView(
         viewModel: WorkoutListViewModel(cache: PreviewWorkoutCache.empty),
-        analysisViewModel: AnalysisViewModel(
-            cache: PreviewWorkoutCache.empty,
-            inference: PreviewAnalysisStreamer.recommendation
-        ),
         makeWorkoutDetailViewModel: { id in
             WorkoutDetailViewModel(cache: PreviewWorkoutDetailCache.filled, workoutID: id)
-        }
+        },
+        makeExerciseListViewModel: { ExerciseListViewModel(cache: PreviewExerciseCache.filled) }
     )
 }
 #endif
