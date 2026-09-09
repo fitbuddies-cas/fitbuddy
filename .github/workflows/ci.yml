@@ -4,10 +4,19 @@ name: CI
 # own macOS runner (#113, ADR-9). An iOS build needs macOS and Xcode, so this
 # workflow cannot fall back to a GitHub-hosted Linux runner.
 on:
+  # Manual run from the Actions tab or `gh workflow run ci.yml --ref <branch>`.
+  # Note that GitHub only offers this once the workflow sits on the default
+  # branch — until then the label below is the way to ask for a UI-test run.
+  workflow_dispatch:
   # `branches` filters on the *base*: with develop alone, the weekly
   # develop -> main release PR would be the one merge without a check.
+  #
+  # `types` has to spell out the defaults again to add `labeled`: putting the
+  # `ui-tests` label on a PR is what asks for the UI suite (see the job below),
+  # and without this the label would sit there until the next push.
   pull_request:
     branches: [develop, main]
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: [develop]
 
@@ -123,7 +132,13 @@ jobs:
   # binding.
   ui-test:
     name: UI test (onboarding)
-    if: github.base_ref == 'main'
+    # Three ways in: the release PR, a manual run, or the `ui-tests` label on
+    # any PR — the last one so a change to the flow or to the tests themselves
+    # can be proven in CI without waiting for release day.
+    if: >-
+      github.base_ref == 'main'
+      || github.event_name == 'workflow_dispatch'
+      || contains(github.event.pull_request.labels.*.name, 'ui-tests')
     runs-on: [self-hosted, macOS, ARM64]
     continue-on-error: true
     # Roughly 40s of tests plus a build; well short of this, and a hung
