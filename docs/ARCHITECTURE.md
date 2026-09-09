@@ -255,6 +255,7 @@ Alle asynchronen Zugriffe folgen drei fixen Ausführungskontexten — gilt schic
 | [ADR-008](adr/ADR-008-ios26-deployment-target.md) | Mindest-Deployment-Target iOS 26 | Accepted |
 | [ADR-009](adr/ADR-009-self-hosted-ci-runner.md) | CI auf selbst gehostetem macOS-Runner | Accepted |
 | [ADR-010](adr/ADR-010-strava-oauth-byo-app.md) | Strava-OAuth2 im BYO-App-Modell — Client-Credentials des Nutzers statt Backend | Accepted |
+| [ADR-011](adr/ADR-011-polar-als-zweite-quelle.md) | Polar AccessLink als dritte Datenquelle, `Activity` additiv um `metrics` erweitert | Accepted |
 
 ---
 
@@ -299,12 +300,15 @@ Bekannte Lücken im PoC-Design — vor Sprint 3 (AI-Integration) adressieren.
 > [ADR-010](adr/ADR-010-strava-oauth-byo-app.md) aufgelöst: Das Secret gehört nicht dem Team,
 > sondern dem Nutzer. Er legt unter `strava.com/settings/api` seine eigene API-Application an
 > und hinterlegt Client ID und Client Secret im Keychain — kein Secret im Binary, kein Backend,
-> ADR-004 bleibt unverändert. Strava bleibt damit die zweite Quelle, Polar ist verworfen.
+> ADR-004 bleibt unverändert. Damit sind Strava **und** Polar ([ADR-011](adr/ADR-011-polar-als-zweite-quelle.md),
+> PKCE-Public-Client, ebenfalls kein Backend nötig) beide als reale, zu Hevy gleichwertige
+> Quellen umsetzbar — keine schliesst die andere aus.
 
 | # | Widerspruch / Unklarheit | Betroffene Dokumente | Handlungsbedarf |
 |---|---|---|---|
 | W-3 | **Certificate Pinning: als aktiv formuliert, laut ADR noch nicht implementiert.** ADR-004 markiert es als «Pflicht in Sprint 2». | `ADR-004` | Formulierung korrigieren: «geplant, Sprint 2». |
 | W-5 | **HealthKit: Entscheid gefordert, aber nirgends getroffen.** Das `Activity`-Modell ist deshalb noch nicht finalisierbar. | `ADR-006` | Entscheid blockiert Protocol-Design und Datenmodell. Empfehlung: OUT für PoC. |
+| W-6 | **Dritte/zweite Quelle je ADR-010 und ADR-011: sowohl Strava als auch Polar sind umgesetzt**, nicht nur eine davon. `StravaConnector` (BYO-App-OAuth) und `PolarConnector` (PKCE-Public-Client) sind beide implementiert und getestet, beide konform zu ADR-004. Offen für v1: OAuth-Consent-UI und Onboarding-Einbindung für Polar, SwiftData-Persistenz der Cardio-Sessions, Migration v3 → v4. | `ADR-004`, `ADR-006`, `ADR-010`, `ADR-011` | v1: Polar-OAuth-Screen + Persistenz. Polar-Recovery/Sleep bleibt ausgeschlossen (session-, nicht workout-förmig — wie `W-5`). |
 
 ### Offene Architektur-Fragen
 

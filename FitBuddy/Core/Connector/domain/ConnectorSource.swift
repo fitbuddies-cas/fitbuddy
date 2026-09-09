@@ -9,11 +9,17 @@ import Foundation
 /// renewal prompt from US-5 AC2 could be written against it; since #142 the
 /// real `StravaConnector` stands behind it.
 ///
+/// `polar` has a working connector (`PolarConnector`, ADR-11) but is not wired
+/// into onboarding in v0 — the OAuth screen is v1. The case still earns its
+/// place: the connector, its token refresh and the renewal prompt are all
+/// testable through the registry today.
+///
 /// `Codable` because `Activity` carries it (#141) and `Activity` is the
 /// connector-facing wire boundary.
 enum ConnectorSource: String, CaseIterable, Identifiable, Codable, Sendable {
     case hevy
     case strava
+    case polar
 
     var id: String { rawValue }
 
@@ -22,6 +28,7 @@ enum ConnectorSource: String, CaseIterable, Identifiable, Codable, Sendable {
         switch self {
         case .hevy: return "Hevy"
         case .strava: return "Strava"
+        case .polar: return "Polar"
         }
     }
 
