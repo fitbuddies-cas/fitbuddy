@@ -17,6 +17,10 @@ struct DashboardView: View {
     /// dependencies is one no preview can stand up.
     private let makeWorkoutDetailViewModel: (String) -> WorkoutDetailViewModel
 
+    /// Builds the ViewModel behind the exercise list (#37) — same reasoning,
+    /// and likewise called once per push rather than once per render.
+    private let makeExerciseListViewModel: () -> ExerciseListViewModel
+
     /// Changes whenever something outside the dashboard invalidated the cache —
     /// today only a replaced Hevy key (#91). Its value carries no meaning; the
     /// change itself is the signal to sync again.
@@ -34,15 +38,19 @@ struct DashboardView: View {
     ///     parent's `body` does not rebuild it on every render.
     ///   - makeWorkoutDetailViewModel: Called once per push, not per rendered
     ///     row — see `.navigationDestination` below.
+    ///   - makeExerciseListViewModel: Called once per push of the exercise
+    ///     list (#37).
     ///   - reloadToken: Defaults to a constant, so a preview or a test that
     ///     has no cache-invalidating parent never re-syncs.
     init(
         viewModel: @autoclosure @escaping () -> WorkoutListViewModel,
         makeWorkoutDetailViewModel: @escaping (String) -> WorkoutDetailViewModel,
+        makeExerciseListViewModel: @escaping () -> ExerciseListViewModel,
         reloadToken: Int = 0
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
         self.makeWorkoutDetailViewModel = makeWorkoutDetailViewModel
+        self.makeExerciseListViewModel = makeExerciseListViewModel
         self.reloadToken = reloadToken
     }
 
@@ -75,6 +83,13 @@ struct DashboardView: View {
             .navigationDestination(for: WorkoutSummary.self) { workout in
                 WorkoutDetailView(viewModel: makeWorkoutDetailViewModel(workout.id))
             }
+            .navigationDestination(for: DashboardRoute.self) { route in
+                switch route {
+                case .exercises:
+                    ExerciseListView(viewModel: makeExerciseListViewModel())
+                }
+            }
+            .toolbar { exercisesLink }
             .refreshable { await viewModel.refresh() }
         }
         // `.task(id:)` rather than a plain `.task`: the first run is the
@@ -86,6 +101,20 @@ struct DashboardView: View {
             guard loadedToken != reloadToken else { return }
             loadedToken = reloadToken
             await viewModel.reload()
+        }
+    }
+
+    /// Opens the searchable exercise list (US-7). Only with data behind it:
+    /// over an empty or unreadable cache the list has nothing to search, and
+    /// the dashboard underneath already explains why.
+    @ToolbarContentBuilder
+    private var exercisesLink: some ToolbarContent {
+        if case .loaded = viewModel.state {
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink(value: DashboardRoute.exercises) {
+                    Label("Exercises", systemImage: "list.bullet")
+                }
+            }
         }
     }
 
@@ -135,7 +164,8 @@ struct DashboardView: View {
         viewModel: WorkoutListViewModel(cache: PreviewWorkoutCache.filled),
         makeWorkoutDetailViewModel: { id in
             WorkoutDetailViewModel(cache: PreviewWorkoutDetailCache.filled, workoutID: id)
-        }
+        },
+        makeExerciseListViewModel: { ExerciseListViewModel(cache: PreviewExerciseCache.filled) }
     )
 }
 
@@ -144,7 +174,8 @@ struct DashboardView: View {
         viewModel: WorkoutListViewModel(cache: PreviewWorkoutCache.empty),
         makeWorkoutDetailViewModel: { id in
             WorkoutDetailViewModel(cache: PreviewWorkoutDetailCache.filled, workoutID: id)
-        }
+        },
+        makeExerciseListViewModel: { ExerciseListViewModel(cache: PreviewExerciseCache.filled) }
     )
 }
 #endif
