@@ -7,8 +7,8 @@ import SwiftUI
 /// pure cache read — the dashboard owns the sync, so opening this screen never
 /// costs a Hevy request.
 ///
-/// The muscle-group filter (US-7 AC2) is not here yet; it is the next task on
-/// the same story (#38) and hangs off the same view model.
+/// The muscle-group filter (US-7 AC2) sits above the list as `ExerciseFilterView`
+/// and combines with the search field (AC3); both hang off the same view model.
 struct ExerciseListView: View {
     @StateObject private var viewModel: ExerciseListViewModel
 
@@ -49,9 +49,27 @@ struct ExerciseListView: View {
 
     private var baseScrollView: some View {
         ScrollView {
-            content
-                .padding(.horizontal, 16)
-                .padding(.bottom, 32)
+            VStack(spacing: 0) {
+                filterRow
+                content
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 32)
+            }
+        }
+    }
+
+    /// The muscle-group chips (AC2), edge-to-edge so they scroll under the
+    /// screen margin. Only over a loaded window with movements in it — the same
+    /// condition as the search field.
+    @ViewBuilder
+    private var filterRow: some View {
+        if viewModel.isSearchable {
+            ExerciseFilterView(
+                groups: viewModel.filterGroups,
+                selection: viewModel.selectedMuscleGroups,
+                onToggle: { viewModel.toggle($0) }
+            )
+            .padding(.top, 12)
         }
     }
 
@@ -63,7 +81,7 @@ struct ExerciseListView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.top, 80)
         case .loaded:
-            if viewModel.hasNoSearchMatches {
+            if viewModel.hasNoMatches {
                 noMatchesView
             } else {
                 list
@@ -108,14 +126,15 @@ struct ExerciseListView: View {
         .padding(.bottom, 6)
     }
 
-    /// The query matched nothing (AC1). A statement about the search, which is
-    /// why it names the query and offers no retry — the fix is to type less.
+    /// Search and/or muscle-group filter matched nothing (AC1/AC2). A statement
+    /// about the filter, which is why it offers no retry — the fix is to widen
+    /// the search term or drop a chip.
     private var noMatchesView: some View {
         FBCard(padding: 18) {
             FBInfoRow(
-                icon: "magnifyingglass",
+                icon: "line.3.horizontal.decrease",
                 title: "No exercises found",
-                text: "Nothing in the last 90 days matches your search. Try a shorter term."
+                text: "Nothing in the last 90 days matches your filter. Try a shorter term or fewer muscle groups."
             )
         }
         .padding(.top, 40)
