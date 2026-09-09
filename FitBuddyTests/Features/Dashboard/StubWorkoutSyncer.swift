@@ -5,7 +5,7 @@ import XCTest
 /// Test double for the Hevy sync, so `WorkoutListViewModel` can be driven
 /// through every offline case without a network stub.
 ///
-/// An `actor`, mirroring `HevyService`: `WorkoutSyncing.syncRecentWorkouts()`
+/// An `actor`, mirroring `WorkoutSyncService`: `WorkoutSyncing.syncRecentWorkouts()`
 /// is a nonisolated `async` requirement, so its body runs on the cooperative
 /// pool while the tests read `callCount` and swap `error` from the main actor.
 /// A plain class with `@unchecked Sendable` would be covering that up rather
@@ -14,7 +14,7 @@ actor StubWorkoutSyncer: WorkoutSyncing {
     private var error: Error?
     private var result = SyncResult(workoutCount: 0, syncedAt: .distantPast, windowStart: .distantPast)
     private var gatesFirstCall = false
-    /// Written on every successful sync, mirroring `HevyService`: the
+    /// Written on every successful sync, mirroring `WorkoutSyncService`: the
     /// dashboard reads its timestamp back out of the store, not out of the
     /// `SyncResult`, so a test about US-10 AC1 needs the store to move.
     private var timestamps: SyncTimestampStore?
