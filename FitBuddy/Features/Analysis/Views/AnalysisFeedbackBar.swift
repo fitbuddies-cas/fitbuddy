@@ -5,8 +5,8 @@ import SwiftUI
 /// A tap is stored on the device and nothing else happens — no request, no
 /// backend. The buttons stay put after the tap, with the chosen verdict filled:
 /// the store is built to take a changed mind, so the UI has to let the user
-/// change it. Below them sits the lock label, which is what the user
-/// actually needs next.
+/// change it. Below them sits the lock label, which is what the user actually
+/// needs next.
 struct AnalysisFeedbackBar: View {
     /// The verdict already given for this recommendation, if any.
     let selected: AnalysisFeedback?

@@ -110,10 +110,10 @@ struct AnalysisView: View {
                 text: text,
                 attribution: viewModel.attribution,
                 age: viewModel.resultAge,
-                // Offered only while a new run is actually possible: while the
-                // lock holds, the intro screen would be a dead end with the same
-                // countdown on it, and the recommendation the user still has is
-                // the more useful thing to keep on screen (#97).
+                // Offered only while a new run is actually possible: while the lock
+                // holds, the intro screen would be a dead end with the same countdown
+                // on it, and the recommendation the user still has is the more useful
+                // thing to keep on screen (#97).
                 onNewAnalysis: viewModel.canStartAnalysis ? { viewModel.reset() } : nil
             )
         case .error(let failure):
