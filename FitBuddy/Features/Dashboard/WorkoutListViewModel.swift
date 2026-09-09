@@ -29,6 +29,11 @@ final class WorkoutListViewModel: ObservableObject {
 
     /// The read currently in flight, so a newer `load()` supersedes it.
     private var loadTask: Task<Void, Never>?
+    /// Identifies the read that owns `state`, bumped once per read — the same
+    /// distinction `syncGeneration` draws, for the same reason. A read the
+    /// sync starts after caching a fresh window is routinely cancelled from
+    /// outside, and its result is the whole point of the sync.
+    private var loadGeneration = 0
     /// The sync currently in flight, so repeated pull-to-refresh does not
     /// stack up parallel windows fetches on Hevy.
     private var syncTask: Task<Void, Never>?
@@ -128,12 +133,19 @@ final class WorkoutListViewModel: ObservableObject {
     ///   `refresh()`.
     func load(keepingSpinnerWhenEmpty: Bool = false) async {
         loadTask?.cancel()
-        let task = Task { await performLoad(keepingSpinnerWhenEmpty: keepingSpinnerWhenEmpty) }
+        loadGeneration &+= 1
+        let generation = loadGeneration
+        let task = Task {
+            await performLoad(
+                keepingSpinnerWhenEmpty: keepingSpinnerWhenEmpty,
+                generation: generation
+            )
+        }
         loadTask = task
         await task.awaitingCancellation()
     }
 
-    private func performLoad(keepingSpinnerWhenEmpty: Bool) async {
+    private func performLoad(keepingSpinnerWhenEmpty: Bool, generation: Int) async {
         let syncedAt = await timestamps.lastSync()
 
         let windowStart = TrainingWindow.start(endingAt: now(), calendar: calendar)
@@ -147,12 +159,16 @@ final class WorkoutListViewModel: ObservableObject {
                     metrics: DashboardMetrics(summaries: summaries, calendar: calendar)
                 )
         } catch {
+            // A read the caller interrupted says nothing about the store, so
+            // `.failed` would tell the user their training data is unreadable
+            // when it is not. Leave the screen as it is instead.
+            guard !error.isCancellation else { return }
             newState = .failed
         }
 
-        // Publish nothing once superseded: a cancelled read's result is stale
-        // by definition, and `.failed` from a cancelled read would be a lie.
-        guard !Task.isCancelled else { return }
+        // Publish nothing once superseded: the newer read owns `state`, and a
+        // slow older result would overwrite what it already published.
+        guard isCurrentLoad(generation) else { return }
         lastSync = syncedAt
         state = newState
     }
@@ -232,6 +248,13 @@ final class WorkoutListViewModel: ObservableObject {
             }
             await resolveHeldSpinner()
         }
+    }
+
+    /// Whether this read is still the one `state` belongs to. See
+    /// `isCurrentSync(_:)` — a read cancelled from outside is still current
+    /// and publishes what it found.
+    private func isCurrentLoad(_ generation: Int) -> Bool {
+        generation == loadGeneration
     }
 
     /// Whether this sync is still the one `syncStatus` belongs to.

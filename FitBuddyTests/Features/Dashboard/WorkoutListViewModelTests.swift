@@ -421,6 +421,35 @@ final class WorkoutListViewModelTests: XCTestCase {
         XCTAssertNotEqual(sut.syncStatus, .syncing)
     }
 
+    /// The same teardown, but the sync got through before it was cancelled.
+    /// The workouts are in the cache by then, so the read that follows has to
+    /// publish them — dropping it would leave the dashboard showing the old
+    /// window under a stale timestamp until the user pulls a second time.
+    func testSyncCancelledFromOutsideStillPublishesWhatItCached() async throws {
+        let syncedAt = reference.addingTimeInterval(-30)
+        cache.results = [
+            [summary(id: "old", daysAgo: 5, volume: 400)],
+            [summary(id: "fresh", daysAgo: 0, volume: 900)],
+        ]
+        await syncer.setResult(SyncResult(workoutCount: 1, syncedAt: syncedAt, windowStart: reference))
+        await syncer.recordSyncs(in: timestamps)
+        await syncer.gateFirstCall()
+        let sut = makeSUT(withSyncer: true)
+
+        let pull = Task { await sut.retry() }
+        await syncer.waitForFirstCall()
+        pull.cancel()
+        await syncer.releaseFirstCall()
+        await pull.value
+
+        guard case let .loaded(workouts, _) = sut.state else {
+            return XCTFail("Expected .loaded, got \(sut.state)")
+        }
+        XCTAssertEqual(workouts.map(\.id), ["fresh"])
+        let stored = try XCTUnwrap(sut.lastSync)
+        XCTAssertEqual(stored.timeIntervalSince1970, syncedAt.timeIntervalSince1970, accuracy: 0.001)
+    }
+
     // MARK: - Reload after a discarded cache (#91)
 
     /// The window belongs to a Hevy key that was just replaced. Neither the
