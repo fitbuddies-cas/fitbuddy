@@ -16,4 +16,10 @@ enum ConnectorError: Error, Equatable, Sendable {
     case serviceUnavailable
     /// The response did not match the shape the connector expects.
     case invalidResponse
+    /// The connector exists only as a stub and cannot serve this call yet —
+    /// thrown by every `StravaConnector` method until the OAuth flow and the
+    /// Strava mapping land in v1 (ADR-6, #35). Distinct from
+    /// `serviceUnavailable`: nothing is wrong on the provider's side and a
+    /// retry will never succeed.
+    case notImplemented
 }

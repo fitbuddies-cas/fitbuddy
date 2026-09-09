@@ -10,4 +10,16 @@ enum ConnectorCredentials: Equatable, Sendable {
     /// An OAuth 2.0 token pair. `expiresAt` lets the connector's own
     /// `validate()` refresh proactively instead of failing first.
     case oauth(accessToken: String, refreshToken: String, expiresAt: Date)
+
+    /// When these credentials stop working, or `nil` for a scheme that does
+    /// not expire. `ConnectorRegistry` records it on `connect` — it is the
+    /// only place the expiry is visible without asking the provider.
+    var expiresAt: Date? {
+        switch self {
+        case .apiKey:
+            return nil
+        case .oauth(_, _, let expiresAt):
+            return expiresAt
+        }
+    }
 }
