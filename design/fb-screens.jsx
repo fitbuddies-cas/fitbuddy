@@ -684,7 +684,7 @@ function FBAnalyzeLoadingScreen({ longWait = false, onCancel }) {
   );
 }
 
-function FBAnalysisResultScreen({ variant = 'progression', feedback = null, cooldown = false, onFeedback, onClose }) {
+function FBAnalysisResultScreen({ variant = 'progression', feedback = null, rateLimited = false, onFeedback, onClose }) {
   // variant: 'progression' | 'recovery'
   const recovery = variant === 'recovery';
 
@@ -763,11 +763,11 @@ function FBAnalysisResultScreen({ variant = 'progression', feedback = null, cool
         borderTop: `1px solid ${FB.border}`,
         padding: '14px 16px 44px',
       }}>
-        {cooldown ? (
+        {rateLimited ? (
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 13, color: FB.muted, marginBottom: 4 }}>Thanks for the feedback.</div>
             <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: -0.2 }}>
-              Next analysis available in <span style={{ fontVariantNumeric: 'tabular-nums' }}>5 h 42 m</span>
+              New analysis available in <span style={{ fontVariantNumeric: 'tabular-nums' }}>45s</span>
             </div>
           </div>
         ) : (

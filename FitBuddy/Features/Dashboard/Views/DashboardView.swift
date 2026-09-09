@@ -67,7 +67,7 @@ struct DashboardView: View {
                         SyncStatusView(
                             status: viewModel.syncStatus,
                             lastSync: viewModel.lastSync,
-                            onRetry: { Task { await viewModel.refresh() } }
+                            onRetry: { Task { await viewModel.retry() } }
                         )
                     }
                     content
@@ -90,7 +90,17 @@ struct DashboardView: View {
                 }
             }
             .toolbar { exercisesLink }
-            .refreshable { await viewModel.refresh() }
+            // The gesture's own spinner retracts when this returns, and
+            // `retry()` returns only once the Hevy call has answered — so it
+            // stands for the sync, not just for the cache read underneath it
+            // (US-10 AC1/AC2).
+            .refreshable { await viewModel.retry() }
+            .overlay(alignment: .bottom) { refreshToast }
+            // The toast's own timer dies with the view. Without this the
+            // notice would be parked by a tab switch mid-message and shown
+            // again on return, long after the pull it describes.
+            .onDisappear { viewModel.dismissRefreshNotice() }
+            .animation(.snappy, value: viewModel.refreshNotice)
         }
         // `.task(id:)` rather than a plain `.task`: the first run is the
         // dashboard appearing, every later one is a cache another screen
@@ -134,6 +144,28 @@ struct DashboardView: View {
         }
     }
 
+    /// Says that the refresh the user just asked for failed (US-10 AC2).
+    ///
+    /// On top of the content rather than in the layout: the point of the
+    /// message is that the cached dashboard underneath it is still there and
+    /// still valid, and a toast that pushed the cards down would undercut it.
+    @ViewBuilder
+    private var refreshToast: some View {
+        if let notice = viewModel.refreshNotice {
+            FBToast(
+                symbolName: notice.failure.symbolName,
+                message: notice.failure.refreshMessage,
+                onDismiss: viewModel.dismissRefreshNotice
+            )
+            // Per announcement, so a second failed pull restarts the toast's
+            // own dismissal timer instead of inheriting the first one's.
+            .id(notice.id)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
     /// The cache could not be read. Kept distinct from the empty state on
     /// purpose: claiming "no training data" for a broken store would tell the
     /// user something false about their own training.
@@ -149,7 +181,7 @@ struct DashboardView: View {
                     """
                 )
                 Button("Try again") {
-                    Task { await viewModel.refresh() }
+                    Task { await viewModel.retry() }
                 }
                 .buttonStyle(FBButtonStyle(kind: .secondary))
             }

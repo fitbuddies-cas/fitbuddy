@@ -10,7 +10,7 @@ import Foundation
 /// Hand-rolled for the same reason as `SyncTimeFormatter`: the wording is
 /// fixed by the requirement, and the output is English by policy, so there is
 /// no locale to negotiate.
-enum CooldownFormatter {
+enum RateLimitFormatter {
     /// `"45s"`, `"1s"`. `nil` once the lock has lifted, so the caller drops the
     /// label instead of showing "0s".
     ///

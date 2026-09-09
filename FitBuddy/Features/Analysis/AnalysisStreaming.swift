@@ -12,7 +12,7 @@ protocol AnalysisStreaming: Sendable {
     /// `AnalysisEvent`s.
     ///
     /// - Throws: `InferenceServiceError` before the first event (no key,
-    ///   cooldown, already running) and through the stream afterwards — the
+    ///   rate limit, already running) and through the stream afterwards — the
     ///   latter only once every configured provider has failed.
     func streamAnalysis(systemPrompt: String, userPrompt: String) async throws -> AsyncThrowingStream<AnalysisEvent, Error>
 }

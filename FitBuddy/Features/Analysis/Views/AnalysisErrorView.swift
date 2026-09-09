@@ -12,7 +12,7 @@ struct AnalysisErrorView: View {
     /// on a single-provider run repeating that name adds nothing.
     let attribution: AnalysisAttribution?
     /// `nil` for a failure a retry cannot fix (a missing or rejected key, an
-    /// active cooldown), where a "Try again" button would only produce the
+    /// active lock), where a "Try again" button would only produce the
     /// same message again.
     let onRetry: (() -> Void)?
     /// Returns to the intro state — the button reads "Back", and that is what

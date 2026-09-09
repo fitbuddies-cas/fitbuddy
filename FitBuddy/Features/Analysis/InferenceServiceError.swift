@@ -17,7 +17,7 @@ enum InferenceServiceError: Error, Equatable {
     case keychainUnavailable
     /// The lock after the last run has not lifted yet. Carries the instant it
     /// does.
-    case cooldownActive(availableAt: Date)
+    case lockActive(availableAt: Date)
     /// A call is already streaming; the analysis button must stay disabled
     /// until it finishes, but the actor enforces this independently.
     case alreadyInProgress

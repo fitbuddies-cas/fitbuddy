@@ -307,15 +307,15 @@ final class InferenceServiceTests: XCTestCase {
 
     // MARK: - Rate limit (#117: 60s Doppeltipp-Sperre)
 
-    func testThrowsCooldownActiveWhenCalledTooSoon() async throws {
+    func testThrowsLockActiveWhenCalledTooSoon() async throws {
         let lastCall = Self.now.addingTimeInterval(-30)
         await rateLimit.recordCall(at: lastCall)
 
         do {
             _ = try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u")
-            XCTFail("expected cooldownActive")
+            XCTFail("expected lockActive")
         } catch let error as InferenceServiceError {
-            guard case .cooldownActive(let availableAt) = error else {
+            guard case .lockActive(let availableAt) = error else {
                 return XCTFail("wrong error: \(error)")
             }
             XCTAssertEqual(availableAt, lastCall.addingTimeInterval(AnalysisRateLimitStore.duration))

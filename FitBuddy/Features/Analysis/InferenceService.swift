@@ -77,7 +77,7 @@ actor InferenceService {
         let candidates: [Candidate]
         do {
             if let availableAt = await rateLimit.activeLock(now: now()) {
-                throw InferenceServiceError.cooldownActive(availableAt: availableAt)
+                throw InferenceServiceError.lockActive(availableAt: availableAt)
             }
             candidates = try await resolveCandidates()
         } catch {

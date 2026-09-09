@@ -29,9 +29,9 @@ final class AnalysisFailureTests: XCTestCase {
         XCTAssertEqual(failure(.streamInterrupted(message: "overloaded")), .serviceUnavailable(.claude))
     }
 
-    func testCarriesCooldownInstant() {
+    func testCarriesLockInstant() {
         let availableAt = Date(timeIntervalSince1970: 1_788_000_000)
-        XCTAssertEqual(failure(.cooldownActive(availableAt: availableAt)), .cooldownActive(availableAt: availableAt))
+        XCTAssertEqual(failure(.lockActive(availableAt: availableAt)), .lockActive(availableAt: availableAt))
     }
 
     func testMapsUnreadableResponses() {
@@ -79,11 +79,11 @@ final class AnalysisFailureTests: XCTestCase {
 
     // MARK: - Retry and formatting
 
-    func testKeyAndCooldownFailuresAreNotRetryable() {
+    func testKeyAndLockFailuresAreNotRetryable() {
         XCTAssertFalse(AnalysisFailure.missingAPIKey.isRetryable)
         XCTAssertFalse(AnalysisFailure.unauthorized(.claude).isRetryable)
         XCTAssertFalse(AnalysisFailure.noTrainingData.isRetryable)
-        XCTAssertFalse(AnalysisFailure.cooldownActive(availableAt: Date()).isRetryable)
+        XCTAssertFalse(AnalysisFailure.lockActive(availableAt: Date()).isRetryable)
         XCTAssertTrue(AnalysisFailure.offline(.claude).isRetryable)
         XCTAssertTrue(AnalysisFailure.keychainUnavailable.isRetryable)
     }
@@ -98,7 +98,7 @@ final class AnalysisFailureTests: XCTestCase {
         let failures: [AnalysisFailure] = [
             .missingAPIKey, .keychainUnavailable, .unauthorized(.claude), .offline(.gemini),
             .rateLimited(provider: .mistral, retryAfter: nil), .serviceUnavailable(.claude),
-            .cooldownActive(availableAt: Date()), .noTrainingData,
+            .lockActive(availableAt: Date()), .noTrainingData,
             .cacheUnavailable, .unreadableResponse(.gemini), .unreadableResponse(nil),
         ]
         for failure in failures {
