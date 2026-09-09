@@ -99,7 +99,7 @@ final class GeminiClientTests: LLMClientTestCase {
 
     /// Gemini reports a post-200 failure as an ordinary `data:` frame. Without
     /// recognising it, the frame carries no text, gets skipped like metadata,
-    /// and the run ends as a silent success — no fallback, cooldown spent.
+    /// and the run ends as a silent success — no fallback, the lock started.
     func testErrorFrameAfterTheStatusCodeInterruptsTheStream() async throws {
         stub(body: GeminiSSEFactory.errorBody(status: "RESOURCE_EXHAUSTED", message: "quota exceeded"))
 

@@ -4,7 +4,7 @@ import Foundation
 /// Wraps a real `AnalysisResultStoring` and lets a test hold `save` open.
 ///
 /// Used to inspect what the screen shows *while* a finished run is being
-/// persisted — the window in which a stale `cooldownMessage` used to offer
+/// persisted — the window in which a stale `lockMessage` used to offer
 /// "New analysis" for a run `start()` would immediately refuse.
 actor GatedAnalysisResultStore: AnalysisResultStoring {
     private let wrapped: any AnalysisResultStoring

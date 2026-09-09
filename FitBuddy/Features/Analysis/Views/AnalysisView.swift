@@ -58,12 +58,12 @@ struct AnalysisView: View {
             // with the glass instead of stacking a second opaque strip on it.
             .safeAreaBar(edge: .bottom) { footer }
         }
-        // Keeps the cooldown label counting down for as long as the tab is
+        // Keeps the lock label counting down for as long as the tab is
         // visible; cancelled with the view.
-        .task { await viewModel.trackCooldown() }
+        .task { await viewModel.trackLock() }
         // Brings back the newest recommendation, so a returning user lands on
         // the answer they paid for rather than on the intro (US-3 AC10). Its
-        // own `.task`, because `trackCooldown()` never returns — and here
+        // own `.task`, because `trackLock()` never returns — and here
         // rather than in `DashboardView`, whose `reloadToken` path drops
         // exactly this state when the Hevy key changes (#91).
         .task { await viewModel.restore() }
@@ -87,7 +87,7 @@ struct AnalysisView: View {
         switch viewModel.state {
         case .idle:
             AnalysisIntroView(
-                cooldownMessage: viewModel.cooldownMessage,
+                lockMessage: viewModel.lockMessage,
                 canStart: viewModel.canStartAnalysis,
                 onStart: start
             )
@@ -110,10 +110,10 @@ struct AnalysisView: View {
                 text: text,
                 attribution: viewModel.attribution,
                 age: viewModel.resultAge,
-                // Offered only while a new run is actually possible: during the
-                // cooldown the intro screen would be a dead end with the same
-                // countdown on it, and the recommendation the user still has is
-                // the more useful thing to keep on screen (#97).
+                // Offered only while a new run is actually possible: while the lock
+                // holds, the intro screen would be a dead end with the same countdown
+                // on it, and the recommendation the user still has is the more useful
+                // thing to keep on screen (#97).
                 onNewAnalysis: viewModel.canStartAnalysis ? { viewModel.reset() } : nil
             )
         case .error(let failure):
@@ -130,13 +130,13 @@ struct AnalysisView: View {
     }
 
     /// The bar under the recommendation: the two feedback buttons while a
-    /// result is showing (US-3 AC9), otherwise the cooldown label — and
+    /// result is showing (US-3 AC9), otherwise the lock label — and
     /// nothing at all while a run is in flight, where neither applies.
     ///
-    /// `.idle` is deliberately not in the cooldown branch: `AnalysisIntroView`
+    /// `.idle` is deliberately not in the lock branch: `AnalysisIntroView`
     /// already prints the same label under its button, and repeating it in the
     /// bottom bar would show the user the same sentence twice. In `.error` the
-    /// repetition is wanted — `AnalysisFailure.cooldownActive` names the time,
+    /// repetition is wanted — `AnalysisFailure.lockActive` names the time,
     /// the label next to it keeps ticking.
     @ViewBuilder
     private var footer: some View {
@@ -144,19 +144,19 @@ struct AnalysisView: View {
         case .result:
             AnalysisFeedbackBar(
                 selected: viewModel.feedback,
-                cooldownMessage: viewModel.cooldownMessage,
+                lockMessage: viewModel.lockMessage,
                 onSelect: { verdict in Task { await viewModel.submitFeedback(verdict) } }
             )
         case .error:
-            if let cooldownMessage = viewModel.cooldownMessage {
-                cooldownBar(cooldownMessage)
+            if let lockMessage = viewModel.lockMessage {
+                lockBar(lockMessage)
             }
         case .idle, .loading, .streaming:
             EmptyView()
         }
     }
 
-    private func cooldownBar(_ message: String) -> some View {
+    private func lockBar(_ message: String) -> some View {
         Text(message)
             .font(.subheadline.weight(.semibold))
             .fbTabularNumbers()

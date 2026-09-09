@@ -28,7 +28,7 @@ enum AnalysisFailure: Equatable {
     /// The short lock after the last run had not lifted when the call went
     /// out. Carries the instant it does, so the label beside the message can
     /// count it down.
-    case cooldownActive(availableAt: Date)
+    case lockActive(availableAt: Date)
     /// The cached window holds no workouts at all — not even in the widest
     /// rung of the fallback ladder (#87). There is nothing to analyse, and
     /// sending an empty prompt would spend the user's tokens on it.
@@ -68,8 +68,8 @@ enum AnalysisFailure: Equatable {
             self = .rateLimited(provider: provider, retryAfter: retryAfter)
         case .serviceUnavailable, .streamInterrupted:
             self = .serviceUnavailable(provider)
-        case .cooldownActive(let availableAt):
-            self = .cooldownActive(availableAt: availableAt)
+        case .lockActive(let availableAt):
+            self = .lockActive(availableAt: availableAt)
         case .invalidResponse, .unexpectedStatus, .alreadyInProgress:
             self = .unreadableResponse(provider)
         }
@@ -90,7 +90,7 @@ enum AnalysisFailure: Equatable {
             return "Too many requests"
         case .serviceUnavailable(let provider):
             return "\(Self.name(provider)) unavailable"
-        case .cooldownActive:
+        case .lockActive:
             return "Analysis just ran"
         case .noTrainingData:
             return "No training data"
@@ -120,9 +120,9 @@ enum AnalysisFailure: Equatable {
             return "\(Self.name(provider)) is rate-limiting your key. Try again in \(wait)."
         case .serviceUnavailable(let provider):
             return "\(Self.name(provider)) could not complete the analysis. Try again in a few minutes."
-        case .cooldownActive:
+        case .lockActive:
             // No countdown in here: this message is written once, while
-            // `AnalysisViewModel.cooldownMessage` keeps ticking beside it.
+            // `AnalysisViewModel.lockMessage` keeps ticking beside it.
             return "An analysis has just been sent off. The next one is available in a moment."
         case .noTrainingData:
             return "There are no workouts in your cached training data to analyse. Sync it first."
@@ -144,7 +144,7 @@ enum AnalysisFailure: Equatable {
             return "antenna.radiowaves.left.and.right.slash"
         case .rateLimited, .serviceUnavailable:
             return "exclamationmark.icloud"
-        case .cooldownActive:
+        case .lockActive:
             return "hourglass"
         case .noTrainingData:
             return "figure.strengthtraining.traditional"
@@ -159,7 +159,7 @@ enum AnalysisFailure: Equatable {
     /// key cannot be retried into working — that one needs onboarding.
     var isRetryable: Bool {
         switch self {
-        case .missingAPIKey, .unauthorized, .cooldownActive, .noTrainingData:
+        case .missingAPIKey, .unauthorized, .lockActive, .noTrainingData:
             return false
         case .keychainUnavailable, .offline, .rateLimited, .serviceUnavailable,
              .cacheUnavailable, .unreadableResponse:

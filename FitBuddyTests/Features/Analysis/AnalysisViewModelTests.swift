@@ -97,7 +97,7 @@ final class AnalysisViewModelTests: XCTestCase {
 
         XCTAssertEqual(sut.state, .result("Your bench volume is rising."))
         XCTAssertFalse(sut.isTakingLong)
-        XCTAssertNil(sut.cooldownMessage)
+        XCTAssertNil(sut.lockMessage)
     }
 
     func testStateCarriesTheTextInStreamingAndResult() {
@@ -176,7 +176,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await sut.start()
         XCTAssertNotNil(sut.context)
 
-        // Past the 6h cooldown, on a cache that no rung can serve.
+        // Past the lock, on a cache that no rung can serve.
         clock.advance(by: 7 * 3_600)
         cache.summaries = []
         await sut.start()
@@ -196,7 +196,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await sut.start()
         XCTAssertNotNil(sut.context)
 
-        // Past the 6h cooldown, second run held inside the cache read — after
+        // Past the lock, second run held inside the cache read — after
         // the clearing, before the window is resolved.
         clock.advance(by: 7 * 3_600)
         await streamer.setChunks(["second"])
@@ -295,7 +295,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await sut.start()
         XCTAssertEqual(sut.context?.window.weeks, 8)
 
-        // Past the 6h cooldown, with recent training in the cache this time.
+        // Past the lock, with recent training in the cache this time.
         clock.advance(by: 7 * 3_600)
         cache.summaries = [Self.workout(daysAgo: 2)]
         await streamer.setChunks(["second"])
@@ -322,8 +322,8 @@ final class AnalysisViewModelTests: XCTestCase {
         await sut.start()
 
         let availableAt = Self.reference.addingTimeInterval(AnalysisRateLimitStore.duration - 15)
-        XCTAssertEqual(sut.state, .error(.cooldownActive(availableAt: availableAt)))
-        XCTAssertEqual(sut.cooldownMessage, "New analysis available in 45s")
+        XCTAssertEqual(sut.state, .error(.lockActive(availableAt: availableAt)))
+        XCTAssertEqual(sut.lockMessage, "New analysis available in 45s")
         XCTAssertFalse(sut.canStartAnalysis)
         let calls = await streamer.callCount
         XCTAssertEqual(calls, 0)
@@ -360,7 +360,7 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(sut.state, .result("done"))
     }
 
-    /// A cancel during the cooldown lookup must not be overrun by the run it
+    /// A cancel during the lock lookup must not be overrun by the run it
     /// stopped before it reached the service.
     func testCancelBeforeTheCallReachesTheServiceStopsTheRun() async {
         await streamer.setChunks(["never rendered"])
@@ -384,13 +384,13 @@ final class AnalysisViewModelTests: XCTestCase {
         let sut = makeSUT(clock: clock)
 
         await sut.start()
-        XCTAssertEqual(sut.state, .error(.cooldownActive(availableAt: Self.reference.addingTimeInterval(30))))
+        XCTAssertEqual(sut.state, .error(.lockActive(availableAt: Self.reference.addingTimeInterval(30))))
 
         clock.advance(by: 31)
-        await sut.refreshCooldown()
+        await sut.refreshLock()
 
         XCTAssertEqual(sut.state, .idle)
-        XCTAssertNil(sut.cooldownMessage)
+        XCTAssertNil(sut.lockMessage)
         XCTAssertTrue(sut.canStartAnalysis)
     }
 
@@ -475,7 +475,7 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(sut.state, .error(.unauthorized(.gemini)))
     }
 
-    /// No provider was ever announced (no key, cooldown, cache failure), so
+    /// No provider was ever announced (no key, lock, cache failure), so
     /// there is nothing to attribute.
     func testLeavesTheAttributionEmptyWhenNoProviderWasTried() async {
         await streamer.setStartError(InferenceServiceError.missingAPIKey)
@@ -490,7 +490,7 @@ final class AnalysisViewModelTests: XCTestCase {
     /// A blocked run has no providers of its own; showing the previous run's
     /// under a "wait a moment" message would read as "we tried Claude, then
     /// Gemini, and the answer is: come back later".
-    func testACooldownErrorDoesNotInheritThePreviousRunsAttribution() async {
+    func testALockErrorDoesNotInheritThePreviousRunsAttribution() async {
         await streamer.setEvents([.attempting(.claude), .attempting(.gemini), .text("Recommendation")])
         let sut = makeSUT()
         await sut.start()
@@ -500,8 +500,8 @@ final class AnalysisViewModelTests: XCTestCase {
         await sut.start()
 
         XCTAssertNil(sut.attribution)
-        guard case .error(.cooldownActive) = sut.state else {
-            return XCTFail("expected a cooldown error, got \(sut.state)")
+        guard case .error(.lockActive) = sut.state else {
+            return XCTFail("expected a lock error, got \(sut.state)")
         }
     }
 
@@ -649,26 +649,26 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertFalse(sut.isTakingLong)
     }
 
-    // MARK: - Cooldown label (#31 AC3)
+    // MARK: - Lock label (#31 AC3)
 
     func testTheLabelCountsDownWithTheClock() async {
         await rateLimit.recordCall(at: Self.reference.addingTimeInterval(-15))
         let clock = TestClock(Self.reference)
         let sut = makeSUT(clock: clock, tickInterval: 0.01, restingTickInterval: 0.01)
 
-        let ticker = Task { await sut.trackCooldown() }
+        let ticker = Task { await sut.trackLock() }
         await waitUntil("the initial label appears") {
-            sut.cooldownMessage == "New analysis available in 45s"
+            sut.lockMessage == "New analysis available in 45s"
         }
 
         clock.advance(by: 30)
         await waitUntil("the label counts down") {
-            sut.cooldownMessage == "New analysis available in 15s"
+            sut.lockMessage == "New analysis available in 15s"
         }
 
         clock.advance(by: 15)
         await waitUntil("the label disappears once the lock lifts") {
-            sut.cooldownMessage == nil
+            sut.lockMessage == nil
         }
         XCTAssertTrue(sut.canStartAnalysis)
 
@@ -686,14 +686,14 @@ final class AnalysisViewModelTests: XCTestCase {
         // appears.
         let sut = makeSUT(clock: clock, tickInterval: 0.01, restingTickInterval: 600)
 
-        let ticker = Task { await sut.trackCooldown() }
+        let ticker = Task { await sut.trackLock() }
         await waitUntil("the countdown is running") {
-            sut.cooldownMessage == "New analysis available in 1s"
+            sut.lockMessage == "New analysis available in 1s"
         }
 
         clock.advance(by: 1)
         await waitUntil("the label disappears once the lock lifts") {
-            sut.cooldownMessage == nil
+            sut.lockMessage == nil
         }
 
         ticker.cancel()
@@ -709,20 +709,20 @@ final class AnalysisViewModelTests: XCTestCase {
         // had to wait it out, the countdown below would never move.
         let sut = makeSUT(clock: clock, tickInterval: 0.01, restingTickInterval: 600)
 
-        let ticker = Task { await sut.trackCooldown() }
+        let ticker = Task { await sut.trackLock() }
         await waitUntil("the ticker has settled with no lock") {
-            sut.cooldownMessage == nil
+            sut.lockMessage == nil
         }
 
         // Stands in for the service recording the call once a provider
         // accepted the request, mid-run.
         await rateLimit.recordCall(at: Self.reference)
-        await sut.refreshCooldown()
-        XCTAssertEqual(sut.cooldownMessage, "New analysis available in 60s")
+        await sut.refreshLock()
+        XCTAssertEqual(sut.lockMessage, "New analysis available in 60s")
 
         clock.advance(by: 15)
         await waitUntil("the countdown moves without waiting out the resting sleep") {
-            sut.cooldownMessage == "New analysis available in 45s"
+            sut.lockMessage == "New analysis available in 45s"
         }
 
         ticker.cancel()
@@ -744,7 +744,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await run.value
 
         XCTAssertEqual(sut.state, .result("done"))
-        XCTAssertEqual(sut.cooldownMessage, "New analysis available in 60s")
+        XCTAssertEqual(sut.lockMessage, "New analysis available in 60s")
         XCTAssertFalse(sut.canStartAnalysis)
     }
 
@@ -847,7 +847,7 @@ final class AnalysisViewModelTests: XCTestCase {
     }
 }
 
-/// Movable clock for the cooldown countdown.
+/// Movable clock for the lock countdown.
 ///
 /// `@unchecked Sendable`: it is only ever read from the ViewModel's main actor
 /// and advanced from the test body, which runs there too.
@@ -953,7 +953,7 @@ extension AnalysisViewModelTests {
         XCTAssertEqual(stored?.text, "Add 2.5 kg on bench next session.")
     }
 
-    /// US-3 AC10: reopening the app during the cooldown shows the last
+    /// US-3 AC10: reopening the app during the lock shows the last
     /// recommendation instead of the intro screen.
     func testRestoreBringsBackTheStoredRecommendation() async throws {
         try await storeRecommendation(
@@ -1145,12 +1145,12 @@ extension AnalysisViewModelTests {
         XCTAssertEqual(sut.resultAge, "2 h ago")
     }
 
-    /// A "New analysis" tap the cooldown refuses must not cost the user their
+    /// A "New analysis" tap the lock refuses must not cost the user their
     /// recommendation for the rest of the session: `start()` returns early on
     /// that path, and clearing the dismissal only after that early return left
     /// "Back" with nothing to restore — countdown on screen, recommendation
     /// still on disk (#97).
-    func testACooldownRefusedRunStillLetsBackRestoreTheRecommendation() async throws {
+    func testALockRefusedRunStillLetsBackRestoreTheRecommendation() async throws {
         try await storeRecommendation(at: Self.reference.addingTimeInterval(-2 * 3_600))
         await rateLimit.recordCall(at: Self.reference.addingTimeInterval(-30))
         let sut = makeSUT()
@@ -1159,7 +1159,7 @@ extension AnalysisViewModelTests {
 
         await sut.start()
         let availableAt = Self.reference.addingTimeInterval(AnalysisRateLimitStore.duration - 30)
-        XCTAssertEqual(sut.state, .error(.cooldownActive(availableAt: availableAt)))
+        XCTAssertEqual(sut.state, .error(.lockActive(availableAt: availableAt)))
         await sut.dismissFailure()
 
         XCTAssertEqual(sut.state, .result("Add 2.5 kg on bench next session."))
@@ -1168,11 +1168,11 @@ extension AnalysisViewModelTests {
         XCTAssertEqual(calls, 0)
     }
 
-    /// The result must not become visible while `cooldownMessage` still holds
+    /// The result must not become visible while `lockMessage` still holds
     /// the value from before the run: `canStartAnalysis` would be true, the
     /// result screen would offer "New analysis", and the tap would replace the
-    /// recommendation the user just paid for with a cooldown error.
-    func testTheResultIsNotPublishedWhileTheCooldownLabelIsStale() async throws {
+    /// recommendation the user just paid for with a lock error.
+    func testTheResultIsNotPublishedWhileTheLockLabelIsStale() async throws {
         let gate = GatedAnalysisResultStore(wrapping: results)
         await streamer.gateCall()
         await streamer.setChunks(["done"])
@@ -1192,7 +1192,7 @@ extension AnalysisViewModelTests {
         await gate.releaseSave()
         await run.value
         XCTAssertEqual(sut.state, .result("done"))
-        XCTAssertEqual(sut.cooldownMessage, "New analysis available in 60s")
+        XCTAssertEqual(sut.lockMessage, "New analysis available in 60s")
         XCTAssertFalse(sut.canStartAnalysis)
     }
 
@@ -1247,7 +1247,7 @@ extension AnalysisViewModelTests {
         XCTAssertEqual(stored?.text, "Add 2.5 kg on bench next session.")
     }
 
-    /// The age is re-rendered by the same ticker as the cooldown label, so a
+    /// The age is re-rendered by the same ticker as the lock label, so a
     /// sheet left open does not keep claiming "just now".
     func testResultAgeAgesWithTheClock() async throws {
         let clock = TestClock(Self.reference)
@@ -1257,7 +1257,7 @@ extension AnalysisViewModelTests {
         XCTAssertEqual(sut.resultAge, "just now")
 
         clock.advance(by: 2 * 3_600)
-        await sut.refreshCooldown()
+        await sut.refreshLock()
 
         XCTAssertEqual(sut.resultAge, "2 h ago")
     }
