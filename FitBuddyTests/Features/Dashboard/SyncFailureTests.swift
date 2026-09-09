@@ -28,6 +28,12 @@ final class SyncFailureTests: XCTestCase {
         XCTAssertNil(SyncFailure(syncError: WorkoutSyncError.missingAPIKey))
     }
 
+    /// A source that cannot sync yet is nothing the user can act on — it gets
+    /// the generic banner rather than a reason of its own.
+    func testANotImplementedSourceFallsBackToTheGenericReason() {
+        XCTAssertEqual(SyncFailure(syncError: WorkoutSyncError.notImplemented), .unknown)
+    }
+
     func testUnknownErrorsStillProduceABanner() {
         struct Boom: Error {}
         XCTAssertEqual(SyncFailure(syncError: Boom()), .unknown)

@@ -31,6 +31,11 @@ enum WorkoutSyncError: Error, Equatable {
     case invalidResponse
     /// The workouts were fetched but could not be written to SwiftData.
     case persistenceFailed
+    /// The source cannot sync yet — its connector is still a stub (#35).
+    /// Unreachable while Hevy is the only synced source; it exists so the lift
+    /// below stays a complete 1:1 mapping instead of folding a permanent
+    /// failure into a retryable one.
+    case notImplemented
 
     /// Lifts a connector failure into the sync's own vocabulary. Every
     /// `ConnectorError` case has exactly one counterpart here — the enum adds
@@ -47,6 +52,8 @@ enum WorkoutSyncError: Error, Equatable {
             self = .serviceUnavailable
         case .invalidResponse:
             self = .invalidResponse
+        case .notImplemented:
+            self = .notImplemented
         }
     }
 }
