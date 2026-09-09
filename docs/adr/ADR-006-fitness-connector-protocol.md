@@ -74,6 +74,17 @@ Die Implementierung des ersten Connectors weicht an fünf Stellen von der obigen
 
 Die Konsequenz *"Dashboard und AI-Engine sehen nie Hevy-spezifische Typen"* gilt seit #34 tatsächlich: die Hevy-DTOs liegen in `Core/Connector/data/` und werden ausserhalb nur noch von `MockWorkoutLoader` genannt — einem DEBUG-only-Fixture-Loader, der aufgezeichnete Hevy-Payloads dekodiert und genau deshalb den echten Decoding-Pfad nehmen muss.
 
+### Nachtrag: Strava-Stub und `ConnectorRegistry` (Issue #35)
+
+Der in Sprint 1 verschobene Stub ist mit #35 ausgeliefert, zusammen mit der `ConnectorRegistry`. Vier Punkte, die den Vertrag präzisieren:
+
+1. **`ConnectorError.notImplemented` ist neu im Vertrag.** Der `StravaConnector` wirft ihn aus `connect`, `validate` und `fetchActivities`. Bewusst ein eigener Case und nicht `serviceUnavailable`: Bei Letzterem würde ein Retry-Handler wiederholen, was nie gelingen kann. `disconnect()` wirft als einzige Methode nicht — sie ist in der Protocol-Signatur non-throwing, und ein Stub ohne Credentials erfüllt ihre Zusage bereits.
+2. **Token-Ablauf liegt in der Registry, nicht im Connector.** `ConnectorCredentials.oauth` trägt `expiresAt`; nur wer die Credentials übergibt, sieht es. Die Registry hält es pro Quelle fest und beantwortet daraus `state(of:now:)` und `sourcesNeedingRenewal(now:)` — die Datengrundlage des Hinweises aus US-5 AC2. Der ADR-Absatz *"`validate()` prüft Token-Ablauf und refresht bei Bedarf"* bleibt für den echten `StravaConnector` in v1 gültig, ersetzt die Registry-Buchführung aber nicht: Ein abgelaufenes Refresh-Token kann nur der Nutzer erneuern.
+3. **Kein Fan-out-`fetchActivities` über alle Quellen, und die Registry hängt in v0 noch nicht im Sync-Pfad.** `WorkoutSyncService` (#34) hält seinen `HevyConnector` weiterhin direkt; die Registry verwaltet Registrierung und Verbindungszustand, geholt wird über `connector(for:)`. Mit genau einer echten Quelle und einem Stub, der wirft, hätte eine aggregierende Methode nichts zu aggregieren — sie würde nur den gesamten Sync an der Stub-Quelle scheitern lassen. Beides (Einhängen und Fan-out) gehört in v1 zum echten `StravaConnector`, inkl. Entscheid Teilergebnis vs. Gesamtfehler.
+4. **Kein UI-Hinweis «Strava-Verbindung erneuern» in v0.** US-5 AC2 ist modellseitig erfüllt (`ConnectorSource.renewalPrompt`, `sourcesNeedingRenewal`), aber nicht angezeigt: Ohne OAuth-Flow kann in v0 keine Strava-Verbindung entstehen, folglich auch keine ablaufen. Ein Banner wäre nachweislich toter Code ohne Ziel für den Re-Auth-Link. Die Anzeige gehört in v1 zusammen mit dem OAuth-Flow.
+
+Die Strava-API-Feldanalyse (Punkt 2 des Nachtrags zu #33, bestätigt in Punkt 4 des Nachtrags zu #34) bleibt offen — der Stub bildet keine Strava-Daten ab und beantwortet die Frage nach `Activity`-Zusatzfeldern daher nicht.
+
 ---
 
 ## Konsequenzen

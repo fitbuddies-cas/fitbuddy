@@ -22,7 +22,9 @@ enum SyncFailure: Equatable {
     case unreadableResponse
     /// The workouts arrived but could not be written to the local cache.
     case cacheWriteFailed
-    /// Anything the sync surfaced that is not a `WorkoutSyncError`.
+    /// Anything the banner has no dedicated wording for: an error that is not
+    /// a `WorkoutSyncError`, or a source whose connector is still a stub
+    /// (`.notImplemented`, #35) — nothing the user can act on either way.
     case unknown
 
     /// Maps a sync error onto a banner reason.
@@ -50,6 +52,8 @@ enum SyncFailure: Equatable {
             self = .unreadableResponse
         case .persistenceFailed:
             self = .cacheWriteFailed
+        case .notImplemented:
+            self = .unknown
         }
     }
 
