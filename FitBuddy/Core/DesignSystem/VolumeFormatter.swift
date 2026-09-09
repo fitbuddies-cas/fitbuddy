@@ -1,6 +1,7 @@
 import Foundation
 
-/// Formats training volumes for the dashboard.
+/// Formats training volumes wherever the app shows one — dashboard, exercise
+/// list, exercise detail.
 ///
 /// Volumes span four orders of magnitude — a single session is thousands of
 /// kilograms, a 90-day window hundreds of thousands — so the full form carries
