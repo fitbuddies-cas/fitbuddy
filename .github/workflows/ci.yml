@@ -52,6 +52,8 @@ jobs:
           xcrun simctl list devices available | grep -q "$SIMULATOR_NAME (" \
             || { echo "::error::No '$SIMULATOR_NAME' simulator — run: xcrun simctl create \"$SIMULATOR_NAME\" \"$SIMULATOR_NAME\""; exit 1; }
 
+      # Unit tests only: the UI tests get their own job below, so a flaky
+      # simulator interaction cannot block a merge on a green diff.
       - name: Test
         shell: bash
         run: |
@@ -61,7 +63,8 @@ jobs:
             -destination "platform=iOS Simulator,name=$SIMULATOR_NAME" \
             -derivedDataPath "$DERIVED_DATA" \
             -resultBundlePath "$DERIVED_DATA/TestResults.xcresult" \
-            -enableCodeCoverage YES
+            -enableCodeCoverage YES \
+            -skip-testing:FitBuddyUITests
 
       # Directly after the test step on purpose: further down, a failing
       # Release build would also trigger `failure()` and upload a bundle in
@@ -104,6 +107,55 @@ jobs:
 
       # The runner keeps its workspace between jobs; build output would grow
       # without bound on a machine that is also someone's desk computer.
+      - name: Clean build output
+        if: always()
+        shell: bash
+        run: rm -rf "$DERIVED_DATA"
+
+  # Deliberately not a required check yet (#120): UI tests drive a simulator
+  # and are the one suite here that can fail for reasons that have nothing to
+  # do with the diff. `continue-on-error` makes this job report without
+  # blocking; once it has run green for a week or two, drop that line and the
+  # check becomes binding like any other.
+  ui-test:
+    name: UI test (onboarding)
+    runs-on: [self-hosted, macOS, ARM64]
+    continue-on-error: true
+    # Roughly 40s of tests plus a build; well short of this, and a hung
+    # simulator must not hold the only runner.
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+      # Its own directory, so the two jobs cannot race on one build output when
+      # the runner ever gets a sibling.
+      DERIVED_DATA: ${{ github.workspace }}/.derivedDataUI
+      SIMULATOR_NAME: iPhone 17
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Test
+        shell: bash
+        run: |
+          xcodebuild test \
+            -project FitBuddy.xcodeproj \
+            -scheme FitBuddy \
+            -destination "platform=iOS Simulator,name=$SIMULATOR_NAME" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -resultBundlePath "$DERIVED_DATA/UITestResults.xcresult" \
+            -only-testing:FitBuddyUITests
+
+      # More valuable here than for the unit tests: the bundle carries the
+      # screenshots and the element tree from the moment the run failed, which
+      # is most of what a UI-test post-mortem needs.
+      - name: Upload UI test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: UITestResults
+          path: ${{ env.DERIVED_DATA }}/UITestResults.xcresult
+          retention-days: 7
+
       - name: Clean build output
         if: always()
         shell: bash

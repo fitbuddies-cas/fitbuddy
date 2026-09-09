@@ -96,7 +96,8 @@ struct HevyKeyEntryView: View {
             text: $viewModel.apiKey,
             isBusy: isValidating,
             hasError: failure == .invalidKey,
-            focus: $keyFieldIsFocused
+            focus: $keyFieldIsFocused,
+            identifier: AccessibilityID.HevyKey.field
         ) {
             Task { await viewModel.connect() }
         }
@@ -137,6 +138,12 @@ struct HevyKeyEntryView: View {
             RoundedRectangle(cornerRadius: FBRadius.control)
                 .strokeBorder(Color.fbRedBorder, lineWidth: 1)
         )
+        // Grouped, not merged: `.combine` would fold the "Open API settings"
+        // link into one actionable element and take the link away from
+        // VoiceOver. `.contain` only gives the banner an identity a UI test
+        // can wait for.
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(AccessibilityID.HevyKey.errorBanner)
     }
 
     private var ctaButton: some View {
@@ -152,6 +159,7 @@ struct HevyKeyEntryView: View {
         }
         .buttonStyle(.fb(failure == .invalidKey ? .danger : .primary))
         .disabled(!viewModel.canConnect)
+        .accessibilityIdentifier(AccessibilityID.HevyKey.ctaButton)
     }
 
     private var ctaTitle: String {

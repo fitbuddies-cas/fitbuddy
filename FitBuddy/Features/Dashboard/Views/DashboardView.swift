@@ -69,6 +69,8 @@ struct DashboardView: View {
             }
             .background(Color.fbBackground)
             .navigationTitle("Dashboard")
+            // The UI tests' proof that onboarding let the app through (#120).
+            .accessibilityIdentifier(AccessibilityID.Dashboard.root)
             // By value, so the destination is built when a row is tapped
             // rather than once per row while the list renders (#98). Reading
             // it back costs no sync — the session is already in the cache.

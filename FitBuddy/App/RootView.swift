@@ -65,7 +65,7 @@ struct RootView: View {
         let timestamps = SyncTimestampStore()
         let viewModel = WorkoutListViewModel(
             cache: store,
-            syncer: HevyService(workouts: store, timestamps: timestamps),
+            syncer: Self.syncer(workouts: store, timestamps: timestamps),
             timestamps: timestamps
         )
         // Hevy rejected the stored key: `HevyService` has already wiped it, so
@@ -75,6 +75,18 @@ struct RootView: View {
             await coordinator?.handleHevyUnauthorized()
         }
         return viewModel
+    }
+
+    /// The dashboard's sync for this launch. A UI test walking onboarding with
+    /// a stubbed key gets a sync that reaches no network (#120) — the live one
+    /// would answer that key with a 401 and drop the app back into step 2.
+    private static func syncer(workouts: WorkoutStore, timestamps: SyncTimestampStore) -> any WorkoutSyncing {
+        #if DEBUG
+        if HevyStubbing.isActive() {
+            return StubWorkoutSync()
+        }
+        #endif
+        return HevyService(workouts: workouts, timestamps: timestamps)
     }
 
     /// Wires the analysis tab to the cache and to Claude (#32).

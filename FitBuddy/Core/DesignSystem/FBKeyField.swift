@@ -10,6 +10,9 @@ struct FBKeyField: View {
     var isBusy = false
     var hasError = false
     var focus: FocusState<Bool>.Binding? = nil
+    /// Accessibility identifier for the text field itself, so a UI test can
+    /// address it without depending on the label or placeholder copy (#120).
+    var identifier: String? = nil
     var onSubmit: () -> Void = {}
 
     var body: some View {
@@ -48,6 +51,7 @@ struct FBKeyField: View {
             .submitLabel(.go)
             .disabled(isBusy)
             .onSubmit(onSubmit)
+            .accessibilityIdentifier(identifier ?? "")
         if let focus {
             field.focused(focus)
         } else {
