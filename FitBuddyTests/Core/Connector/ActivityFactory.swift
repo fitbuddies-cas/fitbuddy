@@ -31,6 +31,10 @@ enum ActivityFactory {
                     title: exerciseTitle,
                     notes: "Paid attention to form",
                     templateID: "05293BCA",
+                    // A real value, not `nil`: every field of this mapping has
+                    // to be able to fail a test by going missing, and the
+                    // superset marker is one the detail card renders.
+                    supersetID: 1,
                     sets: [
                         ActivityExerciseSet(index: 0, type: .warmup, weightKg: 60, reps: 10),
                         ActivityExerciseSet(index: 1, type: .normal, weightKg: 100, reps: 8, rpe: 9.5),

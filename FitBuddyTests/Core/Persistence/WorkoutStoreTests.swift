@@ -38,12 +38,18 @@ final class WorkoutStoreTests: XCTestCase {
         XCTAssertEqual(workout.title, "Morning Workout")
         XCTAssertEqual(workout.workoutDescription, "Felt strong")
         XCTAssertEqual(workout.startTime, start)
+        XCTAssertEqual(workout.endTime, start.addingTimeInterval(3600))
+        XCTAssertEqual(workout.updatedAt, start.addingTimeInterval(3600))
 
         let exercise = try XCTUnwrap(workout.exercises.first)
         XCTAssertEqual(workout.exercises.count, 1)
         XCTAssertEqual(exercise.title, "Bench Press (Barbell)")
+        XCTAssertEqual(exercise.notes, "Paid attention to form")
         XCTAssertEqual(exercise.templateID, "05293BCA")
-        XCTAssertNil(exercise.supersetID)
+        // Every field asserted against its real value, `nil` for none of them:
+        // the mapping is two hops long, and a field dropped anywhere along it
+        // has to fail here rather than disappear from the detail view.
+        XCTAssertEqual(exercise.supersetID, 1)
 
         let sets = exercise.sets.sorted { $0.index < $1.index }
         XCTAssertEqual(sets.count, 2)

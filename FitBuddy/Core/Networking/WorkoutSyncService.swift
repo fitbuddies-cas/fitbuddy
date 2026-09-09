@@ -97,8 +97,9 @@ actor WorkoutSyncService: WorkoutSyncing {
             }
             throw WorkoutSyncError(connectorError: error)
         }
-        // Any other error is a cancellation travelling out untouched:
-        // navigating away mid-sync must not surface as "no internet".
+        // Anything that is not a `ConnectorError` travels out untouched — in
+        // practice a cancellation: navigating away mid-sync must not surface
+        // as "no internet".
     }
 
     // MARK: - Helpers
@@ -116,7 +117,14 @@ actor WorkoutSyncService: WorkoutSyncing {
             logger.error("Keychain read failed: \(error, privacy: .public)")
             throw WorkoutSyncError.keychainUnavailable
         }
-        guard let key = stored, !key.isEmpty else { throw WorkoutSyncError.missingAPIKey }
+        guard let key = stored, !key.isEmpty else {
+            // The key is gone — a hard logout, or "delete all data" from
+            // settings. Neither knows about the connector, so this is where its
+            // in-memory copy gets dropped: a reset the UI promises is a full
+            // deletion must not leave the key sitting in the process.
+            await connector.disconnect()
+            throw WorkoutSyncError.missingAPIKey
+        }
         return key
     }
 }

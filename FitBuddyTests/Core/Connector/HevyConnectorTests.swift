@@ -59,6 +59,19 @@ final class HevyConnectorTests: XCTestCase {
         }
     }
 
+    /// An empty key is no key: sending it would spend a request to be told
+    /// what the connector already knows.
+    func testConnectRejectsAnEmptyAPIKey() async {
+        let fresh = HevyConnector(session: StubURLProtocol.makeSession())
+
+        do {
+            try await fresh.connect(credentials: .apiKey(""))
+            XCTFail("Expected .unauthorized to be thrown")
+        } catch {
+            XCTAssertEqual(error as? ConnectorError, .unauthorized)
+        }
+    }
+
     func testDisconnectDropsTheKey() async {
         stub(pages: [HevyPayloadFactory.page(page: 1, pageCount: 1, workouts: [])])
 
@@ -129,10 +142,15 @@ final class HevyConnectorTests: XCTestCase {
         // detail view, and the round trip through `Activity` is where it would
         // silently go missing.
         XCTAssertEqual(activity.notes, "Felt strong")
+        XCTAssertEqual(activity.updatedAt, activity.endTime)
 
         let exercise = try XCTUnwrap(activity.exercises.first)
         XCTAssertEqual(exercise.title, "Bench Press (Barbell)")
+        XCTAssertEqual(exercise.notes, "Paid attention to form")
         XCTAssertEqual(exercise.templateID, "05293BCA")
+        // The superset marker the detail card renders; `nil` here would be
+        // indistinguishable from a mapping that dropped it.
+        XCTAssertEqual(exercise.supersetID, 1)
         XCTAssertEqual(exercise.sets.map(\.type), [.warmup, .normal])
         XCTAssertEqual(exercise.sets.last?.reps, 8)
         XCTAssertEqual(exercise.sets.last?.rpe, 9.5)

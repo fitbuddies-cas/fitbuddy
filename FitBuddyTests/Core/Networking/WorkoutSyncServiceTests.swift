@@ -460,6 +460,29 @@ final class WorkoutSyncServiceTests: XCTestCase {
         XCTAssertEqual(storedKey, "hv_live_abc")
     }
 
+    /// "Delete all data" and the settings logout both wipe the Keychain
+    /// without knowing the connector exists. The next sync is where its
+    /// in-memory key has to go, or a reset the UI calls complete would leave
+    /// it in the process.
+    func testASyncAfterTheKeyIsGoneDropsTheConnectorsCopy() async throws {
+        let connector = MockConnector()
+        let sut = makeService(connector: connector)
+        _ = try await sut.syncRecentWorkouts()
+        let beforeReset = await connector.didDisconnect
+        XCTAssertFalse(beforeReset)
+
+        try await keychain.delete(.hevyAPIKey)
+        do {
+            _ = try await sut.syncRecentWorkouts()
+            XCTFail("Expected .missingAPIKey to be thrown")
+        } catch {
+            XCTAssertEqual(error as? WorkoutSyncError, .missingAPIKey)
+        }
+
+        let didDisconnect = await connector.didDisconnect
+        XCTAssertTrue(didDisconnect)
+    }
+
     // MARK: - Helpers
 
     /// Page bodies the stub still has to hand out, in order.
