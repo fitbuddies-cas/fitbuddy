@@ -131,6 +131,27 @@ final class DashboardRenderingTests: XCTestCase {
         }
     }
 
+    /// The toast a failed pull raises (#43). Its copy is a whole sentence per
+    /// failure, and the longest of them has to wrap rather than truncate —
+    /// a clipped "Try again in 3 mi" is worse than no message.
+    func testRefreshToastRendersEveryFailure() throws {
+        let failures: [SyncFailure] = [
+            .offline, .serviceUnavailable, .rateLimited(retryAfter: 180),
+            .keychainUnavailable, .unreadableResponse, .cacheWriteFailed, .unknown,
+        ]
+
+        for failure in failures {
+            let image = try render(
+                FBToast(
+                    symbolName: failure.symbolName,
+                    message: failure.refreshMessage,
+                    onDismiss: {}
+                )
+            )
+            XCTAssertGreaterThan(image.size.height, 0, "\(failure) did not render")
+        }
+    }
+
     func testEmptyStateRenders() throws {
         let image = try render(DashboardEmptyView())
         XCTAssertGreaterThan(image.size.height, 0)

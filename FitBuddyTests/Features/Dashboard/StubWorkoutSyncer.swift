@@ -14,6 +14,10 @@ actor StubWorkoutSyncer: WorkoutSyncing {
     private var error: Error?
     private var result = SyncResult(workoutCount: 0, syncedAt: .distantPast, windowStart: .distantPast)
     private var gatesFirstCall = false
+    /// Written on every successful sync, mirroring `HevyService`: the
+    /// dashboard reads its timestamp back out of the store, not out of the
+    /// `SyncResult`, so a test about US-10 AC1 needs the store to move.
+    private var timestamps: SyncTimestampStore?
 
     private(set) var callCount = 0
 
@@ -30,6 +34,12 @@ actor StubWorkoutSyncer: WorkoutSyncing {
 
     func setResult(_ result: SyncResult) {
         self.result = result
+    }
+
+    /// Makes a successful sync record `result.syncedAt`, as the real service
+    /// does once the fetched window has been cached.
+    func recordSyncs(in timestamps: SyncTimestampStore) {
+        self.timestamps = timestamps
     }
 
     /// Makes the next call block until `releaseFirstCall()`, so a test can
@@ -50,6 +60,7 @@ actor StubWorkoutSyncer: WorkoutSyncing {
         }
 
         if let error { throw error }
+        await timestamps?.setLastSync(result.syncedAt)
         return result
     }
 

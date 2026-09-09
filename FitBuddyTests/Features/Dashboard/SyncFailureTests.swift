@@ -63,6 +63,32 @@ final class SyncFailureTests: XCTestCase {
         XCTAssertEqual(SyncFailure.rateLimited(retryAfter: 0).summary, "too many requests")
     }
 
+    // MARK: - Refresh toast (#43)
+
+    /// The toast after a failed pull is a whole sentence on its own, not the
+    /// banner fragment — "sync failed" as a standalone message says nothing.
+    func testEveryFailureHasAStandaloneRefreshMessage() {
+        for failure in Self.allFailures {
+            let message = failure.refreshMessage
+            XCTAssertFalse(message.isEmpty, "\(failure) has no refresh message")
+            XCTAssertTrue(message.hasSuffix("."), "\(failure) is not a sentence: \(message)")
+            XCTAssertNotEqual(message, failure.summary, "\(failure) just reuses the banner fragment")
+        }
+    }
+
+    /// The wait Hevy sent is the one thing that makes the message actionable,
+    /// so it survives into the toast too.
+    func testRateLimitedRefreshMessageNamesTheWait() {
+        XCTAssertEqual(
+            SyncFailure.rateLimited(retryAfter: 180).refreshMessage,
+            "Too many requests to Hevy. Try again in 3 min."
+        )
+        XCTAssertEqual(
+            SyncFailure.rateLimited(retryAfter: nil).refreshMessage,
+            "Too many requests to Hevy. Try again in a moment."
+        )
+    }
+
     // MARK: - Symbols
 
     func testEveryFailureHasASymbol() {
