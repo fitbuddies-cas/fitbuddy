@@ -26,6 +26,6 @@ protocol FitnessConnector: Sendable {
     func fetchActivities(since: Date) async throws -> [Activity]
 
     /// Drops the in-memory credentials. Does not touch the Keychain — that
-    /// stays the caller's responsibility, same as today's `HevyService`.
+    /// stays the caller's responsibility — `WorkoutSyncService` owns it.
     func disconnect() async
 }

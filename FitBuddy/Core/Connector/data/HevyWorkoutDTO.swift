@@ -36,16 +36,20 @@ struct HevyWorkoutDTO: Decodable, Equatable, Sendable {
         exercises = try container.decodeIfPresent([HevyExerciseDTO].self, forKey: .exercises) ?? []
     }
 
-    /// Maps to the cached model, including its exercises and sets.
-    func makeWorkout() -> Workout {
-        Workout(
+    /// Maps to the normalized `Activity` (ADR-6), including its exercises and
+    /// sets. This is the only place Hevy's wire shape is translated — every
+    /// layer above the connector reads `Activity`.
+    func makeActivity() -> Activity {
+        Activity(
             id: id,
             title: title ?? "Workout",
-            workoutDescription: description,
+            notes: description,
             startTime: startTime,
             endTime: endTime,
             updatedAt: updatedAt,
-            exercises: exercises.enumerated().map { $0.element.makeExercise(position: $0.offset) }
+            exercises: exercises.enumerated().map {
+                $0.element.makeActivityExercise(position: $0.offset)
+            }
         )
     }
 }

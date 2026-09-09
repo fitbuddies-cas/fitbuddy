@@ -222,7 +222,7 @@ final class MockWorkoutLoaderTests: XCTestCase {
     }
 
     /// Paging through a profile yields its whole history exactly once — the
-    /// property a stubbed `HevyService` walk depends on.
+    /// property a stubbed `HevyConnector` walk depends on.
     func testPagingCoversEveryWorkoutOnce() throws {
         let all = try loader.workouts(for: .personB).map(\.id)
         var collected: [String] = []

@@ -11,6 +11,14 @@ struct ActivityExercise: Identifiable, Equatable, Codable, Sendable {
     var index: Int
     var title: String
     var notes: String?
+    /// The source's own identifier for the movement itself, stable across
+    /// activities (Hevy's `exercise_template_id`). It is what per-exercise
+    /// progression (US-9) matches on, where the title alone would split a
+    /// movement the user renamed.
+    var templateID: String?
+    /// Grouping id for exercises the source reports as one superset; `nil`
+    /// when the exercise stands alone or the source has no such concept.
+    var supersetID: Int?
     var sets: [ActivityExerciseSet]
 
     var id: Int { index }
@@ -19,11 +27,15 @@ struct ActivityExercise: Identifiable, Equatable, Codable, Sendable {
         index: Int,
         title: String,
         notes: String? = nil,
+        templateID: String? = nil,
+        supersetID: Int? = nil,
         sets: [ActivityExerciseSet] = []
     ) {
         self.index = index
         self.title = title
         self.notes = notes
+        self.templateID = templateID
+        self.supersetID = supersetID
         self.sets = sets
     }
 }

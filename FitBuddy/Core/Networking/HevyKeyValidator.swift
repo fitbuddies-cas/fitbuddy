@@ -3,7 +3,7 @@ import Foundation
 /// Validates a user-provided Hevy API key with a minimal authenticated call:
 /// `GET /v1/workouts?page=1&pageSize=1`. HTTP 200 means the key is accepted;
 /// HTTP 401 means Hevy rejected it. Fetching real workout data is out of scope
-/// here — that is `HevyService`'s job (#25).
+/// here — that is `HevyConnector`'s job (#25, #34).
 actor HevyKeyValidator: HevyKeyValidating {
     /// Smallest possible authenticated request against the workouts endpoint.
     private static let probeURL = URL(staticString: "https://api.hevyapp.com/v1/workouts?page=1&pageSize=1")

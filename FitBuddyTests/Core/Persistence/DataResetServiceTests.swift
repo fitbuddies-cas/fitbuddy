@@ -96,10 +96,8 @@ final class DataResetServiceTests: XCTestCase {
     }
 
     func testDeleteAllDataClearsCachedWorkouts() async throws {
-        let payload = HevyPayloadFactory.workout(id: "w-1", start: Date(timeIntervalSince1970: 1_750_000_000))
-        let data = try JSONSerialization.data(withJSONObject: payload)
-        let dto = try JSONDecoder.hevy.decode(HevyWorkoutDTO.self, from: data)
-        try await workouts.replaceCachedWorkouts(with: [dto])
+        let activity = ActivityFactory.activity(id: "w-1", start: Date(timeIntervalSince1970: 1_750_000_000))
+        try await workouts.replaceCachedWorkouts(with: [activity])
 
         await sut.deleteAllData()
 

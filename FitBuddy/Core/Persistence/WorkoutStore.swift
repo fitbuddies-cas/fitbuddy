@@ -10,17 +10,20 @@ import SwiftData
 /// never `@Model` instances.
 @ModelActor
 actor WorkoutStore {
-    /// Replaces the cached window with `workouts` in a single save.
+    /// Replaces the cached window with `activities` in a single save.
     ///
-    /// The Hevy response for the 90-day window is authoritative, so the cache
-    /// is rebuilt rather than merged: this avoids the `@Attribute(.unique)`
-    /// upsert path entirely, and it removes workouts the user deleted in Hevy
-    /// for free. Delete and insert share one `save()`, so a failure leaves the
+    /// Takes the normalized `Activity` (ADR-6, #34), not a provider's DTO: the
+    /// cache is the same shape whichever connector filled it.
+    ///
+    /// The source's window is authoritative, so the cache is rebuilt rather
+    /// than merged: this avoids the `@Attribute(.unique)` upsert path
+    /// entirely, and it removes workouts the user deleted at the source for
+    /// free. Delete and insert share one `save()`, so a failure leaves the
     /// previous cache intact.
-    func replaceCachedWorkouts(with workouts: [HevyWorkoutDTO]) throws {
+    func replaceCachedWorkouts(with activities: [Activity]) throws {
         try deleteAllWorkouts()
-        for dto in workouts {
-            modelContext.insert(dto.makeWorkout())
+        for activity in activities {
+            modelContext.insert(activity.makeWorkout())
         }
         try saveOrRollback()
     }

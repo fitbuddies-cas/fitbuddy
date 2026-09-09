@@ -2,11 +2,13 @@ import SwiftData
 import XCTest
 @testable import FitBuddy
 
-/// Unit tests for `HevyService` using a stubbed `URLProtocol` — no real network
-/// traffic. Keychain access uses the real `KeychainService` on the simulator;
-/// SwiftData runs in-memory and the sync timestamp lives in an isolated
-/// `UserDefaults` suite.
-final class HevyServiceTests: XCTestCase {
+/// Unit tests for `WorkoutSyncService` driving a real `HevyConnector` over a
+/// stubbed `URLProtocol` — no real network traffic. The pair is tested
+/// together because the sync is only correct if what the connector returns
+/// reaches the cache: Keychain access uses the real `KeychainService` on the
+/// simulator, SwiftData runs in-memory and the sync timestamp lives in an
+/// isolated `UserDefaults` suite.
+final class WorkoutSyncServiceTests: XCTestCase {
     /// Fixed clock so window boundaries are deterministic.
     private static let now = Date(timeIntervalSince1970: 1_754_400_000) // 2025-08-05 14:40 UTC
 
@@ -16,7 +18,7 @@ final class HevyServiceTests: XCTestCase {
     private var timestamps: SyncTimestampStore!
     private var defaults: UserDefaults!
     private var suiteName: String!
-    private var sut: HevyService!
+    private var sut: WorkoutSyncService!
 
     /// Requests the stub answered, in order.
     nonisolated(unsafe) private static var captured: [URLRequest] = []
@@ -51,14 +53,12 @@ final class HevyServiceTests: XCTestCase {
         try await super.tearDown()
     }
 
-    private func makeService() -> HevyService {
-        // UTC so the day-aligned window start does not depend on the machine's
-        // time zone.
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
-
-        return HevyService(
-            session: StubURLProtocol.makeSession(),
+    /// The same service against a different data source, so the tests can
+    /// separate "the sync orchestrates correctly" from "the Hevy connector
+    /// parses correctly".
+    private func makeService(connector: any FitnessConnector) -> WorkoutSyncService {
+        WorkoutSyncService(
+            connector: connector,
             keychain: keychain,
             workouts: workouts,
             timestamps: timestamps,
@@ -68,7 +68,32 @@ final class HevyServiceTests: XCTestCase {
                 results: AnalysisResultStore(modelContainer: workouts.modelContainer),
                 timestamps: timestamps
             ),
-            calendar: calendar,
+            calendar: Self.utcCalendar,
+            now: { Self.now }
+        )
+    }
+
+    private static var utcCalendar: Calendar {
+        // UTC so the day-aligned window start does not depend on the machine's
+        // time zone.
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
+        return calendar
+    }
+
+    private func makeService() -> WorkoutSyncService {
+        WorkoutSyncService(
+            connector: HevyConnector(session: StubURLProtocol.makeSession()),
+            keychain: keychain,
+            workouts: workouts,
+            timestamps: timestamps,
+            sessionReset: SessionResetService(
+                keychain: keychain,
+                workouts: workouts,
+                results: AnalysisResultStore(modelContainer: workouts.modelContainer),
+                timestamps: timestamps
+            ),
+            calendar: Self.utcCalendar,
             now: { Self.now }
         )
     }
@@ -318,10 +343,13 @@ final class HevyServiceTests: XCTestCase {
         await assertSyncThrows(.serviceUnavailable)
     }
 
+    /// 403 is reported as an unreadable response, not as an auth failure:
+    /// `ConnectorError` has no "odd status" case, and the distinction that
+    /// matters here is that the key survives.
     func testForbiddenDoesNotTriggerLogout() async throws {
         StubURLProtocol.handler = { Self.response(status: 403, for: $0) }
 
-        await assertSyncThrows(.unexpectedStatus(403))
+        await assertSyncThrows(.invalidResponse)
 
         // 403 can hit a valid key (WAF, geo) — wiping it would be wrong.
         let storedKey = try await keychain.read(.hevyAPIKey)
@@ -347,6 +375,112 @@ final class HevyServiceTests: XCTestCase {
             (Self.http(status: 200, for: request, headers: nil), Data("not json".utf8))
         }
         await assertSyncThrows(.invalidResponse)
+    }
+
+    // MARK: - Source independence (ADR-6, #34)
+
+    /// The payoff of the refactor: the sync names no provider. Everything it
+    /// caches comes out of a `FitnessConnector`, so a second source (#35) is a
+    /// different argument here, not a different sync.
+    func testCachesWhatAnyConnectorReturns() async throws {
+        let connector = MockConnector()
+        await connector.setFetchActivitiesResult(.success([
+            ActivityFactory.activity(id: "a-1", start: daysAgo(1)),
+            ActivityFactory.activity(id: "a-2", start: daysAgo(2)),
+        ]))
+        let sut = makeService(connector: connector)
+
+        let result = try await sut.syncRecentWorkouts()
+
+        XCTAssertEqual(result.workoutCount, 2)
+        let ids = try await workouts.cachedWorkoutIDs()
+        XCTAssertEqual(ids, ["a-1", "a-2"])
+    }
+
+    /// The window boundary belongs to the app, not to the provider: the
+    /// connector is told where the 90 days start and filters against it.
+    func testAsksTheConnectorForTheNinetyDayWindow() async throws {
+        let connector = MockConnector()
+        let sut = makeService(connector: connector)
+
+        let result = try await sut.syncRecentWorkouts()
+
+        let since = await connector.lastFetchSince
+        XCTAssertEqual(since, result.windowStart)
+    }
+
+    func testTheStoredKeyIsHandedToTheConnector() async throws {
+        let connector = MockConnector()
+        let sut = makeService(connector: connector)
+
+        _ = try await sut.syncRecentWorkouts()
+
+        let credentials = await connector.lastConnectedCredentials
+        XCTAssertEqual(credentials, .apiKey("hv_live_abc"))
+    }
+
+    /// A rejected key is the connector's finding but the app's problem: the
+    /// hard logout and the in-memory credentials are cleared here, above the
+    /// connector, because neither belongs to the provider.
+    func testConnectorUnauthorizedRunsTheHardLogoutAndDisconnects() async throws {
+        let connector = MockConnector()
+        await connector.setFetchActivitiesResult(.failure(.unauthorized))
+        let sut = makeService(connector: connector)
+
+        do {
+            _ = try await sut.syncRecentWorkouts()
+            XCTFail("Expected .unauthorized to be thrown")
+        } catch {
+            XCTAssertEqual(error as? WorkoutSyncError, .unauthorized)
+        }
+
+        let didDisconnect = await connector.didDisconnect
+        XCTAssertTrue(didDisconnect)
+        let storedKey = try await keychain.read(.hevyAPIKey)
+        XCTAssertNil(storedKey, "Revoked key must be removed from the Keychain")
+    }
+
+    /// Every other connector failure is reported as-is — no logout, no cache
+    /// change: the dashboard keeps showing what it has (US-2 AC2).
+    func testOtherConnectorFailuresLeaveTheSessionAlone() async throws {
+        let connector = MockConnector()
+        await connector.setFetchActivitiesResult(.failure(.rateLimited(retryAfter: 30)))
+        let sut = makeService(connector: connector)
+
+        do {
+            _ = try await sut.syncRecentWorkouts()
+            XCTFail("Expected .rateLimited to be thrown")
+        } catch {
+            XCTAssertEqual(error as? WorkoutSyncError, .rateLimited(retryAfter: 30))
+        }
+
+        let didDisconnect = await connector.didDisconnect
+        XCTAssertFalse(didDisconnect)
+        let storedKey = try await keychain.read(.hevyAPIKey)
+        XCTAssertEqual(storedKey, "hv_live_abc")
+    }
+
+    /// "Delete all data" and the settings logout both wipe the Keychain
+    /// without knowing the connector exists. The next sync is where its
+    /// in-memory key has to go, or a reset the UI calls complete would leave
+    /// it in the process.
+    func testASyncAfterTheKeyIsGoneDropsTheConnectorsCopy() async throws {
+        let connector = MockConnector()
+        let sut = makeService(connector: connector)
+        _ = try await sut.syncRecentWorkouts()
+        let beforeReset = await connector.didDisconnect
+        XCTAssertFalse(beforeReset)
+
+        try await keychain.delete(.hevyAPIKey)
+        do {
+            _ = try await sut.syncRecentWorkouts()
+            XCTFail("Expected .missingAPIKey to be thrown")
+        } catch {
+            XCTAssertEqual(error as? WorkoutSyncError, .missingAPIKey)
+        }
+
+        let didDisconnect = await connector.didDisconnect
+        XCTAssertTrue(didDisconnect)
     }
 
     // MARK: - Helpers
@@ -405,14 +539,14 @@ final class HevyServiceTests: XCTestCase {
     }
 
     private func assertSyncThrows(
-        _ expected: HevyServiceError,
+        _ expected: WorkoutSyncError,
         file: StaticString = #filePath,
         line: UInt = #line
     ) async {
         do {
             _ = try await sut.syncRecentWorkouts()
             XCTFail("Expected \(expected) to be thrown", file: file, line: line)
-        } catch let error as HevyServiceError {
+        } catch let error as WorkoutSyncError {
             XCTAssertEqual(error, expected, file: file, line: line)
         } catch {
             XCTFail("Unexpected error: \(error)", file: file, line: line)
