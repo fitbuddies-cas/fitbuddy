@@ -19,23 +19,40 @@ struct ExerciseListView: View {
     }
 
     var body: some View {
+        scrollView
+            .background(Color.fbBackground)
+            .navigationTitle("Exercises")
+            .navigationBarTitleDisplayMode(.inline)
+            .task { await viewModel.load() }
+    }
+
+    /// The search field is attached only once the window has loaded with
+    /// movements in it — over an empty or failed window it would be a control
+    /// with nothing to filter.
+    ///
+    /// The system field, not one of our own: it filters while typing (AC1) and
+    /// brings the placement, the cancel button and the Dynamic Type behaviour
+    /// the user already knows from every other iOS list.
+    @ViewBuilder
+    private var scrollView: some View {
+        if viewModel.isSearchable {
+            baseScrollView
+                .searchable(
+                    text: $viewModel.searchText,
+                    placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "Search exercises"
+                )
+        } else {
+            baseScrollView
+        }
+    }
+
+    private var baseScrollView: some View {
         ScrollView {
             content
                 .padding(.horizontal, 16)
                 .padding(.bottom, 32)
         }
-        .background(Color.fbBackground)
-        .navigationTitle("Exercises")
-        .navigationBarTitleDisplayMode(.inline)
-        // The system field, not one of our own: it filters while typing (AC1)
-        // and brings the placement, the cancel button and the Dynamic Type
-        // behaviour the user already knows from every other iOS list.
-        .searchable(
-            text: $viewModel.searchText,
-            placement: .navigationBarDrawer(displayMode: .always),
-            prompt: "Search exercises"
-        )
-        .task { await viewModel.load() }
     }
 
     @ViewBuilder

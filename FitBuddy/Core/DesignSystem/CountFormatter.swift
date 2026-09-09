@@ -1,6 +1,6 @@
 import Foundation
 
-/// Formats counted nouns for the dashboard: `1 set`, `21 sets`.
+/// Formats counted nouns app-wide: `1 set`, `21 sets`, `1 exercise`.
 ///
 /// Explicit rather than automatic grammar agreement (`^[…](inflect: true)`):
 /// that markup resolves through SwiftUI's localisation path but renders

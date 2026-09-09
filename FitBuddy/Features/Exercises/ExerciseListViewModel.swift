@@ -45,6 +45,14 @@ final class ExerciseListViewModel: ObservableObject {
         return exercises.filter { $0.matches(query: query) }
     }
 
+    /// Whether the search field belongs on screen: only once the window has
+    /// loaded with movements in it. Over an empty or failed window it would be
+    /// a control with nothing to act on.
+    var isSearchable: Bool {
+        guard case .loaded = state else { return false }
+        return true
+    }
+
     /// Whether the user typed a query that no movement matches — the
     /// «No exercises found» case of AC1, as opposed to a window with no
     /// training in it at all.

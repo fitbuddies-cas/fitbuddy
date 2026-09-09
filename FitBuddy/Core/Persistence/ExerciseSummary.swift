@@ -31,10 +31,17 @@ extension ExerciseSummary {
     /// Identity of a movement across sessions.
     ///
     /// `templateID` is Hevy's own stable id and wins whenever the cache holds
-    /// one. Falling back to the folded title is what keeps the list from
-    /// splitting "Bench Press (Barbell)" into two rows because one session was
-    /// logged before the template id was cached — case and diacritics are
-    /// folded so a user-created duplicate spelled differently still merges.
+    /// one; only occurrences that carry no id fall back to the folded title.
+    /// Case and diacritics are folded so a user-created duplicate spelled
+    /// differently still merges.
+    ///
+    /// The fallback therefore merges two id-less occurrences of the same
+    /// movement, but it does *not* merge an id-less occurrence with an
+    /// id-carrying one of the same title (`templateID` is `decodeIfPresent`,
+    /// so a mixed window is possible). In practice Hevy fills the id for every
+    /// occurrence of a movement, so the mixed case would need a session logged
+    /// against an older cache; #38/#39 revisit identity when the muscle-group
+    /// filter lands.
     static func key(templateID: String?, title: String) -> String {
         if let templateID, !templateID.isEmpty { return templateID }
         return title.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
