@@ -176,7 +176,7 @@ final class WorkoutListViewModelTests: XCTestCase {
     /// #28 AC1: an unreachable API leaves the cached dashboard on screen.
     func testFailedSyncKeepsTheCachedDashboardAndRaisesTheBanner() async {
         cache.summaries = [summary(id: "cached", daysAgo: 3, volume: 700)]
-        await syncer.setError(HevyServiceError.networkUnavailable)
+        await syncer.setError(WorkoutSyncError.networkUnavailable)
 
         let sut = makeSUT(withSyncer: true)
         await sut.refresh()
@@ -192,7 +192,7 @@ final class WorkoutListViewModelTests: XCTestCase {
     /// A network failure and an HTTP failure must not collapse into one
     /// message — the issue asks for exactly this distinction.
     func testHTTPFailureIsReportedSeparatelyFromANetworkFailure() async {
-        await syncer.setError(HevyServiceError.serviceUnavailable)
+        await syncer.setError(WorkoutSyncError.serviceUnavailable)
 
         let sut = makeSUT(withSyncer: true)
         await sut.refresh()
@@ -202,7 +202,7 @@ final class WorkoutListViewModelTests: XCTestCase {
 
     /// #28 AC3.
     func testBannerDisappearsAfterASuccessfulSync() async {
-        await syncer.setError(HevyServiceError.networkUnavailable)
+        await syncer.setError(WorkoutSyncError.networkUnavailable)
         let sut = makeSUT(withSyncer: true)
         await sut.refresh()
         XCTAssertEqual(sut.syncStatus, .failed(.offline))
@@ -218,7 +218,7 @@ final class WorkoutListViewModelTests: XCTestCase {
     func testFailedSyncKeepsThePreviousTimestamp() async throws {
         let syncedAt = reference.addingTimeInterval(-7_200)
         await timestamps.setLastSync(syncedAt)
-        await syncer.setError(HevyServiceError.networkUnavailable)
+        await syncer.setError(WorkoutSyncError.networkUnavailable)
 
         let sut = makeSUT(withSyncer: true)
         await sut.refresh()
@@ -230,7 +230,7 @@ final class WorkoutListViewModelTests: XCTestCase {
     /// HTTP 401: `HevyService` has already wiped the key, so the dashboard
     /// hands over to onboarding instead of showing a banner.
     func testUnauthorizedRoutesToOnboardingWithoutABanner() async {
-        await syncer.setError(HevyServiceError.unauthorized)
+        await syncer.setError(WorkoutSyncError.unauthorized)
         let sut = makeSUT(withSyncer: true)
         var routed = false
         sut.onUnauthorized = { routed = true }
@@ -256,7 +256,7 @@ final class WorkoutListViewModelTests: XCTestCase {
     /// screen after the newer one already answered.
     func testSupersededSyncDoesNotOverwriteTheNewerOutcome() async {
         await syncer.gateFirstCall()
-        await syncer.setError(HevyServiceError.networkUnavailable)
+        await syncer.setError(WorkoutSyncError.networkUnavailable)
         let sut = makeSUT(withSyncer: true)
 
         let first = Task { await sut.refresh() }
@@ -312,7 +312,7 @@ final class WorkoutListViewModelTests: XCTestCase {
     /// A sync that fails has no reload of its own — the held-back empty state
     /// must still reach the screen instead of leaving the spinner up forever.
     func testFailedSyncResolvesTheHeldSpinnerToTheEmptyState() async {
-        await syncer.setError(HevyServiceError.networkUnavailable)
+        await syncer.setError(WorkoutSyncError.networkUnavailable)
         let sut = makeSUT(withSyncer: true)
 
         await sut.reload()

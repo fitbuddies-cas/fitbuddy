@@ -60,7 +60,7 @@ final class OnboardingViewModel: ObservableObject {
 
     /// Entry point for an HTTP 401 from Hevy anywhere in the app: the stored
     /// key is no longer valid, so it is removed and the flow returns to step 2
-    /// for a fresh one. Future services (e.g. HevyService, #25) reach this via
+    /// for a fresh one. Future services (e.g. WorkoutSyncService, #25) reach this via
     /// the coordinator `RootView` injects into the environment.
     func handleHevyUnauthorized() async {
         // A failed delete is tolerable: the flow still returns to step 2, and

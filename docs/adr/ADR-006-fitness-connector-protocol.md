@@ -62,6 +62,18 @@ Die Umsetzung des Protocols weicht an vier Stellen bewusst von der obigen Entsch
 3. **Kein `StravaConnectorStub` in Sprint 1.** Der Stub ist nach #35 verschoben; ausgeliefert wird vorerst nur der `MockConnector`.
 4. **Identität der Kind-Objekte ist die Quell-Reihenfolge, nicht eine generierte UUID.** `ActivityExercise.id` und `ActivityExerciseSet.id` sind der jeweilige `index`. Eine pro Mapping neu erzeugte `UUID()` würde ein inhaltlich unverändertes Workout beim Re-Sync `!=` zur gecachten Kopie machen und SwiftUI zwingen, jede `ForEach`-Zeile neu aufzubauen. `SetType` liegt aus demselben Grund im Connector-Domain-Layer (`Core/Connector/domain/`) und nicht in der Persistence-Schicht — die Konsequenz *"Dashboard und AI-Engine sehen nie Hevy-spezifische Typen"* gilt sonst nicht.
 
+### Nachtrag: Abweichungen aus der Umsetzung (Issue #34, `HevyConnector`)
+
+Die Implementierung des ersten Connectors weicht an fünf Stellen von der obigen Skizze ab:
+
+1. **Der Connector ist reines Provider-I/O, die Sync-Orchestrierung liegt darüber.** `HevyConnector` kennt nur HTTP, Pagination und die DTO→`Activity`-Abbildung; Keychain-Lesen, Cache-Write, Sync-Timestamp und der Hard-Logout aus [[ADR-3]] liegen in `WorkoutSyncService`. Grund: `ConnectorError` beschreibt ausschliesslich Provider-Fehler — für "Keychain gesperrt" und "Cache-Write fehlgeschlagen" gibt es dort bewusst keine Cases, und beide muss das Dashboard unterscheiden können. Ein Connector, der die Keychain leert, wäre ausserdem nicht mehr austauschbar: das Löschen der Session ist eine App-Entscheidung, keine des Providers.
+2. **`WorkoutSyncError` ist das Fehler-Vokabular der Sync-Schicht.** Es hebt jeden `ConnectorError`-Case 1:1 an und ergänzt `missingAPIKey`, `keychainUnavailable` und `persistenceFailed`. `ConnectorError` selbst bleibt damit eingefroren, wie unter "Negativ" gefordert.
+3. **HTTP 403 wird als `invalidResponse` gemeldet, nicht als `unauthorized`.** `ConnectorError` hat keinen Case für "unerwarteter Status", und 403 trifft auch gültige Keys (WAF, Geo) — als Auth-Fehler gemeldet würde der Aufrufer einen funktionierenden Key löschen. Der Statuscode geht ins Log.
+4. **`Activity` wurde additiv erweitert** um `notes`, `updatedAt` (Workout-Ebene) sowie `templateID` und `supersetID` (Übungsebene). Ohne diese Felder verliert der Weg Hevy → `Activity` → Cache Daten, die die App bereits anzeigt (die Session-Beschreibung in der Detailansicht) oder für US-9 braucht (die stabile Identität der Übung). Das ist der additive Eingriff, den Nachtrag Punkt 2 der ersten Umsetzung vorgesehen hat — die Strava-Feldanalyse bleibt davon unberührt offen.
+5. **`HevyKeyValidator` bleibt vorerst neben `HevyConnector.validate()` bestehen.** Onboarding und Settings prüfen den Key über `HevyKeyValidating` mit eigenem Fehlertyp; die Doppelspurigkeit ist bekannt und bewusst nicht Teil von #34, weil sie den Onboarding-Fehlerpfad mit umbauen würde. Zusammenlegen ist ein eigener Task.
+
+Die Konsequenz *"Dashboard und AI-Engine sehen nie Hevy-spezifische Typen"* gilt seit #34 tatsächlich: die Hevy-DTOs liegen in `Core/Connector/data/` und werden ausserhalb nur noch von `MockWorkoutLoader` genannt — einem DEBUG-only-Fixture-Loader, der aufgezeichnete Hevy-Payloads dekodiert und genau deshalb den echten Decoding-Pfad nehmen muss.
+
 ---
 
 ## Konsequenzen

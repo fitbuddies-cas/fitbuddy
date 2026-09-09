@@ -37,7 +37,7 @@ struct HevySetDTO: Decodable, Equatable, Sendable {
     /// use — a machine set arrives as `distance_meters: 0, duration_seconds: 0`
     /// alongside its weight and reps. Kept as zeros they are indistinguishable
     /// from logged values: the detail row prints `0 m · 0:00` on a strength
-    /// set, and the `Activity` mapping in #34 would carry the same phantom
+    /// set, and the `Activity` mapping below would carry the same phantom
     /// values into the normalized model.
     ///
     /// Only these two metrics: `0 kg` is a bodyweight set and `0 reps` a set
@@ -46,12 +46,12 @@ struct HevySetDTO: Decodable, Equatable, Sendable {
         value == 0 ? nil : value
     }
 
-    /// Maps to the cached model, ordered by `position` in the payload.
+    /// Maps to the normalized model, ordered by `position` in the payload.
     ///
     /// As for the exercise above: Hevy's own `index` is optional, and mixing it
-    /// with a positional fallback yields duplicate `SetDetail.id`s.
-    func makeExerciseSet(position: Int) -> ExerciseSet {
-        ExerciseSet(
+    /// with a positional fallback yields duplicate ids.
+    func makeActivitySet(position: Int) -> ActivityExerciseSet {
+        ActivityExerciseSet(
             index: position,
             type: SetType.from(type),
             weightKg: weightKg,

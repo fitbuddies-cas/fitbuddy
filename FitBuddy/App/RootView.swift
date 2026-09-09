@@ -65,10 +65,10 @@ struct RootView: View {
         let timestamps = SyncTimestampStore()
         let viewModel = WorkoutListViewModel(
             cache: store,
-            syncer: HevyService(workouts: store, timestamps: timestamps),
+            syncer: WorkoutSyncService(workouts: store, timestamps: timestamps),
             timestamps: timestamps
         )
-        // Hevy rejected the stored key: `HevyService` has already wiped it, so
+        // Hevy rejected the stored key: `WorkoutSyncService` has already wiped it, so
         // the only thing left is to send the user back to step 2 (US-1 AC3).
         let coordinator = onboardingViewModel
         viewModel.onUnauthorized = { [weak coordinator] in
