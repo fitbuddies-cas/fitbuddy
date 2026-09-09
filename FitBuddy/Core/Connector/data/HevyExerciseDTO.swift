@@ -25,16 +25,16 @@ struct HevyExerciseDTO: Decodable, Equatable, Sendable {
         sets = try container.decodeIfPresent([HevySetDTO].self, forKey: .sets) ?? []
     }
 
-    /// Maps to the cached model, ordered by `position` in the payload.
+    /// Maps to the normalized model, ordered by `position` in the payload.
     ///
     /// The payload position, not Hevy's own `index` field: that field is
     /// optional, so a payload may carry it for some entries and omit it for
-    /// others, and mixing the two produces duplicates — `ExerciseDetail.id`
+    /// others, and mixing the two produces duplicates — `ActivityExercise.id`
     /// is this index, so a collision makes `ForEach` drop a card and leaves
     /// the sort by index arbitrary. The position is unique by construction and
     /// is Hevy's order, which is what the index was read for.
-    func makeExercise(position: Int) -> Exercise {
-        Exercise(
+    func makeActivityExercise(position: Int) -> ActivityExercise {
+        ActivityExercise(
             index: position,
             // An untitled exercise is not worth dropping the workout for; the
             // template id still identifies the movement for US-9.
@@ -42,7 +42,7 @@ struct HevyExerciseDTO: Decodable, Equatable, Sendable {
             notes: notes,
             templateID: exerciseTemplateID,
             supersetID: supersetsID,
-            sets: sets.enumerated().map { $0.element.makeExerciseSet(position: $0.offset) }
+            sets: sets.enumerated().map { $0.element.makeActivitySet(position: $0.offset) }
         )
     }
 }

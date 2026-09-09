@@ -5,28 +5,27 @@ import XCTest
 /// failure distinguishable from an HTTP failure in the banner.
 final class SyncFailureTests: XCTestCase {
     func testNetworkFailureMapsToOffline() {
-        XCTAssertEqual(SyncFailure(syncError: HevyServiceError.networkUnavailable), .offline)
+        XCTAssertEqual(SyncFailure(syncError: WorkoutSyncError.networkUnavailable), .offline)
     }
 
     func testServerFailuresStaySeparateFromTheNetworkCase() {
-        XCTAssertEqual(SyncFailure(syncError: HevyServiceError.serviceUnavailable), .serviceUnavailable)
+        XCTAssertEqual(SyncFailure(syncError: WorkoutSyncError.serviceUnavailable), .serviceUnavailable)
         XCTAssertEqual(
-            SyncFailure(syncError: HevyServiceError.rateLimited(retryAfter: 30)),
+            SyncFailure(syncError: WorkoutSyncError.rateLimited(retryAfter: 30)),
             .rateLimited(retryAfter: 30)
         )
-        XCTAssertEqual(SyncFailure(syncError: HevyServiceError.unexpectedStatus(403)), .unreadableResponse)
-        XCTAssertEqual(SyncFailure(syncError: HevyServiceError.invalidResponse), .unreadableResponse)
+        XCTAssertEqual(SyncFailure(syncError: WorkoutSyncError.invalidResponse), .unreadableResponse)
     }
 
     func testLocalFailuresKeepTheirOwnReason() {
-        XCTAssertEqual(SyncFailure(syncError: HevyServiceError.keychainUnavailable), .keychainUnavailable)
-        XCTAssertEqual(SyncFailure(syncError: HevyServiceError.persistenceFailed), .cacheWriteFailed)
+        XCTAssertEqual(SyncFailure(syncError: WorkoutSyncError.keychainUnavailable), .keychainUnavailable)
+        XCTAssertEqual(SyncFailure(syncError: WorkoutSyncError.persistenceFailed), .cacheWriteFailed)
     }
 
     /// The auth failures are not banner material — they route to onboarding.
     func testAuthFailuresProduceNoBannerReason() {
-        XCTAssertNil(SyncFailure(syncError: HevyServiceError.unauthorized))
-        XCTAssertNil(SyncFailure(syncError: HevyServiceError.missingAPIKey))
+        XCTAssertNil(SyncFailure(syncError: WorkoutSyncError.unauthorized))
+        XCTAssertNil(SyncFailure(syncError: WorkoutSyncError.missingAPIKey))
     }
 
     func testUnknownErrorsStillProduceABanner() {

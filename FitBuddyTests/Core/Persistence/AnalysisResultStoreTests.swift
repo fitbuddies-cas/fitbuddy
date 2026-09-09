@@ -211,7 +211,7 @@ final class AnalysisResultStoreTests: XCTestCase {
     }
 
     /// The wiring the app actually runs: `RootView` builds one store for the
-    /// analysis screen and a second for the settings screen, `HevyService` a
+    /// analysis screen and a second for the settings screen, `WorkoutSyncService` a
     /// third — three `@ModelActor`s with three own `ModelContext`s over one
     /// container. A delete on one has to be visible to the others, otherwise
     /// "Hevy key replaced → recommendation dropped → sheet opens" would restore

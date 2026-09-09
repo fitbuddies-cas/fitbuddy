@@ -24,7 +24,7 @@ enum HevyPayloadFactory {
                     "title": exerciseTitle,
                     "notes": "Paid attention to form",
                     "exercise_template_id": "05293BCA",
-                    "supersets_id": NSNull(),
+                    "supersets_id": 1,
                     "sets": [
                         [
                             "index": 0,

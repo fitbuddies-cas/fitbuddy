@@ -4,7 +4,8 @@ import XCTest
 
 /// Unit tests for `WorkoutStore` against real SwiftData containers — in-memory
 /// for the mapping/replacement behaviour, on-disk for the app-kill guarantee
-/// (issue #25 AC2).
+/// (issue #25 AC2). The store is written from normalized `Activity` values
+/// (#34), so no provider payload appears here.
 final class WorkoutStoreTests: XCTestCase {
     private var container: ModelContainer!
     private var sut: WorkoutStore!
@@ -23,10 +24,10 @@ final class WorkoutStoreTests: XCTestCase {
 
     // MARK: - Mapping
 
-    func testStoresWorkoutHierarchyFromDTOs() async throws {
+    func testStoresWorkoutHierarchyFromActivities() async throws {
         let start = Date(timeIntervalSince1970: 1_750_000_000)
         try await sut.replaceCachedWorkouts(with: [
-            try Self.decodeWorkout(HevyPayloadFactory.workout(id: "w-1", start: start)),
+            ActivityFactory.activity(id: "w-1", start: start),
         ])
 
         let context = ModelContext(container)
@@ -37,12 +38,18 @@ final class WorkoutStoreTests: XCTestCase {
         XCTAssertEqual(workout.title, "Morning Workout")
         XCTAssertEqual(workout.workoutDescription, "Felt strong")
         XCTAssertEqual(workout.startTime, start)
+        XCTAssertEqual(workout.endTime, start.addingTimeInterval(3600))
+        XCTAssertEqual(workout.updatedAt, start.addingTimeInterval(3600))
 
         let exercise = try XCTUnwrap(workout.exercises.first)
         XCTAssertEqual(workout.exercises.count, 1)
         XCTAssertEqual(exercise.title, "Bench Press (Barbell)")
+        XCTAssertEqual(exercise.notes, "Paid attention to form")
         XCTAssertEqual(exercise.templateID, "05293BCA")
-        XCTAssertNil(exercise.supersetID)
+        // Every field asserted against its real value, `nil` for none of them:
+        // the mapping is two hops long, and a field dropped anywhere along it
+        // has to fail here rather than disappear from the detail view.
+        XCTAssertEqual(exercise.supersetID, 1)
 
         let sets = exercise.sets.sorted { $0.index < $1.index }
         XCTAssertEqual(sets.count, 2)
@@ -58,13 +65,13 @@ final class WorkoutStoreTests: XCTestCase {
     func testReplaceDropsWorkoutsMissingFromTheNewWindow() async throws {
         let start = Date(timeIntervalSince1970: 1_750_000_000)
         try await sut.replaceCachedWorkouts(with: [
-            try Self.decodeWorkout(HevyPayloadFactory.workout(id: "w-1", start: start)),
-            try Self.decodeWorkout(HevyPayloadFactory.workout(id: "w-2", start: start)),
+            ActivityFactory.activity(id: "w-1", start: start),
+            ActivityFactory.activity(id: "w-2", start: start),
         ])
 
         // Second sync: the user deleted w-1 in Hevy.
         try await sut.replaceCachedWorkouts(with: [
-            try Self.decodeWorkout(HevyPayloadFactory.workout(id: "w-2", start: start)),
+            ActivityFactory.activity(id: "w-2", start: start),
         ])
 
         let ids = try await sut.cachedWorkoutIDs()
@@ -73,10 +80,10 @@ final class WorkoutStoreTests: XCTestCase {
 
     func testReplaceDoesNotDuplicateAWorkoutSyncedTwice() async throws {
         let start = Date(timeIntervalSince1970: 1_750_000_000)
-        let dto = try Self.decodeWorkout(HevyPayloadFactory.workout(id: "w-1", start: start))
+        let activity = ActivityFactory.activity(id: "w-1", start: start)
 
-        try await sut.replaceCachedWorkouts(with: [dto])
-        try await sut.replaceCachedWorkouts(with: [dto])
+        try await sut.replaceCachedWorkouts(with: [activity])
+        try await sut.replaceCachedWorkouts(with: [activity])
 
         let count = try await sut.workoutCount()
         XCTAssertEqual(count, 1)
@@ -85,7 +92,7 @@ final class WorkoutStoreTests: XCTestCase {
     func testReplaceCascadeDeletesExercisesAndSets() async throws {
         let start = Date(timeIntervalSince1970: 1_750_000_000)
         try await sut.replaceCachedWorkouts(with: [
-            try Self.decodeWorkout(HevyPayloadFactory.workout(id: "w-1", start: start)),
+            ActivityFactory.activity(id: "w-1", start: start),
         ])
         try await sut.replaceCachedWorkouts(with: [])
 
@@ -99,8 +106,8 @@ final class WorkoutStoreTests: XCTestCase {
         let old = Date(timeIntervalSince1970: 1_700_000_000)
         let recent = Date(timeIntervalSince1970: 1_750_000_000)
         try await sut.replaceCachedWorkouts(with: [
-            try Self.decodeWorkout(HevyPayloadFactory.workout(id: "older", start: old)),
-            try Self.decodeWorkout(HevyPayloadFactory.workout(id: "newer", start: recent)),
+            ActivityFactory.activity(id: "older", start: old),
+            ActivityFactory.activity(id: "newer", start: recent),
         ])
 
         let ids = try await sut.cachedWorkoutIDs()
@@ -112,7 +119,7 @@ final class WorkoutStoreTests: XCTestCase {
     func testDeleteAllEmptiesTheCache() async throws {
         let start = Date(timeIntervalSince1970: 1_750_000_000)
         try await sut.replaceCachedWorkouts(with: [
-            try Self.decodeWorkout(HevyPayloadFactory.workout(id: "w-1", start: start)),
+            ActivityFactory.activity(id: "w-1", start: start),
         ])
 
         try await sut.deleteAll()
@@ -132,7 +139,7 @@ final class WorkoutStoreTests: XCTestCase {
         try await Self.withDiskContainer(at: storeURL) { container in
             let store = WorkoutStore(modelContainer: container)
             try await store.replaceCachedWorkouts(with: [
-                try Self.decodeWorkout(HevyPayloadFactory.workout(id: "w-1", start: start)),
+                ActivityFactory.activity(id: "w-1", start: start),
             ])
         }
 
@@ -168,9 +175,4 @@ final class WorkoutStoreTests: XCTestCase {
         try await body(container)
     }
 
-    /// Decodes a wire-format workout the same way `HevyService` does.
-    private static func decodeWorkout(_ payload: [String: Any]) throws -> HevyWorkoutDTO {
-        let data = try JSONSerialization.data(withJSONObject: payload)
-        return try JSONDecoder.hevy.decode(HevyWorkoutDTO.self, from: data)
-    }
 }

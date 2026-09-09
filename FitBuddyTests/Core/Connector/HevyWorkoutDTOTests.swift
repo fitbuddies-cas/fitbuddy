@@ -1,8 +1,9 @@
 import XCTest
 @testable import FitBuddy
 
-/// Decoding tests for the Hevy wire format — the tolerances that keep one odd
-/// workout from failing a whole sync.
+/// Decoding tests for the Hevy wire format and its mapping onto the
+/// normalized `Activity` (#34) — the tolerances that keep one odd workout from
+/// failing a whole sync.
 final class HevyWorkoutDTOTests: XCTestCase {
     private func decode(_ payload: [String: Any]) throws -> HevyWorkoutDTO {
         let data = try JSONSerialization.data(withJSONObject: payload)
@@ -38,9 +39,9 @@ final class HevyWorkoutDTOTests: XCTestCase {
         XCTAssertNil(dto.endTime)
         XCTAssertEqual(dto.exercises, [])
 
-        let workout = dto.makeWorkout()
-        XCTAssertEqual(workout.title, "Workout")
-        XCTAssertEqual(workout.exercises.count, 0)
+        let activity = dto.makeActivity()
+        XCTAssertEqual(activity.title, "Workout")
+        XCTAssertEqual(activity.exercises.count, 0)
     }
 
     func testWholeNumbersSentAsDecimalsStillDecode() throws {
@@ -98,7 +99,7 @@ final class HevyWorkoutDTOTests: XCTestCase {
             ]],
         ])
 
-        let set = try XCTUnwrap(dto.makeWorkout().exercises.first?.sets.first)
+        let set = try XCTUnwrap(dto.makeActivity().exercises.first?.sets.first)
         XCTAssertNil(set.distanceMeters)
         XCTAssertNil(set.durationSeconds)
         XCTAssertEqual(set.weightKg, 115)
@@ -116,7 +117,7 @@ final class HevyWorkoutDTOTests: XCTestCase {
             ]],
         ])
 
-        let set = try XCTUnwrap(dto.makeWorkout().exercises.first?.sets.first)
+        let set = try XCTUnwrap(dto.makeActivity().exercises.first?.sets.first)
         XCTAssertEqual(set.distanceMeters, 3_500)
         XCTAssertEqual(set.durationSeconds, 1_206)
     }
@@ -135,7 +136,7 @@ final class HevyWorkoutDTOTests: XCTestCase {
             ]],
         ])
 
-        let set = try XCTUnwrap(dto.makeWorkout().exercises.first?.sets.first)
+        let set = try XCTUnwrap(dto.makeActivity().exercises.first?.sets.first)
         XCTAssertEqual(set.weightKg, 0)
         XCTAssertEqual(set.reps, 0)
     }
@@ -151,7 +152,7 @@ final class HevyWorkoutDTOTests: XCTestCase {
             ]],
         ])
 
-        let set = try XCTUnwrap(dto.makeWorkout().exercises.first?.sets.first)
+        let set = try XCTUnwrap(dto.makeActivity().exercises.first?.sets.first)
         XCTAssertEqual(set.type, .unknown)
         XCTAssertFalse(set.type.countsTowardsVolume)
     }
@@ -166,14 +167,14 @@ final class HevyWorkoutDTOTests: XCTestCase {
             ]],
         ])
 
-        let exercise = try XCTUnwrap(dto.makeWorkout().exercises.first)
+        let exercise = try XCTUnwrap(dto.makeActivity().exercises.first)
         XCTAssertEqual(exercise.index, 0)
         XCTAssertEqual(exercise.sets.map(\.index).sorted(), [0, 1])
     }
 
     /// Hevy's `index` is optional per entry, so a payload may carry it for one
     /// exercise and omit it for the next. Reading it would then hand two
-    /// entries the same index — and that index is `ExerciseDetail.id`, so
+    /// entries the same index — and that index is `ActivityExercise.id`, so
     /// `ForEach` would drop a card and the sort by index would be arbitrary.
     func testIndicesStayUniqueWhenThePayloadNumbersOnlySomeEntries() throws {
         let dto = try decode([
@@ -189,9 +190,9 @@ final class HevyWorkoutDTOTests: XCTestCase {
             ],
         ])
 
-        let workout = dto.makeWorkout()
-        XCTAssertEqual(workout.exercises.map(\.index), [0, 1])
-        let first = try XCTUnwrap(workout.exercises.first)
+        let activity = dto.makeActivity()
+        XCTAssertEqual(activity.exercises.map(\.index), [0, 1])
+        let first = try XCTUnwrap(activity.exercises.first)
         XCTAssertEqual(first.sets.map(\.index).sorted(), [0, 1])
     }
 

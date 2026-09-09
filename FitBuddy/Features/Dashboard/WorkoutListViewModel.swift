@@ -21,7 +21,7 @@ final class WorkoutListViewModel: ObservableObject {
     /// automatic sync behind `reload()` has the banner and nothing to confirm.
     @Published private(set) var refreshNotice: RefreshNotice?
 
-    /// Called when Hevy rejected the stored key, which `HevyService` has
+    /// Called when the source rejected the stored key, which `WorkoutSyncService` has
     /// already wiped. The dashboard cannot recover from this on its own — the
     /// app has to route back to onboarding (US-1 AC3), which only the root
     /// view can do, so it is handed in as a callback.
@@ -53,7 +53,7 @@ final class WorkoutListViewModel: ObservableObject {
 
     /// - Parameters:
     ///   - cache: Read access to the cached window (`WorkoutStore` in the app).
-    ///   - syncer: Fills that cache from Hevy (`HevyService` in the app).
+    ///   - syncer: Fills that cache from the source (`WorkoutSyncService` in the app).
     ///     Optional so previews and the cache-only tests can leave it out; a
     ///     `nil` syncer makes `refresh()` a plain cache read.
     ///   - now: Injectable clock, so the window boundary is testable.

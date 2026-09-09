@@ -37,6 +37,7 @@ struct RootView: View {
                     makeDashboardViewModel: makeDashboardViewModel,
                     makeSettingsViewModel: makeSettingsViewModel,
                     makeWorkoutDetailViewModel: makeWorkoutDetailViewModel(for:),
+                    makeExerciseListViewModel: makeExerciseListViewModel,
                     makeAnalysisHistoryViewModel: makeAnalysisHistoryViewModel,
                     reloadToken: dashboardReloadToken
                 )
@@ -68,7 +69,7 @@ struct RootView: View {
             syncer: Self.syncer(workouts: store, timestamps: timestamps),
             timestamps: timestamps
         )
-        // Hevy rejected the stored key: `HevyService` has already wiped it, so
+        // Hevy rejected the stored key: `WorkoutSyncService` has already wiped it, so
         // the only thing left is to send the user back to step 2 (US-1 AC3).
         let coordinator = onboardingViewModel
         viewModel.onUnauthorized = { [weak coordinator] in
@@ -86,7 +87,7 @@ struct RootView: View {
             return StubWorkoutSync()
         }
         #endif
-        return HevyService(workouts: workouts, timestamps: timestamps)
+        return WorkoutSyncService(workouts: workouts, timestamps: timestamps)
     }
 
     /// Wires the analysis tab to the cache and to Claude (#32).
@@ -130,6 +131,16 @@ struct RootView: View {
             cache: WorkoutStore(modelContainer: modelContext.container),
             workoutID: workoutID
         )
+    }
+
+    /// Wires the exercise list to the cache (#37).
+    ///
+    /// A factory rather than a ready-made ViewModel: the screen exists only
+    /// while the user is in it, and each push has to read the cache fresh — a
+    /// sync in between changes what the window holds. Its own `WorkoutStore`
+    /// over the same container, like the detail screen's — this one only reads.
+    private func makeExerciseListViewModel() -> ExerciseListViewModel {
+        ExerciseListViewModel(cache: WorkoutStore(modelContainer: modelContext.container))
     }
 
     /// Wires the settings screen to the Keychain and to the two reset paths
