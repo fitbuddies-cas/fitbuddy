@@ -418,7 +418,10 @@ final class WorkoutListViewModelTests: XCTestCase {
         await syncer.releaseFirstCall()
         await pull.value
 
-        XCTAssertNotEqual(sut.syncStatus, .syncing)
+        // `.idle`, not merely "not syncing": a cancelled request says nothing
+        // about connectivity, so publishing `.failed(.offline)` here would be
+        // the very thing `performSync`'s `isCancellation` guard prevents.
+        XCTAssertEqual(sut.syncStatus, .idle)
     }
 
     /// The same teardown, but the sync got through before it was cancelled.

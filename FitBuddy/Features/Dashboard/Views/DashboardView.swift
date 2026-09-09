@@ -81,6 +81,10 @@ struct DashboardView: View {
             // (US-10 AC1/AC2).
             .refreshable { await viewModel.retry() }
             .overlay(alignment: .bottom) { refreshToast }
+            // The toast's own timer dies with the view. Without this the
+            // notice would be parked by a tab switch mid-message and shown
+            // again on return, long after the pull it describes.
+            .onDisappear { viewModel.dismissRefreshNotice() }
             .animation(.snappy, value: viewModel.refreshNotice)
         }
         // `.task(id:)` rather than a plain `.task`: the first run is the

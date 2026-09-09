@@ -83,6 +83,14 @@ final class WorkoutListViewModel: ObservableObject {
         await refresh(announcingFailure: true)
     }
 
+    /// The dashboard's own sync, silent about its failures — the banner is
+    /// the whole report. `retry()` is the announcing counterpart, and the two
+    /// entry points are the only ones: the parametrised body below is private
+    /// so a caller cannot end up in the announcing path by accident.
+    func refresh() async {
+        await refresh(announcingFailure: false)
+    }
+
     /// Drops the toast — its timeout elapsed, or the user tapped it away.
     func dismissRefreshNotice() {
         refreshNotice = nil
@@ -97,7 +105,7 @@ final class WorkoutListViewModel: ObservableObject {
     ///
     /// - Parameter announcingFailure: Raises a `refreshNotice` if the sync
     ///   fails. Only the user-triggered path passes `true` — see `retry()`.
-    func refresh(announcingFailure: Bool = false) async {
+    private func refresh(announcingFailure: Bool) async {
         // An empty cache while the sync behind it is still running is not an
         // answer about the user's training yet: the window may simply have
         // been discarded (#91) or never filled. The spinner stays up and the

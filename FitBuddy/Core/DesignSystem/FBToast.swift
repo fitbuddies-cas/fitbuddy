@@ -45,6 +45,9 @@ struct FBToast: View {
         // second message gets its own full duration instead of inheriting
         // what was left of the first one's.
         .task {
+            // The only feedback a repeated failure gives, so it has to reach
+            // VoiceOver too: the toast takes no focus and is gone in 5 s.
+            AccessibilityNotification.Announcement(message).post()
             try? await Task.sleep(for: duration)
             guard !Task.isCancelled else { return }
             onDismiss()
