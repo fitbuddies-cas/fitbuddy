@@ -10,10 +10,12 @@ import XCTest
 /// reset, both DEBUG-only seams in the app.
 @MainActor
 struct OnboardingApp {
-    /// How long an element gets to appear. Generous on purpose: the runner is
-    /// shared and a cold app launch on a busy machine is slow, and a flaky
-    /// timeout would cost more trust than the seconds it saves.
-    static let timeout: TimeInterval = 20
+    /// How long an element gets to appear. Generous on purpose, and measured:
+    /// a cold simulator on the CI runner took ~25s from launch to the first
+    /// screen. Only a failing run ever waits this long, so the budget costs
+    /// nothing when things work — and a flaky timeout would cost more trust
+    /// than the seconds it saves.
+    static let timeout: TimeInterval = 30
 
     let app: XCUIApplication
 

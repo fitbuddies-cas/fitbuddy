@@ -52,8 +52,8 @@ jobs:
           xcrun simctl list devices available | grep -q "$SIMULATOR_NAME (" \
             || { echo "::error::No '$SIMULATOR_NAME' simulator — run: xcrun simctl create \"$SIMULATOR_NAME\" \"$SIMULATOR_NAME\""; exit 1; }
 
-      # Unit tests only: the UI tests get their own job below, so a flaky
-      # simulator interaction cannot block a merge on a green diff.
+      # Unit tests only: the UI tests run in their own job, and only on the
+      # release PR into main (see below).
       - name: Test
         shell: bash
         run: |
@@ -112,13 +112,18 @@ jobs:
         shell: bash
         run: rm -rf "$DERIVED_DATA"
 
-  # Deliberately not a required check yet (#120): UI tests drive a simulator
-  # and are the one suite here that can fail for reasons that have nothing to
-  # do with the diff. `continue-on-error` makes this job report without
-  # blocking; once it has run green for a week or two, drop that line and the
-  # check becomes binding like any other.
+  # Only on the way to main — the weekly release PR — not on every feature PR
+  # into develop. UI tests cost a simulator boot and a cold app launch for what
+  # is, per merge, the same three flows; running them at the release gate keeps
+  # the per-PR check fast and still blocks a broken onboarding from shipping to
+  # TestFlight.
+  #
+  # `continue-on-error` on top: the suite reports without blocking until it has
+  # a few green release runs behind it (#120). Dropping that one line makes it
+  # binding.
   ui-test:
     name: UI test (onboarding)
+    if: github.base_ref == 'main'
     runs-on: [self-hosted, macOS, ARM64]
     continue-on-error: true
     # Roughly 40s of tests plus a build; well short of this, and a hung
