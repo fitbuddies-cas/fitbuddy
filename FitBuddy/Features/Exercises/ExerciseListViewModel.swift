@@ -9,12 +9,16 @@ import Foundation
 /// The search filters in memory rather than in a `FetchDescriptor`: the window
 /// holds a few dozen movements, and a predicate per keystroke would put a
 /// SwiftData round trip between the user's typing and the list (AC1 asks for
-/// a filter that reacts while typing).
+/// a filter that reacts while typing). The muscle-group filter (AC2) rides the
+/// same in-memory pass and combines with the search (AC3).
 @MainActor
 final class ExerciseListViewModel: ObservableObject {
     @Published private(set) var state: ExerciseListState = .loading
     /// The search field's text, bound by the view.
     @Published var searchText: String = ""
+    /// Muscle groups the user has picked in the filter row. Empty means "no
+    /// muscle filter" — the chips do not narrow the list until one is tapped.
+    @Published var selectedMuscleGroups: Set<MuscleGroup> = []
 
     private let cache: ExerciseSummaryReading
     private let calendar: Calendar
@@ -34,32 +38,57 @@ final class ExerciseListViewModel: ObservableObject {
     }
 
     /// The rows the list renders: everything the window holds, narrowed by the
-    /// search text.
+    /// muscle-group filter and then the search text (AC3 — the two combine).
     ///
-    /// Empty for a query that matches nothing — which the view tells apart
-    /// from an empty window through `hasNoSearchMatches`.
+    /// Muscle groups use OR logic (AC2): with Chest and Back selected a
+    /// movement shows if it belongs to either. Empty for a filter that matches
+    /// nothing — which the view tells apart from an empty window through
+    /// `hasNoMatches`.
     var visibleExercises: [ExerciseSummary] {
         guard case .loaded(let exercises) = state else { return [] }
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return exercises }
-        return exercises.filter { $0.matches(query: query) }
+        return exercises.filter { exercise in
+            let matchesGroup = selectedMuscleGroups.isEmpty
+                || selectedMuscleGroups.contains(exercise.muscleGroup)
+            let matchesQuery = query.isEmpty || exercise.matches(query: query)
+            return matchesGroup && matchesQuery
+        }
     }
 
-    /// Whether the search field belongs on screen: only once the window has
-    /// loaded with movements in it. Over an empty or failed window it would be
-    /// a control with nothing to act on.
-    var isSearchable: Bool {
+    /// The muscle groups offered as filter chips: every group FitBuddy
+    /// classifies movements into, in the app's canonical order (AC1).
+    var filterGroups: [MuscleGroup] { MuscleGroup.allCases }
+
+    /// Whether the search field and the filter row belong on screen: only once
+    /// the window has loaded with movements in it. Over an empty or failed
+    /// window they would be controls with nothing to act on.
+    var showsFilterControls: Bool {
         guard case .loaded = state else { return false }
         return true
     }
 
-    /// Whether the user typed a query that no movement matches — the
-    /// «No exercises found» case of AC1, as opposed to a window with no
+    /// Whether a search term or a muscle-group chip is currently narrowing the
+    /// list.
+    var isFiltering: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !selectedMuscleGroups.isEmpty
+    }
+
+    /// Whether the active filter — search, chips, or both — matched nothing:
+    /// the «No exercises found» case of AC1/AC2, as opposed to a window with no
     /// training in it at all.
-    var hasNoSearchMatches: Bool {
+    var hasNoMatches: Bool {
         guard case .loaded = state else { return false }
-        return !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && visibleExercises.isEmpty
+        return isFiltering && visibleExercises.isEmpty
+    }
+
+    /// Adds or removes a muscle group from the filter — one chip tap.
+    func toggle(_ group: MuscleGroup) {
+        if selectedMuscleGroups.contains(group) {
+            selectedMuscleGroups.remove(group)
+        } else {
+            selectedMuscleGroups.insert(group)
+        }
     }
 
     /// Loads the window from the cache — the screen's `.task` and the "Try

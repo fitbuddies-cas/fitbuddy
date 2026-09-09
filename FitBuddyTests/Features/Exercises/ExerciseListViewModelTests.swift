@@ -1,9 +1,10 @@
 import XCTest
 @testable import FitBuddy
 
-/// Unit tests for `ExerciseListViewModel` (US-7 AC1, #37): the four states,
-/// the realtime search and the difference between a window with no training
-/// and a query that matches nothing.
+/// Unit tests for `ExerciseListViewModel` (US-7, #37/#38): the four states, the
+/// realtime search, the muscle-group filter and the way the two combine, and
+/// the difference between a window with no training and a filter that matches
+/// nothing.
 @MainActor
 final class ExerciseListViewModelTests: XCTestCase {
     private var cache: StubExerciseCache!
@@ -57,7 +58,7 @@ final class ExerciseListViewModelTests: XCTestCase {
         await sut.load()
 
         XCTAssertEqual(sut.state, .empty)
-        XCTAssertFalse(sut.hasNoSearchMatches)
+        XCTAssertFalse(sut.hasNoMatches)
     }
 
     func testAnUnreadableCacheIsAFailure() async {
@@ -104,8 +105,8 @@ final class ExerciseListViewModelTests: XCTestCase {
         XCTAssertEqual(sut.visibleExercises.map(\.title), ["Bench Press (Barbell)"])
     }
 
-    /// The list is a search over titles, not over muscle groups — that is the
-    /// filter of AC2, which arrives with #38.
+    /// The text search runs over titles, not over muscle groups — the group is
+    /// the job of the chip filter (AC2), not the search field.
     func testSearchDoesNotMatchTheMuscleGroup() async {
         let sut = makeSUT()
         await sut.load()
@@ -122,7 +123,7 @@ final class ExerciseListViewModelTests: XCTestCase {
         sut.searchText = "   "
 
         XCTAssertEqual(sut.visibleExercises, Self.catalogue)
-        XCTAssertFalse(sut.hasNoSearchMatches)
+        XCTAssertFalse(sut.hasNoMatches)
     }
 
     /// The «No exercises found» case: a statement about the query, not about
@@ -134,7 +135,7 @@ final class ExerciseListViewModelTests: XCTestCase {
         sut.searchText = "kettlebell"
 
         XCTAssertTrue(sut.visibleExercises.isEmpty)
-        XCTAssertTrue(sut.hasNoSearchMatches)
+        XCTAssertTrue(sut.hasNoMatches)
         XCTAssertEqual(sut.state, .loaded(Self.catalogue))
     }
 
@@ -157,7 +158,100 @@ final class ExerciseListViewModelTests: XCTestCase {
 
         sut.searchText = "bench"
 
-        XCTAssertFalse(sut.hasNoSearchMatches)
+        XCTAssertFalse(sut.hasNoMatches)
+    }
+
+    // MARK: - Muscle-group filter (AC2)
+
+    /// Every group the app classifies into is offered as a chip, in the
+    /// canonical order (AC1).
+    func testFilterGroupsCoverEveryMuscleGroup() {
+        XCTAssertEqual(makeSUT().filterGroups, MuscleGroup.allCases)
+    }
+
+    func testNoGroupSelectedShowsEverything() async {
+        let sut = makeSUT()
+        await sut.load()
+
+        XCTAssertTrue(sut.selectedMuscleGroups.isEmpty)
+        XCTAssertEqual(sut.visibleExercises, Self.catalogue)
+        XCTAssertFalse(sut.isFiltering)
+    }
+
+    func testSelectingAGroupNarrowsToThatGroup() async {
+        let sut = makeSUT()
+        await sut.load()
+
+        sut.toggle(.legs)
+
+        XCTAssertEqual(sut.visibleExercises.map(\.title), ["Squat (Barbell)"])
+        XCTAssertTrue(sut.isFiltering)
+    }
+
+    /// AC2: several groups combine with OR — a movement shows if it belongs to
+    /// any selected group.
+    func testMultipleGroupsUseOrLogic() async {
+        let sut = makeSUT()
+        await sut.load()
+
+        sut.toggle(.legs)
+        sut.toggle(.shoulders)
+
+        XCTAssertEqual(
+            sut.visibleExercises.map(\.title),
+            ["Squat (Barbell)", "Overhead Press (Barbell)"]
+        )
+    }
+
+    func testTogglingAGroupOffRestoresIt() async {
+        let sut = makeSUT()
+        await sut.load()
+        sut.toggle(.legs)
+
+        sut.toggle(.legs)
+
+        XCTAssertTrue(sut.selectedMuscleGroups.isEmpty)
+        XCTAssertEqual(sut.visibleExercises, Self.catalogue)
+    }
+
+    /// A chip whose group has no movement in the window is the «no matches»
+    /// case, not an empty window.
+    func testAGroupWithNoExercisesIsNoMatchesNotEmpty() async {
+        let sut = makeSUT()
+        await sut.load()
+
+        sut.toggle(.core)
+
+        XCTAssertTrue(sut.visibleExercises.isEmpty)
+        XCTAssertTrue(sut.hasNoMatches)
+        XCTAssertEqual(sut.state, .loaded(Self.catalogue))
+    }
+
+    // MARK: - Search + filter combined (AC3)
+
+    func testMuscleFilterAndSearchCombine() async {
+        let sut = makeSUT()
+        await sut.load()
+
+        sut.toggle(.chest)
+        sut.toggle(.shoulders)
+        sut.searchText = "press"
+
+        XCTAssertEqual(
+            sut.visibleExercises.map(\.title),
+            ["Bench Press (Barbell)", "Overhead Press (Barbell)"]
+        )
+    }
+
+    func testSearchInsideAGroupCanMatchNothing() async {
+        let sut = makeSUT()
+        await sut.load()
+
+        sut.toggle(.legs)
+        sut.searchText = "bench"
+
+        XCTAssertTrue(sut.visibleExercises.isEmpty)
+        XCTAssertTrue(sut.hasNoMatches)
     }
 
     // MARK: - Fixtures
