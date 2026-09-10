@@ -13,7 +13,7 @@ final class ConnectorRegistryTests: XCTestCase {
     func testItManagesSeveralConnectorsAtOnce() async {
         let sut = ConnectorRegistry()
         let hevy = MockConnector()
-        let strava = StravaConnector()
+        let strava = makeStravaConnector()
 
         await sut.register(hevy, for: .hevy)
         await sut.register(strava, for: .strava)
@@ -131,24 +131,47 @@ final class ConnectorRegistryTests: XCTestCase {
         XCTAssertEqual(state, .disconnected)
     }
 
-    /// The registered Strava stub throws on every call — the registry passes
-    /// that through unchanged instead of pretending the source connected.
-    func testConnectingTheStravaStubThrowsNotImplemented() async {
+    /// The real `StravaConnector` (#142) accepts an OAuth pair, and the
+    /// registry records the expiry that pair carries — the data behind the
+    /// renewal prompt (US-5 AC2).
+    func testConnectingStravaRecordsTheTokenExpiry() async throws {
         let sut = ConnectorRegistry()
-        await sut.register(StravaConnector(), for: .strava)
+        await sut.register(makeStravaConnector(), for: .strava)
+
+        try await sut.connect(
+            .strava,
+            credentials: .oauth(accessToken: "a", refreshToken: "r", expiresAt: expiresAt)
+        )
+
+        let state = await sut.state(of: .strava, now: beforeExpiry)
+        XCTAssertEqual(state, .connected(expiresAt: expiresAt))
+    }
+
+    /// Credentials the connector refuses leave the source disconnected — the
+    /// registry does not record a connection the provider never accepted.
+    func testConnectingStravaWithAnAPIKeyIsRejectedAndLeavesItDisconnected() async {
+        let sut = ConnectorRegistry()
+        await sut.register(makeStravaConnector(), for: .strava)
 
         do {
-            try await sut.connect(
-                .strava,
-                credentials: .oauth(accessToken: "a", refreshToken: "r", expiresAt: expiresAt)
-            )
-            XCTFail("Expected .notImplemented to be thrown")
+            try await sut.connect(.strava, credentials: .apiKey("hv_live_abc"))
+            XCTFail("Expected .unauthorized to be thrown")
         } catch {
-            XCTAssertEqual(error as? ConnectorError, .notImplemented)
+            XCTAssertEqual(error as? ConnectorError, .unauthorized)
         }
 
         let state = await sut.state(of: .strava)
         XCTAssertEqual(state, .disconnected)
+    }
+
+    /// A Strava connector with doubles for the OAuth service and the
+    /// credential store, since the real ones need a browser and a Keychain.
+    private func makeStravaConnector() -> StravaConnector {
+        StravaConnector(
+            session: StubURLProtocol.makeSession(),
+            oauth: StubStravaOAuthorizer(),
+            credentialStore: StubStravaCredentialStore()
+        )
     }
 
     func testValidateForwardsToTheConnector() async throws {
