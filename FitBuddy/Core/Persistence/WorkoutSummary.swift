@@ -11,10 +11,13 @@ import SwiftData
 /// `.navigationDestination(for:)` builds its ViewModel once per push instead
 /// of once per rendered row.
 struct WorkoutSummary: Hashable, Identifiable, Sendable {
-    /// Hevy's workout id.
+    /// The source's workout id.
     let id: String
     let title: String
     let startTime: Date
+    /// Which provider delivered the session (#141) — the dashboard labels
+    /// Strava sessions next to Hevy ones (US-5 AC1).
+    let source: ConnectorSource
     /// Training volume in kg: Σ (weight × reps) over all counted sets.
     let volumeKg: Double
     let exerciseCount: Int
@@ -24,12 +27,16 @@ struct WorkoutSummary: Hashable, Identifiable, Sendable {
     /// loaded. Feeds the dashboard's distribution chart (#27).
     let muscleLoads: [MuscleLoad]
 
-    /// - Parameter muscleLoads: Defaults to none, so a caller that only cares
-    ///   about the totals — a test fixture, a list row — stays unaffected.
+    /// - Parameters:
+    ///   - source: Defaults to Hevy, so a fixture written before #141 still
+    ///     describes what it always did.
+    ///   - muscleLoads: Defaults to none, so a caller that only cares about
+    ///     the totals — a test fixture, a list row — stays unaffected.
     init(
         id: String,
         title: String,
         startTime: Date,
+        source: ConnectorSource = .hevy,
         volumeKg: Double,
         exerciseCount: Int,
         countedSetCount: Int,
@@ -38,6 +45,7 @@ struct WorkoutSummary: Hashable, Identifiable, Sendable {
         self.id = id
         self.title = title
         self.startTime = startTime
+        self.source = source
         self.volumeKg = volumeKg
         self.exerciseCount = exerciseCount
         self.countedSetCount = countedSetCount
@@ -67,6 +75,7 @@ extension WorkoutSummary {
             id: workout.id,
             title: workout.title,
             startTime: workout.startTime,
+            source: workout.source,
             volumeKg: countedSets.trainingVolumeKg,
             exerciseCount: workout.exercises.count,
             countedSetCount: countedSets.count,

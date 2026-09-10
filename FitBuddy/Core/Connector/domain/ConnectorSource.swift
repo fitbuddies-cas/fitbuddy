@@ -8,7 +8,10 @@ import Foundation
 /// `strava` is listed although only `StravaConnector`'s stub exists in v0: the
 /// case is what lets the registry, and the renewal prompt from US-5 AC2, be
 /// written and tested before the OAuth flow lands in v1.
-enum ConnectorSource: String, CaseIterable, Identifiable, Sendable {
+///
+/// `Codable` because `Activity` carries it (#141) and `Activity` is the
+/// connector-facing wire boundary.
+enum ConnectorSource: String, CaseIterable, Identifiable, Codable, Sendable {
     case hevy
     case strava
 

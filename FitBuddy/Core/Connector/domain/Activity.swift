@@ -17,8 +17,14 @@ struct Activity: Identifiable, Equatable, Codable, Sendable {
     /// When the source last modified the activity, when it reports it. Kept
     /// for the delta sync planned on top of `/workouts/events`.
     var updatedAt: Date?
+    /// The provider this activity came from (#141). With two sources side by
+    /// side, the cache needs it to replace one source's window without
+    /// dropping the other's, and the dashboard needs it to say which is which.
+    var source: ConnectorSource
     var exercises: [ActivityExercise]
 
+    /// - Parameter source: Defaults to Hevy, the only source before #141, so
+    ///   the mapping and every fixture written against it stay valid.
     init(
         id: String,
         title: String,
@@ -26,6 +32,7 @@ struct Activity: Identifiable, Equatable, Codable, Sendable {
         startTime: Date,
         endTime: Date? = nil,
         updatedAt: Date? = nil,
+        source: ConnectorSource = .hevy,
         exercises: [ActivityExercise] = []
     ) {
         self.id = id
@@ -34,6 +41,7 @@ struct Activity: Identifiable, Equatable, Codable, Sendable {
         self.startTime = startTime
         self.endTime = endTime
         self.updatedAt = updatedAt
+        self.source = source
         self.exercises = exercises
     }
 }

@@ -49,8 +49,12 @@ actor SessionResetService {
         await discardCachedWorkouts()
     }
 
-    /// Drops the cached workouts and the sync timestamp, keeping the stored
-    /// key — what replacing the Hevy key in Settings needs (#91).
+    /// Drops the cached Hevy workouts and the sync timestamp, keeping the
+    /// stored key — what replacing the Hevy key in Settings needs (#91).
+    ///
+    /// Only Hevy's sessions go (#141): a second source's cache describes a
+    /// connection this reset is not about, and the user would otherwise watch
+    /// their Strava history vanish because their Hevy key changed.
     ///
     /// The timestamp goes with the cache, always: a "last synced 5 min ago"
     /// line over an empty dashboard describes a sync of somebody else's
@@ -65,7 +69,7 @@ actor SessionResetService {
     /// logout a way around the lock.
     func discardCachedWorkouts() async {
         do {
-            try await workouts.deleteAll()
+            try await workouts.deleteCachedWorkouts(from: .hevy)
         } catch {
             logger.error("Workout cache not cleared: \(error, privacy: .public)")
         }

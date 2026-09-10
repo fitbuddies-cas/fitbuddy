@@ -13,6 +13,7 @@ import OSLog
 /// sync.
 actor WorkoutSyncService: WorkoutSyncing {
     private let connector: any FitnessConnector
+    private let source: ConnectorSource
     private let keychain: KeychainService
     private let workouts: WorkoutStore
     private let timestamps: SyncTimestampStore
@@ -24,11 +25,15 @@ actor WorkoutSyncService: WorkoutSyncing {
 
     /// - Parameters:
     ///   - connector: The data source. Defaults to Hevy, the only one v0 ships.
+    ///   - source: Which source's cached window `connector` fills (#141). The
+    ///     store replaces per source, and an empty result cannot say whose
+    ///     window it is.
     ///   - sessionReset: Defaults to one built from the other dependencies —
     ///     it cannot be a default argument because it needs them.
     ///   - now: Injectable clock, so window boundaries are testable.
     init(
         connector: any FitnessConnector = HevyConnector(),
+        source: ConnectorSource = .hevy,
         keychain: KeychainService = KeychainService(),
         workouts: WorkoutStore,
         timestamps: SyncTimestampStore = SyncTimestampStore(),
@@ -37,6 +42,7 @@ actor WorkoutSyncService: WorkoutSyncing {
         now: @escaping () -> Date = Date.init
     ) {
         self.connector = connector
+        self.source = source
         self.keychain = keychain
         self.workouts = workouts
         self.timestamps = timestamps
@@ -65,7 +71,7 @@ actor WorkoutSyncService: WorkoutSyncing {
         let fetched = try await fetchWindow(from: windowStart, apiKey: apiKey)
 
         do {
-            try await workouts.replaceCachedWorkouts(with: fetched)
+            try await workouts.replaceCachedWorkouts(from: source, with: fetched)
         } catch {
             // The timestamp stays untouched: nothing new was cached, so the
             // dashboard must keep advertising the older sync (US-2 AC2).

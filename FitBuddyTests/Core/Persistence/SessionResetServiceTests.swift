@@ -82,12 +82,27 @@ final class SessionResetServiceTests: XCTestCase {
 
     func testHardLogoutClearsCachedWorkouts() async throws {
         let activity = ActivityFactory.activity(id: "w-1", start: Date(timeIntervalSince1970: 1_750_000_000))
-        try await workouts.replaceCachedWorkouts(with: [activity])
+        try await workouts.replaceCachedWorkouts(from: .hevy, with: [activity])
 
         await sut.hardLogout()
 
         let count = try await workouts.workoutCount()
         XCTAssertEqual(count, 0)
+    }
+
+    /// A Hevy logout is about the Hevy session (#141): the Strava sessions
+    /// cached next to it describe a connection that was not rejected.
+    func testHardLogoutKeepsStravaWorkouts() async throws {
+        let start = Date(timeIntervalSince1970: 1_750_000_000)
+        try await workouts.replaceCachedWorkouts(from: .hevy, with: [ActivityFactory.activity(id: "hevy-1", start: start)])
+        try await workouts.replaceCachedWorkouts(from: .strava, with: [
+            Activity(id: "strava:1", title: "Run", startTime: start, source: .strava),
+        ])
+
+        await sut.hardLogout()
+
+        let ids = try await workouts.cachedWorkoutIDs()
+        XCTAssertEqual(ids, ["strava:1"])
     }
 
     func testHardLogoutClearsSyncTimestamp() async throws {
@@ -124,12 +139,25 @@ final class SessionResetServiceTests: XCTestCase {
 
     func testDiscardCachedWorkoutsClearsTheCache() async throws {
         let activity = ActivityFactory.activity(id: "w-1", start: Date(timeIntervalSince1970: 1_750_000_000))
-        try await workouts.replaceCachedWorkouts(with: [activity])
+        try await workouts.replaceCachedWorkouts(from: .hevy, with: [activity])
 
         await sut.discardCachedWorkouts()
 
         let count = try await workouts.workoutCount()
         XCTAssertEqual(count, 0)
+    }
+
+    func testDiscardCachedWorkoutsKeepsStravaWorkouts() async throws {
+        let start = Date(timeIntervalSince1970: 1_750_000_000)
+        try await workouts.replaceCachedWorkouts(from: .hevy, with: [ActivityFactory.activity(id: "hevy-1", start: start)])
+        try await workouts.replaceCachedWorkouts(from: .strava, with: [
+            Activity(id: "strava:1", title: "Run", startTime: start, source: .strava),
+        ])
+
+        await sut.discardCachedWorkouts()
+
+        let ids = try await workouts.cachedWorkoutIDs()
+        XCTAssertEqual(ids, ["strava:1"])
     }
 
     /// The timestamp goes with the cache: a "last synced" line over an empty

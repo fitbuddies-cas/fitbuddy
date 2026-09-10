@@ -17,6 +17,7 @@ extension Activity {
             startTime: startTime,
             endTime: endTime,
             updatedAt: updatedAt,
+            source: source,
             exercises: exercises.map { $0.makeExercise() }
         )
     }
