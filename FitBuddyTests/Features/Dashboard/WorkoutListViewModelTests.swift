@@ -502,6 +502,54 @@ final class WorkoutListViewModelTests: XCTestCase {
         XCTAssertEqual(sut.state, .empty)
     }
 
+    // MARK: - Data sources (US-8, #40)
+
+    /// The strip is fed from the ViewModel rather than reading the timestamp
+    /// store a second time, so what it reports can never disagree with the
+    /// "last synced" line the dashboard already had.
+    func testDataSourcesReportTheStoredSyncTimestamp() async throws {
+        await timestamps.setLastSync(reference.addingTimeInterval(-3 * 86_400))
+
+        let sut = makeSUT()
+        await sut.load()
+
+        let source = try XCTUnwrap(sut.dataSources.first)
+        XCTAssertEqual(source.source, .hevy)
+        XCTAssertEqual(source.lastSync, sut.lastSync)
+        XCTAssertFalse(source.isSyncing)
+        XCTAssertTrue(source.needsAttention(now: reference))
+    }
+
+    /// v0 syncs Hevy and nothing else, so the strip has exactly one row to
+    /// draw — a Strava row here would promise data no connector can deliver.
+    func testDataSourcesHoldHevyAloneInV0() {
+        XCTAssertEqual(makeSUT().dataSources.map(\.source), [.hevy])
+    }
+
+    func testDataSourceIsFreshAfterASuccessfulSync() async throws {
+        await timestamps.setLastSync(reference.addingTimeInterval(-60))
+
+        let sut = makeSUT()
+        await sut.load()
+
+        let source = try XCTUnwrap(sut.dataSources.first)
+        XCTAssertEqual(source.freshness(now: reference), .fresh)
+        XCTAssertFalse(source.needsAttention(now: reference))
+    }
+
+    func testDataSourceReportsAnInFlightSync() async throws {
+        await syncer.gateFirstCall()
+        let sut = makeSUT(withSyncer: true)
+
+        let running = Task { await sut.refresh() }
+        await syncer.waitForFirstCall()
+        XCTAssertTrue(try XCTUnwrap(sut.dataSources.first).isSyncing)
+
+        await syncer.releaseFirstCall()
+        await running.value
+        XCTAssertFalse(try XCTUnwrap(sut.dataSources.first).isSyncing)
+    }
+
     // MARK: - Helpers
 
     private func makeSUT(withSyncer: Bool = false) -> WorkoutListViewModel {

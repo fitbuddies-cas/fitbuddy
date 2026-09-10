@@ -27,6 +27,18 @@ final class WorkoutListViewModel: ObservableObject {
     /// view can do, so it is handed in as a callback.
     var onUnauthorized: (() async -> Void)?
 
+    /// The sources the status strip reports on (US-8, #40).
+    ///
+    /// Derived rather than stored: `lastSync` and `syncStatus` are both
+    /// published, so SwiftUI re-renders whenever either moves, and a second
+    /// copy of the same facts is a second thing that can be wrong. v0 syncs one
+    /// source — `WorkoutSyncService` fetches Hevy and nothing else — so the
+    /// list holds one entry; a Strava row appears here once its connector stops
+    /// throwing `.notImplemented` (#35).
+    var dataSources: [DataSourceStatus] {
+        [DataSourceStatus(source: .hevy, lastSync: lastSync, isSyncing: syncStatus == .syncing)]
+    }
+
     /// The read currently in flight, so a newer `load()` supersedes it.
     private var loadTask: Task<Void, Never>?
     /// Identifies the read that owns `state`, bumped once per read — the same

@@ -1,18 +1,28 @@
 import SwiftUI
 
-/// The sync strip above the dashboard: the always-visible "last synced" line
-/// (US-2 AC2) and, when the last sync failed, the cached-data banner (#28).
+/// The sync strip above the dashboard: the per-source status rows (US-2 AC2,
+/// US-8 AC1) and, when the last sync failed, the cached-data banner (#28).
 ///
-/// Both live in one view because they are one statement to the user: how old
+/// All of it lives in one view because it is one statement to the user: how old
 /// the data is, and whether that is going to change on its own. The banner
-/// disappears the moment a sync succeeds; the timestamp never does.
+/// disappears the moment a sync succeeds; the source rows never do.
 struct SyncStatusView: View {
     let status: SyncStatus
-    let lastSync: Date?
+    /// The sources the strip reports on — one per row (#40). v0 hands in Hevy
+    /// alone; `DataSourceStatusView` loops either way.
+    let sources: [DataSourceStatus]
     /// Overrides the clock, so the rendered age is deterministic in tests.
     /// `nil` in the app, where the timeline below supplies the current time.
     var now: Date?
+    /// Syncs again. Takes no source: v0 has one sync path that refills the
+    /// whole cache, so both the banner's button and a stale row's mean the
+    /// same thing.
     let onRetry: () -> Void
+
+    /// The sync the banner is about. The banner reports the attempt that just
+    /// failed, and in v0 exactly one source is ever synced — see
+    /// `WorkoutSyncService`.
+    private var lastSync: Date? { sources.first?.lastSync }
 
     var body: some View {
         // The rendered age has to keep up with the clock on its own. Nothing
@@ -29,35 +39,14 @@ struct SyncStatusView: View {
     private func content(now: Date) -> some View {
         if case .failed(let failure) = status {
             // The banner carries the timestamp in its own subtitle, so the
-            // separate line underneath would print it twice (US-2 AC2 is met
-            // either way — the banner *is* the visible statement).
+            // source rows underneath would print it twice — and a stale badge
+            // next to a failure the user is already being told about only
+            // splits their attention. The banner is the whole report while it
+            // is up (US-2 AC2 is met either way).
             banner(failure, now: now)
         } else {
-            timestampLine(now: now)
+            DataSourceStatusView(sources: sources, now: now, onRetry: { _ in onRetry() })
         }
-    }
-
-    // MARK: - Timestamp
-
-    /// Visible whenever no banner is up — including while a sync runs. That,
-    /// plus the banner's own subtitle, is US-2 AC2.
-    private func timestampLine(now: Date) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: status == .syncing ? "arrow.triangle.2.circlepath" : "clock")
-                .font(.caption)
-            Text(timestampText(now: now))
-                .font(.fbLabel)
-                .fbTabularNumbers()
-            Spacer(minLength: 0)
-        }
-        .foregroundStyle(Color.fbMuted)
-        .accessibilityElement(children: .combine)
-    }
-
-    private func timestampText(now: Date) -> String {
-        status == .syncing
-            ? "Syncing with Hevy…"
-            : SyncTimeFormatter.lastSynced(lastSync, now: now)
     }
 
     // MARK: - Banner
@@ -111,19 +100,34 @@ struct SyncStatusView: View {
     VStack(spacing: 20) {
         SyncStatusView(
             status: .failed(.offline),
-            lastSync: Date().addingTimeInterval(-8_040),
+            sources: [DataSourceStatus(source: .hevy, lastSync: Date().addingTimeInterval(-8_040))],
             onRetry: {}
         )
-        SyncStatusView(status: .failed(.keychainUnavailable), lastSync: nil, onRetry: {})
+        SyncStatusView(
+            status: .failed(.keychainUnavailable),
+            sources: [DataSourceStatus(source: .hevy, lastSync: nil)],
+            onRetry: {}
+        )
         SyncStatusView(
             status: .failed(.rateLimited(retryAfter: 45)),
-            lastSync: Date().addingTimeInterval(-300),
+            sources: [DataSourceStatus(source: .hevy, lastSync: Date().addingTimeInterval(-300))],
             onRetry: {}
         )
-        SyncStatusView(status: .syncing, lastSync: nil, onRetry: {})
+        SyncStatusView(
+            status: .syncing,
+            sources: [DataSourceStatus(source: .hevy, lastSync: nil, isSyncing: true)],
+            onRetry: {}
+        )
         SyncStatusView(
             status: .idle,
-            lastSync: Date().addingTimeInterval(-120),
+            sources: [DataSourceStatus(source: .hevy, lastSync: Date().addingTimeInterval(-120))],
+            onRetry: {}
+        )
+        // Nothing failed, nothing running — and the data is three days old
+        // (US-8 AC1).
+        SyncStatusView(
+            status: .idle,
+            sources: [DataSourceStatus(source: .hevy, lastSync: Date().addingTimeInterval(-3 * 86_400))],
             onRetry: {}
         )
     }

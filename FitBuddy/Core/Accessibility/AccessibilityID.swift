@@ -21,6 +21,8 @@ enum AccessibilityID {
         static let field = "hevyKey.field"
         static let ctaButton = "hevyKey.ctaButton"
         static let errorBanner = "hevyKey.errorBanner"
+        /// The "your saved key was rejected" banner from US-8 AC2.
+        static let noticeBanner = "hevyKey.noticeBanner"
     }
 
     enum LLMKeys {
@@ -29,5 +31,7 @@ enum AccessibilityID {
 
     enum Dashboard {
         static let root = "dashboard.root"
+        /// The stale-source row from US-8 AC1, with its retry button.
+        static let staleSource = "dashboard.staleSource"
     }
 }
