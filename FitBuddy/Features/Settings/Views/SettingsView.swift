@@ -14,11 +14,20 @@ import SwiftUI
 struct SettingsView: View {
     @StateObject private var viewModel: SettingsViewModel
 
-    /// - Parameter viewModel: Built lazily — the autoclosure is evaluated once,
-    ///   when SwiftUI first creates the view's state, so presenting this from a
-    ///   parent's `body` does not rebuild it on every render.
-    init(viewModel: @autoclosure @escaping () -> SettingsViewModel) {
+    private let makeStravaCredentialsViewModel: @MainActor () -> StravaCredentialsViewModel
+
+    /// - Parameters:
+    ///   - viewModel: Built lazily — the autoclosure is evaluated once, when
+    ///     SwiftUI first creates the view's state, so presenting this from a
+    ///     parent's `body` does not rebuild it on every render.
+    ///   - makeStravaCredentialsViewModel: Called once per push of the Strava
+    ///     credentials screen (#139).
+    init(
+        viewModel: @autoclosure @escaping () -> SettingsViewModel,
+        makeStravaCredentialsViewModel: @escaping @MainActor () -> StravaCredentialsViewModel = { StravaCredentialsViewModel() }
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel())
+        self.makeStravaCredentialsViewModel = makeStravaCredentialsViewModel
     }
 
     var body: some View {
@@ -131,6 +140,7 @@ struct SettingsView: View {
                 target: .hevy,
                 canDelete: viewModel.hevyKeyMask != nil
             )
+            stravaRow
         } header: {
             Text("TRAINING DATA")
                 .font(.fbLabel)
@@ -258,6 +268,25 @@ struct SettingsView: View {
     }
 
     // MARK: - Rows
+
+    /// Entry point to the Strava application credentials (#139). The
+    /// connection itself — authorize, status, disconnect — comes with #140,
+    /// which takes over this row.
+    private var stravaRow: some View {
+        NavigationLink {
+            StravaCredentialsView(viewModel: makeStravaCredentialsViewModel())
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(StravaKeyPresentation.displayName)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color.fbInk)
+                Text("API application credentials")
+                    .font(.footnote)
+                    .foregroundStyle(Color.fbInkSecondary)
+            }
+        }
+        .listRowBackground(Color.fbCard)
+    }
 
     /// One credential row: name, masked key, and an actions menu. The key is
     /// only ever shown masked (#83).

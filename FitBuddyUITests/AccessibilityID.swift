@@ -24,6 +24,13 @@ enum AccessibilityID {
         static let skipButton = "llmKeys.skipButton"
     }
 
+    enum StravaCredentials {
+        static let clientIDField = "stravaCredentials.clientIDField"
+        static let clientSecretField = "stravaCredentials.clientSecretField"
+        static let saveButton = "stravaCredentials.saveButton"
+        static let errorBanner = "stravaCredentials.errorBanner"
+    }
+
     enum Dashboard {
         static let root = "dashboard.root"
         /// The stale-source row from US-8 AC1, with its retry button — one
