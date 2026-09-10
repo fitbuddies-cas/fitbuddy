@@ -288,6 +288,7 @@ struct LLMKeysView: View {
             }
             .buttonStyle(.fb(.secondary))
             .disabled(isSaving)
+            .accessibilityIdentifier(AccessibilityID.LLMKeys.skipButton)
         }
     }
 

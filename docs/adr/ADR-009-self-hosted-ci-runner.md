@@ -21,6 +21,12 @@ Ein iOS-Build braucht macOS und Xcode. GitHub-hosted Runner bieten das, ihre mac
 
 Ein Workflow (`.github/workflows/ci.yml`), der bei `pull_request` gegen `develop` und bei `push` auf `develop` Build und XCTest-Suite gegen den iOS-Simulator fährt und das Ergebnis als Status-Check am PR zurückmeldet.
 
+### Nachtrag: zweiter Job für die UI-Tests (Issue #120)
+
+Seit den XCUITests für das Onboarding hat der Workflow zwei Jobs. Der beschriebene Job fährt weiterhin bei jedem PR, testet aber nur noch `FitBuddyTests` (`-skip-testing:FitBuddyUITests`). Die UI-Suite läuft in einem eigenen Job, und zwar nicht bei jedem PR: UI-Tests kosten einen Simulator-Kaltstart und prüfen pro Merge dieselben drei Abläufe. Drei Wege lösen sie aus — ein PR gegen `main` (das wöchentliche Release), ein manueller Start (`workflow_dispatch`) und das Label `ui-tests` an einem beliebigen PR.
+
+Der UI-Job läuft mit `continue-on-error: true`, meldet also, ohne zu blockieren — auch vor `main`. Das ist bewusst befristet: Sobald die Suite ein paar grüne Release-Läufe hinter sich hat, entfällt die Zeile und der Check wird verbindlich wie jeder andere.
+
 Bewusst nicht Teil des Umfangs:
 
 - **Keine Secrets.** Durch das BYO-Key-Modell braucht die Testsuite weder Hevy- noch LLM-Keys. Der Runner bekommt keine und soll nie welche sehen.

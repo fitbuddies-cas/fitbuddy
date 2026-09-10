@@ -81,6 +81,7 @@ struct ConsentView: View {
                 .foregroundStyle(Color.fbInk)
         }
         .tint(.fbAccent)
+        .accessibilityIdentifier(AccessibilityID.Consent.acceptToggle)
     }
 
     private var confirmButton: some View {
@@ -91,6 +92,7 @@ struct ConsentView: View {
         }
         .buttonStyle(.fb(.primary))
         .disabled(!viewModel.canConfirm)
+        .accessibilityIdentifier(AccessibilityID.Consent.confirmButton)
     }
 }
 
