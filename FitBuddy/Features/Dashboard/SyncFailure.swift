@@ -82,7 +82,7 @@ enum SyncFailure: Equatable {
         case .offline:
             return "no connection"
         case .serviceUnavailable:
-            return "Hevy unavailable"
+            return "service unavailable"
         case .rateLimited(let retryAfter):
             // Hevy's own `Retry-After` is the only part of a rate limit the
             // user can act on: without it "too many requests" leaves them

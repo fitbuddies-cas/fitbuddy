@@ -14,6 +14,9 @@ import SwiftUI
 /// pre-glass mocks in `design/`, which draw flat surfaces.
 struct MainTabView: View {
     @Binding var selection: MainTab
+    /// The settings tab's navigation path, owned by the root so the
+    /// dashboard's renewal banner can open the Strava screen (#144).
+    @Binding var settingsPath: [SettingsRoute]
 
     /// Owned here rather than by `AnalysisView`, so the analysis tab can be
     /// left and re-entered without losing the run or the countdown.
@@ -27,9 +30,13 @@ struct MainTabView: View {
     private let makeAnalysisHistoryViewModel: () -> AnalysisHistoryViewModel
 
     /// Changes whenever something outside the dashboard invalidated the cache —
-    /// today only a replaced Hevy key (#91). Passed through to the dashboard,
-    /// and used here to drop the analysis built from the discarded cache.
+    /// a replaced Hevy key (#91), a Strava connect or disconnect (#140).
+    /// Passed through to the dashboard, and used here to drop the analysis
+    /// built from the discarded cache.
     private let reloadToken: Int
+
+    /// Where the dashboard's renewal banner leads (#144).
+    private let onRenewSource: (ConnectorSource) -> Void
 
     /// - Parameters:
     ///   - selection: The visible tab, owned by the parent.
@@ -46,8 +53,11 @@ struct MainTabView: View {
     ///   - makeAnalysisHistoryViewModel: Called once per push of the saved
     ///     analyses (#117).
     ///   - reloadToken: Defaults to a constant, so a preview never re-syncs.
+    ///   - settingsPath: Defaults to a constant empty path, for previews.
+    ///   - onRenewSource: Defaults to nothing, for previews.
     init(
         selection: Binding<MainTab>,
+        settingsPath: Binding<[SettingsRoute]> = .constant([]),
         analysisViewModel: @autoclosure @escaping () -> AnalysisViewModel,
         makeDashboardViewModel: @escaping () -> WorkoutListViewModel,
         makeSettingsViewModel: @escaping () -> SettingsViewModel,
@@ -55,10 +65,13 @@ struct MainTabView: View {
         makeWorkoutDetailViewModel: @escaping (String) -> WorkoutDetailViewModel,
         makeExerciseListViewModel: @escaping () -> ExerciseListViewModel,
         makeAnalysisHistoryViewModel: @escaping () -> AnalysisHistoryViewModel,
-        reloadToken: Int = 0
+        reloadToken: Int = 0,
+        onRenewSource: @escaping (ConnectorSource) -> Void = { _ in }
     ) {
         _selection = selection
+        _settingsPath = settingsPath
         _analysisViewModel = StateObject(wrappedValue: analysisViewModel())
+        self.onRenewSource = onRenewSource
         self.makeDashboardViewModel = makeDashboardViewModel
         self.makeSettingsViewModel = makeSettingsViewModel
         self.makeStravaConnectionViewModel = makeStravaConnectionViewModel
@@ -75,7 +88,8 @@ struct MainTabView: View {
                     viewModel: makeDashboardViewModel(),
                     makeWorkoutDetailViewModel: makeWorkoutDetailViewModel,
                     makeExerciseListViewModel: makeExerciseListViewModel,
-                    reloadToken: reloadToken
+                    reloadToken: reloadToken,
+                    onRenewSource: onRenewSource
                 )
             }
             Tab("Analysis", systemImage: "sparkles", value: MainTab.analysis) {
@@ -87,6 +101,7 @@ struct MainTabView: View {
             Tab("Settings", systemImage: "gearshape", value: MainTab.settings) {
                 SettingsView(
                     viewModel: makeSettingsViewModel(),
+                    path: $settingsPath,
                     makeStravaConnectionViewModel: makeStravaConnectionViewModel
                 )
             }

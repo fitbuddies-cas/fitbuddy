@@ -54,5 +54,9 @@ enum AccessibilityID {
         static func staleSource(_ source: String) -> String {
             "dashboard.staleSource." + source
         }
+        static let sourceBadge = "dashboard.sourceBadge"
+        static let sourceBanner = "dashboard.sourceBanner"
+        static let renewalBanner = "dashboard.renewalBanner"
+        static let renewButton = "dashboard.renewButton"
     }
 }

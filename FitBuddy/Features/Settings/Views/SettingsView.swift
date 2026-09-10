@@ -14,6 +14,10 @@ import SwiftUI
 struct SettingsView: View {
     @StateObject private var viewModel: SettingsViewModel
 
+    /// The stack's path, owned by the root so another tab can push onto it
+    /// (#144, US-5 AC2).
+    @Binding private var path: [SettingsRoute]
+
     private let makeStravaConnectionViewModel: @MainActor () -> StravaConnectionViewModel
     private let makeStravaCredentialsViewModel: @MainActor () -> StravaCredentialsViewModel
 
@@ -21,26 +25,39 @@ struct SettingsView: View {
     ///   - viewModel: Built lazily — the autoclosure is evaluated once, when
     ///     SwiftUI first creates the view's state, so presenting this from a
     ///     parent's `body` does not rebuild it on every render.
+    ///   - path: Defaults to a constant empty path, for previews with nobody
+    ///     outside the tab to push onto it.
     ///   - makeStravaConnectionViewModel: Called once per push of the Strava
     ///     connection screen (#140).
     ///   - makeStravaCredentialsViewModel: Called once per push of the Strava
     ///     credentials screen (#139), from the connection screen.
     init(
         viewModel: @autoclosure @escaping () -> SettingsViewModel,
+        path: Binding<[SettingsRoute]> = .constant([]),
         makeStravaConnectionViewModel: @escaping @MainActor () -> StravaConnectionViewModel,
         makeStravaCredentialsViewModel: @escaping @MainActor () -> StravaCredentialsViewModel = { StravaCredentialsViewModel() }
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
+        _path = path
         self.makeStravaConnectionViewModel = makeStravaConnectionViewModel
         self.makeStravaCredentialsViewModel = makeStravaCredentialsViewModel
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             content
                 .background(Color.fbBackground)
                 .navigationTitle("Settings")
                 .navigationBarTitleDisplayMode(.inline)
+                .navigationDestination(for: SettingsRoute.self) { route in
+                    switch route {
+                    case .strava:
+                        StravaConnectionView(
+                            viewModel: makeStravaConnectionViewModel(),
+                            makeCredentialsViewModel: makeStravaCredentialsViewModel
+                        )
+                    }
+                }
         }
         .task { await viewModel.load() }
         .sheet(item: $viewModel.editorTarget) { target in
@@ -275,14 +292,11 @@ struct SettingsView: View {
     // MARK: - Rows
 
     /// Entry point to the Strava connection (#140): connect, status,
-    /// disconnect, and from there the application credentials (#139).
+    /// disconnect, and from there the application credentials (#139). By
+    /// value, so the dashboard's renewal banner can push the same screen
+    /// through the path (#144).
     private var stravaRow: some View {
-        NavigationLink {
-            StravaConnectionView(
-                viewModel: makeStravaConnectionViewModel(),
-                makeCredentialsViewModel: makeStravaCredentialsViewModel
-            )
-        } label: {
+        NavigationLink(value: SettingsRoute.strava) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(StravaKeyPresentation.displayName)
                     .font(.subheadline.weight(.medium))

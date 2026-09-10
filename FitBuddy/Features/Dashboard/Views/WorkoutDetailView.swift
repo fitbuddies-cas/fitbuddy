@@ -74,6 +74,14 @@ struct WorkoutDetailView: View {
                     Text(detail.title)
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(Color.fbInk)
+                    // Same rule as the dashboard row (#144): only a second
+                    // source is named, Hevy being where every session came
+                    // from before US-5.
+                    if detail.source != .hevy {
+                        Label("Synced from \(detail.source.displayName)", systemImage: "arrow.down.circle")
+                            .font(.caption)
+                            .foregroundStyle(Color.fbInkSecondary)
+                    }
                     FBStat(
                         label: "Volume",
                         value: VolumeFormatter.full(detail.volumeKg),
@@ -127,10 +135,10 @@ struct WorkoutDetailView: View {
         FBCard(padding: 18) {
             FBInfoRow(
                 icon: "clock.arrow.circlepath",
-                title: "This session is no longer in your Hevy data",
+                title: "This session is no longer in your training data",
                 text: """
-                It was removed the last time FitBuddy synced — either deleted in \
-                Hevy or older than the 90 days the app keeps.
+                It was removed the last time FitBuddy synced — either deleted at \
+                the source or older than the 90 days the app keeps.
                 """
             )
         }

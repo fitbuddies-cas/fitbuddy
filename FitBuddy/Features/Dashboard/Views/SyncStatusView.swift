@@ -18,6 +18,10 @@ struct SyncStatusView: View {
     /// whole cache, so both the banner's button and a stale row's mean the
     /// same thing.
     let onRetry: () -> Void
+    /// The re-auth link US-5 AC2 asks for: a source whose token can only be
+    /// renewed by the user. Defaults to nothing, for callers that only have
+    /// one source.
+    var onRenew: (ConnectorSource) -> Void = { _ in }
 
     /// The sync the banner is about. The banner reports the attempt that just
     /// failed, and in v0 exactly one source is ever synced — see
@@ -43,7 +47,8 @@ struct SyncStatusView: View {
 
     @ViewBuilder
     private func content(now: Date) -> some View {
-        if case .failed(let failure) = status {
+        switch status {
+        case .failed(let failure):
             // The banner carries the timestamp in its own subtitle, so the
             // source rows underneath would print it twice — and a stale badge
             // next to a failure the user is already being told about only
@@ -55,7 +60,24 @@ struct SyncStatusView: View {
             // row that has nothing to do with it. Same fix as `lastSync`
             // above — a per-source `SyncStatus`.
             banner(failure, now: now)
-        } else {
+        case .degraded(let failures):
+            // A partial sync (#143, #144): one banner per source that is
+            // missing from the fresh data, in a fixed order so they do not
+            // reshuffle between syncs, and the ordinary status row for every
+            // source that did sync — each source gets exactly one statement.
+            VStack(spacing: 8) {
+                ForEach(ConnectorSource.allCases.filter { failures[$0] != nil }) { source in
+                    if let failure = failures[source] {
+                        sourceBanner(source, failure, now: now)
+                    }
+                }
+                DataSourceStatusView(
+                    sources: sources.filter { failures[$0.source] == nil },
+                    now: now,
+                    onRetry: { _ in onRetry() }
+                )
+            }
+        case .idle, .syncing:
             DataSourceStatusView(sources: sources, now: now, onRetry: { _ in onRetry() })
         }
     }
@@ -93,6 +115,53 @@ struct SyncStatusView: View {
             RoundedRectangle(cornerRadius: FBRadius.control)
                 .strokeBorder(Color.fbWarn.opacity(0.25), lineWidth: 1)
         )
+    }
+
+    /// A partial sync's banner for one source (#144). Two shapes: a token
+    /// only the user can renew gets the renewal prompt and a link into the
+    /// re-auth flow (US-5 AC2); anything else names the source and offers the
+    /// same retry as the full-failure banner.
+    private func sourceBanner(_ source: ConnectorSource, _ failure: SyncFailure, now: Date) -> some View {
+        let needsRenewal = failure == .connectionExpired
+        return HStack(alignment: .top, spacing: 10) {
+            Image(systemName: failure.symbolName)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Color.fbWarn)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(needsRenewal ? source.renewalPrompt : "\(source.displayName) not synced")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.fbInk)
+                Text(bannerDetail(failure, now: now))
+                    .font(.caption)
+                    .foregroundStyle(Color.fbInkSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            if needsRenewal {
+                Button("Reconnect") { onRenew(source) }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.fbWarn)
+                    .accessibilityIdentifier(AccessibilityID.Dashboard.renewButton)
+            } else {
+                Button("Retry", action: onRetry)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.fbWarn)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.fbWarnSoft)
+        .clipShape(RoundedRectangle(cornerRadius: FBRadius.control))
+        .overlay(
+            RoundedRectangle(cornerRadius: FBRadius.control)
+                .strokeBorder(Color.fbWarn.opacity(0.25), lineWidth: 1)
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(needsRenewal ? AccessibilityID.Dashboard.renewalBanner : AccessibilityID.Dashboard.sourceBanner)
     }
 
     /// Claiming "showing cached data" with an empty cache would be a lie — a
@@ -139,6 +208,14 @@ struct SyncStatusView: View {
         SyncStatusView(
             status: .idle,
             sources: [DataSourceStatus(source: .hevy, lastSync: Date().addingTimeInterval(-3 * 86_400))],
+            onRetry: {}
+        )
+        SyncStatusView(
+            status: .degraded(failures: [.strava: .connectionExpired]),
+            sources: [
+                DataSourceStatus(source: .hevy, lastSync: Date().addingTimeInterval(-60)),
+                DataSourceStatus(source: .strava, lastSync: Date().addingTimeInterval(-60)),
+            ],
             onRetry: {}
         )
     }

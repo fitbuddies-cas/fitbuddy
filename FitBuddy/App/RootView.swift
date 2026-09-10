@@ -20,6 +20,11 @@ struct RootView: View {
     /// settings tab (#107).
     @State private var selectedTab: MainTab = .dashboard
 
+    /// The settings tab's navigation path (#144). Owned here so the
+    /// dashboard's «Renew your Strava connection» banner can land the user on
+    /// the connection screen on another tab (US-5 AC2).
+    @State private var settingsPath: [SettingsRoute] = []
+
     /// Bumped when the settings screen replaces the Hevy key, which drops the
     /// cached workouts. The dashboard stays alive on its tab and its own
     /// `.task` does not re-run, so without this it would sit on an empty
@@ -38,6 +43,7 @@ struct RootView: View {
                 // the ViewModels until SwiftUI first creates each tab's state.
                 MainTabView(
                     selection: $selectedTab,
+                    settingsPath: $settingsPath,
                     analysisViewModel: makeAnalysisViewModel(),
                     makeDashboardViewModel: makeDashboardViewModel,
                     makeSettingsViewModel: makeSettingsViewModel,
@@ -45,7 +51,8 @@ struct RootView: View {
                     makeWorkoutDetailViewModel: makeWorkoutDetailViewModel(for:),
                     makeExerciseListViewModel: makeExerciseListViewModel,
                     makeAnalysisHistoryViewModel: makeAnalysisHistoryViewModel,
-                    reloadToken: dashboardReloadToken
+                    reloadToken: dashboardReloadToken,
+                    onRenewSource: openConnectionScreen(for:)
                 )
             }
         }
@@ -57,7 +64,10 @@ struct RootView: View {
         // onboarding; the tab bar goes with it, and the selection is put back
         // so the next start lands on the dashboard, not in settings.
         .onChange(of: onboardingViewModel.step) { _, step in
-            if step != .completed { selectedTab = .dashboard }
+            if step != .completed {
+                selectedTab = .dashboard
+                settingsPath = []
+            }
         }
         .task {
             // Connectors first: onboarding resolving to `.completed` is what
@@ -187,6 +197,17 @@ struct RootView: View {
         // out of it: the dashboard simply has to refill the cache it lost.
         viewModel.onHevyKeyStored = { dashboardReloadToken += 1 }
         return viewModel
+    }
+
+    /// The re-auth link behind the dashboard's renewal banner (US-5 AC2,
+    /// #144): switches to the settings tab and pushes the source's connection
+    /// screen. Only Strava has one; Hevy's key is renewed through onboarding.
+    private func openConnectionScreen(for source: ConnectorSource) {
+        selectedTab = .settings
+        switch source {
+        case .strava: settingsPath = [.strava]
+        case .hevy: settingsPath = []
+        }
     }
 
     /// Wires the Strava connection screen to the shared registry, the OAuth

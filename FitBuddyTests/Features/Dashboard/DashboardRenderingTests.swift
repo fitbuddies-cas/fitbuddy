@@ -121,6 +121,11 @@ final class DashboardRenderingTests: XCTestCase {
         let now = Date(timeIntervalSince1970: 1_750_000_000)
         let statuses: [SyncStatus] = [
             .idle, .syncing, .failed(.keychainUnavailable), .failed(.rateLimited(retryAfter: 45)),
+            // Partial syncs (#143, #144): the renewal prompt of US-5 AC2, a
+            // plain per-source failure, and both sources at once.
+            .degraded(failures: [.strava: .connectionExpired]),
+            .degraded(failures: [.strava: .offline]),
+            .degraded(failures: [.hevy: .serviceUnavailable, .strava: .connectionExpired]),
         ]
 
         for status in statuses {
@@ -195,7 +200,7 @@ final class DashboardRenderingTests: XCTestCase {
     func testRefreshToastRendersEveryFailure() throws {
         let failures: [SyncFailure] = [
             .offline, .serviceUnavailable, .rateLimited(retryAfter: 180),
-            .keychainUnavailable, .unreadableResponse, .cacheWriteFailed, .unknown,
+            .keychainUnavailable, .unreadableResponse, .cacheWriteFailed, .unknown, .connectionExpired,
         ]
 
         for failure in failures {
