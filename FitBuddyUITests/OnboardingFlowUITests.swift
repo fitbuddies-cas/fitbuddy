@@ -23,7 +23,7 @@ final class OnboardingFlowUITests: XCTestCase {
     /// The whole flow, in the order a first-time tester walks it.
     @MainActor
     func testCompletingOnboardingReachesTheDashboard() {
-        let sut = OnboardingApp(keyVerdict: "accepts").launch()
+        let sut = OnboardingApp(keyVerdict: LaunchArgument.Verdict.accepts).launch()
 
         sut.grantConsent()
         sut.submitKey("hv_live_uitest")
@@ -37,7 +37,7 @@ final class OnboardingFlowUITests: XCTestCase {
     /// user's next move is pasting a different key, not being pushed onwards.
     @MainActor
     func testRejectedKeyShowsTheErrorAndKeepsTheUserOnStepTwo() {
-        let sut = OnboardingApp(keyVerdict: "rejects").launch()
+        let sut = OnboardingApp(keyVerdict: LaunchArgument.Verdict.rejects).launch()
 
         sut.grantConsent()
         sut.submitKey("hv_live_revoked")
@@ -54,8 +54,11 @@ final class OnboardingFlowUITests: XCTestCase {
         sut.assertEnabled(sut.keyCTAButton)
         XCTAssertEqual(sut.keyCTAButton.label, "Try again")
         sut.keyCTAButton.tap()
-        XCTAssertFalse(
-            sut.keyErrorBanner.exists,
+        // Waited for, not read straight away: the banner leaves through a
+        // 0.15s fade, and this is the suite's only assertion about something
+        // *disappearing*.
+        XCTAssertTrue(
+            sut.keyErrorBanner.waitForNonExistence(timeout: OnboardingApp.timeout),
             "Tapping the retry CTA must clear the failure and return to input"
         )
         sut.assertAppears(sut.keyField)
@@ -65,7 +68,7 @@ final class OnboardingFlowUITests: XCTestCase {
     /// there is no way past step 1.
     @MainActor
     func testWithoutConsentTheFlowDoesNotAdvance() {
-        let sut = OnboardingApp(keyVerdict: "accepts").launch()
+        let sut = OnboardingApp(keyVerdict: LaunchArgument.Verdict.accepts).launch()
 
         sut.assertAppears(sut.consentConfirmButton)
         XCTAssertFalse(

@@ -19,8 +19,13 @@ enum HevyStubbing {
     static let launchArgument = "-fbStubHevy"
 
     /// Whether this launch replaces every Hevy collaborator with a stub.
+    ///
+    /// Derived from the verdict rather than from the argument's presence: read
+    /// separately, `-fbStubHevy accpets` would stub the sync but leave the
+    /// validator live — real key checks against Hevy behind a dashboard that
+    /// never syncs. A typo has to leave *every* collaborator live.
     static func isActive(in launchArguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
-        launchArguments.contains(launchArgument)
+        verdict(in: launchArguments) != nil
     }
 
     /// The verdict for the key check, read from the value after the argument.

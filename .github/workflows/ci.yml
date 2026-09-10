@@ -61,8 +61,9 @@ jobs:
           xcrun simctl list devices available | grep -q "$SIMULATOR_NAME (" \
             || { echo "::error::No '$SIMULATOR_NAME' simulator — run: xcrun simctl create \"$SIMULATOR_NAME\" \"$SIMULATOR_NAME\""; exit 1; }
 
-      # Unit tests only: the UI tests run in their own job, and only on the
-      # release PR into main (see below).
+      # Unit tests only: the UI tests run in their own job — on the release PR
+      # into main, on a manual run, or when a PR carries the `ui-tests` label
+      # (see below).
       - name: Test
         shell: bash
         run: |
@@ -123,13 +124,14 @@ jobs:
 
   # Only on the way to main — the weekly release PR — not on every feature PR
   # into develop. UI tests cost a simulator boot and a cold app launch for what
-  # is, per merge, the same three flows; running them at the release gate keeps
-  # the per-PR check fast and still blocks a broken onboarding from shipping to
-  # TestFlight.
+  # is, per merge, the same three flows, so the per-PR check stays fast and the
+  # suite reports at the release gate instead.
   #
-  # `continue-on-error` on top: the suite reports without blocking until it has
-  # a few green release runs behind it (#120). Dropping that one line makes it
-  # binding.
+  # Reports, not blocks: `continue-on-error` is still on until the suite has a
+  # few green release runs behind it (#120). Until that line goes, a red UI job
+  # is a signal to read, not a gate — including before main.
+  #
+  # On a feature PR the `ui-tests` label is the way to ask for a run.
   ui-test:
     name: UI test (onboarding)
     # Three ways in: the release PR, a manual run, or the `ui-tests` label on
@@ -153,6 +155,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+
+      # Same check as the unit job. It matters more here: with
+      # `continue-on-error` a missing simulator would otherwise wave the job
+      # through on a raw xcodebuild error nobody reads.
+      - name: Verify toolchain
+        shell: bash
+        run: |
+          xcrun simctl list devices available | grep -q "$SIMULATOR_NAME (" \
+            || { echo "::error::No '$SIMULATOR_NAME' simulator — run: xcrun simctl create \"$SIMULATOR_NAME\" \"$SIMULATOR_NAME\""; exit 1; }
 
       - name: Test
         shell: bash

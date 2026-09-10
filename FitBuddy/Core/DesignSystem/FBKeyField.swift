@@ -51,7 +51,18 @@ struct FBKeyField: View {
             .submitLabel(.go)
             .disabled(isBusy)
             .onSubmit(onSubmit)
-            .accessibilityIdentifier(identifier ?? "")
+        // Applied only where one was given: `identifier ?? ""` would stamp an
+        // empty identifier onto every other key field in the app.
+        if let identifier {
+            focusing(field.accessibilityIdentifier(identifier))
+        } else {
+            focusing(field)
+        }
+    }
+
+    /// Binds the focus state when the caller passed one.
+    @ViewBuilder
+    private func focusing(_ field: some View) -> some View {
         if let focus {
             field.focused(focus)
         } else {

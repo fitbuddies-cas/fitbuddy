@@ -19,9 +19,12 @@ final class HevyStubbingTests: XCTestCase {
     }
 
     /// A typo must not silently stub the app out — the callers read `nil` as
-    /// "use the live collaborator".
-    func testUnknownVerdictIsNoVerdict() {
+    /// "use the live collaborator". Both readings have to agree on that, or
+    /// the launch ends up half stubbed: sync off, validator live.
+    func testUnknownVerdictLeavesEveryCollaboratorLive() {
         XCTAssertNil(HevyStubbing.verdict(in: ["-fbStubHevy", "maybe"]))
+        XCTAssertFalse(HevyStubbing.isActive(in: ["-fbStubHevy", "maybe"]))
+        XCTAssertFalse(HevyStubbing.isActive(in: ["-fbStubHevy"]))
     }
 
     /// The argument as the last element has no value behind it; reading one

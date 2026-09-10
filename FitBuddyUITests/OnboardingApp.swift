@@ -28,9 +28,9 @@ struct OnboardingApp {
         // the Keychain across app deletions and `UserDefaults` across
         // relaunches, so without this the second test of a run would already be
         // past onboarding.
-        app.launchArguments = ["-fbResetState"]
+        app.launchArguments = [LaunchArgument.resetState]
         if let keyVerdict {
-            app.launchArguments += ["-fbStubHevy", keyVerdict]
+            app.launchArguments += [LaunchArgument.stubHevy, keyVerdict]
         }
     }
 
