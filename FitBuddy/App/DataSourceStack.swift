@@ -14,6 +14,7 @@ import Foundation
 @MainActor
 final class DataSourceStack {
     let registry = ConnectorRegistry()
+    let hevyConnector = HevyConnector()
     let stravaCredentialStore = StravaCredentialStore()
     let stravaOAuth: StravaOAuthService
     let stravaConnector: StravaConnector
@@ -23,12 +24,11 @@ final class DataSourceStack {
         stravaConnector = StravaConnector(oauth: stravaOAuth, credentialStore: stravaCredentialStore)
     }
 
-    /// Registers the connectors with the registry. Run once at launch, before
-    /// anything asks the registry a question.
-    ///
-    /// Hevy is not registered yet: `WorkoutSyncService` still holds its own
-    /// `HevyConnector` until #143 moves the sync onto the registry.
+    /// Registers both connectors with the registry. Run once at launch,
+    /// before anything asks the registry a question — the sync (#143) fetches
+    /// every source through it.
     func registerConnectors() async {
+        await registry.register(hevyConnector, for: .hevy)
         await registry.register(stravaConnector, for: .strava)
     }
 }

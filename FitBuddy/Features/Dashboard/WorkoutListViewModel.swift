@@ -226,13 +226,18 @@ final class WorkoutListViewModel: ObservableObject {
         guard isCurrentSync(generation) else { return }
         syncStatus = .syncing
         do {
-            try await syncer.syncRecentWorkouts()
+            let result = try await syncer.syncRecentWorkouts()
             guard isCurrentSync(generation) else { return }
             // Clears the banner (#28 AC3) before the reload, so the cached
             // window and the "up to date" claim land in the same render pass.
             // The toast goes with it: a message about a failure that has just
             // been made good would contradict the timestamp above it (#43).
-            syncStatus = .idle
+            //
+            // A partial sync (#143) is neither: the timestamp moved and the
+            // data is fresh, but a source is missing from it. `degraded`
+            // carries which, per source, for the banner to say so. No toast —
+            // the moved timestamp is what tells the user their pull ran.
+            syncStatus = Self.status(after: result)
             refreshNotice = nil
             await load()
         } catch {
@@ -268,6 +273,17 @@ final class WorkoutListViewModel: ObservableObject {
             }
             await resolveHeldSpinner()
         }
+    }
+
+    /// `idle` for a clean sync, `degraded` with one banner reason per failed
+    /// source otherwise. A source whose failure has no banner wording (an
+    /// auth failure on Hevy would have thrown instead) is left out.
+    private static func status(after result: SyncResult) -> SyncStatus {
+        var failures: [ConnectorSource: SyncFailure] = [:]
+        for (source, error) in result.failures {
+            failures[source] = SyncFailure(syncError: error, source: source)
+        }
+        return failures.isEmpty ? .idle : .degraded(failures: failures)
     }
 
     /// Whether this read is still the one `state` belongs to. See

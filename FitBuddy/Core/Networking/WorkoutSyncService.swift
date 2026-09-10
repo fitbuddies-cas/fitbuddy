@@ -1,20 +1,25 @@
 import Foundation
 import OSLog
 
-/// Loads the dashboard's 90-day workout window from a `FitnessConnector`
-/// (US-2) and caches it locally.
+/// Loads the dashboard's 90-day workout window from every connected
+/// `FitnessConnector` (US-2, US-5) and caches it locally, one source at a time.
 ///
-/// Everything the provider knows about lives in the connector (ADR-6, #34);
-/// what stays here is what belongs to the app's session rather than to the
+/// Everything the providers know about lives in their connectors (ADR-6);
+/// what stays here is what belongs to the app's session rather than to a
 /// source: the stored credentials, the window boundary, the local cache, the
-/// sync timestamp, and the hard logout US-1 AC3 demands on a rejected key.
-/// The type therefore names no provider — swapping `HevyConnector` for a
-/// future `StravaConnector` (#35) is a different argument, not a different
-/// sync.
+/// sync timestamp, and the hard logout US-1 AC3 demands on a rejected Hevy
+/// key. The connectors themselves come from the `ConnectorRegistry` (#143),
+/// so the sync names no provider type — only `ConnectorSource`.
+///
+/// **Partial results rather than a total failure.** Sources are fetched in
+/// parallel and cached one after another; a source that fails is recorded in
+/// `SyncResult.failures` and the others still land. The sync throws only when
+/// every connected source failed — or when Hevy rejected its key, because that
+/// ends the session whatever Strava did (ADR-6, addendum to #35, point 3).
 actor WorkoutSyncService: WorkoutSyncing {
-    private let connector: any FitnessConnector
-    private let source: ConnectorSource
+    private let registry: ConnectorRegistry
     private let keychain: KeychainService
+    private let stravaCredentials: any StravaCredentialStoring
     private let workouts: WorkoutStore
     private let timestamps: SyncTimestampStore
     private let sessionReset: SessionResetService
@@ -24,26 +29,26 @@ actor WorkoutSyncService: WorkoutSyncing {
     private let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "WorkoutSyncService")
 
     /// - Parameters:
-    ///   - connector: The data source. Defaults to Hevy, the only one v0 ships.
-    ///   - source: Which source's cached window `connector` fills (#141). The
-    ///     store replaces per source, and an empty result cannot say whose
-    ///     window it is.
+    ///   - registry: Holds the connectors. Hevy has to be registered; Strava
+    ///     is synced when it is registered *and* has stored credentials.
+    ///   - stravaCredentials: Where the Strava token pair comes from. Hevy's
+    ///     key comes from `keychain` directly, as before.
     ///   - sessionReset: Defaults to one built from the other dependencies —
     ///     it cannot be a default argument because it needs them.
     ///   - now: Injectable clock, so window boundaries are testable.
     init(
-        connector: any FitnessConnector = HevyConnector(),
-        source: ConnectorSource = .hevy,
+        registry: ConnectorRegistry,
         keychain: KeychainService = KeychainService(),
+        stravaCredentials: any StravaCredentialStoring = StravaCredentialStore(),
         workouts: WorkoutStore,
         timestamps: SyncTimestampStore = SyncTimestampStore(),
         sessionReset: SessionResetService? = nil,
         calendar: Calendar = .current,
         now: @escaping () -> Date = Date.init
     ) {
-        self.connector = connector
-        self.source = source
+        self.registry = registry
         self.keychain = keychain
+        self.stravaCredentials = stravaCredentials
         self.workouts = workouts
         self.timestamps = timestamps
         self.sessionReset = sessionReset
@@ -64,53 +69,146 @@ actor WorkoutSyncService: WorkoutSyncing {
 
     @discardableResult
     func syncRecentWorkouts() async throws -> SyncResult {
-        let apiKey = try await storedAPIKey()
+        // Hevy first and on its own terms: without its key the app is not
+        // onboarded, and that is a thrown error, not a per-source failure.
+        let hevyKey = try await storedHevyKey()
         let syncedAt = now()
         let windowStart = TrainingWindow.start(endingAt: syncedAt, calendar: calendar)
 
-        let fetched = try await fetchWindow(from: windowStart, apiKey: apiKey)
+        var failures: [ConnectorSource: WorkoutSyncError] = [:]
+        var credentials: [ConnectorSource: ConnectorCredentials] = [.hevy: .apiKey(hevyKey)]
+        switch await storedStravaCredentials() {
+        case .available(let pair): credentials[.strava] = pair
+        case .unreadable: failures[.strava] = .keychainUnavailable
+        case .notConfigured: break
+        }
+        // `allCases` order, so "the first source" below means the same thing
+        // on every run.
+        let sources = ConnectorSource.allCases.filter { credentials[$0] != nil }
 
-        do {
-            try await workouts.replaceCachedWorkouts(from: source, with: fetched)
-        } catch {
-            // The timestamp stays untouched: nothing new was cached, so the
-            // dashboard must keep advertising the older sync (US-2 AC2).
-            logger.error("Caching \(fetched.count) activities failed: \(error, privacy: .public)")
-            throw WorkoutSyncError.persistenceFailed
+        let outcomes = await fetchWindows(from: windowStart, credentials: credentials, sources: sources)
+
+        for source in sources {
+            guard case .failure(let error)? = outcomes[source] else { continue }
+            guard let syncError = error as? WorkoutSyncError else {
+                // Anything that is not a `WorkoutSyncError` travels out
+                // untouched — in practice a cancellation: navigating away
+                // mid-sync must not surface as "no internet".
+                throw error
+            }
+            failures[source] = syncError
+        }
+
+        // A rejected Hevy key ends the session whatever the other sources did:
+        // the hard logout has already run, and the caller has to route back
+        // to onboarding (US-1 AC3). A partial result would hide that.
+        if failures[.hevy] == .unauthorized {
+            throw WorkoutSyncError.unauthorized
+        }
+
+        var cachedCount = 0
+        for source in sources {
+            guard case .success(let activities)? = outcomes[source] else { continue }
+            do {
+                try await workouts.replaceCachedWorkouts(from: source, with: activities)
+                cachedCount += activities.count
+            } catch {
+                logger.error("Caching \(activities.count) \(source.displayName, privacy: .public) activities failed: \(error, privacy: .public)")
+                failures[source] = .persistenceFailed
+            }
+        }
+
+        // Nothing landed: the timestamp stays untouched, so the dashboard
+        // keeps advertising the older sync (US-2 AC2), and the first source's
+        // failure is the one reported.
+        guard sources.contains(where: { failures[$0] == nil }) else {
+            throw sources.compactMap { failures[$0] }.first ?? WorkoutSyncError.invalidResponse
         }
 
         await timestamps.setLastSync(syncedAt)
-        return SyncResult(workoutCount: fetched.count, syncedAt: syncedAt, windowStart: windowStart)
+        return SyncResult(
+            workoutCount: cachedCount,
+            syncedAt: syncedAt,
+            windowStart: windowStart,
+            failures: failures
+        )
     }
 
-    // MARK: - Connector
+    // MARK: - Connectors
 
-    /// Hands the stored key to the connector and asks it for the window.
+    /// Asks every source for its window at the same time. The connectors are
+    /// actors of their own, so the requests overlap; the cache writes that
+    /// follow are sequential, since one `ModelActor` owns the store.
+    private func fetchWindows(
+        from windowStart: Date,
+        credentials: [ConnectorSource: ConnectorCredentials],
+        sources: [ConnectorSource]
+    ) async -> [ConnectorSource: Result<[Activity], Error>] {
+        await withTaskGroup(of: (ConnectorSource, Result<[Activity], Error>).self) { group in
+            for source in sources {
+                guard let pair = credentials[source] else { continue }
+                group.addTask {
+                    do {
+                        return (source, .success(try await self.fetchWindow(for: source, credentials: pair, from: windowStart)))
+                    } catch {
+                        return (source, .failure(error))
+                    }
+                }
+            }
+            var outcomes: [ConnectorSource: Result<[Activity], Error>] = [:]
+            for await (source, outcome) in group {
+                outcomes[source] = outcome
+            }
+            return outcomes
+        }
+    }
+
+    /// Hands the credentials to the source's connector through the registry
+    /// and asks it for the window.
     ///
     /// The `ConnectorError` the connector may throw is translated here, and
-    /// only here: `unauthorized` additionally runs the hard logout, because
-    /// wiping the app's session is not the provider's business (US-1 AC3).
-    private func fetchWindow(from windowStart: Date, apiKey: String) async throws -> [Activity] {
+    /// only here. `unauthorized` is the one case with a side effect, and it
+    /// depends on the source: Hevy's session is over, so the hard logout runs
+    /// (US-1 AC3); Strava's pair stays where it is, because only the user can
+    /// renew it and the dashboard has to be able to say so (US-5 AC2).
+    private func fetchWindow(
+        for source: ConnectorSource,
+        credentials: ConnectorCredentials,
+        from windowStart: Date
+    ) async throws -> [Activity] {
         do {
-            try await connector.connect(credentials: .apiKey(apiKey))
-            return try await connector.fetchActivities(since: windowStart)
+            try await registry.connect(source, credentials: credentials)
+            guard let connector = await registry.connector(for: source) else {
+                throw ConnectorRegistryError.notRegistered(source)
+            }
+            let activities = try await connector.fetchActivities(since: windowStart)
+
+            // A Strava fetch may have refreshed the pair on the way; the
+            // registry's expiry bookkeeping has to follow the stored pair, or
+            // it would prompt for a renewal the connector already did.
+            if source == .strava, case .available(let fresh) = await storedStravaCredentials() {
+                try? await registry.connect(.strava, credentials: fresh)
+            }
+            return activities
         } catch let error as ConnectorError {
-            if error == .unauthorized {
+            if error == .unauthorized, source == .hevy {
                 // The stored key was revoked — drop it and the cached data
                 // before the caller routes back to onboarding.
-                await connector.disconnect()
+                await registry.disconnect(.hevy)
                 await sessionReset.hardLogout()
             }
             throw WorkoutSyncError(connectorError: error)
+        } catch let error as ConnectorRegistryError {
+            // No connector behind the source: a composition mistake, not a
+            // provider failure. Reported as the source not being able to sync.
+            logger.error("Sync skipped: \(String(describing: error), privacy: .public)")
+            throw WorkoutSyncError.notImplemented
         }
-        // Anything that is not a `ConnectorError` travels out untouched — in
-        // practice a cancellation: navigating away mid-sync must not surface
-        // as "no internet".
     }
 
-    // MARK: - Helpers
+    // MARK: - Credentials
 
-    private func storedAPIKey() async throws -> String {
+    private func storedHevyKey() async throws -> String {
         let stored: String?
         do {
             stored = try await keychain.read(.hevyAPIKey)
@@ -128,9 +226,27 @@ actor WorkoutSyncService: WorkoutSyncing {
             // settings. Neither knows about the connector, so this is where its
             // in-memory copy gets dropped: a reset the UI promises is a full
             // deletion must not leave the key sitting in the process.
-            await connector.disconnect()
+            await registry.disconnect(.hevy)
             throw WorkoutSyncError.missingAPIKey
         }
         return key
+    }
+
+    private enum StoredStravaCredentials {
+        case available(ConnectorCredentials)
+        case notConfigured
+        case unreadable
+    }
+
+    /// Strava is optional: no stored pair means the source is simply not
+    /// connected, whereas a Keychain that refuses the read is a failure the
+    /// result should carry.
+    private func storedStravaCredentials() async -> StoredStravaCredentials {
+        do {
+            return try await stravaCredentials.credentials().map { .available($0) } ?? .notConfigured
+        } catch {
+            logger.error("Strava credentials unreadable: \(error, privacy: .public)")
+            return .unreadable
+        }
     }
 }
