@@ -7,10 +7,13 @@ import Foundation
 @MainActor
 final class OnboardingViewModel: ObservableObject {
     /// DEBUG-only launch argument that bypasses the whole flow, so simulator
-    /// demo runs and future UI tests don't need real API keys. Note that no
-    /// keys exist afterwards — screens depending on them will show their
-    /// unavailable/error states.
+    /// demo runs don't need real API keys. Note that no keys exist afterwards
+    /// — screens depending on them will show their unavailable/error states.
     static let skipLaunchArgument = "-fbSkipOnboarding"
+
+    // The counterpart to `skipLaunchArgument` for the UI tests (#120) — they
+    // need to *walk* the flow rather than skip it — lives in `HevyStubbing`,
+    // because the dashboard's sync has to be stubbed by the same decision.
 
     @Published private(set) var step: OnboardingStep = .loading
 
@@ -33,7 +36,11 @@ final class OnboardingViewModel: ObservableObject {
         self.keychain = keychain
         self.launchArguments = launchArguments
         self.consentViewModel = consentViewModel ?? ConsentViewModel(keychain: keychain)
-        self.hevyKeyViewModel = hevyKeyViewModel ?? HevyKeyEntryViewModel(keychain: keychain)
+        self.hevyKeyViewModel = hevyKeyViewModel
+            ?? HevyKeyEntryViewModel(
+                validator: Self.validator(for: launchArguments),
+                keychain: keychain
+            )
         self.llmKeysViewModel = llmKeysViewModel ?? LLMKeysViewModel(keychain: keychain)
 
         self.consentViewModel.onGranted = { [weak self] in self?.step = self?.resolvedStep ?? .hevyKey }
@@ -79,6 +86,17 @@ final class OnboardingViewModel: ObservableObject {
         hevyKeyViewModel.reset()
         llmKeysViewModel.reset()
         step = .consent
+    }
+
+    /// The key validator for this launch: the live one, unless a UI test asked
+    /// for a fixed verdict (#120).
+    private static func validator(for launchArguments: [String]) -> any HevyKeyValidating {
+        #if DEBUG
+        if let verdict = HevyStubbing.verdict(in: launchArguments) {
+            return StubHevyKeyValidator(verdict: verdict)
+        }
+        #endif
+        return HevyKeyValidator()
     }
 
     /// First incomplete step according to the children's persisted state.
