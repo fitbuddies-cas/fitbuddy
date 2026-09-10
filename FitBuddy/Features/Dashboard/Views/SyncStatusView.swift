@@ -22,6 +22,12 @@ struct SyncStatusView: View {
     /// The sync the banner is about. The banner reports the attempt that just
     /// failed, and in v0 exactly one source is ever synced — see
     /// `WorkoutSyncService`.
+    ///
+    /// - Note: **Does not scale to a second source (#35).** With two sources
+    ///   this would report the first one's timestamp whichever of them
+    ///   actually failed. It falls away once `SyncStatus` is tracked per
+    ///   source rather than per dashboard; until then, unreachable — the
+    ///   registry has one real connector.
     private var lastSync: Date? { sources.first?.lastSync }
 
     var body: some View {
@@ -43,6 +49,11 @@ struct SyncStatusView: View {
             // next to a failure the user is already being told about only
             // splits their attention. The banner is the whole report while it
             // is up (US-2 AC2 is met either way).
+            //
+            // Does not scale to a second source (#35): this hides *every*
+            // source row, so a Hevy failure would also swallow a stale Strava
+            // row that has nothing to do with it. Same fix as `lastSync`
+            // above — a per-source `SyncStatus`.
             banner(failure, now: now)
         } else {
             DataSourceStatusView(sources: sources, now: now, onRetry: { _ in onRetry() })

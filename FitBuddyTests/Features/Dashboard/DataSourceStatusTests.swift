@@ -6,12 +6,11 @@ import XCTest
 final class DataSourceStatusTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_750_000_000)
 
-    func testFreshnessFollowsTheLastSync() throws {
-        let staleSince = now.addingTimeInterval(-2 * 86_400)
-        let stale = DataSourceStatus(source: .hevy, lastSync: staleSince)
+    func testFreshnessFollowsTheLastSync() {
+        let stale = DataSourceStatus(source: .hevy, lastSync: now.addingTimeInterval(-2 * 86_400))
         let fresh = DataSourceStatus(source: .hevy, lastSync: now.addingTimeInterval(-60))
 
-        XCTAssertEqual(stale.freshness(now: now), .stale(since: staleSince))
+        XCTAssertEqual(stale.freshness(now: now), .stale)
         XCTAssertEqual(fresh.freshness(now: now), .fresh)
     }
 
@@ -32,11 +31,14 @@ final class DataSourceStatusTests: XCTestCase {
     /// A running sync is already the answer a retry button would ask for, so
     /// the stale treatment stands down until it reports back.
     func testSyncingSourceNeedsNoAttentionEvenWhenStale() {
-        let staleSince = now.addingTimeInterval(-4 * 86_400)
-        let sut = DataSourceStatus(source: .hevy, lastSync: staleSince, isSyncing: true)
+        let sut = DataSourceStatus(
+            source: .hevy,
+            lastSync: now.addingTimeInterval(-4 * 86_400),
+            isSyncing: true
+        )
 
         XCTAssertFalse(sut.needsAttention(now: now))
-        XCTAssertEqual(sut.freshness(now: now), .stale(since: staleSince))
+        XCTAssertEqual(sut.freshness(now: now), .stale)
     }
 
     func testSummaryReportsTheAgeOfTheLastSync() {

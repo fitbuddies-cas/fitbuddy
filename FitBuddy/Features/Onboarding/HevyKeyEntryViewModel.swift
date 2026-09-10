@@ -16,6 +16,14 @@ final class HevyKeyEntryViewModel: ObservableObject {
     /// Why the app sent the user here, when it was not their own doing — the
     /// banner above the form (US-8 AC2). `nil` for every screen the user
     /// walked into themselves.
+    ///
+    /// - Note: In memory only, so it does not survive an app kill. US-8 AC2
+    ///   asks for a notification *at the sync attempt*, which this meets: the
+    ///   401 arrives while the user is in the app and the banner is up
+    ///   immediately. The gap is the relaunch afterwards — `bootstrap()`
+    ///   resolves back to `.hevyKey` because the key is gone, but without the
+    ///   reason. Closing it means persisting a flag that clears on the first
+    ///   accepted key; deliberately left for v1 (#40 review).
     @Published private(set) var notice: HevyKeyEntryNotice?
 
     /// Invoked when a key was actively validated and stored (not on a

@@ -93,7 +93,7 @@ struct DataSourceStatusView: View {
         // Contained rather than combined: the retry button has to stay its own
         // element for VoiceOver, which `.combine` would fold into the label.
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(AccessibilityID.Dashboard.staleSource)
+        .accessibilityIdentifier(AccessibilityID.Dashboard.staleSource(source.source.rawValue))
     }
 
     /// Names the source and what is wrong with it, so the headline stands on

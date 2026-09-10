@@ -24,15 +24,12 @@ final class DataSourceFreshnessTests: XCTestCase {
 
     func testJustPastTwentyFourHoursIsStale() {
         let lastSync = now.addingTimeInterval(-DataSourceFreshness.staleThreshold - 1)
-        XCTAssertEqual(DataSourceFreshness(lastSync: lastSync, now: now), .stale(since: lastSync))
+        XCTAssertEqual(DataSourceFreshness(lastSync: lastSync, now: now), .stale)
     }
 
-    func testStaleCarriesTheTimestampItWentStaleFrom() {
+    func testAWeekOldSyncIsStale() {
         let lastSync = now.addingTimeInterval(-5 * 86_400)
-        guard case .stale(let since) = DataSourceFreshness(lastSync: lastSync, now: now) else {
-            return XCTFail("Expected .stale for a five-day-old sync")
-        }
-        XCTAssertEqual(since, lastSync)
+        XCTAssertEqual(DataSourceFreshness(lastSync: lastSync, now: now), .stale)
     }
 
     /// A clock change or a restored backup can put the last sync ahead of now.
@@ -45,6 +42,6 @@ final class DataSourceFreshnessTests: XCTestCase {
     func testOnlyFreshNeedsNoAttention() {
         XCTAssertFalse(DataSourceFreshness.fresh.needsAttention)
         XCTAssertTrue(DataSourceFreshness.never.needsAttention)
-        XCTAssertTrue(DataSourceFreshness.stale(since: now).needsAttention)
+        XCTAssertTrue(DataSourceFreshness.stale.needsAttention)
     }
 }

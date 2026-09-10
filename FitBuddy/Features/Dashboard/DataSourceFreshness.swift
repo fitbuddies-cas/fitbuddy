@@ -14,8 +14,13 @@ enum DataSourceFreshness: Equatable {
     case never
     /// The last successful sync is within `staleThreshold`.
     case fresh
-    /// Nothing has synced since `date` — longer ago than `staleThreshold`.
-    case stale(since: Date)
+    /// The last successful sync is older than `staleThreshold`.
+    ///
+    /// Carries no date: the timestamp is `DataSourceStatus.lastSync`, which
+    /// every caller already holds and which `SyncTimeFormatter` renders for
+    /// all three cases at once — a payload here would only be a second copy
+    /// of it, and it was read by nothing but the tests (#40 review).
+    case stale
 
     /// How old a sync may get before the dashboard flags it (US-8 AC1: 24 h).
     static let staleThreshold: TimeInterval = 86_400
@@ -36,7 +41,7 @@ enum DataSourceFreshness: Equatable {
         // reason, and a stale badge on data the device believes is newer than
         // the current time would only look like a bug.
         let age = now.timeIntervalSince(lastSync)
-        self = age > Self.staleThreshold ? .stale(since: lastSync) : .fresh
+        self = age > Self.staleThreshold ? .stale : .fresh
     }
 
     /// Whether the user has something to act on — the row that earns the

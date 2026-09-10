@@ -26,7 +26,13 @@ enum AccessibilityID {
 
     enum Dashboard {
         static let root = "dashboard.root"
-        /// The stale-source row from US-8 AC1, with its retry button.
-        static let staleSource = "dashboard.staleSource"
+        /// The stale-source row from US-8 AC1, with its retry button — one
+        /// per source, so two sources gone stale at once stay tellable apart
+        /// (#40 review). Takes the raw `ConnectorSource` value rather than the
+        /// type: this file is mirrored into the UI-test target, which cannot
+        /// see the app module.
+        static func staleSource(_ source: String) -> String {
+            "dashboard.staleSource." + source
+        }
     }
 }
