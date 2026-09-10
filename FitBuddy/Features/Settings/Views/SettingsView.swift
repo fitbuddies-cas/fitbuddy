@@ -14,19 +14,24 @@ import SwiftUI
 struct SettingsView: View {
     @StateObject private var viewModel: SettingsViewModel
 
+    private let makeStravaConnectionViewModel: @MainActor () -> StravaConnectionViewModel
     private let makeStravaCredentialsViewModel: @MainActor () -> StravaCredentialsViewModel
 
     /// - Parameters:
     ///   - viewModel: Built lazily — the autoclosure is evaluated once, when
     ///     SwiftUI first creates the view's state, so presenting this from a
     ///     parent's `body` does not rebuild it on every render.
+    ///   - makeStravaConnectionViewModel: Called once per push of the Strava
+    ///     connection screen (#140).
     ///   - makeStravaCredentialsViewModel: Called once per push of the Strava
-    ///     credentials screen (#139).
+    ///     credentials screen (#139), from the connection screen.
     init(
         viewModel: @autoclosure @escaping () -> SettingsViewModel,
+        makeStravaConnectionViewModel: @escaping @MainActor () -> StravaConnectionViewModel,
         makeStravaCredentialsViewModel: @escaping @MainActor () -> StravaCredentialsViewModel = { StravaCredentialsViewModel() }
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
+        self.makeStravaConnectionViewModel = makeStravaConnectionViewModel
         self.makeStravaCredentialsViewModel = makeStravaCredentialsViewModel
     }
 
@@ -269,18 +274,20 @@ struct SettingsView: View {
 
     // MARK: - Rows
 
-    /// Entry point to the Strava application credentials (#139). The
-    /// connection itself — authorize, status, disconnect — comes with #140,
-    /// which takes over this row.
+    /// Entry point to the Strava connection (#140): connect, status,
+    /// disconnect, and from there the application credentials (#139).
     private var stravaRow: some View {
         NavigationLink {
-            StravaCredentialsView(viewModel: makeStravaCredentialsViewModel())
+            StravaConnectionView(
+                viewModel: makeStravaConnectionViewModel(),
+                makeCredentialsViewModel: makeStravaCredentialsViewModel
+            )
         } label: {
             VStack(alignment: .leading, spacing: 4) {
                 Text(StravaKeyPresentation.displayName)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(Color.fbInk)
-                Text("API application credentials")
+                Text("Connection and API application")
                     .font(.footnote)
                     .foregroundStyle(Color.fbInkSecondary)
             }

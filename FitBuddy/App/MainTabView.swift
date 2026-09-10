@@ -21,6 +21,7 @@ struct MainTabView: View {
 
     private let makeDashboardViewModel: () -> WorkoutListViewModel
     private let makeSettingsViewModel: () -> SettingsViewModel
+    private let makeStravaConnectionViewModel: @MainActor () -> StravaConnectionViewModel
     private let makeWorkoutDetailViewModel: (String) -> WorkoutDetailViewModel
     private let makeExerciseListViewModel: () -> ExerciseListViewModel
     private let makeAnalysisHistoryViewModel: () -> AnalysisHistoryViewModel
@@ -37,6 +38,8 @@ struct MainTabView: View {
     ///   - makeDashboardViewModel: Handed to `DashboardView`, which keeps the
     ///     result as its own state — see its initializer.
     ///   - makeSettingsViewModel: Same, for `SettingsView`.
+    ///   - makeStravaConnectionViewModel: Handed on to `SettingsView`, called
+    ///     once per push of the Strava connection screen (#140).
     ///   - makeWorkoutDetailViewModel: Called once per pushed session (#98).
     ///   - makeExerciseListViewModel: Called once per push of the exercise
     ///     list (#37).
@@ -48,6 +51,7 @@ struct MainTabView: View {
         analysisViewModel: @autoclosure @escaping () -> AnalysisViewModel,
         makeDashboardViewModel: @escaping () -> WorkoutListViewModel,
         makeSettingsViewModel: @escaping () -> SettingsViewModel,
+        makeStravaConnectionViewModel: @escaping @MainActor () -> StravaConnectionViewModel,
         makeWorkoutDetailViewModel: @escaping (String) -> WorkoutDetailViewModel,
         makeExerciseListViewModel: @escaping () -> ExerciseListViewModel,
         makeAnalysisHistoryViewModel: @escaping () -> AnalysisHistoryViewModel,
@@ -57,6 +61,7 @@ struct MainTabView: View {
         _analysisViewModel = StateObject(wrappedValue: analysisViewModel())
         self.makeDashboardViewModel = makeDashboardViewModel
         self.makeSettingsViewModel = makeSettingsViewModel
+        self.makeStravaConnectionViewModel = makeStravaConnectionViewModel
         self.makeWorkoutDetailViewModel = makeWorkoutDetailViewModel
         self.makeExerciseListViewModel = makeExerciseListViewModel
         self.makeAnalysisHistoryViewModel = makeAnalysisHistoryViewModel
@@ -80,7 +85,10 @@ struct MainTabView: View {
                 )
             }
             Tab("Settings", systemImage: "gearshape", value: MainTab.settings) {
-                SettingsView(viewModel: makeSettingsViewModel())
+                SettingsView(
+                    viewModel: makeSettingsViewModel(),
+                    makeStravaConnectionViewModel: makeStravaConnectionViewModel
+                )
             }
         }
         // No `.tabBarMinimizeBehavior`: on iOS 26 the minimized bar collapses
@@ -107,7 +115,20 @@ struct MainTabView: View {
 private struct PreviewResetService: SessionResetting, DataResetting {
     func hardLogout() async {}
     func discardCachedWorkouts() async {}
+    func discardCachedWorkouts(from source: ConnectorSource) async {}
     func deleteAllData() async {}
+}
+
+/// OAuth that never reaches a browser, so the Strava screen renders in a
+/// preview without a sheet.
+private struct PreviewStravaOAuthorizer: StravaOAuthorizing {
+    func authorize(_ credentials: StravaClientCredentials) async throws -> ConnectorCredentials {
+        throw StravaOAuthError.transport
+    }
+
+    func refresh(_ credentials: StravaClientCredentials, refreshToken: String) async throws -> ConnectorCredentials {
+        throw StravaOAuthError.transport
+    }
 }
 
 /// Holds the selection for the preview the way `RootView` does in the app.
@@ -124,6 +145,14 @@ private struct MainTabViewPreviewHost: View {
             makeDashboardViewModel: { WorkoutListViewModel(cache: PreviewWorkoutCache.filled) },
             makeSettingsViewModel: {
                 SettingsViewModel(sessionReset: PreviewResetService(), dataReset: PreviewResetService())
+            },
+            makeStravaConnectionViewModel: {
+                StravaConnectionViewModel(
+                    oauth: PreviewStravaOAuthorizer(),
+                    credentialStore: StravaCredentialStore(),
+                    registry: ConnectorRegistry(),
+                    sessionReset: PreviewResetService()
+                )
             },
             makeWorkoutDetailViewModel: { id in
                 WorkoutDetailViewModel(cache: PreviewWorkoutDetailCache.filled, workoutID: id)

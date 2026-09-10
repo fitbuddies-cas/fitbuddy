@@ -68,16 +68,26 @@ actor SessionResetService {
     /// stays — this is not a deletion request, and clearing it would make a
     /// logout a way around the lock.
     func discardCachedWorkouts() async {
-        do {
-            try await workouts.deleteCachedWorkouts(from: .hevy)
-        } catch {
-            logger.error("Workout cache not cleared: \(error, privacy: .public)")
-        }
+        await discardCachedWorkouts(from: .hevy)
         do {
             try await results.deleteAll()
         } catch {
             logger.error("Stored analysis not cleared: \(error, privacy: .public)")
         }
         await timestamps.clear()
+    }
+
+    /// Drops one source's cached sessions and nothing else (#140).
+    ///
+    /// Unlike the Hevy teardown above, the analysis history and the sync
+    /// timestamp stay: disconnecting Strava removes a part of the user's own
+    /// training from view, it does not swap one account for another, and the
+    /// recommendations were written about training that remains theirs.
+    func discardCachedWorkouts(from source: ConnectorSource) async {
+        do {
+            try await workouts.deleteCachedWorkouts(from: source)
+        } catch {
+            logger.error("\(source.displayName, privacy: .public) cache not cleared: \(error, privacy: .public)")
+        }
     }
 }

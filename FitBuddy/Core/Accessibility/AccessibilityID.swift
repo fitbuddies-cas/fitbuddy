@@ -36,6 +36,14 @@ enum AccessibilityID {
         static let errorBanner = "stravaCredentials.errorBanner"
     }
 
+    enum StravaConnection {
+        static let status = "stravaConnection.status"
+        static let connectButton = "stravaConnection.connectButton"
+        static let disconnectButton = "stravaConnection.disconnectButton"
+        static let credentialsLink = "stravaConnection.credentialsLink"
+        static let errorBanner = "stravaConnection.errorBanner"
+    }
+
     enum Dashboard {
         static let root = "dashboard.root"
         /// The stale-source row from US-8 AC1, with its retry button — one

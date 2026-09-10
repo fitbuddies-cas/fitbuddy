@@ -30,7 +30,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		FB0000000000000000000013 /* Exceptions for "FitBuddy" folder in "FitBuddy" target */ = {
+		FB0000000000000000000013 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				App/Info.plist,
@@ -40,7 +40,7 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		FB0000000000000000000010 /* FitBuddy */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (FB0000000000000000000013 /* Exceptions for "FitBuddy" folder in "FitBuddy" target */, ); explicitFileTypes = {}; explicitFolders = (); path = FitBuddy; sourceTree = "<group>"; };
+		FB0000000000000000000010 /* FitBuddy */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (FB0000000000000000000013 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = FitBuddy; sourceTree = "<group>"; };
 		FB0000000000000000000011 /* FitBuddyTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = FitBuddyTests; sourceTree = "<group>"; };
 		FB0000000000000000000012 /* FitBuddyUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = FitBuddyUITests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
