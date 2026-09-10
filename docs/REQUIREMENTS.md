@@ -64,10 +64,14 @@ Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 
 | # | Given | When | Then |
 |---|---|---|---|
-| AC1 | Nutzer tippt auf «Quelle hinzufügen» | Er wählt Quelle und schliesst OAuth-Flow ab | Aktivitäten der letzten 30 Tage erscheinen normalisiert im Dashboard neben bestehenden Daten |
+| AC1 | Nutzer tippt auf «Quelle hinzufügen» | Er wählt Quelle und schliesst OAuth-Flow ab | Aktivitäten der letzten 90 Tage erscheinen normalisiert im Dashboard neben bestehenden Daten, die Quelle ist pro Session erkennbar |
 | AC2 | Token einer Quelle ist abgelaufen | Dashboard lädt | Hinweis erscheint («Strava-Verbindung erneuern») mit direktem Link zum Re-Auth-Flow |
+| AC3 | Nutzer hat noch keine Strava-Zugangsdaten hinterlegt | Er öffnet «Quelle hinzufügen» | Screen zur Eingabe von Client ID und Client Secret erscheint mit Anleitung zur eigenen Strava-API-App; beide Werte landen im Keychain |
+| AC4 | Access-Token ist abgelaufen, Refresh-Token ist gültig | Sync läuft | Token wird transparent erneuert, der Sync gelingt ohne Nutzerinteraktion |
 
-> **Hinweis:** Im PoC wird nur das `FitnessConnector`-Interface verankert; der Strava-Connector selbst erst in v1.
+> **Hinweis:** Im PoC (v0) wird nur das `FitnessConnector`-Interface verankert — Protocol, `HevyConnector`-Konformität, `StravaConnector`-Stub und `ConnectorRegistry`. Der OAuth-Flow und der echte Strava-Connector folgen in v1 nach ADR-010 (Zugangsdaten der eigenen Strava-API-App des Nutzers, kein Backend).
+
+> **Zum Zeitfenster in AC1:** Die ursprünglichen «30 Tage» sind auf die 90 Tage des bestehenden Analyse- und Cache-Fensters (`TrainingWindow`) vereinheitlicht — zwei Fenster würden zwei Cache-Invalidierungsregeln bedeuten. Gleiche Korrektur wie bei der Doku-Synchronisation des Analysezeitraums.
 
 ### 1.2.2 US-6 · Analyse-Kontext transparent machen
 **Als** Nutzer **möchte ich** sehen, auf welcher Datenbasis die AI-Empfehlung generiert wurde, **damit** ich die Empfehlung einordnen und ihr vertrauen oder sie hinterfragen kann.
@@ -169,7 +173,7 @@ Bewusst ausgeschlossen für den PoC. Dokumentiert, damit später kein Scope-Cree
 |---|---|
 | **US-11** Push-Notifications (Wochenübersicht) | iOS-Permission-Flow, Background-Scheduling, LLM-Fallback bei Offline-Zustand — eigenes Sub-System. Frühestens v1.2 sinnvoll, wenn Retention-Daten zeigen, dass User die App nicht regelmässig öffnen. |
 | **US-12** Write-back nach Hevy | Erfordert Hevy PRO, ungeklärtes Write-Target (Routine vs. zukünftiges Workout) und Undo-UX. Falsch übernommene AI-Empfehlung ist ein realer Schaden für den User (R3). |
-| **Strava-Connector (Implementierung)** | Nur das `FitnessConnector`-Interface wird verankert (US-5 / ADR-3). Die OAuth-Implementierung samt Token-Refresh und Cross-Source-Analyse kommt in v1. |
+| **Strava-Connector (Implementierung)** | Im PoC wird nur das `FitnessConnector`-Interface verankert (US-5 / ADR-006). Die OAuth-Implementierung samt Token-Refresh, quellenbezogenem Cache und Cross-Source-Analyse ist für v1 spezifiziert (ADR-010) und bleibt ausserhalb des PoC-Scope. |
 | **Apple Health Integration** | Siehe Risiko 1 — Vorschlag: OUT für PoC. |
 | **i18n / Lokalisierung** | English-only ist Definition of Done — kein Framework, keine zweite Sprache. Spart Übersetzungs-Roundtrips beim Prompt-Tuning. |
 | **App Store Release** | Distribution ausschliesslich via TestFlight / Sideload. Spart App-Store-Review, Marketing-Assets und Compliance-Roundtrips. |
