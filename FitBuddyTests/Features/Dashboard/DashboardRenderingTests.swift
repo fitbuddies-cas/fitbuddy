@@ -103,7 +103,7 @@ final class DashboardRenderingTests: XCTestCase {
         let now = Date(timeIntervalSince1970: 1_750_000_000)
         let view = SyncStatusView(
             status: .failed(.offline),
-            lastSync: now.addingTimeInterval(-900),
+            sources: [DataSourceStatus(source: .hevy, lastSync: now.addingTimeInterval(-900))],
             now: now,
             onRetry: {}
         )
@@ -125,10 +125,68 @@ final class DashboardRenderingTests: XCTestCase {
 
         for status in statuses {
             let image = try render(
-                SyncStatusView(status: status, lastSync: nil, now: now, onRetry: {})
+                SyncStatusView(
+                    status: status,
+                    sources: [DataSourceStatus(source: .hevy, lastSync: nil)],
+                    now: now,
+                    onRetry: {}
+                )
             )
             XCTAssertGreaterThan(image.size.height, 0, "\(status) did not render")
         }
+    }
+
+    // MARK: - Data sources (US-8, #40)
+
+    /// Every state one source row can be in. The stale row is the one that
+    /// grows a title, a second line and a button, so a layout that only ever
+    /// saw the quiet single-line case would not have been exercised.
+    func testDataSourceRowRendersInEveryFreshness() throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let sources: [DataSourceStatus] = [
+            DataSourceStatus(source: .hevy, lastSync: now.addingTimeInterval(-900)),
+            DataSourceStatus(source: .hevy, lastSync: nil, isSyncing: true),
+            DataSourceStatus(source: .hevy, lastSync: now.addingTimeInterval(-4 * 86_400)),
+            DataSourceStatus(source: .hevy, lastSync: nil),
+        ]
+
+        for source in sources {
+            let image = try render(
+                DataSourceStatusView(sources: [source], now: now, onRetry: { _ in })
+            )
+            XCTAssertGreaterThan(image.size.height, 0, "\(source) did not render")
+        }
+    }
+
+    /// The strip is written to loop, so a second source has to lay out without
+    /// the first one's row being rebuilt — the shape v0's Hevy-only wiring
+    /// never reaches, and the one #35 will.
+    func testDataSourceStripRendersMoreThanOneSource() throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let image = try render(
+            DataSourceStatusView(
+                sources: [
+                    DataSourceStatus(source: .hevy, lastSync: now.addingTimeInterval(-300)),
+                    DataSourceStatus(source: .strava, lastSync: now.addingTimeInterval(-6 * 86_400)),
+                ],
+                now: now,
+                onRetry: { _ in }
+            )
+        )
+        XCTAssertGreaterThan(image.size.height, 0)
+    }
+
+    /// A stale source is what the strip shows when nothing failed and nothing
+    /// is running — the `.idle` case US-8 AC1 is entirely about.
+    func testIdleStripStillFlagsAStaleSource() throws {
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        let stale = DataSourceStatus(source: .hevy, lastSync: now.addingTimeInterval(-2 * 86_400))
+
+        XCTAssertTrue(stale.needsAttention(now: now))
+        let image = try render(
+            SyncStatusView(status: .idle, sources: [stale], now: now, onRetry: {})
+        )
+        XCTAssertGreaterThan(image.size.height, 0)
     }
 
     /// The toast a failed pull raises (#43). Its copy is a whole sentence per

@@ -209,6 +209,71 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertNil(stored)
     }
 
+    /// US-8 AC2: the user is moved off a working dashboard by a 401 they never
+    /// saw. Arriving on step 2 with no explanation is the silent failure the
+    /// AC rules out, so the reason travels with them.
+    func testHevyUnauthorizedAnnouncesWhyTheUserIsBackOnStepTwo() async throws {
+        try await seedConsent()
+        try await keychain.save("hevy-key", for: .hevyAPIKey)
+        defaults.set(true, forKey: "fitbuddy.onboarding.llmKeysSkipped")
+        let sut = makeSUT()
+        await sut.bootstrap()
+
+        await sut.handleHevyUnauthorized()
+
+        XCTAssertEqual(sut.hevyKeyViewModel.notice, .keyRejected)
+    }
+
+    /// Deleting the key in Settings lands on the same screen and says nothing:
+    /// the user pressed the button and is looking at the result of it.
+    func testDeletingTheKeyReturnsToStepTwoWithoutANotice() async throws {
+        try await seedConsent()
+        try await keychain.save("hevy-key", for: .hevyAPIKey)
+        defaults.set(true, forKey: "fitbuddy.onboarding.llmKeysSkipped")
+        let sut = makeSUT()
+        await sut.bootstrap()
+
+        await sut.handleHevyKeyDeleted()
+
+        XCTAssertEqual(sut.step, .hevyKey)
+        XCTAssertNil(sut.hevyKeyViewModel.notice)
+        let stored = try await keychain.read(.hevyAPIKey)
+        XCTAssertNil(stored)
+    }
+
+    /// Reconnecting is the end of the notice: it explains a key that no longer
+    /// exists, and the new one has just been accepted.
+    func testReconnectingAfterUnauthorizedClearsTheNotice() async throws {
+        try await seedConsent()
+        try await keychain.save("hevy-key", for: .hevyAPIKey)
+        defaults.set(true, forKey: "fitbuddy.onboarding.llmKeysSkipped")
+        let sut = makeSUT()
+        await sut.bootstrap()
+        await sut.handleHevyUnauthorized()
+        XCTAssertEqual(sut.hevyKeyViewModel.notice, .keyRejected)
+
+        sut.hevyKeyViewModel.apiKey = "new-hevy-key"
+        await sut.hevyKeyViewModel.connect()
+
+        XCTAssertEqual(sut.step, .completed)
+        XCTAssertNil(sut.hevyKeyViewModel.notice)
+    }
+
+    /// Wiping everything restarts at consent, so a notice about a Hevy key
+    /// from the previous install would be waiting two steps later.
+    func testDataResetClearsTheNotice() async throws {
+        try await seedConsent()
+        try await keychain.save("hevy-key", for: .hevyAPIKey)
+        let sut = makeSUT()
+        await sut.bootstrap()
+        await sut.handleHevyUnauthorized()
+
+        sut.handleDataReset()
+
+        XCTAssertEqual(sut.step, .consent)
+        XCTAssertNil(sut.hevyKeyViewModel.notice)
+    }
+
     // MARK: - Delete all data (#83)
 
     func testDataResetReturnsToConsentAndClearsTheChildren() async throws {

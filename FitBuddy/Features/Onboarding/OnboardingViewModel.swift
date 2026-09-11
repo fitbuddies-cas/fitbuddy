@@ -69,11 +69,27 @@ final class OnboardingViewModel: ObservableObject {
     /// key is no longer valid, so it is removed and the flow returns to step 2
     /// for a fresh one. Future services (e.g. WorkoutSyncService, #25) reach this via
     /// the coordinator `RootView` injects into the environment.
+    ///
+    /// Announces itself on arrival (US-8 AC2). The user did not ask for this
+    /// screen and never saw the 401, so without the notice they are moved out
+    /// of a working dashboard for no stated reason — the silent failure the AC
+    /// rules out, in a different form than carrying on with cached data.
     func handleHevyUnauthorized() async {
+        await returnToHevyStep(announcing: .keyRejected)
+    }
+
+    /// Entry point for the user deleting the Hevy key in Settings (#83). Same
+    /// route back to step 2 and no notice: they are standing on the screen
+    /// that sent them, so there is nothing to explain.
+    func handleHevyKeyDeleted() async {
+        await returnToHevyStep(announcing: nil)
+    }
+
+    private func returnToHevyStep(announcing notice: HevyKeyEntryNotice?) async {
         // A failed delete is tolerable: the flow still returns to step 2, and
         // saving a freshly validated key simply overwrites the stale one.
         try? await keychain.delete(.hevyAPIKey)
-        hevyKeyViewModel.reset()
+        hevyKeyViewModel.reset(announcing: notice)
         step = .hevyKey
     }
 
