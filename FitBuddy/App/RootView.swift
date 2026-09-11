@@ -38,6 +38,7 @@ struct RootView: View {
                     makeSettingsViewModel: makeSettingsViewModel,
                     makeWorkoutDetailViewModel: makeWorkoutDetailViewModel(for:),
                     makeExerciseListViewModel: makeExerciseListViewModel,
+                    makeExerciseProgressionViewModel: makeExerciseProgressionViewModel(for:),
                     makeAnalysisHistoryViewModel: makeAnalysisHistoryViewModel,
                     reloadToken: dashboardReloadToken
                 )
@@ -141,6 +142,18 @@ struct RootView: View {
     /// over the same container, like the detail screen's — this one only reads.
     private func makeExerciseListViewModel() -> ExerciseListViewModel {
         ExerciseListViewModel(cache: WorkoutStore(modelContainer: modelContext.container))
+    }
+
+    /// One progression screen per tapped movement (US-9, #42). Reads the same
+    /// container the list just read, so the curve and the row it was opened
+    /// from describe the same window.
+    private func makeExerciseProgressionViewModel(
+        for exercise: ExerciseSummary
+    ) -> ExerciseProgressionViewModel {
+        ExerciseProgressionViewModel(
+            cache: WorkoutStore(modelContainer: modelContext.container),
+            exercise: exercise
+        )
     }
 
     /// Wires the settings screen to the Keychain and to the two reset paths
