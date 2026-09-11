@@ -54,7 +54,15 @@ struct RootView: View {
         .onChange(of: onboardingViewModel.step) { _, step in
             if step != .completed { selectedTab = .dashboard }
         }
-        .task { await onboardingViewModel.bootstrap() }
+        .task {
+            // Before the coordinator resolves, so the first screen past
+            // onboarding already reads a full cache instead of flashing its
+            // empty state (#148). DEBUG-only and inert without the argument.
+            #if DEBUG
+            await MockDataSeeder.seedIfRequested(container: modelContext.container)
+            #endif
+            await onboardingViewModel.bootstrap()
+        }
     }
 
     /// Wires the dashboard to the cache and to Hevy (#28).

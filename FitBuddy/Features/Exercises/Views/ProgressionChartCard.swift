@@ -86,6 +86,7 @@ struct ProgressionChartCard: View {
         // graphic.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
+        .accessibilityIdentifier(AccessibilityID.Progression.chart)
     }
 
     /// Padded by a tenth of the span on each side, with a floor of 2.5 kg so a

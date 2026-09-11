@@ -24,5 +24,22 @@ enum AccessibilityID {
 
     enum Dashboard {
         static let root = "dashboard.root"
+        static let sessionRow = "dashboard.sessionRow"
+        static let exercisesLink = "dashboard.exercisesLink"
+    }
+
+    enum WorkoutDetail {
+        static let root = "workoutDetail.root"
+    }
+
+    enum Exercises {
+        static let root = "exercises.root"
+        static let row = "exercises.row"
+    }
+
+    enum Progression {
+        static let root = "progression.root"
+        static let chart = "progression.chart"
+        static let insufficientData = "progression.insufficientData"
     }
 }
