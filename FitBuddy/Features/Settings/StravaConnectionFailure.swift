@@ -72,7 +72,7 @@ enum StravaConnectionFailure: Equatable {
         case .missingScope:
             return "FitBuddy needs permission to read your activities. Connect again and leave “View data about your private activities” ticked."
         case .invalidResponse:
-            return "Make sure the Authorization Callback Domain of your Strava application is set to “fitbuddy”, then try again."
+            return "Make sure the Authorization Callback Domain of your Strava application is set to “\(StravaKeyPresentation.callbackDomain)”, then try again."
         case .network:
             return "Check your internet connection and try again."
         case .serviceUnavailable:

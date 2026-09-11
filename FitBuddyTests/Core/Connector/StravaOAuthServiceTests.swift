@@ -107,7 +107,10 @@ final class StravaOAuthServiceTests: XCTestCase {
         XCTAssertEqual(url.path, "/oauth/authorize")
         let query = queryItems(of: url)
         XCTAssertEqual(query["client_id"], "123456")
-        XCTAssertEqual(query["redirect_uri"], "fitbuddy://oauth/strava")
+        // Strava matches the URI's host against the application's callback
+        // domain; the host has to be exactly what the user is told to enter.
+        XCTAssertEqual(query["redirect_uri"], "fitbuddy://localhost/strava")
+        XCTAssertEqual(URL(string: query["redirect_uri"] ?? "")?.host, StravaKeyPresentation.callbackDomain)
         XCTAssertEqual(query["response_type"], "code")
         XCTAssertEqual(query["approval_prompt"], "auto")
         XCTAssertEqual(query["scope"], "activity:read_all")
@@ -180,7 +183,7 @@ final class StravaOAuthServiceTests: XCTestCase {
     // MARK: - Callback validation
 
     func testMismatchedStateIsRejectedBeforeAnyTokenRequest() async throws {
-        await web.set(.callback(URL(string: "fitbuddy://oauth/strava?state=someone-elses&code=the-code&scope=activity:read_all")!))
+        await web.set(.callback(URL(string: "fitbuddy://localhost/strava?state=someone-elses&code=the-code&scope=activity:read_all")!))
         nonisolated(unsafe) var tokenRequests = 0
         StubURLProtocol.handler = { request in
             tokenRequests += 1

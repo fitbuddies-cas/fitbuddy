@@ -53,7 +53,7 @@ Backend, weil die Client-Credentials dem Nutzer gehören.
 
 **1 — Der Nutzer bringt seine eigene Strava-API-Application mit.** Die App führt ihn nach
 `strava.com/settings/api`; er trägt Client ID und Client Secret in FitBuddy ein. Als
-«Authorization Callback Domain» setzt er in seiner Strava-Application `fitbuddy`.
+«Authorization Callback Domain» setzt er in seiner Strava-Application `localhost` — Strava prüft die `redirect_uri` über ihren *Host*, nicht über das Scheme, und `localhost` ist der Wert, den Stravas eigene Doku für Apps ohne Web-Domain vorsieht.
 
 **2 — Fünf Keychain-Items statt eines.** [[ADR-3]] reserviert für Strava einen einzelnen Key
 `fitbuddy.strava.token`. Das BYO-Modell braucht mehr, und dieser ADR löst die Reservierung ab:
@@ -71,7 +71,7 @@ Alle fünf tragen `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`, liegen unter d
 von `DataResetService` und `FirstLaunchResetService` erfasst. `kSecAttrAccessGroup` bleibt
 ungesetzt — unverändert zu [[ADR-3]].
 
-**3 — `ASWebAuthenticationSession` mit Custom-Scheme `fitbuddy://oauth/strava`.** Der
+**3 — `ASWebAuthenticationSession` mit Custom-Scheme `fitbuddy://localhost/strava`.** Der
 Authorize-Aufruf geht an den Web-Endpoint `https://www.strava.com/oauth/authorize`; die Session
 fängt den Redirect selbst ab, es braucht keinen `onOpenURL`-Pfad in der App. Universal Links
 sind verworfen: sie verlangen eine gehostete `apple-app-site-association` und damit genau die

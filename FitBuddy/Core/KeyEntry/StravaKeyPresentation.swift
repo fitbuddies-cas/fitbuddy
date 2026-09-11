@@ -24,8 +24,10 @@ enum StravaKeyPresentation {
     static let consoleURL = URL(staticString: "https://www.strava.com/settings/api")
 
     /// The value the user has to enter as "Authorization Callback Domain" in
-    /// that application, or the OAuth redirect will never reach the app.
-    static let callbackDomain = "fitbuddy"
+    /// that application. Strava matches it against the *host* of the redirect
+    /// URI (`fitbuddy://localhost/strava`, see `StravaOAuthService`), not the
+    /// scheme — anything else is rejected as "invalid redirect_uri".
+    static let callbackDomain = "localhost"
 
     /// Where-to-find instructions shown on the credentials card (markdown).
     static let consoleInstructions = """

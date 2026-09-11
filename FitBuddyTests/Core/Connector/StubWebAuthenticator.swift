@@ -54,7 +54,7 @@ actor StubWebAuthenticator: WebAuthenticating {
     }
 
     private static func callback(_ items: [URLQueryItem]) -> URL {
-        var components = URLComponents(string: "fitbuddy://oauth/strava")!
+        var components = URLComponents(string: StravaOAuthService.redirectURI)!
         components.queryItems = items
         return components.url!
     }

@@ -12,13 +12,19 @@ import OSLog
 ///
 /// The `state` parameter is a fresh random value per authorization and the
 /// callback is rejected if it does not echo it: with a custom URL scheme any
-/// app on the device could in principle open `fitbuddy://oauth/strava`, and
+/// app on the device could in principle open `fitbuddy://localhost/strava`, and
 /// the state is what proves the callback answers *our* request.
 actor StravaOAuthService: StravaOAuthorizing {
-    /// The scheme registered in `Info.plist` and set as "Authorization Callback
-    /// Domain" in the user's Strava application.
+    /// The scheme registered in `Info.plist`; `ASWebAuthenticationSession`
+    /// captures the redirect by it.
     static let callbackScheme = "fitbuddy"
-    static let redirectURI = "fitbuddy://oauth/strava"
+    /// Strava validates `redirect_uri` by comparing its *host* with the
+    /// "Authorization Callback Domain" of the user's application — the scheme
+    /// plays no part. `localhost` is the host Strava's own docs use for apps
+    /// without a web domain, so that is what the user enters and what the URI
+    /// carries. Any other host (`fitbuddy://oauth/…`) fails the check with
+    /// "invalid redirect_uri" before the consent page is even shown.
+    static let redirectURI = "fitbuddy://localhost/strava"
     /// Read access to all activities, private ones included. The only scope
     /// requested — see ADR-10.
     static let scope = "activity:read_all"
