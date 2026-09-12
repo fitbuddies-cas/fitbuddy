@@ -1,6 +1,9 @@
 import Foundation
+import OSLog
 
 extension Task where Success == Void, Failure == Never {
+    private static var logger: Logger { Logger(subsystem: "ch.bfh.fitbuddy", category: "TaskLifetime") }
+
     /// Awaits the task, forwarding the caller's cancellation into it.
     ///
     /// Used where work has to stay unstructured — a ViewModel holds on to the
@@ -13,6 +16,9 @@ extension Task where Success == Void, Failure == Never {
         await withTaskCancellationHandler {
             await value
         } onCancel: {
+            // The one place a SwiftUI task's cancellation turns into a
+            // cancelled request; worth a line in the log when it happens.
+            Self.logger.notice("Caller cancelled — forwarding into the awaited task")
             cancel()
         }
     }

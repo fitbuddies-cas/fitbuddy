@@ -18,6 +18,25 @@ import Foundation
 enum HevyStubbing {
     static let launchArgument = "-fbStubHevy"
 
+    /// Makes the stubbed sync take a few seconds instead of returning at once,
+    /// so a launch in the simulator has a window in which a cancellation of
+    /// the dashboard's task can be observed. Diagnostic; not used by the UI
+    /// tests.
+    static let slowSyncLaunchArgument = "-fbSlowStubSync"
+
+    static func slowSyncIsActive(in launchArguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
+        launchArguments.contains(slowSyncLaunchArgument)
+    }
+
+    /// Makes the stubbed sync write the bundled mock workouts (#44) into the
+    /// cache, so a stubbed launch reaches the loaded dashboard instead of the
+    /// empty state. Diagnostic; not used by the onboarding UI tests.
+    static let seedMockWorkoutsLaunchArgument = "-fbSeedMockWorkouts"
+
+    static func seedsMockWorkouts(in launchArguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
+        launchArguments.contains(seedMockWorkoutsLaunchArgument)
+    }
+
     /// Whether this launch replaces every Hevy collaborator with a stub.
     ///
     /// Derived from the verdict rather than from the argument's presence: read
