@@ -222,7 +222,16 @@ final class WorkoutListViewModel: ObservableObject {
         }
         syncTask = task
         logger.notice("Sync #\(generation, privacy: .public) handed to its task; caller cancelled: \(Task.isCancelled, privacy: .public)")
-        await task.awaitingCancellation()
+        // Awaited *without* forwarding the caller's cancellation — unlike
+        // `load()`. SwiftUI cancels the `.refreshable` task the moment this
+        // view re-renders (observed on iOS 26: the first `@Published` change of
+        // the refresh, ~20 ms in, on the device and in the simulator alike),
+        // and forwarding that into the sync killed every pull-to-refresh before
+        // its first request left the device. A sync that outlives its gesture
+        // is the wanted outcome anyway: it fills the cache and publishes to a
+        // view model that lives on. A newer sync still cancels this one through
+        // `syncTask?.cancel()` above.
+        await task.value
     }
 
     private func performSync(

@@ -107,7 +107,15 @@ struct RootView: View {
     private func syncer(workouts: WorkoutStore, timestamps: SyncTimestampStore) -> any WorkoutSyncing {
         #if DEBUG
         if HevyStubbing.isActive() {
-            return StubWorkoutSync()
+            // The mock payloads decode through the real Hevy DTO path, so the
+            // seeded cache holds exactly what a live sync would have written.
+            let activities = HevyStubbing.seedsMockWorkouts()
+                ? (try? MockWorkoutLoader().page(for: .personA).workouts.map { $0.makeActivity() }) ?? []
+                : []
+            return StubWorkoutSync(
+                delay: HevyStubbing.slowSyncIsActive() ? .seconds(3) : .zero,
+                seed: activities.isEmpty ? nil : (store: workouts, activities: activities)
+            )
         }
         #endif
         return WorkoutSyncService(
