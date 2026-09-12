@@ -85,8 +85,19 @@ actor WorkoutSyncService: WorkoutSyncing {
         // `allCases` order, so "the first source" below means the same thing
         // on every run.
         let sources = ConnectorSource.allCases.filter { credentials[$0] != nil }
+        logger.notice("Fetching \(sources.map(\.rawValue).joined(separator: ","), privacy: .public); task cancelled: \(Task.isCancelled, privacy: .public)")
 
         let outcomes = await fetchWindows(from: windowStart, credentials: credentials, sources: sources)
+        for source in sources {
+            switch outcomes[source] {
+            case .success(let activities)?:
+                logger.notice("\(source.rawValue, privacy: .public): \(activities.count, privacy: .public) activities")
+            case .failure(let error)?:
+                logger.notice("\(source.rawValue, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+            case nil:
+                break
+            }
+        }
 
         for source in sources {
             guard case .failure(let error)? = outcomes[source] else { continue }

@@ -649,6 +649,37 @@ final class WorkoutSyncServiceTests: XCTestCase {
         XCTAssertEqual(fetches, 0)
     }
 
+    // MARK: - Driven from the dashboard
+
+    /// The whole chain the dashboard runs at launch and on pull-to-refresh —
+    /// view model, sync service, registry, connectors — must carry a sync to
+    /// completion. On a device every request of every sync was found cancelled
+    /// a millisecond after starting; this pins down whether the service cancels
+    /// itself or something above the view model does.
+    @MainActor
+    func testTheDashboardReloadRunsTheSyncToCompletion() async throws {
+        let hevy = MockConnector()
+        await hevy.setFetchActivitiesResult(.success([ActivityFactory.activity(id: "hevy-1", start: daysAgo(1))]))
+        let strava = MockConnector()
+        await strava.setFetchActivitiesResult(.success([stravaRun(id: 1, daysAgo: 2)]))
+        await connectStrava(strava)
+        let service = await makeService(connector: hevy)
+        let viewModel = WorkoutListViewModel(cache: workouts, syncer: service, timestamps: timestamps, now: { Self.now })
+
+        await viewModel.reload()
+
+        XCTAssertEqual(viewModel.syncStatus, .idle)
+        XCTAssertEqual(viewModel.lastSync, Self.now)
+        let hevyFetches = await hevy.fetchActivitiesCallCount
+        let stravaFetches = await strava.fetchActivitiesCallCount
+        XCTAssertEqual(hevyFetches, 1)
+        XCTAssertEqual(stravaFetches, 1)
+        guard case .loaded(let summaries, _) = viewModel.state else {
+            return XCTFail("expected .loaded, got \(viewModel.state)")
+        }
+        XCTAssertEqual(Set(summaries.map(\.id)), ["hevy-1", "strava:1"])
+    }
+
     // MARK: - Helpers
 
     /// Page bodies the stub still has to hand out, in order.

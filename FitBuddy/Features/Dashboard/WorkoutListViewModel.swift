@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Drives the dashboard's workout list, its 90-day metrics and the Hevy sync
 /// that keeps them current (US-2).
@@ -56,6 +57,12 @@ final class WorkoutListViewModel: ObservableObject {
     /// outside — SwiftUI tearing down the `.refreshable` task as the user
     /// leaves the tab mid-pull — and the two need opposite responses.
     private var syncGeneration = 0
+
+    /// Sync lifecycle at `notice` level, so a tester's device log shows when
+    /// a sync started, how it ended, and — the case that is otherwise
+    /// invisible — whether the SwiftUI task driving it was cancelled underneath
+    /// it. Never any key material.
+    private let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "DashboardSync")
 
     private let cache: WorkoutSummaryReading
     private let syncer: WorkoutSyncing?
@@ -124,7 +131,9 @@ final class WorkoutListViewModel: ObservableObject {
         // read after the sync publishes the real answer — only from a resting
         // `.loading`, so pull-to-refresh keeps its content on screen.
         let holdsSpinner = syncer != nil && state == .loading
+        logger.notice("Refresh requested (user-triggered: \(announcingFailure, privacy: .public)); caller cancelled: \(Task.isCancelled, privacy: .public)")
         await load(keepingSpinnerWhenEmpty: holdsSpinner)
+        logger.notice("Cache read done; caller cancelled: \(Task.isCancelled, privacy: .public)")
         await sync(announcingFailure: announcingFailure)
     }
 
@@ -212,6 +221,7 @@ final class WorkoutListViewModel: ObservableObject {
             )
         }
         syncTask = task
+        logger.notice("Sync #\(generation, privacy: .public) handed to its task; caller cancelled: \(Task.isCancelled, privacy: .public)")
         await task.awaitingCancellation()
     }
 
@@ -225,8 +235,10 @@ final class WorkoutListViewModel: ObservableObject {
         // so this is not reachable today — but it costs one line.
         guard isCurrentSync(generation) else { return }
         syncStatus = .syncing
+        logger.notice("Sync #\(generation, privacy: .public) started; task cancelled on entry: \(Task.isCancelled, privacy: .public)")
         do {
             let result = try await syncer.syncRecentWorkouts()
+            logger.notice("Sync #\(generation, privacy: .public) finished: \(result.workoutCount, privacy: .public) workouts, \(result.failures.count, privacy: .public) failed source(s)")
             guard isCurrentSync(generation) else { return }
             // Clears the banner (#28 AC3) before the reload, so the cached
             // window and the "up to date" claim land in the same render pass.
@@ -251,6 +263,7 @@ final class WorkoutListViewModel: ObservableObject {
             // no banner. It still has to clear `.syncing`, or the strip would
             // claim a sync is running forever.
             guard !error.isCancellation else {
+                logger.notice("Sync #\(generation, privacy: .public) cancelled (superseded by a newer sync: \(!self.isCurrentSync(generation), privacy: .public))")
                 syncStatus = .idle
                 await resolveHeldSpinner()
                 return
@@ -264,6 +277,7 @@ final class WorkoutListViewModel: ObservableObject {
                 await onUnauthorized?()
                 return
             }
+            logger.notice("Sync #\(generation, privacy: .public) failed: \(String(describing: error), privacy: .public)")
             syncStatus = .failed(failure)
             // US-10 AC2: the toast is what tells the user their pull happened
             // and did not work. Raised after the banner, so both describe the
