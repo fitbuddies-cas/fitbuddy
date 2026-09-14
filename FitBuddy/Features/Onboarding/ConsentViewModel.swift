@@ -11,8 +11,9 @@ final class ConsentViewModel: ObservableObject {
     ///
     /// History: `2026-08-21` (AI providers Claude/Gemini/Mistral), `2026-09-10`
     /// (Strava as a second data source and recipient of the user's
-    /// credentials, #145).
-    static let currentVersion = "2026-09-10"
+    /// credentials, #145), `2026-09-16` (Polar AccessLink as a third data
+    /// source and recipient of the user's OAuth tokens, #160).
+    static let currentVersion = "2026-09-16"
 
     /// Whether the user ticked the consent checkbox.
     @Published var hasAcceptedCheckbox = false

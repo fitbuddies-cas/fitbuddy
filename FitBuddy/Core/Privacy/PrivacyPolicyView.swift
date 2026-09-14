@@ -25,13 +25,16 @@ struct PrivacyPolicyView: View {
                             title: "What data we process",
                             text: """
                             • Training data from your Hevy account (workouts, exercises, sets) \
-                            and, if you connect it, your Strava account (activities with \
-                            distance and duration) — this qualifies as health data under \
-                            Art. 5 lit. c nDSG.
+                            and, if you connect them, your Strava account (activities with \
+                            distance and duration) and your Polar account (endurance sessions \
+                            with heart rate, calories and training load) — this qualifies as \
+                            health data under Art. 5 lit. c nDSG.
                             • Your Hevy API key, the API keys of the AI providers you connect \
                             (Claude, Gemini, and/or Mistral), and — for Strava — the client ID \
                             and client secret of your own Strava API application together with \
-                            the access and refresh tokens Strava issues for it.
+                            the access and refresh tokens Strava issues for it, and — for Polar \
+                            — the OAuth access and refresh tokens Polar issues once you authorize \
+                            FitBuddy.
                             • The time and version of your consent.
                             """
                         )
@@ -55,6 +58,10 @@ struct PrivacyPolicyView: View {
                             you register in your own Strava account. Strava receives your \
                             authorization and the read requests; it never receives your Hevy \
                             data or the AI analysis.
+                            • Polar Electro Oy, if you connect it: source of your endurance \
+                            sessions, fetched directly from your device through the Polar \
+                            AccessLink OAuth flow. Polar receives your authorization and the read \
+                            requests; it never receives your Hevy data or the AI analysis.
                             • AI providers — Anthropic (Claude), Google (Gemini), Mistral AI: \
                             recipients of the training data for the AI analysis, called directly \
                             from your device with your own API keys. Only the providers you have \
@@ -77,19 +84,21 @@ struct PrivacyPolicyView: View {
                             Addendum), which applies automatically once you create your account. \
                             Mistral AI processes data within the EU. Strava, Inc. likewise \
                             processes data in the USA, under the API agreement of your own \
-                            Strava account.
+                            Strava account. Polar Electro Oy processes data in Finland (EU) — \
+                            connecting Polar is not a third-country transfer.
                             """
                         )
                         Divider().overlay(Color.fbDivider)
                         FBInfoRow(
                             title: "Local storage",
                             text: """
-                            API keys, the Strava application credentials and tokens, and consent \
-                            data are stored exclusively in your device's iOS Keychain (this device \
-                            only, no iCloud sync). They only leave your device during your own API \
-                            calls to Hevy, Strava or your AI providers. Disconnecting Strava in \
-                            Settings removes every Strava item from the Keychain and every Strava \
-                            activity from the local cache.
+                            API keys, the Strava application credentials and tokens, Polar OAuth \
+                            tokens, and consent data are stored exclusively in your device's iOS \
+                            Keychain (this device only, no iCloud sync). They only leave your \
+                            device during your own API calls to Hevy, Strava, Polar or your AI \
+                            providers. Disconnecting Strava or Polar in Settings removes every \
+                            item of that provider from the Keychain and every activity of that \
+                            provider from the local cache.
                             """
                         )
                         Divider().overlay(Color.fbDivider)

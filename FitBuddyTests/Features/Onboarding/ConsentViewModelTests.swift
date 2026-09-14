@@ -29,6 +29,14 @@ final class ConsentViewModelTests: XCTestCase {
         }
     }
 
+    // MARK: - version (#160)
+
+    func testCurrentVersionReflectsThePolarAddition() {
+        // Pinned so a future version bump is a deliberate, reviewed change
+        // rather than an accidental one.
+        XCTAssertEqual(ConsentViewModel.currentVersion, "2026-09-16")
+    }
+
     // MARK: - confirm gating
 
     func testCanConfirmReflectsCheckbox() {
