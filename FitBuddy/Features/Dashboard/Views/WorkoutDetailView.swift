@@ -82,11 +82,16 @@ struct WorkoutDetailView: View {
                             .font(.caption)
                             .foregroundStyle(Color.fbInkSecondary)
                     }
-                    FBStat(
-                        label: "Volume",
-                        value: VolumeFormatter.full(detail.volumeKg),
-                        unit: "kg"
-                    )
+                    // A Strava activity moves no load; "0 kg" over a run would
+                    // be a wrong number, not a missing one. The sets below
+                    // carry its distance and time instead.
+                    if !(detail.source == .strava && detail.volumeKg == 0) {
+                        FBStat(
+                            label: "Volume",
+                            value: VolumeFormatter.full(detail.volumeKg),
+                            unit: "kg"
+                        )
+                    }
                     Text(figures(detail))
                         .font(.footnote)
                         .fbTabularNumbers()
