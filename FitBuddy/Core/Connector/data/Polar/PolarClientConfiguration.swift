@@ -43,4 +43,29 @@ struct PolarClientConfiguration: Sendable {
         self.redirectURI = redirectURI
         self.clientSecret = clientSecret
     }
+
+    /// Loads the team's `clientID`/`redirectURI` from `PolarTeamConfig.plist`
+    /// (issue #155) — the gitignored copy of `PolarTeamConfig.plist.example`
+    /// every developer fills in locally with the credentials registered at
+    /// <https://admin.polaraccesslink.com>. `bundle` defaults to the bundle
+    /// containing this type, i.e. the app bundle at runtime.
+    static func loadFromTeamConfig(bundle: Bundle = Bundle(for: PolarConnector.self)) throws -> PolarClientConfiguration {
+        guard let url = bundle.url(forResource: "PolarTeamConfig", withExtension: "plist"),
+              let data = try? Data(contentsOf: url),
+              let raw = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: String] else {
+            throw PolarTeamConfigError.missingConfigFile
+        }
+
+        func value(for key: String) throws -> String {
+            guard let value = raw[key], value != "REPLACE_ME" else {
+                throw PolarTeamConfigError.placeholderNotReplaced(key: key)
+            }
+            return value
+        }
+
+        return PolarClientConfiguration(
+            clientID: try value(for: "PolarClientID"),
+            redirectURI: try value(for: "PolarRedirectURI")
+        )
+    }
 }
