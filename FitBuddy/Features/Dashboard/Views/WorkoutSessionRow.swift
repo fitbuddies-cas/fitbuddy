@@ -5,9 +5,10 @@ import SwiftUI
 ///
 /// Since #144 the list holds two kinds of session. A strength session reads
 /// as volume and sets; a cardio one — a Strava run, or Hevy treadmill sets —
-/// has no kg to show and reads as distance and time instead. Sessions from a
-/// second source carry a badge, so the two providers can be told apart in one
-/// chronological list (US-5 AC1).
+/// has no kg to show and reads as distance and time instead. Every session
+/// carries a badge naming its source, tinted per provider — Strava in the
+/// design system's orange, Hevy in ink — so the two can be told apart at a
+/// glance in one chronological list (US-5 AC1).
 ///
 /// Presentational only — `RecentSessionsCard` wraps it in the `NavigationLink`
 /// that opens the detail screen (#98). The row spells its own accessibility
@@ -19,18 +20,19 @@ struct WorkoutSessionRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(workout.startTime, format: .dateTime.weekday(.abbreviated).day().month(.abbreviated))
-                    .font(.caption)
-                    .foregroundStyle(Color.fbMuted)
+                // Date and source share the caption line: both say where and
+                // when the session comes from, and the title keeps its full
+                // width below.
                 HStack(spacing: 6) {
-                    Text(workout.title)
-                        .font(.subheadline)
-                        .foregroundStyle(Color.fbInk)
-                        .lineLimit(1)
-                    if workout.source != .hevy {
-                        sourceBadge
-                    }
+                    Text(workout.startTime, format: .dateTime.weekday(.abbreviated).day().month(.abbreviated))
+                        .font(.caption)
+                        .foregroundStyle(Color.fbMuted)
+                    sourceBadge
                 }
+                Text(workout.title)
+                    .font(.subheadline)
+                    .foregroundStyle(Color.fbInk)
+                    .lineLimit(1)
             }
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 2) {
@@ -54,20 +56,35 @@ struct WorkoutSessionRow: View {
         .accessibilityLabel(accessibilityLabel)
     }
 
-    /// Only sessions from a second source are badged: Hevy is where every
-    /// session came from before US-5, and badging all of them would say
-    /// nothing. Design-system tokens only, no colour of its own.
+    /// The source, as a small filled capsule after the date. Same pairings as
+    /// the design system's buttons: Strava on the warm orange with white text,
+    /// like `.accent`; Hevy as ink with the background colour as text, like
+    /// `.primary` — black with light text on the light theme, and the reverse
+    /// on the dark one, where a white badge with white text would vanish.
     private var sourceBadge: some View {
         Text(workout.source.displayName.uppercased())
             .font(.system(size: 9, weight: .semibold))
             .tracking(0.4)
-            .foregroundStyle(Color.fbInkSecondary)
+            .foregroundStyle(badgeText)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(Color.fbCardSubtle)
+            .background(badgeFill)
             .clipShape(Capsule())
-            .overlay(Capsule().strokeBorder(Color.fbBorder, lineWidth: 1))
             .accessibilityIdentifier(AccessibilityID.Dashboard.sourceBadge)
+    }
+
+    private var badgeFill: Color {
+        switch workout.source {
+        case .strava: return .fbWarn
+        case .hevy: return .fbInk
+        }
+    }
+
+    private var badgeText: Color {
+        switch workout.source {
+        case .strava: return .white
+        case .hevy: return .fbBackground
+        }
     }
 
     // MARK: - Figures
@@ -95,10 +112,10 @@ struct WorkoutSessionRow: View {
         return "cardio"
     }
 
+    /// Names the source for every row, as the badge does.
     private var accessibilityLabel: String {
         let date = workout.startTime.formatted(.dateTime.weekday(.wide).day().month(.wide))
-        let origin = workout.source == .hevy ? "" : " from \(workout.source.displayName)"
-        return "\(workout.title)\(origin), \(date), \(headline), \(detail)"
+        return "\(workout.title) from \(workout.source.displayName), \(date), \(headline), \(detail)"
     }
 }
 
