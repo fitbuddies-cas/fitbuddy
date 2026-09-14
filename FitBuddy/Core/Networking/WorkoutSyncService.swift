@@ -141,7 +141,8 @@ actor WorkoutSyncService: WorkoutSyncing {
             workoutCount: cachedCount,
             syncedAt: syncedAt,
             windowStart: windowStart,
-            failures: failures
+            failures: failures,
+            sources: sources
         )
     }
 

@@ -28,16 +28,23 @@ final class WorkoutListViewModel: ObservableObject {
     /// view can do, so it is handed in as a callback.
     var onUnauthorized: (() async -> Void)?
 
-    /// The sources the status strip reports on (US-8, #40).
+    /// The sources the last sync covered, failed ones included (#143). Hevy
+    /// alone until a sync has run — a Strava row before any sync would promise
+    /// data nobody has fetched.
+    @Published private(set) var syncedSources: [ConnectorSource] = [.hevy]
+
+    /// The sources the status strip reports on (US-8, #40), one row each.
     ///
-    /// Derived rather than stored: `lastSync` and `syncStatus` are both
-    /// published, so SwiftUI re-renders whenever either moves, and a second
-    /// copy of the same facts is a second thing that can be wrong. v0 syncs one
-    /// source — `WorkoutSyncService` fetches Hevy and nothing else — so the
-    /// list holds one entry; a Strava row appears here once its connector stops
-    /// throwing `.notImplemented` (#35).
+    /// Derived rather than stored: `lastSync`, `syncStatus` and
+    /// `syncedSources` are all published, so SwiftUI re-renders whenever any
+    /// of them moves, and a second copy of the same facts is a second thing
+    /// that can be wrong. The timestamp is the sync's, not the source's: one
+    /// sync fills every connected source, and a source that failed inside a
+    /// partial sync is reported by the `degraded` banner rather than by its row.
     var dataSources: [DataSourceStatus] {
-        [DataSourceStatus(source: .hevy, lastSync: lastSync, isSyncing: syncStatus == .syncing)]
+        syncedSources.map {
+            DataSourceStatus(source: $0, lastSync: lastSync, isSyncing: syncStatus == .syncing)
+        }
     }
 
     /// The read currently in flight, so a newer `load()` supersedes it.
@@ -259,6 +266,7 @@ final class WorkoutListViewModel: ObservableObject {
             // carries which, per source, for the banner to say so. No toast —
             // the moved timestamp is what tells the user their pull ran.
             syncStatus = Self.status(after: result)
+            syncedSources = result.sources
             refreshNotice = nil
             await load()
         } catch {

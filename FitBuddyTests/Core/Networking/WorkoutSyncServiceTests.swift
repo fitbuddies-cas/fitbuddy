@@ -514,6 +514,7 @@ final class WorkoutSyncServiceTests: XCTestCase {
         XCTAssertEqual(result.workoutCount, 2)
         XCTAssertTrue(result.failures.isEmpty)
         XCTAssertFalse(result.isPartial)
+        XCTAssertEqual(result.sources, [.hevy, .strava])
         let ids = try await workouts.cachedWorkoutIDs()
         XCTAssertEqual(Set(ids), ["hevy-1", "strava:1"])
         let stravaCredentials = await strava.lastConnectedCredentials

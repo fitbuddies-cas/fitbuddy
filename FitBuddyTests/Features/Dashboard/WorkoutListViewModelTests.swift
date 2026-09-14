@@ -572,10 +572,29 @@ final class WorkoutListViewModelTests: XCTestCase {
         XCTAssertTrue(source.needsAttention(now: reference))
     }
 
-    /// v0 syncs Hevy and nothing else, so the strip has exactly one row to
-    /// draw — a Strava row here would promise data no connector can deliver.
-    func testDataSourcesHoldHevyAloneInV0() {
+    /// Before any sync the strip has exactly one row to draw — a Strava row
+    /// here would promise data nobody has fetched.
+    func testDataSourcesHoldHevyAloneBeforeTheFirstSync() {
         XCTAssertEqual(makeSUT().dataSources.map(\.source), [.hevy])
+    }
+
+    /// Once a sync covered Strava too (#143), the strip gets its second row —
+    /// including after a partial sync, where the failed source is reported by
+    /// the banner and still listed.
+    func testDataSourcesListEverySourceTheLastSyncCovered() async {
+        await syncer.setResult(SyncResult(
+            workoutCount: 2,
+            syncedAt: reference,
+            windowStart: TrainingWindow.start(endingAt: reference),
+            failures: [.strava: .networkUnavailable],
+            sources: [.hevy, .strava]
+        ))
+        let sut = makeSUT(withSyncer: true)
+
+        await sut.refresh()
+
+        XCTAssertEqual(sut.dataSources.map(\.source), [.hevy, .strava])
+        XCTAssertEqual(sut.syncStatus, .degraded(failures: [.strava: .offline]))
     }
 
     func testDataSourceIsFreshAfterASuccessfulSync() async throws {

@@ -18,19 +18,27 @@ struct SyncResult: Equatable, Sendable {
     /// Sources that were attempted and failed, with why. Empty when every
     /// connected source synced.
     let failures: [ConnectorSource: WorkoutSyncError]
+    /// Every source this sync attempted, failed ones included, in
+    /// `ConnectorSource.allCases` order — what the dashboard's status strip
+    /// lists a row for (US-8, #40).
+    let sources: [ConnectorSource]
 
-    /// - Parameter failures: Defaults to none, so a single-source result —
-    ///   the DEBUG stub, a test fixture — reads as it always did.
+    /// - Parameters:
+    ///   - failures: Defaults to none, so a single-source result — the DEBUG
+    ///     stub, a test fixture — reads as it always did.
+    ///   - sources: Defaults to Hevy alone, for the same reason.
     init(
         workoutCount: Int,
         syncedAt: Date,
         windowStart: Date,
-        failures: [ConnectorSource: WorkoutSyncError] = [:]
+        failures: [ConnectorSource: WorkoutSyncError] = [:],
+        sources: [ConnectorSource] = [.hevy]
     ) {
         self.workoutCount = workoutCount
         self.syncedAt = syncedAt
         self.windowStart = windowStart
         self.failures = failures
+        self.sources = sources
     }
 
     /// Whether some connected source did not make it into this sync.
