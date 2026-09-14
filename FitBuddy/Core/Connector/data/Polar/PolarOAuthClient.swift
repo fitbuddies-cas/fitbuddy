@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-/// Drives the Polar OAuth2 authorization-code + PKCE flow (ADR-10): builds the
+/// Drives the Polar OAuth2 authorization-code + PKCE flow (ADR-11): builds the
 /// authorization URL, exchanges the returned code for tokens, and refreshes an
 /// expired access token.
 ///

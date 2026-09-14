@@ -1,6 +1,6 @@
 import Foundation
 
-/// Body of a successful Polar `POST /oauth/token` response (ADR-10), for both
+/// Body of a successful Polar `POST /oauth/token` response (ADR-11), for both
 /// the authorization-code exchange and the refresh call.
 ///
 /// Only `access_token` is strictly required. `refresh_token` is absent from

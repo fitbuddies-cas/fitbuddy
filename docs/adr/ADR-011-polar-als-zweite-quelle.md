@@ -1,4 +1,4 @@
-# ADR-10: Polar AccessLink als zweite Datenquelle (vor Strava)
+# ADR-11: Polar AccessLink als zweite Datenquelle (vor Strava)
 
 **Status:** Accepted
 **Datum:** 2026-09-10

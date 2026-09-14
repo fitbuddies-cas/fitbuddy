@@ -1,7 +1,7 @@
 import Foundation
 
 /// One training session as returned by Polar AccessLink `GET /v3/exercises`
-/// (ADR-10).
+/// (ADR-11).
 ///
 /// Only `id` and `startTime` are decoded strictly — the id identifies the
 /// session for de-duplication against the cache, the start time decides
@@ -80,6 +80,9 @@ struct PolarExerciseDTO: Decodable, Equatable, Sendable {
             sport: detailedSportInfo ?? sport
         )
 
+        // TODO(#5): once PR #152 (Strava) lands `Activity.source`, pass
+        // `source: .polar` here explicitly — the default is `.hevy`, which
+        // would silently mislabel every Polar activity.
         return Activity(
             id: "polar-\(id)",
             title: Self.title(sport: sport, detailed: detailedSportInfo),

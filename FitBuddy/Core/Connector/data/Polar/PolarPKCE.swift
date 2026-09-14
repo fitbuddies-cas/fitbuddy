@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 
 /// One PKCE (RFC 7636) verifier/challenge pair for a single Polar
-/// authorization run (ADR-10).
+/// authorization run (ADR-11).
 ///
 /// FitBuddy is a public OAuth client — there is no confidential secret it
 /// could send with the token request — so the `code_verifier` is what proves

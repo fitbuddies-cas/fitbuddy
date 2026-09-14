@@ -1,7 +1,7 @@
 import Foundation
 
 /// Everything a `PolarConnector` needs that is fixed per FitBuddy build
-/// rather than per user (ADR-10).
+/// rather than per user (ADR-11).
 ///
 /// The `clientID` / `redirectURI` come from the OAuth client registered at
 /// <https://admin.polaraccesslink.com>. There is no bundled default: a real
@@ -33,7 +33,7 @@ struct PolarClientConfiguration: Sendable {
     /// AccessLink REST base. `PolarConnector` targets the v3 `exercises`
     /// resource, whose response schema is stable and documented; migrating to
     /// the v4 `training-sessions` resource is tracked as an open point in
-    /// ADR-10.
+    /// ADR-11.
     var accessLinkBaseURL: URL {
         URL(staticString: "https://www.polaraccesslink.com/v3")
     }

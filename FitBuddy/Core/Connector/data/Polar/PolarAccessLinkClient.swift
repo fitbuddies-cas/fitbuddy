@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 /// Thin wrapper around the Polar AccessLink REST resources `PolarConnector`
-/// needs (ADR-10): registering the user once, then listing their exercises.
+/// needs (ADR-11): registering the user once, then listing their exercises.
 ///
 /// Split out from `PolarConnector` so the connector's orchestration (token
 /// refresh, windowing, mapping) and the raw HTTP are tested separately.
