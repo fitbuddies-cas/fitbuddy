@@ -23,6 +23,7 @@ struct MainTabView: View {
     private let makeSettingsViewModel: () -> SettingsViewModel
     private let makeWorkoutDetailViewModel: (String) -> WorkoutDetailViewModel
     private let makeExerciseListViewModel: () -> ExerciseListViewModel
+    private let makeExerciseProgressionViewModel: (ExerciseSummary) -> ExerciseProgressionViewModel
     private let makeAnalysisHistoryViewModel: () -> AnalysisHistoryViewModel
 
     /// Changes whenever something outside the dashboard invalidated the cache —
@@ -40,6 +41,8 @@ struct MainTabView: View {
     ///   - makeWorkoutDetailViewModel: Called once per pushed session (#98).
     ///   - makeExerciseListViewModel: Called once per push of the exercise
     ///     list (#37).
+    ///   - makeExerciseProgressionViewModel: Called once per pushed movement
+    ///     (#42).
     ///   - makeAnalysisHistoryViewModel: Called once per push of the saved
     ///     analyses (#117).
     ///   - reloadToken: Defaults to a constant, so a preview never re-syncs.
@@ -50,6 +53,7 @@ struct MainTabView: View {
         makeSettingsViewModel: @escaping () -> SettingsViewModel,
         makeWorkoutDetailViewModel: @escaping (String) -> WorkoutDetailViewModel,
         makeExerciseListViewModel: @escaping () -> ExerciseListViewModel,
+        makeExerciseProgressionViewModel: @escaping (ExerciseSummary) -> ExerciseProgressionViewModel,
         makeAnalysisHistoryViewModel: @escaping () -> AnalysisHistoryViewModel,
         reloadToken: Int = 0
     ) {
@@ -59,6 +63,7 @@ struct MainTabView: View {
         self.makeSettingsViewModel = makeSettingsViewModel
         self.makeWorkoutDetailViewModel = makeWorkoutDetailViewModel
         self.makeExerciseListViewModel = makeExerciseListViewModel
+        self.makeExerciseProgressionViewModel = makeExerciseProgressionViewModel
         self.makeAnalysisHistoryViewModel = makeAnalysisHistoryViewModel
         self.reloadToken = reloadToken
     }
@@ -70,6 +75,7 @@ struct MainTabView: View {
                     viewModel: makeDashboardViewModel(),
                     makeWorkoutDetailViewModel: makeWorkoutDetailViewModel,
                     makeExerciseListViewModel: makeExerciseListViewModel,
+                    makeExerciseProgressionViewModel: makeExerciseProgressionViewModel,
                     reloadToken: reloadToken
                 )
             }
@@ -131,6 +137,7 @@ private struct MainTabViewPreviewHost: View {
             makeExerciseListViewModel: {
                 ExerciseListViewModel(cache: PreviewExerciseCache.filled)
             },
+            makeExerciseProgressionViewModel: { _ in PreviewProgressionCache.rising },
             makeAnalysisHistoryViewModel: {
                 AnalysisHistoryViewModel(store: PreviewAnalysisResultStore())
             }
