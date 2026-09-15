@@ -24,6 +24,10 @@ final class StravaConnectionViewModelTests: XCTestCase {
         .oauth(accessToken: "access-old", refreshToken: "refresh-old", expiresAt: now.addingTimeInterval(-3600))
     }
 
+    private static var renewedPair: ConnectorCredentials {
+        .oauth(accessToken: "access-2", refreshToken: "refresh-2", expiresAt: now.addingTimeInterval(6 * 3600))
+    }
+
     override func setUp() async throws {
         try await super.setUp()
         oauth = StubStravaOAuthorizer()
@@ -56,21 +60,21 @@ final class StravaConnectionViewModelTests: XCTestCase {
         )
     }
 
-    // MARK: - Bootstrap
+    // MARK: - Stored state
 
-    func testBootstrapWithoutCredentialsIsMissingCredentialsAndCannotConnect() async {
+    func testRefreshStoredStateWithoutCredentialsIsMissingCredentialsAndCannotConnect() async {
         store = StubStravaCredentialStore(clientCredentials: nil)
         sut = makeViewModel()
 
-        await sut.bootstrap()
+        await sut.refreshStoredState()
 
         XCTAssertEqual(sut.state, .missingCredentials)
         XCTAssertFalse(sut.canConnect)
         XCTAssertFalse(sut.isConnected)
     }
 
-    func testBootstrapWithCredentialsButNoPairIsIdle() async {
-        await sut.bootstrap()
+    func testRefreshStoredStateWithCredentialsButNoPairIsIdle() async {
+        await sut.refreshStoredState()
 
         XCTAssertEqual(sut.state, .idle)
         XCTAssertTrue(sut.canConnect)
@@ -79,11 +83,11 @@ final class StravaConnectionViewModelTests: XCTestCase {
 
     /// A pair the previous launch stored is handed to the registry, so the
     /// renewal prompt and the sync see the same connection this screen does.
-    func testBootstrapWithAStoredPairConnectsTheRegistry() async {
+    func testRefreshStoredStateWithAStoredPairConnectsTheRegistry() async {
         store = StubStravaCredentialStore(clientCredentials: Self.client, credentials: Self.validPair)
         sut = makeViewModel()
 
-        await sut.bootstrap()
+        await sut.refreshStoredState()
 
         XCTAssertEqual(sut.state, .connected(expiresAt: Self.now.addingTimeInterval(4 * 3600)))
         XCTAssertTrue(sut.isConnected)
@@ -91,30 +95,83 @@ final class StravaConnectionViewModelTests: XCTestCase {
         XCTAssertEqual(registryState, .connected(expiresAt: Self.now.addingTimeInterval(4 * 3600)))
     }
 
-    func testBootstrapWithAnExpiredPairIsExpired() async {
+    func testRefreshStoredStateWithAnExpiredPairIsExpired() async {
         store = StubStravaCredentialStore(clientCredentials: Self.client, credentials: Self.expiredPair)
         sut = makeViewModel()
 
-        await sut.bootstrap()
+        await sut.refreshStoredState()
 
         XCTAssertEqual(sut.state, .expired(since: Self.now.addingTimeInterval(-3600)))
         XCTAssertTrue(sut.canConnect, "an expired connection is renewed by reconnecting")
         XCTAssertTrue(sut.isConnected, "there is still a pair to disconnect")
     }
 
-    func testBootstrapFailsOpenWhenTheStoreCannotBeRead() async {
+    /// A Keychain that refuses the read is not "nothing entered" — the
+    /// screen must not tell a fully set-up user to enter credentials again.
+    func testRefreshStoredStateReportsAnUnreadableStoreAsAKeychainFailure() async {
         await store.setFailReads(true)
 
-        await sut.bootstrap()
+        await sut.refreshStoredState()
 
-        XCTAssertEqual(sut.state, .missingCredentials)
+        XCTAssertEqual(sut.state, .failed(.keychain))
+        XCTAssertTrue(sut.canConnect, "the user can try again once the device is unlocked")
+    }
+
+    /// A run-out access token with a good refresh token is the everyday case
+    /// (six-hour tokens, US-5 AC4): the connector renews it silently and the
+    /// screen reports the renewed pair, not a false alarm.
+    func testRefreshStoredStateRenewsAnExpiredPairBeforeReportingIt() async {
+        store = StubStravaCredentialStore(clientCredentials: Self.client, credentials: Self.expiredPair)
+        await oauth.setRefreshResult(.success(Self.renewedPair))
+        await registry.register(
+            StravaConnector(session: StubURLProtocol.makeSession(), oauth: oauth, credentialStore: store, now: { Self.now }),
+            for: .strava
+        )
+        sut = makeViewModel()
+
+        await sut.refreshStoredState()
+
+        XCTAssertEqual(sut.state, .connected(expiresAt: Self.now.addingTimeInterval(6 * 3600)))
+        let stored = await store.storedCredentials
+        XCTAssertEqual(stored, Self.renewedPair, "the rotated pair is what got persisted")
+        let registryState = await registry.state(of: .strava, now: Self.now)
+        XCTAssertEqual(registryState, .connected(expiresAt: Self.now.addingTimeInterval(6 * 3600)))
+    }
+
+    /// Only a pair Strava actually rejects is reported as expired (US-5 AC2).
+    func testRefreshStoredStateKeepsExpiredWhenStravaRejectsTheRefresh() async {
+        store = StubStravaCredentialStore(clientCredentials: Self.client, credentials: Self.expiredPair)
+        await oauth.setRefreshResult(.failure(StravaOAuthError.invalidGrant))
+        await registry.register(
+            StravaConnector(session: StubURLProtocol.makeSession(), oauth: oauth, credentialStore: store, now: { Self.now }),
+            for: .strava
+        )
+        sut = makeViewModel()
+
+        await sut.refreshStoredState()
+
+        XCTAssertEqual(sut.state, .expired(since: Self.now.addingTimeInterval(-3600)))
+        XCTAssertTrue(sut.isConnected, "there is still a pair to disconnect")
+    }
+
+    /// A pair the connector refreshed in the meantime — and, with a locked
+    /// Keychain, may hold nowhere else — is not overwritten by the stale
+    /// stored one on the next visit to the screen.
+    func testRefreshStoredStateDoesNotOverwriteANewerPairTheRegistryHolds() async throws {
+        store = StubStravaCredentialStore(clientCredentials: Self.client, credentials: Self.validPair)
+        sut = makeViewModel()
+        try await registry.connect(.strava, credentials: Self.renewedPair)
+
+        await sut.refreshStoredState()
+
+        XCTAssertEqual(sut.state, .connected(expiresAt: Self.now.addingTimeInterval(6 * 3600)))
     }
 
     /// Returning from the credentials screen after entering a pair.
     func testRefreshStoredStatePicksUpNewlyEnteredCredentials() async {
         store = StubStravaCredentialStore(clientCredentials: nil)
         sut = makeViewModel()
-        await sut.bootstrap()
+        await sut.refreshStoredState()
         XCTAssertEqual(sut.state, .missingCredentials)
 
         try? await store.saveClientCredentials(Self.client)
@@ -129,7 +186,7 @@ final class StravaConnectionViewModelTests: XCTestCase {
         var notified = 0
         sut.onConnected = { notified += 1 }
         await oauth.setAuthorizeResult(.success(Self.validPair))
-        await sut.bootstrap()
+        await sut.refreshStoredState()
 
         await sut.connect()
 
@@ -146,7 +203,7 @@ final class StravaConnectionViewModelTests: XCTestCase {
     func testConnectWithoutCredentialsDoesNotOpenTheBrowser() async {
         store = StubStravaCredentialStore(clientCredentials: nil)
         sut = makeViewModel()
-        await sut.bootstrap()
+        await sut.refreshStoredState()
 
         await sut.connect()
 
@@ -159,7 +216,7 @@ final class StravaConnectionViewModelTests: XCTestCase {
     /// where the user was.
     func testCancelledFlowReturnsToTheStateBeforeAndShowsNoBanner() async {
         await oauth.setAuthorizeResult(.failure(StravaOAuthError.cancelled))
-        await sut.bootstrap()
+        await sut.refreshStoredState()
 
         await sut.connect()
 
@@ -172,7 +229,7 @@ final class StravaConnectionViewModelTests: XCTestCase {
         store = StubStravaCredentialStore(clientCredentials: Self.client, credentials: Self.validPair)
         sut = makeViewModel()
         await oauth.setAuthorizeResult(.failure(StravaOAuthError.cancelled))
-        await sut.bootstrap()
+        await sut.refreshStoredState()
 
         await sut.connect()
 
@@ -182,7 +239,7 @@ final class StravaConnectionViewModelTests: XCTestCase {
     /// AC: wrong client credentials point the user at the credentials screen.
     func testRejectedClientCredentialsPointToTheCredentialsScreen() async {
         await oauth.setAuthorizeResult(.failure(StravaOAuthError.invalidClientCredentials))
-        await sut.bootstrap()
+        await sut.refreshStoredState()
 
         await sut.connect()
 
@@ -193,7 +250,7 @@ final class StravaConnectionViewModelTests: XCTestCase {
 
     func testDeclinedConsentIsReportedWithoutPointingToCredentials() async {
         await oauth.setAuthorizeResult(.failure(StravaOAuthError.accessDenied))
-        await sut.bootstrap()
+        await sut.refreshStoredState()
 
         await sut.connect()
 
@@ -204,7 +261,7 @@ final class StravaConnectionViewModelTests: XCTestCase {
     func testKeychainFailureAfterAuthorizationIsReportedAndNothingIsConnected() async {
         await oauth.setAuthorizeResult(.success(Self.validPair))
         await store.setFailWrites(true)
-        await sut.bootstrap()
+        await sut.refreshStoredState()
 
         await sut.connect()
 
@@ -222,7 +279,7 @@ final class StravaConnectionViewModelTests: XCTestCase {
         store = StubStravaCredentialStore(clientCredentials: Self.client, credentials: Self.validPair)
         sut = makeViewModel()
         sut.onDisconnected = { notified += 1 }
-        await sut.bootstrap()
+        await sut.refreshStoredState()
         XCTAssertTrue(sut.isConnected)
 
         await sut.disconnect()
@@ -241,15 +298,54 @@ final class StravaConnectionViewModelTests: XCTestCase {
         XCTAssertEqual(hardLogouts, 0, "disconnecting Strava must not log out of Hevy")
     }
 
-    func testDisconnectKeychainFailureIsReported() async {
+    /// A Keychain that refuses the delete must not leave a half-torn-down
+    /// connection: the cache and the registry are cleared regardless, the
+    /// failure is shown, and Disconnect stays on offer so it can be retried.
+    func testDisconnectKeychainFailureStillDropsTheCacheAndCanBeRetried() async {
+        var notified = 0
         store = StubStravaCredentialStore(clientCredentials: Self.client, credentials: Self.validPair)
         sut = makeViewModel()
-        await sut.bootstrap()
+        sut.onDisconnected = { notified += 1 }
+        await sut.refreshStoredState()
         await store.setFailWrites(true)
 
         await sut.disconnect()
 
         XCTAssertEqual(sut.state, .failed(.keychain))
+        XCTAssertTrue(sut.isConnected, "the tokens are still stored, so tearing down must be offered again")
+        XCTAssertEqual(notified, 1, "the cached sessions are gone, the dashboard has to re-read")
+        let discarded = await reset.discardedSources
+        XCTAssertEqual(discarded, [.strava])
+        let registryState = await registry.state(of: .strava, now: Self.now)
+        XCTAssertEqual(registryState, .disconnected)
+
+        await store.setFailWrites(false)
+        await sut.disconnect()
+
+        XCTAssertEqual(sut.state, .missingCredentials)
+        let cleared = await store.clearCount
+        XCTAssertEqual(cleared, 2)
+    }
+
+    /// The registry not taking the pair means no connection — and the pair
+    /// just stored goes again, or the next sync would pull Strava in under a
+    /// screen that says "not connected".
+    func testConnectRemovesTheStoredPairWhenTheRegistryRefusesIt() async {
+        let refusing = MockConnector()
+        await refusing.setConnectResult(.failure(.unauthorized))
+        await registry.register(refusing, for: .strava)
+        await oauth.setAuthorizeResult(.success(Self.validPair))
+        await sut.refreshStoredState()
+
+        await sut.connect()
+
+        XCTAssertEqual(sut.state, .failed(.invalidResponse))
+        let stored = await store.storedCredentials
+        XCTAssertNil(stored)
+        let tokensCleared = await store.clearTokensCount
+        XCTAssertEqual(tokensCleared, 1)
+        let remainingClient = await store.storedClientCredentials
+        XCTAssertEqual(remainingClient, Self.client, "the application credentials were not what failed")
     }
 
     // MARK: - Failure presentation

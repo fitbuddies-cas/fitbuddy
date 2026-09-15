@@ -443,8 +443,14 @@ final class AnalysisViewModel: ObservableObject {
             // Read wide enough for the widest rung of the ladder and its
             // comparison window; the cache returns what it has, and the
             // resolved window decides what of it is actually analysed.
-            let summaries = try await cache.workoutSummaries(
-                since: AnalysisWindow.widest.previousStart(endingAt: reference, calendar: calendar)
+            // Strava sessions are dropped right here, so the window ladder,
+            // the context line and the prompt all describe the same strength
+            // history (US-6 AC1) — a cache holding nothing but runs is "no
+            // training data" for the analysis, not a window to widen.
+            let summaries = AnalysisPromptBuilder.strengthSessions(
+                in: try await cache.workoutSummaries(
+                    since: AnalysisWindow.widest.previousStart(endingAt: reference, calendar: calendar)
+                )
             )
             guard !Task.isCancelled else { return nil }
 

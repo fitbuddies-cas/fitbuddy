@@ -5,9 +5,9 @@ import Foundation
 /// provider-specific type — the registry stores `any FitnessConnector`, keyed
 /// by this.
 ///
-/// `strava` is listed although only `StravaConnector`'s stub exists in v0: the
-/// case is what lets the registry, and the renewal prompt from US-5 AC2, be
-/// written and tested before the OAuth flow lands in v1.
+/// `strava` was listed before its connector existed, so the registry and the
+/// renewal prompt from US-5 AC2 could be written against it; since #142 the
+/// real `StravaConnector` stands behind it.
 ///
 /// `Codable` because `Activity` carries it (#141) and `Activity` is the
 /// connector-facing wire boundary.

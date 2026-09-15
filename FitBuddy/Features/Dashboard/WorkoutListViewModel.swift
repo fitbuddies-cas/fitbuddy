@@ -1,8 +1,8 @@
 import Foundation
 import OSLog
 
-/// Drives the dashboard's workout list, its 90-day metrics and the Hevy sync
-/// that keeps them current (US-2).
+/// Drives the dashboard's workout list, its 90-day metrics and the sync over
+/// every connected source that keeps them current (US-2, US-5).
 ///
 /// Everything on screen is rendered from the SwiftData cache — `load()` never
 /// touches the network. The sync is a separate step that writes into that same
@@ -316,6 +316,7 @@ final class WorkoutListViewModel: ObservableObject {
     /// source otherwise. A source whose failure has no banner wording (an
     /// auth failure on Hevy would have thrown instead) is left out.
     private static func status(after result: SyncResult) -> SyncStatus {
+        guard result.isPartial else { return .idle }
         var failures: [ConnectorSource: SyncFailure] = [:]
         for (source, error) in result.failures {
             failures[source] = SyncFailure(syncError: error, source: source)

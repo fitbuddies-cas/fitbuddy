@@ -68,12 +68,20 @@ actor StravaCredentialStore: StravaCredentialStoring {
 
     // MARK: - Reset
 
+    func clearTokens() async throws {
+        try await delete(Self.tokenKeys)
+    }
+
     func clear() async throws {
-        // Every delete is attempted even if an earlier one fails: leaving a
-        // live token behind because the client ID could not be removed would be
-        // the worse outcome. The first error is reported afterwards.
+        try await delete(Self.ownedKeys)
+    }
+
+    /// Every delete is attempted even if an earlier one fails: leaving a
+    /// live token behind because the client ID could not be removed would be
+    /// the worse outcome. The first error is reported afterwards.
+    private func delete(_ keys: [KeychainKey]) async throws {
         var firstError: Error?
-        for key in Self.ownedKeys {
+        for key in keys {
             do {
                 try await keychain.delete(key)
             } catch {
@@ -87,9 +95,10 @@ actor StravaCredentialStore: StravaCredentialStoring {
 
     /// The items this store owns. Deliberately not `KeychainKey.allCases` —
     /// clearing Strava must not touch the Hevy or LLM keys.
-    private static let ownedKeys: [KeychainKey] = [
-        .stravaClientID,
-        .stravaClientSecret,
+    static let ownedKeys: [KeychainKey] = [.stravaClientID, .stravaClientSecret] + tokenKeys
+
+    /// The three items that make up the token pair.
+    private static let tokenKeys: [KeychainKey] = [
         .stravaAccessToken,
         .stravaRefreshToken,
         .stravaTokenExpiry,

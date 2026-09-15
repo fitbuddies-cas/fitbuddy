@@ -21,6 +21,10 @@ protocol StravaCredentialStoring: Sendable {
     /// and after every refresh.
     func saveTokens(accessToken: String, refreshToken: String, expiresAt: Date) async throws
 
+    /// Removes the token pair and keeps the application credentials — the
+    /// connection is undone, the set-up stays.
+    func clearTokens() async throws
+
     /// Removes application credentials and tokens alike.
     func clear() async throws
 }

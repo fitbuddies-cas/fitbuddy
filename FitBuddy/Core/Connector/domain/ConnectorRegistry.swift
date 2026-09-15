@@ -16,10 +16,9 @@ import Foundation
 /// An `actor` because connectors are actors themselves and callers reach this
 /// from the main actor (dashboard) and from background sync alike.
 ///
-/// v0 scope: no fan-out `fetchActivities` across all sources. The only real
-/// connector is Hevy (#34) and `StravaConnector` throws `.notImplemented`, so
-/// an aggregate fetch would have nothing to aggregate and one stub source would
-/// fail the whole sync. Callers fetch through `connector(for:)`.
+/// No aggregate `fetchActivities` here: the fan-out over every connected
+/// source — and the call whether one failing source fails the sync — belongs
+/// to `WorkoutSyncService` (#143), which fetches through `connector(for:)`.
 actor ConnectorRegistry {
     private var connectors: [ConnectorSource: any FitnessConnector] = [:]
     /// Sources whose `connect` succeeded and that have not been disconnected.
@@ -71,6 +70,32 @@ actor ConnectorRegistry {
         try await connector.connect(credentials: credentials)
         connectedSources.insert(source)
         expiryDates[source] = credentials.expiresAt
+    }
+
+    /// `connect`, unless the source is already connected with credentials
+    /// that expire at the same time or later — then the connector keeps what
+    /// it has and nothing is recorded.
+    ///
+    /// For a stored pair that is re-read on every sync and every visit to the
+    /// connection screen: the connector may hold a pair it refreshed in the
+    /// meantime, and one whose persist failed (locked Keychain) exists *only*
+    /// there. Handing the stored pair over again would replace the rotated
+    /// refresh token with one Strava has already invalidated. Credentials
+    /// without an expiry (an API key) cannot be compared and are always handed
+    /// over — a replaced Hevy key has to reach its connector.
+    ///
+    /// - Returns: Whether the connector was handed the credentials.
+    /// - Throws: As `connect`.
+    @discardableResult
+    func connectIfNewer(_ source: ConnectorSource, credentials: ConnectorCredentials) async throws -> Bool {
+        if let offered = credentials.expiresAt,
+           connectedSources.contains(source),
+           let recorded = expiryDates[source],
+           recorded >= offered {
+            return false
+        }
+        try await connect(source, credentials: credentials)
+        return true
     }
 
     /// Asks the source's connector whether its credentials still work.

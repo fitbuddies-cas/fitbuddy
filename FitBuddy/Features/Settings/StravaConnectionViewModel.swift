@@ -61,46 +61,74 @@ final class StravaConnectionViewModel: ObservableObject {
         }
     }
 
-    /// Whether there is a stored pair to tear down.
+    /// Whether there is (or may be) a stored pair to tear down.
+    ///
+    /// `.failed(.keychain)` counts: the Keychain refused a write, so what is
+    /// stored is unknown — after a disconnect that could not clear it, the
+    /// tokens are still there and the user has to be able to try again.
     var isConnected: Bool {
         switch state {
-        case .connected, .expired: return true
+        case .connected, .expired, .failed(.keychain): return true
         case .unknown, .missingCredentials, .idle, .authorizing, .failed: return false
         }
     }
 
     // MARK: - Lifecycle
 
-    /// Resolves `.unknown` from what is stored: no credentials, credentials
-    /// without a pair, or a pair the registry is handed so its expiry
-    /// bookkeeping starts.
-    func bootstrap() async {
-        guard state == .unknown else { return }
-        await refreshStoredState()
-    }
-
-    /// Re-reads the stores, e.g. after the user came back from the
-    /// credentials screen. A running flow is left alone.
+    /// Re-reads the stores: on every appearance of the screen, so a pair
+    /// entered on the credentials screen a moment ago is reflected too. A
+    /// running flow is left alone.
+    ///
+    /// A stored pair is handed to the registry so the renewal prompt and the
+    /// sync see the same connection this screen does. A pair whose access
+    /// token has run out is not reported as expired right away: the access
+    /// token lives six hours, so every returning user would otherwise read
+    /// "could not be renewed" over a connection the next sync renews on its
+    /// own (US-5 AC4). The connector is asked to refresh first, and only a
+    /// pair Strava rejects — or one that cannot be checked — stays expired.
     func refreshStoredState() async {
         guard state != .authorizing else { return }
 
-        let client = try? await credentialStore.clientCredentials()
+        let client: StravaClientCredentials?
+        let stored: ConnectorCredentials?
+        do {
+            client = try await credentialStore.clientCredentials()
+            stored = try await credentialStore.credentials()
+        } catch {
+            // A Keychain that refuses the read (device just unlocked, prewarm
+            // launch) is not "nothing entered": reporting it as missing
+            // credentials would hide a complete set-up behind a wrong message.
+            state = .failed(.keychain)
+            return
+        }
         guard client != nil else {
             state = .missingCredentials
             return
         }
-
-        guard let stored = try? await credentialStore.credentials() else {
+        guard let stored else {
             state = .idle
             return
         }
 
-        // A pair the previous launch stored: hand it to the registry so the
-        // renewal prompt and the sync see the same connection this screen
-        // does. A connector that refuses it (empty token) leaves the source
-        // disconnected, and the screen offers to connect afresh.
-        try? await registry.connect(.strava, credentials: stored)
-        state = Self.state(from: await registry.state(of: .strava, now: now()))
+        // A connector that refuses the pair (empty token) leaves the source
+        // disconnected, and the screen offers to connect afresh. `IfNewer`:
+        // a pair the connector has refreshed since is not overwritten.
+        try? await registry.connectIfNewer(.strava, credentials: stored)
+        var registryState = await registry.state(of: .strava, now: now())
+        if case .expired = registryState {
+            registryState = await renewedState(after: registryState)
+        }
+        state = Self.state(from: registryState)
+    }
+
+    /// Lets the connector refresh a run-out pair and, when it did, brings the
+    /// registry's expiry bookkeeping up to the rotated pair it persisted.
+    /// Anything but a successful refresh leaves `expired` in place.
+    private func renewedState(after expired: ConnectorConnectionState) async -> ConnectorConnectionState {
+        let renewed = (try? await registry.validate(.strava)) ?? false
+        guard renewed, let fresh = try? await credentialStore.credentials() else { return expired }
+        try? await registry.connectIfNewer(.strava, credentials: fresh)
+        return await registry.state(of: .strava, now: now())
     }
 
     /// Runs the browser flow and, on success, stores the pair and connects the
@@ -109,7 +137,14 @@ final class StravaConnectionViewModel: ObservableObject {
         guard canConnect else { return }
         let resting = state
 
-        guard let client = try? await credentialStore.clientCredentials() else {
+        let client: StravaClientCredentials?
+        do {
+            client = try await credentialStore.clientCredentials()
+        } catch {
+            state = .failed(.keychain)
+            return
+        }
+        guard let client else {
             state = .missingCredentials
             return
         }
@@ -142,9 +177,12 @@ final class StravaConnectionViewModel: ObservableObject {
         do {
             try await registry.connect(.strava, credentials: pair)
         } catch {
-            // The pair is stored, so the next launch will retry the hand-over;
-            // for now the screen cannot claim a connection the registry does
-            // not have.
+            // The registry did not take the pair, so the screen cannot claim
+            // a connection — and the stored pair goes again, or the next sync
+            // would quietly pull Strava sessions in under a screen that says
+            // "not connected". The application credentials stay: they were
+            // not what failed.
+            try? await credentialStore.clearTokens()
             state = .failed(.invalidResponse)
             return
         }
@@ -156,25 +194,25 @@ final class StravaConnectionViewModel: ObservableObject {
     /// Tears the connection down: the registry forgets it, every Strava item
     /// leaves the Keychain — application credentials included — and the
     /// cached Strava sessions go. The Hevy session is not touched.
+    ///
+    /// Every step runs whatever the others did (the stance of
+    /// `SessionResetService`): a Keychain that refuses the delete must not
+    /// leave the cached sessions on the dashboard, and the failure is shown
+    /// with the Disconnect button still offered, so the user can try again.
     func disconnect() async {
         guard state != .authorizing else { return }
 
         await registry.disconnect(.strava)
+        await sessionReset.discardCachedWorkouts(from: .strava)
         do {
             try await credentialStore.clear()
         } catch {
             state = .failed(.keychain)
+            onDisconnected?()
             return
         }
-        await sessionReset.discardCachedWorkouts(from: .strava)
         state = .missingCredentials
         onDisconnected?()
-    }
-
-    /// Clears the banner without changing what is stored.
-    func dismissFailure() {
-        guard case .failed = state else { return }
-        Task { await refreshStoredState() }
     }
 
     // MARK: - Mapping

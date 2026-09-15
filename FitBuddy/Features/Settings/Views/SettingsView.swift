@@ -367,8 +367,8 @@ struct SettingsView: View {
         switch target {
         case .hevy:
             return """
-            FitBuddy can no longer sync your workouts, the cached training data is deleted, and you \
-            return to onboarding to enter a new key.
+            FitBuddy can no longer sync your workouts, the cached training data and a Strava \
+            connection are deleted, and you return to onboarding to enter a new key.
             """
         case .llm(let provider):
             if viewModel.llmKeys.count <= 1 {

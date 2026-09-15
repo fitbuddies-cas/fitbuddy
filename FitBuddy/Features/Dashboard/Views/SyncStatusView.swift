@@ -8,30 +8,28 @@ import SwiftUI
 /// disappears the moment a sync succeeds; the source rows never do.
 struct SyncStatusView: View {
     let status: SyncStatus
-    /// The sources the strip reports on — one per row (#40). v0 hands in Hevy
-    /// alone; `DataSourceStatusView` loops either way.
+    /// The sources the strip reports on — one per row (#40): Hevy, and Strava
+    /// once a sync has covered it (#143).
     let sources: [DataSourceStatus]
     /// Overrides the clock, so the rendered age is deterministic in tests.
     /// `nil` in the app, where the timeline below supplies the current time.
     var now: Date?
-    /// Syncs again. Takes no source: v0 has one sync path that refills the
-    /// whole cache, so both the banner's button and a stale row's mean the
-    /// same thing.
+    /// Syncs again. Takes no source: there is one sync path and it refills
+    /// every connected source, so both the banner's button and a stale row's
+    /// mean the same thing.
     let onRetry: () -> Void
     /// The re-auth link US-5 AC2 asks for: a source whose token can only be
     /// renewed by the user. Defaults to nothing, for callers that only have
     /// one source.
     var onRenew: (ConnectorSource) -> Void = { _ in }
 
-    /// The sync the banner is about. The banner reports the attempt that just
-    /// failed, and in v0 exactly one source is ever synced — see
-    /// `WorkoutSyncService`.
-    ///
-    /// - Note: **Does not scale to a second source (#35).** With two sources
-    ///   this would report the first one's timestamp whichever of them
-    ///   actually failed. It falls away once `SyncStatus` is tracked per
-    ///   source rather than per dashboard; until then, unreachable — the
-    ///   registry has one real connector.
+    /// The sync the full-failure banner is about. `.failed` means the whole
+    /// sync ended without caching anything (`WorkoutSyncService` throws only
+    /// then), so the one timestamp every source shares — the sync's, see
+    /// `WorkoutListViewModel.dataSources` — is the right one to show. The
+    /// per-source banner of a partial sync deliberately shows none: that sync
+    /// did just run, and "synced just now" next to "not synced" would be two
+    /// halves of one sentence contradicting each other.
     private var lastSync: Date? { sources.first?.lastSync }
 
     var body: some View {
@@ -53,12 +51,9 @@ struct SyncStatusView: View {
             // source rows underneath would print it twice — and a stale badge
             // next to a failure the user is already being told about only
             // splits their attention. The banner is the whole report while it
-            // is up (US-2 AC2 is met either way).
-            //
-            // Does not scale to a second source (#35): this hides *every*
-            // source row, so a Hevy failure would also swallow a stale Strava
-            // row that has nothing to do with it. Same fix as `lastSync`
-            // above — a per-source `SyncStatus`.
+            // is up (US-2 AC2 is met either way). Hiding every row is right
+            // here: `.failed` means no source got through, a per-source
+            // outcome is `.degraded` below.
             banner(failure, now: now)
         case .degraded(let failures):
             // A partial sync (#143, #144): one banner per source that is
@@ -68,7 +63,7 @@ struct SyncStatusView: View {
             VStack(spacing: 8) {
                 ForEach(ConnectorSource.allCases.filter { failures[$0] != nil }) { source in
                     if let failure = failures[source] {
-                        sourceBanner(source, failure, now: now)
+                        sourceBanner(source, failure)
                     }
                 }
                 DataSourceStatusView(
@@ -120,8 +115,8 @@ struct SyncStatusView: View {
     /// A partial sync's banner for one source (#144). Two shapes: a token
     /// only the user can renew gets the renewal prompt and a link into the
     /// re-auth flow (US-5 AC2); anything else names the source and offers the
-    /// same retry as the full-failure banner.
-    private func sourceBanner(_ source: ConnectorSource, _ failure: SyncFailure, now: Date) -> some View {
+    /// same retry as the full-failure banner. No timestamp — see `lastSync`.
+    private func sourceBanner(_ source: ConnectorSource, _ failure: SyncFailure) -> some View {
         let needsRenewal = failure == .connectionExpired
         return HStack(alignment: .top, spacing: 10) {
             Image(systemName: failure.symbolName)
@@ -132,7 +127,7 @@ struct SyncStatusView: View {
                 Text(needsRenewal ? source.renewalPrompt : "\(source.displayName) not synced")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.fbInk)
-                Text(bannerDetail(failure, now: now))
+                Text(failure.summary)
                     .font(.caption)
                     .foregroundStyle(Color.fbInkSecondary)
                     .fixedSize(horizontal: false, vertical: true)

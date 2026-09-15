@@ -10,9 +10,12 @@ import Foundation
 /// tokens through, and the OAuth service that carries the browser seam.
 ///
 /// Main-actor bound because `WebAuthenticationSession` is; it is created here
-/// and nowhere else. `RootView` owns one of these as state.
+/// and nowhere else. `RootView` owns one as a `@StateObject` — the one
+/// property wrapper whose initial value is an autoclosure, so the stack is
+/// built once rather than on every re-creation of the view struct. It
+/// publishes nothing; the conformance is only what `@StateObject` asks for.
 @MainActor
-final class DataSourceStack {
+final class DataSourceStack: ObservableObject {
     let registry = ConnectorRegistry()
     let hevyConnector = HevyConnector()
     let stravaCredentialStore = StravaCredentialStore()

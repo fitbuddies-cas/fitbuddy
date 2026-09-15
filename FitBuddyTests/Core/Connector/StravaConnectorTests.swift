@@ -318,12 +318,55 @@ final class StravaConnectorTests: XCTestCase {
         StubURLProtocol.handler = { Self.response(status: 200, for: $0) }
 
         await assertFetchThrows(.unauthorized)
-        let valid = try await sut.validate()
 
-        XCTAssertFalse(valid)
         XCTAssertTrue(Self.captured.isEmpty, "no request may be sent with a token Strava rejected")
         let saved = await store.savedTokenPairs.count
         XCTAssertEqual(saved, 0)
+    }
+
+    /// The rejected pair is dropped: Strava has rotated it away, and every
+    /// later call in the process would otherwise re-send the dead refresh
+    /// token — one round-trip each against the application's rate limit.
+    func testARejectedRefreshDropsThePairSoLaterCallsSendNothing() async throws {
+        try await sut.connect(credentials: Self.expiringPair)
+        await oauth.setRefreshResult(.failure(StravaOAuthError.invalidGrant))
+        StubURLProtocol.handler = { Self.response(status: 200, for: $0) }
+
+        await assertFetchThrows(.unauthorized)
+        await assertFetchThrows(.unauthorized)
+        do {
+            _ = try await sut.validate()
+            XCTFail("Expected .unauthorized: there is no pair left to validate")
+        } catch let error as ConnectorError {
+            XCTAssertEqual(error, .unauthorized)
+        }
+
+        let refreshes = await oauth.refreshCalls.count
+        XCTAssertEqual(refreshes, 1, "the dead refresh token is sent once, not on every call")
+        XCTAssertTrue(Self.captured.isEmpty)
+    }
+
+    /// A refresh interrupted by task cancellation is neither a rejected pair
+    /// nor a connectivity problem — it travels out as the cancellation it is,
+    /// like a cancelled request in `get()`.
+    func testACancelledRefreshPropagatesAsACancellation() async throws {
+        try await sut.connect(credentials: Self.expiringPair)
+        await oauth.setRefreshResult(.failure(StravaOAuthError.cancelled))
+
+        do {
+            _ = try await sut.fetchActivities(since: Self.daysAgo(90))
+            XCTFail("Expected the cancellation to propagate")
+        } catch {
+            XCTAssertTrue(error.isCancellation, "Unexpected error: \(error)")
+        }
+
+        await oauth.setRefreshResult(.failure(CancellationError()))
+        do {
+            _ = try await sut.validate()
+            XCTFail("Expected the cancellation to propagate")
+        } catch {
+            XCTAssertTrue(error.isCancellation, "Unexpected error: \(error)")
+        }
     }
 
     func testRefreshWithoutClientCredentialsIsRejected() async throws {

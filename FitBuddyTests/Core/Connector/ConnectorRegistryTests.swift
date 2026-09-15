@@ -326,4 +326,73 @@ final class ConnectorRegistryTests: XCTestCase {
         XCTAssertEqual(ConnectorSource.strava.renewalPrompt, "Renew your Strava connection")
         XCTAssertEqual(ConnectorSource.hevy.renewalPrompt, "Renew your Hevy connection")
     }
+
+    // MARK: - connectIfNewer
+
+    /// A stored pair re-read on every sync must not replace a pair the
+    /// connector has refreshed since — with a locked Keychain the rotated one
+    /// exists only in the connector.
+    func testConnectIfNewerKeepsAPairThatExpiresLater() async throws {
+        let sut = ConnectorRegistry()
+        let strava = MockConnector()
+        await sut.register(strava, for: .strava)
+        let rotated = ConnectorCredentials.oauth(accessToken: "new", refreshToken: "r2", expiresAt: afterExpiry)
+        let stale = ConnectorCredentials.oauth(accessToken: "old", refreshToken: "r1", expiresAt: expiresAt)
+        try await sut.connect(.strava, credentials: rotated)
+
+        let handedOver = try await sut.connectIfNewer(.strava, credentials: stale)
+
+        XCTAssertFalse(handedOver)
+        let connected = await strava.lastConnectedCredentials
+        XCTAssertEqual(connected, rotated)
+        let state = await sut.state(of: .strava, now: beforeExpiry)
+        XCTAssertEqual(state, .connected(expiresAt: afterExpiry))
+    }
+
+    func testConnectIfNewerKeepsAPairWithTheSameExpiry() async throws {
+        let sut = ConnectorRegistry()
+        let strava = MockConnector()
+        await sut.register(strava, for: .strava)
+        let pair = ConnectorCredentials.oauth(accessToken: "a", refreshToken: "r", expiresAt: expiresAt)
+        try await sut.connect(.strava, credentials: pair)
+
+        let handedOver = try await sut.connectIfNewer(.strava, credentials: pair)
+
+        XCTAssertFalse(handedOver)
+        let connects = await strava.connectCallCount
+        XCTAssertEqual(connects, 1)
+    }
+
+    func testConnectIfNewerHandsOverAPairThatExpiresLaterAndADisconnectedSource() async throws {
+        let sut = ConnectorRegistry()
+        let strava = MockConnector()
+        await sut.register(strava, for: .strava)
+        let stale = ConnectorCredentials.oauth(accessToken: "old", refreshToken: "r1", expiresAt: expiresAt)
+        let rotated = ConnectorCredentials.oauth(accessToken: "new", refreshToken: "r2", expiresAt: afterExpiry)
+
+        let first = try await sut.connectIfNewer(.strava, credentials: stale)
+        let second = try await sut.connectIfNewer(.strava, credentials: rotated)
+
+        XCTAssertTrue(first, "a disconnected source takes whatever it is offered")
+        XCTAssertTrue(second)
+        let connected = await strava.lastConnectedCredentials
+        XCTAssertEqual(connected, rotated)
+        let state = await sut.state(of: .strava, now: beforeExpiry)
+        XCTAssertEqual(state, .connected(expiresAt: afterExpiry))
+    }
+
+    /// An API key has no expiry to compare, and a replaced Hevy key has to
+    /// reach its connector — so it is always handed over.
+    func testConnectIfNewerAlwaysHandsOverAnAPIKey() async throws {
+        let sut = ConnectorRegistry()
+        let hevy = MockConnector()
+        await sut.register(hevy, for: .hevy)
+        try await sut.connect(.hevy, credentials: .apiKey("first"))
+
+        let handedOver = try await sut.connectIfNewer(.hevy, credentials: .apiKey("second"))
+
+        XCTAssertTrue(handedOver)
+        let connected = await hevy.lastConnectedCredentials
+        XCTAssertEqual(connected, .apiKey("second"))
+    }
 }

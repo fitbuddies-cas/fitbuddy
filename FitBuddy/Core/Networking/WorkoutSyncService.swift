@@ -77,30 +77,43 @@ actor WorkoutSyncService: WorkoutSyncing {
 
         var failures: [ConnectorSource: WorkoutSyncError] = [:]
         var credentials: [ConnectorSource: ConnectorCredentials] = [.hevy: .apiKey(hevyKey)]
-        switch await storedStravaCredentials() {
-        case .available(let pair): credentials[.strava] = pair
-        case .unreadable: failures[.strava] = .keychainUnavailable
-        case .notConfigured: break
-        }
         // `allCases` order, so "the first source" below means the same thing
         // on every run.
-        let sources = ConnectorSource.allCases.filter { credentials[$0] != nil }
+        var sources: [ConnectorSource] = [.hevy]
+        switch await storedStravaCredentials() {
+        case .available(let pair):
+            credentials[.strava] = pair
+            sources.append(.strava)
+        case .unreadable:
+            // A Keychain that refuses the read cannot say whether a pair is
+            // in there. Only a connection this process already knows about
+            // makes that a Strava failure worth a banner; on a device that
+            // never connected Strava it would announce a source the user
+            // does not have. Either way it is an attempted source, so the
+            // result lists it (`SyncResult.sources`).
+            if await registry.state(of: .strava, now: syncedAt) != .disconnected {
+                failures[.strava] = .keychainUnavailable
+                sources.append(.strava)
+            }
+        case .notConfigured:
+            // No pair stored — disconnected by the user, or wiped by "delete
+            // all data" (#83), which knows nothing about the connector. Same
+            // rule as for the Hevy key in `storedHevyKey()`: a reset the UI
+            // promises is a full deletion must not leave the tokens sitting in
+            // the process.
+            await registry.disconnect(.strava)
+        }
         logger.notice("Fetching \(sources.map(\.rawValue).joined(separator: ","), privacy: .public); task cancelled: \(Task.isCancelled, privacy: .public)")
 
         let outcomes = await fetchWindows(from: windowStart, credentials: credentials, sources: sources)
         for source in sources {
-            switch outcomes[source] {
-            case .success(let activities)?:
-                logger.notice("\(source.rawValue, privacy: .public): \(activities.count, privacy: .public) activities")
-            case .failure(let error)?:
-                logger.notice("\(source.rawValue, privacy: .public) failed: \(String(describing: error), privacy: .public)")
-            case nil:
-                break
+            guard case .failure(let error)? = outcomes[source] else {
+                if case .success(let activities)? = outcomes[source] {
+                    logger.notice("\(source.rawValue, privacy: .public): \(activities.count, privacy: .public) activities")
+                }
+                continue
             }
-        }
-
-        for source in sources {
-            guard case .failure(let error)? = outcomes[source] else { continue }
+            logger.notice("\(source.rawValue, privacy: .public) failed: \(String(describing: error), privacy: .public)")
             guard let syncError = error as? WorkoutSyncError else {
                 // Anything that is not a `WorkoutSyncError` travels out
                 // untouched — in practice a cancellation: navigating away
@@ -130,7 +143,10 @@ actor WorkoutSyncService: WorkoutSyncing {
         // `.missingAPIKey` would make it route there a second time, with a
         // "key rejected" notice for a key the user removed themselves.
         guard await sessionIsStillOpen() else {
+            // Both resets that remove the Hevy key take the Strava pair with
+            // it (`SessionResetService.hardLogout()`, `DataResetService`).
             await registry.disconnect(.hevy)
+            await registry.disconnect(.strava)
             throw CancellationError()
         }
 
@@ -206,24 +222,35 @@ actor WorkoutSyncService: WorkoutSyncing {
         from windowStart: Date
     ) async throws -> [Activity] {
         do {
-            try await registry.connect(source, credentials: credentials)
+            // `IfNewer`: a pair the connector refreshed since the last sync
+            // must not be replaced by the stored one — see the comment after
+            // the fetch.
+            try await registry.connectIfNewer(source, credentials: credentials)
             guard let connector = await registry.connector(for: source) else {
                 throw ConnectorRegistryError.notRegistered(source)
             }
             let activities = try await connector.fetchActivities(since: windowStart)
 
             // A Strava fetch may have refreshed the pair on the way; the
-            // registry's expiry bookkeeping has to follow the stored pair, or
-            // it would prompt for a renewal the connector already did.
+            // registry's expiry bookkeeping has to follow the rotated pair, or
+            // it would prompt for a renewal the connector already did. Only a
+            // pair *newer* than the one recorded is taken: the connector
+            // tolerates a persist that failed (locked Keychain) and keeps the
+            // rotated pair in memory, and re-connecting it with the stale
+            // stored pair would make every later refresh in this process send
+            // a refresh token Strava has already invalidated.
             if source == .strava, case .available(let fresh) = await storedStravaCredentials() {
-                try? await registry.connect(.strava, credentials: fresh)
+                try? await registry.connectIfNewer(.strava, credentials: fresh)
             }
             return activities
         } catch let error as ConnectorError {
             if error == .unauthorized, source == .hevy {
                 // The stored key was revoked — drop it and the cached data
-                // before the caller routes back to onboarding.
+                // before the caller routes back to onboarding. The logout
+                // takes the Strava pair with it (US-1 AC3), so the connector's
+                // copy goes too.
                 await registry.disconnect(.hevy)
+                await registry.disconnect(.strava)
                 await sessionReset.hardLogout()
             }
             throw WorkoutSyncError(connectorError: error)
@@ -272,6 +299,7 @@ actor WorkoutSyncService: WorkoutSyncing {
             // in-memory copy gets dropped: a reset the UI promises is a full
             // deletion must not leave the key sitting in the process.
             await registry.disconnect(.hevy)
+            await registry.disconnect(.strava)
             throw WorkoutSyncError.missingAPIKey
         }
         return key

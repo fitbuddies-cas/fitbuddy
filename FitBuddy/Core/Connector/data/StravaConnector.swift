@@ -91,6 +91,8 @@ actor StravaConnector: FitnessConnector {
     ///   was revoked or already rotated, or the client credentials it needs
     ///   are gone — and only the user can renew the connection. `true` after a
     ///   successful refresh or a successful ping.
+    /// - Throws: `ConnectorError.unauthorized` when there is no pair to check,
+    ///   which after a rejected refresh is the case until the next `connect`.
     func validate() async throws -> Bool {
         guard tokens != nil else { throw ConnectorError.unauthorized }
 
@@ -99,6 +101,7 @@ actor StravaConnector: FitnessConnector {
             case .refreshed: return true
             case .rejected: return false
             case .failed(let error): throw error
+            case .cancelled: throw CancellationError()
             }
         }
 
@@ -165,6 +168,10 @@ actor StravaConnector: FitnessConnector {
         case rejected
         /// Could not ask — offline, outage.
         case failed(ConnectorError)
+        /// The task was cancelled while asking. Not an answer about the pair
+        /// and not a connectivity problem: rethrown as a cancellation, the
+        /// same rule `get()` follows.
+        case cancelled
     }
 
     /// Exchanges the refresh token for a new pair and persists it.
@@ -193,8 +200,15 @@ actor StravaConnector: FitnessConnector {
         } catch let error as StravaOAuthError {
             switch error {
             case .invalidGrant, .invalidClientCredentials:
+                // Strava has rotated the pair away (or will not honour it
+                // without the right client); keeping it would make every
+                // later call in this process re-send a dead refresh token,
+                // each one a round-trip against the application's rate limit.
+                tokens = nil
                 return .rejected
-            case .transport, .cancelled:
+            case .cancelled:
+                return .cancelled
+            case .transport:
                 return .failed(.networkUnavailable)
             case .unexpectedStatus(let status) where (500...599).contains(status):
                 return .failed(.serviceUnavailable)
@@ -202,7 +216,7 @@ actor StravaConnector: FitnessConnector {
                 return .failed(.invalidResponse)
             }
         } catch {
-            return .failed(.networkUnavailable)
+            return error.isCancellation ? .cancelled : .failed(.networkUnavailable)
         }
 
         guard case let .oauth(accessToken, refreshToken, expiresAt) = renewed else {
@@ -235,6 +249,7 @@ actor StravaConnector: FitnessConnector {
             case .refreshed: break
             case .rejected: throw ConnectorError.unauthorized
             case .failed(let error): throw error
+            case .cancelled: throw CancellationError()
             }
         }
         guard let tokens else { throw ConnectorError.unauthorized }

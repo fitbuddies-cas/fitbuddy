@@ -13,6 +13,7 @@ actor StubStravaCredentialStore: StravaCredentialStoring {
     private(set) var storedCredentials: ConnectorCredentials?
     private(set) var savedTokenPairs: [(accessToken: String, refreshToken: String, expiresAt: Date)] = []
     private(set) var clearCount = 0
+    private(set) var clearTokensCount = 0
 
     var failReads = false
     var failWrites = false
@@ -47,6 +48,12 @@ actor StubStravaCredentialStore: StravaCredentialStoring {
         if failWrites { throw Failure.injected }
         savedTokenPairs.append((accessToken, refreshToken, expiresAt))
         storedCredentials = .oauth(accessToken: accessToken, refreshToken: refreshToken, expiresAt: expiresAt)
+    }
+
+    func clearTokens() throws {
+        clearTokensCount += 1
+        if failWrites { throw Failure.injected }
+        storedCredentials = nil
     }
 
     func clear() throws {

@@ -2,8 +2,8 @@ import Foundation
 
 /// A training session, normalized across fitness-data providers (ADR-6) so
 /// the dashboard and AI analysis read one shape regardless of source.
-/// `HevyConnector` (#34) maps Hevy's API responses into this shape; a future
-/// `StravaConnector` (#35) does the same for Strava.
+/// `HevyConnector` (#34) maps Hevy's API responses into this shape and
+/// `StravaConnector` (#142) does the same for Strava.
 struct Activity: Identifiable, Equatable, Codable, Sendable {
     /// The source provider's own identifier (e.g. Hevy's workout id), so a
     /// re-sync can be matched against what is already cached.
@@ -24,7 +24,11 @@ struct Activity: Identifiable, Equatable, Codable, Sendable {
     var exercises: [ActivityExercise]
 
     /// - Parameter source: Defaults to Hevy, the only source before #141, so
-    ///   the mapping and every fixture written against it stay valid.
+    ///   the mapping and every fixture written against it stay valid. The
+    ///   default is the initializer's only: the synthesized `Codable` still
+    ///   requires the `source` key, so JSON without it does not decode —
+    ///   nothing decodes `Activity` from JSON today, and a fixture that does
+    ///   has to carry the key.
     init(
         id: String,
         title: String,

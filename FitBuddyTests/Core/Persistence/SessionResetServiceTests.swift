@@ -90,9 +90,10 @@ final class SessionResetServiceTests: XCTestCase {
         XCTAssertEqual(count, 0)
     }
 
-    /// A Hevy logout is about the Hevy session (#141): the Strava sessions
-    /// cached next to it describe a connection that was not rejected.
-    func testHardLogoutKeepsStravaWorkouts() async throws {
+    /// The session is over and the app is back in onboarding: whoever walks
+    /// through it next must not find the previous user's Strava history
+    /// (US-1 AC3). Unlike the cache teardown for a replaced key (#91).
+    func testHardLogoutClearsStravaWorkoutsToo() async throws {
         let start = Date(timeIntervalSince1970: 1_750_000_000)
         try await workouts.replaceCachedWorkouts(from: .hevy, with: [ActivityFactory.activity(id: "hevy-1", start: start)])
         try await workouts.replaceCachedWorkouts(from: .strava, with: [
@@ -102,7 +103,20 @@ final class SessionResetServiceTests: XCTestCase {
         await sut.hardLogout()
 
         let ids = try await workouts.cachedWorkoutIDs()
-        XCTAssertEqual(ids, ["strava:1"])
+        XCTAssertTrue(ids.isEmpty)
+    }
+
+    func testHardLogoutDeletesTheStravaCredentials() async throws {
+        for key in StravaCredentialStore.ownedKeys {
+            try await keychain.save("strava-\(key.rawValue)", for: key)
+        }
+
+        await sut.hardLogout()
+
+        for key in StravaCredentialStore.ownedKeys {
+            let stored = try await keychain.read(key)
+            XCTAssertNil(stored, "\(key.rawValue) must go with the session")
+        }
     }
 
     func testHardLogoutClearsSyncTimestamp() async throws {

@@ -21,7 +21,8 @@ enum StravaConnectionFailure: Equatable {
     case network
     /// Strava answered with an error status.
     case serviceUnavailable
-    /// The pair came back but could not be stored on this device.
+    /// The Keychain refused a read or a write: the pair could not be stored,
+    /// the stored one could not be read, or a disconnect could not clear it.
     case keychain
 
     /// Maps a service error onto the failure the user is shown, or `nil` for
@@ -58,7 +59,7 @@ enum StravaConnectionFailure: Equatable {
         case .invalidResponse: return "Strava did not send FitBuddy back correctly"
         case .network: return "Could not reach Strava"
         case .serviceUnavailable: return "Strava is currently unavailable"
-        case .keychain: return "Could not save the Strava connection"
+        case .keychain: return "Could not update the Strava connection"
         }
     }
 
@@ -78,7 +79,7 @@ enum StravaConnectionFailure: Equatable {
         case .serviceUnavailable:
             return "Strava answered with an unexpected error — nothing was rejected. Please try again in a little while."
         case .keychain:
-            return "Storing on this device failed. Please try again."
+            return "The Keychain on this device refused the request. Make sure the device is unlocked and try again."
         }
     }
 }

@@ -12,7 +12,7 @@ struct RootView: View {
     /// The shared connector registry and the Strava collaborators around it
     /// (#140). One instance for the whole app, so the connection screen, the
     /// sync and the dashboard agree on what is connected.
-    @State private var dataSources = DataSourceStack()
+    @StateObject private var dataSources = DataSourceStack()
 
     /// The visible tab. Owned here rather than in `MainTabView`, because
     /// deleting a key sends the user back into onboarding — a step change this

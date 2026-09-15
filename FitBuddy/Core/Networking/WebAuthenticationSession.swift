@@ -13,36 +13,71 @@ import UIKit
 /// `URLSession.fitBuddy` — nothing key-adjacent outlives the flow. The price is
 /// that the user signs in to Strava inside the sheet even if Safari knows them;
 /// with refresh tokens that happens once per connection, not per sync.
+///
+/// One flow at a time. A second `authenticate` while a sheet is up is refused
+/// rather than started: replacing `current` would stop the first session
+/// without its completion handler ever running, and the first caller would
+/// wait forever.
 @MainActor
 final class WebAuthenticationSession: NSObject, WebAuthenticating {
     /// Held so it survives the async suspension; `ASWebAuthenticationSession`
     /// stops if nothing retains it.
     private var current: ASWebAuthenticationSession?
+    /// The caller waiting on `current`. Resumed exactly once — by the
+    /// completion handler, or by `cancelCurrent()` when the calling task is
+    /// cancelled before the sheet reports back.
+    private var pending: CheckedContinuation<URL, Error>?
 
     func authenticate(url: URL, callbackURLScheme: String) async throws -> URL {
-        try await withCheckedThrowingContinuation { continuation in
-            let session = ASWebAuthenticationSession(
-                url: url,
-                callback: .customScheme(callbackURLScheme)
-            ) { [weak self] callbackURL, error in
-                self?.current = nil
-                if let error {
-                    continuation.resume(throwing: Self.translate(error))
-                } else if let callbackURL {
-                    continuation.resume(returning: callbackURL)
-                } else {
-                    continuation.resume(throwing: URLError(.badServerResponse))
+        guard current == nil else { throw WebAuthenticationError.flowAlreadyRunning }
+
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let session = ASWebAuthenticationSession(
+                    url: url,
+                    callback: .customScheme(callbackURLScheme)
+                ) { [weak self] callbackURL, error in
+                    guard let self else { return }
+                    self.current = nil
+                    // Already resumed by `cancelCurrent()`: the sheet's late
+                    // answer has nobody to go to.
+                    guard let pending = self.pending else { return }
+                    self.pending = nil
+                    if let error {
+                        pending.resume(throwing: Self.translate(error))
+                    } else if let callbackURL {
+                        pending.resume(returning: callbackURL)
+                    } else {
+                        pending.resume(throwing: URLError(.badServerResponse))
+                    }
+                }
+                session.prefersEphemeralWebBrowserSession = true
+                session.presentationContextProvider = self
+                current = session
+                pending = continuation
+
+                if !session.start() {
+                    current = nil
+                    pending = nil
+                    continuation.resume(throwing: URLError(.cannotConnectToHost))
                 }
             }
-            session.prefersEphemeralWebBrowserSession = true
-            session.presentationContextProvider = self
-            current = session
-
-            if !session.start() {
-                current = nil
-                continuation.resume(throwing: URLError(.cannotConnectToHost))
-            }
+        } onCancel: {
+            // The handler runs on whatever thread cancelled the task; the
+            // session and the continuation live on the main actor.
+            Task { @MainActor [weak self] in self?.cancelCurrent() }
         }
+    }
+
+    /// Dismisses the sheet and lets the waiting caller go with a
+    /// `CancellationError`. Idempotent: a session that already reported back
+    /// has nothing left to cancel.
+    private func cancelCurrent() {
+        current?.cancel()
+        current = nil
+        guard let pending else { return }
+        self.pending = nil
+        pending.resume(throwing: CancellationError())
     }
 
     /// A dismissed sheet is a cancellation, which `Error.isCancellation` already

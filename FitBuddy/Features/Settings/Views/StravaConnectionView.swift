@@ -51,9 +51,10 @@ struct StravaConnectionView: View {
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) { actions.padding(16) }
         .animation(.easeOut(duration: 0.15), value: viewModel.state)
-        .task { await viewModel.bootstrap() }
-        // Coming back from the credentials screen: the pair may have just
-        // been entered (or replaced), and the buttons have to reflect it.
+        // Covers the first appearance and the return from the credentials
+        // screen alike (`.task` would not re-run on the way back): the pair
+        // may have just been entered (or replaced), and the buttons have to
+        // reflect it. One entry point, so two reads cannot race for `state`.
         .onAppear { Task { await viewModel.refreshStoredState() } }
     }
 
@@ -102,7 +103,7 @@ struct StravaConnectionView: View {
         case .connected(let expiresAt):
             return "Your activities sync with the dashboard. The access token renews itself; it is currently valid until \(Self.expiryFormatter.string(from: expiresAt))."
         case .expired:
-            return "The token could not be renewed — Strava may have revoked it. Reconnect to keep syncing."
+            return "The access token ran out and could not be renewed just now. Reconnect to keep syncing."
         }
     }
 

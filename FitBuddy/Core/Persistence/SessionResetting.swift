@@ -4,7 +4,8 @@ import Foundation
 /// without a SwiftData container, and so a test can observe that the hard
 /// logout actually ran.
 protocol SessionResetting: Sendable {
-    /// Deletes the Hevy key and everything cached under it (US-1 AC3).
+    /// Ends the session: deletes the Hevy key, the Strava credentials and
+    /// everything cached under either (US-1 AC3).
     func hardLogout() async
 
     /// Drops the cached Hevy workouts and the sync timestamp but keeps the

@@ -11,9 +11,13 @@ import OSLog
 /// does not depend on *why* the old key is gone, which is why the teardown is
 /// its own entry point rather than something the settings screen rebuilds.
 ///
-/// The Claude key is deliberately kept. It is a separate credential that Hevy
-/// did not reject, and re-entering it is a needless detour through onboarding
-/// step 3.
+/// The LLM keys are deliberately kept. They are separate credentials that
+/// Hevy did not reject, and re-entering them is a needless detour through
+/// onboarding step 3. The Strava connection is *not* kept on a hard logout:
+/// the session is over and the app is back in onboarding, and whoever walks
+/// through it next — possibly another person the device was handed to, the
+/// case US-1 AC3 exists for — must not find the previous user's Strava history
+/// and a live token pair for their account behind it.
 actor SessionResetService {
     private let keychain: KeychainService
     private let workouts: WorkoutStore
@@ -36,17 +40,21 @@ actor SessionResetService {
         self.timestamps = timestamps
     }
 
-    /// Clears the Hevy session. Never throws: a logout that fails halfway is
-    /// worse than one that reports its problems to the log, and the caller is
-    /// already handling an auth error it must surface either way. Each step is
-    /// independent, so one failure does not skip the others.
+    /// Ends the session: the Hevy key, the Strava credentials and tokens, and
+    /// every cached session of both go. Never throws: a logout that fails
+    /// halfway is worse than one that reports its problems to the log, and
+    /// the caller is already handling an auth error it must surface either
+    /// way. Each step is independent, so one failure does not skip the others.
     func hardLogout() async {
-        do {
-            try await keychain.delete(.hevyAPIKey)
-        } catch {
-            logger.error("Hevy key not deleted on logout: \(error, privacy: .public)")
+        for key in [KeychainKey.hevyAPIKey] + StravaCredentialStore.ownedKeys {
+            do {
+                try await keychain.delete(key)
+            } catch {
+                logger.error("\(key.rawValue, privacy: .public) not deleted on logout: \(error, privacy: .public)")
+            }
         }
         await discardCachedWorkouts()
+        await discardCachedWorkouts(from: .strava)
     }
 
     /// Drops the cached Hevy workouts and the sync timestamp, keeping the

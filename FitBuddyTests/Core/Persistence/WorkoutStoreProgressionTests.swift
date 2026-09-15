@@ -137,6 +137,30 @@ final class WorkoutStoreProgressionTests: XCTestCase {
         XCTAssertEqual(progression.title, "Bench Press (Barbell)")
     }
 
+    /// A Strava session sharing the movement's key contributes nothing: no
+    /// weight, no reps, so at best an empty curve — and, alone, it must not
+    /// even produce a titled progression with no points (US-5, #144).
+    func testStravaSessionsAreIgnored() async throws {
+        try await sut.replaceCachedWorkouts(from: .strava, with: [
+            Activity(
+                id: "strava:1",
+                title: "Morning Run",
+                startTime: start(daysAgo: 2),
+                source: .strava,
+                exercises: [
+                    ActivityExercise(index: 0, title: "Run", sets: [
+                        ActivityExerciseSet(index: 0, type: .normal, distanceMeters: 5_000, durationSeconds: 1_800),
+                    ]),
+                ]
+            ),
+        ])
+        let runKey = ExerciseSummary.key(templateID: nil, title: "Run")
+
+        let progression = try await sut.exerciseProgression(id: runKey, since: windowStart)
+
+        XCTAssertNil(progression)
+    }
+
     // MARK: - Helpers
 
     private let templateID = "05293BCA"
