@@ -170,9 +170,10 @@ struct RootView: View {
         )
         let coordinator = onboardingViewModel
         // The hard logout already wiped the key and the cache; all that is left
-        // is returning to step 2 — the same path an HTTP 401 takes (US-1 AC3).
+        // is returning to step 2 (US-1 AC3). The quiet entry point, unlike the
+        // dashboard's above: this user pressed the button themselves.
         viewModel.onHevyKeyDeleted = { [weak coordinator] in
-            await coordinator?.handleHevyUnauthorized()
+            await coordinator?.handleHevyKeyDeleted()
         }
         viewModel.onDataDeleted = { [weak coordinator] in
             coordinator?.handleDataReset()

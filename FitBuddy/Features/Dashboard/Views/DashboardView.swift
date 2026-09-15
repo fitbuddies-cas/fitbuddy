@@ -71,7 +71,7 @@ struct DashboardView: View {
                     if viewModel.state != .loading {
                         SyncStatusView(
                             status: viewModel.syncStatus,
-                            lastSync: viewModel.lastSync,
+                            sources: viewModel.dataSources,
                             onRetry: { Task { await viewModel.retry() } }
                         )
                     }

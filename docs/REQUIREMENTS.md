@@ -136,7 +136,7 @@ Out of Scope — siehe Abschnitt 4.
 | US-5 | Zweite Datenquelle verbinden | **Should** | Differenzierung durch zweite Quelle ist Produktargument. Connector-Interface wird im PoC architektonisch verankert, Strava-Connector erst v1 (OAuth + Normalisierung + kombinierte Analyse ≈ 1.5–2 Sprints). |
 | US-6 | Analyse-Kontext transparent machen | **Should** | AC1 könnte als AC in US-3 wandern; eigenständige Story v. a. wegen AC2 (Warnung bei dünner Datenbasis). |
 | US-7 | Übungssuche & Filter | **Should** | Wird notwendig, sobald User-Historie >20 Übungen erreicht. Für PoC-Demos mit wenigen Sessions verzichtbar. |
-| US-8 | Datenquelle-Status sichtbar | **Could** | Bei nur einer Quelle (Hevy) reicht im PoC der Sync-Zeitstempel aus US-2 AC2. Vollwertig relevant ab v1. |
+| US-8 | Datenquelle-Status sichtbar | **Could** | Bei nur einer Quelle (Hevy) trägt der Sync-Zeitstempel aus US-2 AC2 den Grossteil. AC1 und AC2 sind in v0 dennoch umgesetzt (Stale-Indikator ab >24 h mit Retry, aktive Benachrichtigung bei widerrufenem Key), weil der blosse Zeitstempel veraltete Daten nicht als solche kenntlich macht. Vollwertig — mehrere Quellen nebeneinander — relevant ab v1. |
 | US-9 | Progressionskurven pro Übung | **Could** | US-3 deckt den Hauptnutzen ab. Epley-Formel + Plateau-Detection sind nicht-trivial. |
 | US-10 | Daten manuell neu laden | **Could** | iOS-Pattern, das User erwarten — kein Showstopper. 1–2 Tage Aufwand, ergänzt US-2 AC2. |
 | US-11 | Wochenübersicht als Push-Notification | **Won't** | iOS-Permission-Flow + Background-Scheduling + LLM-Call-Fallback ist eigenes Sub-System. Relevant ab v1.2. |
