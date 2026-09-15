@@ -28,6 +28,7 @@ struct ExerciseProgressionView: View {
         .background(Color.fbBackground)
         .navigationTitle(viewModel.exercise.title)
         .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier(AccessibilityID.Progression.root)
         .task { await viewModel.load() }
     }
 
@@ -145,6 +146,7 @@ struct ExerciseProgressionView: View {
             )
         }
         .padding(.top, 28)
+        .accessibilityIdentifier(AccessibilityID.Progression.insufficientData)
     }
 
     /// The cache was replaced while the screen was open — a new Hevy key drops

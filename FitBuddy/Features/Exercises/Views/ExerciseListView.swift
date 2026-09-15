@@ -31,6 +31,7 @@ struct ExerciseListView: View {
             .background(Color.fbBackground)
             .navigationTitle("Exercises")
             .navigationBarTitleDisplayMode(.inline)
+            .accessibilityIdentifier(AccessibilityID.Exercises.root)
             // By value, so the destination is built when a row is tapped
             // rather than once per row while the list renders (#42).
             .navigationDestination(for: ExerciseSummary.self) { exercise in
@@ -119,6 +120,7 @@ struct ExerciseListView: View {
                     }
                     // The row paints itself; the link only makes it tappable.
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier(AccessibilityID.Exercises.row)
                 }
             }
         }

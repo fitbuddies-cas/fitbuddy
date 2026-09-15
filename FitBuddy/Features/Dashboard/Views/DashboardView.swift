@@ -134,6 +134,7 @@ struct DashboardView: View {
                 NavigationLink(value: DashboardRoute.exercises) {
                     Label("Exercises", systemImage: "list.bullet")
                 }
+                .accessibilityIdentifier(AccessibilityID.Dashboard.exercisesLink)
             }
         }
     }
