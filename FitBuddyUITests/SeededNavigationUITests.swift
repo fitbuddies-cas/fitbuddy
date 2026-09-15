@@ -60,6 +60,7 @@ final class SeededNavigationUITests: XCTestCase {
         let sut = SeededApp().launch()
 
         sut.assertAppears(sut.dashboard)
+        sut.assertAppears(sut.exercisesLink)
         sut.exercisesLink.tap()
         sut.assertAppears(sut.exerciseList)
         sut.firstRow(of: sut.exerciseRows).tap()

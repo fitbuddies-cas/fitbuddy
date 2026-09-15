@@ -51,6 +51,48 @@ final class MockDataSeederTests: XCTestCase {
         XCTAssertNil(MockDataSeeder.requestedProfile(in: ["-fbSeedMockData"]))
     }
 
+    // MARK: - Forced reset
+
+    /// The reset has to run on a launch that skips onboarding, which is where
+    /// its own hook (`ConsentViewModel.bootstrap()`) never gets reached.
+    func testForcedResetRunsWithoutTheOnboardingPath() async throws {
+        let keychain = KeychainService()
+        try await keychain.save("stale", for: .consentVersion)
+        defer { Task { try? await keychain.delete(.consentVersion) } }
+
+        await MockDataSeeder.resetStateIfRequested(
+            launchArguments: ["-fbResetState"],
+            reset: FirstLaunchResetService(
+                defaults: defaults,
+                keychain: keychain,
+                launchArguments: ["-fbResetState"],
+                domainName: suiteName
+            )
+        )
+
+        let stored = try await keychain.read(.consentVersion)
+        XCTAssertNil(stored)
+    }
+
+    func testWithoutTheArgumentNothingIsReset() async throws {
+        let keychain = KeychainService()
+        try await keychain.save("kept", for: .consentVersion)
+        defer { Task { try? await keychain.delete(.consentVersion) } }
+
+        await MockDataSeeder.resetStateIfRequested(
+            launchArguments: ["-fbSeedMockData", "person-a"],
+            reset: FirstLaunchResetService(
+                defaults: defaults,
+                keychain: keychain,
+                launchArguments: [],
+                domainName: suiteName
+            )
+        )
+
+        let stored = try await keychain.read(.consentVersion)
+        XCTAssertEqual(stored, "kept")
+    }
+
     // MARK: - Seeding
 
     func testSeedsTheRequestedWindowAndDatesTheSync() async throws {

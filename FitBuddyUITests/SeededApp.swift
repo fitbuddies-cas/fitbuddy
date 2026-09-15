@@ -20,6 +20,9 @@ struct SeededApp {
     init(profile: String = LaunchArgument.Profile.personA) {
         app = XCUIApplication()
         app.launchArguments = [
+            // Honoured on this path too since #148: the forced reset runs
+            // beside the seeding at launch, not out of the onboarding
+            // bootstrap that `-fbSkipOnboarding` skips.
             LaunchArgument.resetState,
             LaunchArgument.skipOnboarding,
             // Without this the dashboard's own sync would run against Hevy with

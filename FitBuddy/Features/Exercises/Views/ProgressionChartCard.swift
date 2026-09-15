@@ -91,11 +91,17 @@ struct ProgressionChartCard: View {
 
     /// Padded by a tenth of the span on each side, with a floor of 2.5 kg so a
     /// flat series still gets a band rather than a line pinned to the frame.
+    ///
+    /// The lower bound stops at zero. On a light movement the 2.5 kg floor is
+    /// larger than the values themselves — a 1.25 kg set for 8 estimates at
+    /// ~1.6 kg — and the axis would label negative kilograms, a number that
+    /// does not exist here. Clamping costs nothing at normal loads, where the
+    /// padding never reaches zero anyway.
     private var domain: ClosedRange<Double> {
         let values = points.map(\.estimatedOneRepMaxKg)
         guard let lowest = values.min(), let highest = values.max() else { return 0...1 }
         let padding = max((highest - lowest) * 0.1, 2.5)
-        return (lowest - padding)...(highest + padding)
+        return max(lowest - padding, 0)...(highest + padding)
     }
 
     private var accessibilityLabel: String {

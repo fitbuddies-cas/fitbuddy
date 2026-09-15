@@ -38,6 +38,25 @@ enum MockDataSeeder {
         return MockWorkoutProfile(rawValue: launchArguments[value])
     }
 
+    /// Runs `FirstLaunchResetService`'s forced reset when the launch asked for
+    /// one, whatever path the app takes afterwards.
+    ///
+    /// The service's own hook sits in `ConsentViewModel.bootstrap()`, which a
+    /// launch with `-fbSkipOnboarding` never reaches — so a test that combined
+    /// the two arguments got a promise of a clean slate that nothing kept, and
+    /// the next test to rely on it would have found out as a flake.
+    static func resetStateIfRequested(
+        launchArguments: [String] = ProcessInfo.processInfo.arguments,
+        reset: FirstLaunchResetService = FirstLaunchResetService()
+    ) async {
+        guard launchArguments.contains(FirstLaunchResetService.resetLaunchArgument) else { return }
+        do {
+            try await reset.resetIfFirstLaunch()
+        } catch {
+            logger.error("Forced state reset failed: \(error, privacy: .public)")
+        }
+    }
+
     /// Replaces the cached window with the requested profile's, and dates the
     /// sync to now.
     ///
@@ -57,8 +76,7 @@ enum MockDataSeeder {
     ) async {
         guard let profile = requestedProfile(in: launchArguments) else { return }
         do {
-            let loader = MockWorkoutLoader()
-            let activities = try loader.page(for: profile).workouts.map { $0.makeActivity() }
+            let activities = try MockWorkoutLoader().activities(for: profile)
             try await WorkoutStore(modelContainer: container).replaceCachedWorkouts(with: activities)
             await timestamps.setLastSync(now())
             logger.debug("Seeded \(activities.count, privacy: .public) mock workouts")

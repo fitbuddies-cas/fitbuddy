@@ -27,6 +27,10 @@ struct HevyKeyEntryView: View {
                     .font(.subheadline)
                     .foregroundStyle(Color.fbInkSecondary)
                     .padding(.top, 8)
+                if let notice = viewModel.notice {
+                    noticeBanner(for: notice)
+                        .padding(.top, 18)
+                }
                 whereToFindCard
                     .padding(.top, 18)
                 keyInput
@@ -43,6 +47,7 @@ struct HevyKeyEntryView: View {
         .background(Color.fbBackground)
         .safeAreaInset(edge: .bottom) { ctaButton.padding(16) }
         .animation(.easeOut(duration: 0.15), value: viewModel.state)
+        .animation(.easeOut(duration: 0.15), value: viewModel.notice)
         // A failed attempt has something to read: the reason, and for a
         // rejected key the link to fix it. The keyboard covers both, and the
         // next move is reading rather than typing — "Try again" puts the
@@ -115,6 +120,40 @@ struct HevyKeyEntryView: View {
             .font(.caption)
             .foregroundStyle(Color.fbMuted)
             .padding(.leading, 2)
+    }
+
+    /// Says why the app moved the user here on its own (US-8 AC2) — today
+    /// only a key Hevy rejected mid-sync.
+    ///
+    /// Warning chrome, not the error banner's red: nothing the user just did
+    /// went wrong, and the red styling belongs to the attempt they are about to
+    /// make. Above the instructions, because it is the reason they are reading
+    /// them at all.
+    private func noticeBanner(for notice: HevyKeyEntryNotice) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: notice.symbolName)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(Color.fbWarn)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(notice.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.fbInk)
+                Text(notice.message)
+                    .font(.footnote)
+                    .foregroundStyle(Color.fbInkSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.fbWarnSoft)
+        .clipShape(RoundedRectangle(cornerRadius: FBRadius.control))
+        .overlay(
+            RoundedRectangle(cornerRadius: FBRadius.control)
+                .strokeBorder(Color.fbWarn.opacity(0.25), lineWidth: 1)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(AccessibilityID.HevyKey.noticeBanner)
     }
 
     /// Failure banner (AC3): explains what went wrong and, for a rejected key,

@@ -59,6 +59,12 @@ struct RootView: View {
             // onboarding already reads a full cache instead of flashing its
             // empty state (#148). DEBUG-only and inert without the argument.
             #if DEBUG
+            // `-fbResetState` has to hold for every launch path, not only the
+            // one that walks onboarding: the forced reset otherwise hangs off
+            // `ConsentViewModel.bootstrap()`, which `-fbSkipOnboarding` returns
+            // before ever reaching. Run before the seeding below, or the reset
+            // would take the seeded sync timestamp with it.
+            await MockDataSeeder.resetStateIfRequested()
             await MockDataSeeder.seedIfRequested(container: modelContext.container)
             #endif
             await onboardingViewModel.bootstrap()
@@ -178,9 +184,10 @@ struct RootView: View {
         )
         let coordinator = onboardingViewModel
         // The hard logout already wiped the key and the cache; all that is left
-        // is returning to step 2 — the same path an HTTP 401 takes (US-1 AC3).
+        // is returning to step 2 (US-1 AC3). The quiet entry point, unlike the
+        // dashboard's above: this user pressed the button themselves.
         viewModel.onHevyKeyDeleted = { [weak coordinator] in
-            await coordinator?.handleHevyUnauthorized()
+            await coordinator?.handleHevyKeyDeleted()
         }
         viewModel.onDataDeleted = { [weak coordinator] in
             coordinator?.handleDataReset()
