@@ -57,6 +57,11 @@ actor StubWorkoutSyncer: WorkoutSyncing {
             arrival?.resume()
             arrival = nil
             await withCheckedContinuation { gate = $0 }
+            // Released into a cancelled task, the real sync's request would
+            // throw. Mirrored here so a test can tell a cancellation that was
+            // forwarded into the sync from one that stopped at the ViewModel
+            // (#150) — without it both look like a completed sync.
+            try Task.checkCancellation()
         }
 
         if let error { throw error }

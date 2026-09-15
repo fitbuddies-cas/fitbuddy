@@ -21,8 +21,16 @@ actor MockConnector: FitnessConnector {
     private(set) var validateCallCount = 0
     private(set) var fetchActivitiesCallCount = 0
     private(set) var didDisconnect = false
+    /// Runs inside `fetchActivities` before it answers, so a test can change
+    /// the world — delete the key, empty the cache — while the sync is between
+    /// its fetch and its write (#150).
+    private var duringFetch: (@Sendable () async -> Void)?
 
     // MARK: - Configuration (called by tests before exercising the connector)
+
+    func setDuringFetch(_ hook: (@Sendable () async -> Void)?) {
+        duringFetch = hook
+    }
 
     func setConnectResult(_ result: Result<Void, ConnectorError>) {
         connectResult = result
@@ -69,6 +77,7 @@ actor MockConnector: FitnessConnector {
     func fetchActivities(since: Date) async throws -> [Activity] {
         fetchActivitiesCallCount += 1
         lastFetchSince = since
+        await duringFetch?()
         return try fetchActivitiesResult.get().filter { $0.startTime >= since }
     }
 

@@ -99,11 +99,33 @@ struct RootView: View {
     private static func syncer(workouts: WorkoutStore, timestamps: SyncTimestampStore) -> any WorkoutSyncing {
         #if DEBUG
         if HevyStubbing.isActive() {
-            return StubWorkoutSync()
+            return StubWorkoutSync(
+                delay: HevyStubbing.slowSyncIsActive() ? .seconds(3) : .zero,
+                seed: HevyStubbing.seedsMockWorkouts()
+                    ? StubWorkoutSync.Seed(store: workouts, timestamps: timestamps, activities: Self.mockWindow())
+                    : nil
+            )
         }
         #endif
         return WorkoutSyncService(workouts: workouts, timestamps: timestamps)
     }
+
+    #if DEBUG
+    /// The bundled mock window a `-fbSeedMockWorkouts` launch caches. The
+    /// payload decodes through the real Hevy DTO path, so the seeded cache
+    /// holds exactly what a live sync would have written.
+    ///
+    /// Stops the launch rather than seeding nothing: a missing or moved
+    /// payload would otherwise surface fifteen seconds later as an unrelated
+    /// UI-test assertion ("60 total" not found) with nothing pointing here.
+    private static func mockWindow() -> [Activity] {
+        do {
+            return try MockWorkoutLoader().page(for: .personA).workouts.map { $0.makeActivity() }
+        } catch {
+            fatalError("\(HevyStubbing.seedMockWorkoutsLaunchArgument): the mock window could not be loaded — \(error)")
+        }
+    }
+    #endif
 
     /// Wires the analysis tab to the cache and to Claude (#32).
     ///

@@ -241,8 +241,11 @@ final class WorkoutListViewModelTests: XCTestCase {
         XCTAssertEqual(sut.syncStatus, .idle)
     }
 
-    /// A cancelled request is not a connectivity problem and must not put an
-    /// offline banner on a healthy dashboard.
+    /// A sync that ends as a cancellation — the session was reset while the
+    /// window was in flight (#150), or the request was torn down — is not a
+    /// connectivity problem and must not put an offline banner on a healthy
+    /// dashboard. It still has to clear `.syncing`: nothing newer is behind it
+    /// to do so.
     func testCancelledSyncReportsNoFailure() async {
         await syncer.setError(URLError(.cancelled))
         let sut = makeSUT(withSyncer: true)
@@ -401,34 +404,16 @@ final class WorkoutListViewModelTests: XCTestCase {
         XCTAssertNil(sut.refreshNotice)
     }
 
-    /// SwiftUI cancels the `.refreshable` task when the view goes away — a
-    /// tab switch while the pull is still running. That cancellation reaches
-    /// the sync, and nothing newer is behind it to publish an outcome, so the
-    /// sync itself has to clear `.syncing` before it gives up. Otherwise the
-    /// strip claims "Syncing with Hevy…" for the rest of the app's life.
-    func testRefreshCancelledFromOutsideDoesNotLeaveTheStripSyncing() async {
-        await syncer.gateFirstCall()
-        let sut = makeSUT(withSyncer: true)
-
-        let pull = Task { await sut.retry() }
-        await syncer.waitForFirstCall()
-        XCTAssertEqual(sut.syncStatus, .syncing)
-
-        pull.cancel()
-        await syncer.releaseFirstCall()
-        await pull.value
-
-        // `.idle`, not merely "not syncing": a cancelled request says nothing
-        // about connectivity, so publishing `.failed(.offline)` here would be
-        // the very thing `performSync`'s `isCancellation` guard prevents.
-        XCTAssertEqual(sut.syncStatus, .idle)
-    }
-
-    /// The same teardown, but the sync got through before it was cancelled.
-    /// The workouts are in the cache by then, so the read that follows has to
-    /// publish them — dropping it would leave the dashboard showing the old
-    /// window under a stale timestamp until the user pulls a second time.
-    func testSyncCancelledFromOutsideStillPublishesWhatItCached() async throws {
+    /// SwiftUI cancels the `.refreshable` task on the first re-render of the
+    /// refresh, some 20 ms in (#150) — long before the sync has sent its first
+    /// request. That cancellation has to stop at the ViewModel: the sync runs
+    /// to completion, and the read that follows publishes what it cached,
+    /// under the timestamp it wrote, with the strip back on idle.
+    ///
+    /// The stub throws if the cancellation reached it, so a regression that
+    /// forwards the caller's cancellation into the sync again fails here and
+    /// not only in the UI test.
+    func testCancellingTheCallerLetsTheSyncRunToCompletion() async throws {
         let syncedAt = reference.addingTimeInterval(-30)
         cache.results = [
             [summary(id: "old", daysAgo: 5, volume: 400)],
@@ -441,10 +426,12 @@ final class WorkoutListViewModelTests: XCTestCase {
 
         let pull = Task { await sut.retry() }
         await syncer.waitForFirstCall()
+        XCTAssertEqual(sut.syncStatus, .syncing)
         pull.cancel()
         await syncer.releaseFirstCall()
         await pull.value
 
+        XCTAssertEqual(sut.syncStatus, .idle)
         guard case let .loaded(workouts, _) = sut.state else {
             return XCTFail("Expected .loaded, got \(sut.state)")
         }

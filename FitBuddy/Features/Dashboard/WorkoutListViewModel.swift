@@ -41,20 +41,24 @@ final class WorkoutListViewModel: ObservableObject {
 
     /// The read currently in flight, so a newer `load()` supersedes it.
     private var loadTask: Task<Void, Never>?
-    /// Identifies the read that owns `state`, bumped once per read — the same
-    /// distinction `syncGeneration` draws, for the same reason. A read the
-    /// sync starts after caching a fresh window is routinely cancelled from
-    /// outside, and its result is the whole point of the sync.
+    /// Identifies the read that owns `state`, bumped once per read.
+    ///
+    /// `Task.isCancelled` cannot stand in for this: `load()` forwards the
+    /// caller's cancellation, so it is true both when a newer read superseded
+    /// this one and when SwiftUI tore down the `.task` behind it — and the
+    /// two need opposite responses. A read cancelled from outside is still
+    /// current and publishes what it found.
     private var loadGeneration = 0
     /// The sync currently in flight, so repeated pull-to-refresh does not
     /// stack up parallel windows fetches on Hevy.
     private var syncTask: Task<Void, Never>?
     /// Identifies the sync that owns `syncStatus`, bumped once per sync.
     ///
-    /// `Task.isCancelled` cannot stand in for this. It is true both when a
-    /// newer sync superseded this one and when the cancellation came from
-    /// outside — SwiftUI tearing down the `.refreshable` task as the user
-    /// leaves the tab mid-pull — and the two need opposite responses.
+    /// Supersession by a newer sync is the only thing that cancels a sync —
+    /// the caller's cancellation is deliberately not forwarded, see `sync()`
+    /// (#150) — so this says what `Task.isCancelled` would. It is kept
+    /// explicit so the check reads the same as `loadGeneration`'s and stays
+    /// right should another way to cancel a sync ever appear.
     private var syncGeneration = 0
 
     private let cache: WorkoutSummaryReading
@@ -212,7 +216,16 @@ final class WorkoutListViewModel: ObservableObject {
             )
         }
         syncTask = task
-        await task.awaitingCancellation()
+        // Awaited *without* forwarding the caller's cancellation — unlike
+        // `load()`. SwiftUI cancels the `.refreshable` task the moment this
+        // view re-renders (observed on iOS 26: the first `@Published` change of
+        // the refresh, ~20 ms in, on the device and in the simulator alike),
+        // and forwarding that into the sync killed every pull-to-refresh before
+        // its first request left the device. A sync that outlives its gesture
+        // is the wanted outcome anyway: it fills the cache and publishes to a
+        // view model that lives on. A newer sync still cancels this one through
+        // `syncTask?.cancel()` above.
+        await task.value
     }
 
     private func performSync(
@@ -238,13 +251,16 @@ final class WorkoutListViewModel: ObservableObject {
         } catch {
             // Superseded by a newer sync: that one owns `syncStatus` now, so
             // this one publishes nothing at all — not even the idle reset.
-            // Every other way out of this block, cancellation included, has to
-            // leave `.syncing` behind it.
+            // Every other way out of this block has to leave `.syncing`
+            // behind it.
             guard isCurrentSync(generation) else { return }
 
-            // A cancelled request says nothing about connectivity, so it gets
-            // no banner. It still has to clear `.syncing`, or the strip would
-            // claim a sync is running forever.
+            // The sync itself ended as a cancellation, with nothing newer
+            // behind it: `WorkoutSyncService` voids a sync whose session was
+            // reset while the window was in flight (#150), or the request was
+            // torn down underneath it. Neither says anything about
+            // connectivity, so no banner — but `.syncing` has to go, or the
+            // strip would claim a sync is running forever.
             guard !error.isCancellation else {
                 syncStatus = .idle
                 await resolveHeldSpinner()
@@ -270,9 +286,9 @@ final class WorkoutListViewModel: ObservableObject {
         }
     }
 
-    /// Whether this read is still the one `state` belongs to. See
-    /// `isCurrentSync(_:)` — a read cancelled from outside is still current
-    /// and publishes what it found.
+    /// Whether this read is still the one `state` belongs to. Only a newer
+    /// read displaces it — a read cancelled from outside is still current and
+    /// publishes what it found.
     private func isCurrentLoad(_ generation: Int) -> Bool {
         generation == loadGeneration
     }
@@ -280,9 +296,7 @@ final class WorkoutListViewModel: ObservableObject {
     /// Whether this sync is still the one `syncStatus` belongs to.
     ///
     /// False only once a newer sync has taken over, which is the single case
-    /// where staying silent is right — the newer one publishes instead. A sync
-    /// that was cancelled from outside is still the current one, so it reports
-    /// its outcome and clears the spinner on its way out.
+    /// where staying silent is right — the newer one publishes instead.
     private func isCurrentSync(_ generation: Int) -> Bool {
         generation == syncGeneration
     }
