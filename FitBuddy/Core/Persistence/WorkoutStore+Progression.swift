@@ -18,7 +18,6 @@ extension WorkoutStore: ExerciseProgressionReading {
 
         var points: [ProgressionPoint] = []
         var title: String?
-        var titleDate: Date?
 
         for workout in try modelContext.fetch(descriptor) {
             let occurrences = workout.exercises.filter {
@@ -26,12 +25,10 @@ extension WorkoutStore: ExerciseProgressionReading {
             }
             guard !occurrences.isEmpty else { continue }
 
-            // The title follows the most recent session, as in the list: a
-            // renamed movement shows the name the user last used.
-            if titleDate == nil || workout.startTime >= titleDate! {
-                title = occurrences.last?.title
-                titleDate = workout.startTime
-            }
+            // The fetch is sorted ascending, so the last matching session wins
+            // by overwriting: the title follows the most recent session, as in
+            // the list — a renamed movement shows the name the user last used.
+            title = occurrences.last?.title
 
             // Across every occurrence of the movement in this session, so a
             // workout that lists it twice still yields one point.
