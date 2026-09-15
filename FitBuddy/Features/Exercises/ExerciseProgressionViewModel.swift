@@ -83,4 +83,21 @@ final class ExerciseProgressionViewModel: ObservableObject {
     var plottedSessionCount: Int {
         progression?.points.count ?? 0
     }
+
+    /// What the window actually holds, as a sentence the hint leads with.
+    ///
+    /// Here rather than in the view: it is a count turned into one of three
+    /// phrasings, which is a decision with a right answer — and therefore
+    /// something to hold in place with a test rather than to eyeball in a
+    /// preview.
+    var sessionsSoFarDescription: String {
+        switch plottedSessionCount {
+        case 0:
+            return "The last \(TrainingWindow.days) days hold no set of this exercise with both weight and reps."
+        case 1:
+            return "The last \(TrainingWindow.days) days hold one session with weight and reps."
+        default:
+            return "The last \(TrainingWindow.days) days hold \(plottedSessionCount) sessions with weight and reps."
+        }
+    }
 }

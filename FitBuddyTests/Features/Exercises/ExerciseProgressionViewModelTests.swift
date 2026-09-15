@@ -122,6 +122,38 @@ final class ExerciseProgressionViewModelTests: XCTestCase {
         XCTAssertFalse(sut.showsPlateauBadge)
     }
 
+    // MARK: - The "not enough data" sentence
+
+    /// Singular, plural and none — a count folded into prose is a decision
+    /// with a right answer, so it gets held in place here.
+    func testTheSentenceCountsWhatTheWindowHolds() async {
+        cache.progression = progression([])
+        let none = makeSUT()
+        await none.load()
+        XCTAssertTrue(none.sessionsSoFarDescription.contains("no set"))
+
+        cache.progression = progression([100])
+        let one = makeSUT()
+        await one.load()
+        XCTAssertTrue(one.sessionsSoFarDescription.contains("one session"))
+
+        cache.progression = progression([100, 102, 104])
+        let several = makeSUT()
+        await several.load()
+        XCTAssertTrue(several.sessionsSoFarDescription.contains("3 sessions"))
+    }
+
+    /// The window length comes from `TrainingWindow`, not from the copy — the
+    /// two drifting apart is what the view model's own comment argues against.
+    func testTheSentenceNamesTheRealWindowLength() async {
+        cache.progression = progression([100])
+
+        let sut = makeSUT()
+        await sut.load()
+
+        XCTAssertTrue(sut.sessionsSoFarDescription.contains("\(TrainingWindow.days) days"))
+    }
+
     // MARK: - Window
 
     /// The same 90-day window every other screen reads.

@@ -138,23 +138,13 @@ struct ExerciseProgressionView: View {
                 icon: "chart.xyaxis.line",
                 title: "Not enough data yet",
                 text: """
-                \(sessionsSoFar) At least 2 sessions with weight and reps are needed before a \
-                progression curve can be drawn.
+                \(viewModel.sessionsSoFarDescription) At least \
+                \(ExerciseProgression.minimumPlottableSessions) sessions with weight and reps are \
+                needed before a progression curve can be drawn.
                 """
             )
         }
         .padding(.top, 28)
-    }
-
-    private var sessionsSoFar: String {
-        switch viewModel.plottedSessionCount {
-        case 0:
-            return "The last 90 days hold no set of this exercise with both weight and reps."
-        case 1:
-            return "The last 90 days hold one session with weight and reps."
-        default:
-            return "The last 90 days hold \(viewModel.plottedSessionCount) sessions with weight and reps."
-        }
     }
 
     /// The cache was replaced while the screen was open — a new Hevy key drops
@@ -164,7 +154,10 @@ struct ExerciseProgressionView: View {
             FBInfoRow(
                 icon: "questionmark.circle",
                 title: "Exercise not in this window",
-                text: "This exercise is not part of the last 90 days any more. Pull to refresh on the dashboard to load the current window."
+                text: """
+                This exercise is not part of the last \(TrainingWindow.days) days any more. Pull to \
+                refresh on the dashboard to load the current window.
+                """
             )
         }
         .padding(.top, 28)

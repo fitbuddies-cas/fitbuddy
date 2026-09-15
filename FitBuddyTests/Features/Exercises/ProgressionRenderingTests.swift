@@ -30,6 +30,14 @@ final class ProgressionRenderingTests: XCTestCase {
         XCTAssertGreaterThan(image.size.height, 0)
     }
 
+    /// A light movement: the 2.5 kg padding floor is larger than the values
+    /// themselves, so an unclamped domain would run negative and the axis
+    /// would label kilograms that do not exist.
+    func testVeryLightCurveKeepsTheAxisAboveZero() throws {
+        let image = try render(ProgressionChartCard(points: points([1.6, 2.1])))
+        XCTAssertGreaterThan(image.size.height, 0)
+    }
+
     // MARK: - Helpers
 
     private func points(_ estimates: [Double]) -> [ProgressionPoint] {
