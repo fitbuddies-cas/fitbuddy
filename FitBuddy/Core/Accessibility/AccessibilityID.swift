@@ -46,6 +46,10 @@ enum AccessibilityID {
 
     enum Dashboard {
         static let root = "dashboard.root"
+        /// Every session row carries it — the tests address them by position,
+        /// since the point is that a row opens its session, not which one.
+        static let sessionRow = "dashboard.sessionRow"
+        static let exercisesLink = "dashboard.exercisesLink"
         /// The stale-source row from US-8 AC1, with its retry button — one
         /// per source, so two sources gone stale at once stay tellable apart
         /// (#40 review). Takes the raw `ConnectorSource` value rather than the
@@ -58,5 +62,20 @@ enum AccessibilityID {
         static let sourceBanner = "dashboard.sourceBanner"
         static let renewalBanner = "dashboard.renewalBanner"
         static let renewButton = "dashboard.renewButton"
+    }
+
+    enum WorkoutDetail {
+        static let root = "workoutDetail.root"
+    }
+
+    enum Exercises {
+        static let root = "exercises.root"
+        static let row = "exercises.row"
+    }
+
+    enum Progression {
+        static let root = "progression.root"
+        static let chart = "progression.chart"
+        static let insufficientData = "progression.insufficientData"
     }
 }

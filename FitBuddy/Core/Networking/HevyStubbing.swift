@@ -19,9 +19,9 @@ enum HevyStubbing {
     static let launchArgument = "-fbStubHevy"
 
     /// Makes the stubbed sync take a few seconds instead of returning at once,
-    /// so a launch in the simulator has a window in which a cancellation of
-    /// the dashboard's task can be observed. Diagnostic; not used by the UI
-    /// tests.
+    /// so a pull-to-refresh ends its gesture while the sync is still running —
+    /// the window in which #150 showed. Used by `DashboardRefreshUITests`; the
+    /// onboarding UI tests leave it off.
     static let slowSyncLaunchArgument = "-fbSlowStubSync"
 
     static func slowSyncIsActive(in launchArguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
@@ -30,7 +30,8 @@ enum HevyStubbing {
 
     /// Makes the stubbed sync write the bundled mock workouts (#44) into the
     /// cache, so a stubbed launch reaches the loaded dashboard instead of the
-    /// empty state. Diagnostic; not used by the onboarding UI tests.
+    /// empty state. Used by `DashboardRefreshUITests`; the onboarding UI tests
+    /// leave it off.
     static let seedMockWorkoutsLaunchArgument = "-fbSeedMockWorkouts"
 
     static func seedsMockWorkouts(in launchArguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {

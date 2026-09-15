@@ -117,6 +117,23 @@ actor WorkoutSyncService: WorkoutSyncing {
             throw WorkoutSyncError.unauthorized
         }
 
+        // The fetch took seconds, and a sync outlives the gesture that started
+        // it (#150) — so the user may have confirmed "delete Hevy key" or
+        // "delete all data" (#83) in the meantime. Both resets remove the key
+        // before they empty the cache, so a key that is gone now means the
+        // windows in hand belong to a session that has ended. Caching them
+        // would restore exactly the data the user just deleted (US-1 AC3).
+        //
+        // Thrown as a cancellation on purpose: for the dashboard this sync
+        // ends the way one cancelled from outside does — nothing to show,
+        // nothing to report, and the app is already on its way to onboarding.
+        // `.missingAPIKey` would make it route there a second time, with a
+        // "key rejected" notice for a key the user removed themselves.
+        guard await sessionIsStillOpen() else {
+            await registry.disconnect(.hevy)
+            throw CancellationError()
+        }
+
         var cachedCount = 0
         for source in sources {
             guard case .success(let activities)? = outcomes[source] else { continue }
@@ -219,6 +236,22 @@ actor WorkoutSyncService: WorkoutSyncing {
     }
 
     // MARK: - Credentials
+
+    /// Whether the stored key is still there — re-checked right before the
+    /// cache write, see `syncRecentWorkouts()`.
+    ///
+    /// Only a definite "gone" voids the sync. A Keychain that refuses the read
+    /// (locked device) still holds the key the window was fetched under, so
+    /// the write goes ahead — the same distinction `storedAPIKey()` draws
+    /// between `.missingAPIKey` and `.keychainUnavailable`.
+    private func sessionIsStillOpen() async -> Bool {
+        do {
+            let stored = try await keychain.read(.hevyAPIKey)
+            return !(stored ?? "").isEmpty
+        } catch {
+            return true
+        }
+    }
 
     private func storedHevyKey() async throws -> String {
         let stored: String?

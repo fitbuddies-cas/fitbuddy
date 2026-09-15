@@ -681,6 +681,45 @@ final class WorkoutSyncServiceTests: XCTestCase {
         XCTAssertEqual(Set(summaries.map(\.id)), ["hevy-1", "strava:1"])
     }
 
+    // MARK: - Reset during a running sync (#150)
+
+    /// A sync outlives the pull that started it (#150), so it can still be
+    /// fetching when the user confirms "delete Hevy key" or "delete all data"
+    /// (#83). Both remove the key before they empty the cache; the sync must
+    /// notice and drop the window it fetched — writing it would restore what
+    /// the user just deleted (US-1 AC3). It ends as a cancellation, not as
+    /// `.missingAPIKey`: the dashboard must not route to onboarding a second
+    /// time over a key the user removed themselves.
+    func testAResetDuringTheFetchVoidsTheSyncInsteadOfRestoringTheCache() async throws {
+        let connector = MockConnector()
+        await connector.setFetchActivitiesResult(.success([ActivityFactory.activity(id: "a-1", start: daysAgo(1))]))
+        sut = await makeService(connector: connector)
+        _ = try await sut.syncRecentWorkouts()
+        let cachedBefore = try await workouts.workoutCount()
+        XCTAssertEqual(cachedBefore, 1)
+
+        let reset = SessionResetService(
+            keychain: keychain,
+            workouts: workouts,
+            results: AnalysisResultStore(modelContainer: workouts.modelContainer),
+            timestamps: timestamps
+        )
+        await connector.setDuringFetch { await reset.hardLogout() }
+        do {
+            _ = try await sut.syncRecentWorkouts()
+            XCTFail("Expected the voided sync to throw")
+        } catch {
+            XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
+        }
+
+        let cachedAfter = try await workouts.workoutCount()
+        XCTAssertEqual(cachedAfter, 0, "The reset must win over the sync running through it")
+        let lastSync = await timestamps.lastSync()
+        XCTAssertNil(lastSync)
+        let didDisconnect = await connector.didDisconnect
+        XCTAssertTrue(didDisconnect, "The connector's in-memory key goes with the stored one")
+    }
+
     // MARK: - Helpers
 
     /// Page bodies the stub still has to hand out, in order.

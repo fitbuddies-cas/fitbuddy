@@ -20,6 +20,7 @@ struct DashboardView: View {
     /// Builds the ViewModel behind the exercise list (#37) — same reasoning,
     /// and likewise called once per push rather than once per render.
     private let makeExerciseListViewModel: () -> ExerciseListViewModel
+    private let makeExerciseProgressionViewModel: (ExerciseSummary) -> ExerciseProgressionViewModel
 
     /// Changes whenever something outside the dashboard invalidated the cache —
     /// a replaced Hevy key (#91), a Strava connect or disconnect (#140). Its
@@ -45,6 +46,8 @@ struct DashboardView: View {
     ///     row — see `.navigationDestination` below.
     ///   - makeExerciseListViewModel: Called once per push of the exercise
     ///     list (#37).
+    ///   - makeExerciseProgressionViewModel: Called once per pushed movement
+    ///     (#42).
     ///   - reloadToken: Defaults to a constant, so a preview or a test that
     ///     has no cache-invalidating parent never re-syncs.
     ///   - onRenewSource: Defaults to nothing, for previews without a
@@ -53,12 +56,14 @@ struct DashboardView: View {
         viewModel: @autoclosure @escaping () -> WorkoutListViewModel,
         makeWorkoutDetailViewModel: @escaping (String) -> WorkoutDetailViewModel,
         makeExerciseListViewModel: @escaping () -> ExerciseListViewModel,
+        makeExerciseProgressionViewModel: @escaping (ExerciseSummary) -> ExerciseProgressionViewModel,
         reloadToken: Int = 0,
         onRenewSource: @escaping (ConnectorSource) -> Void = { _ in }
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
         self.makeWorkoutDetailViewModel = makeWorkoutDetailViewModel
         self.makeExerciseListViewModel = makeExerciseListViewModel
+        self.makeExerciseProgressionViewModel = makeExerciseProgressionViewModel
         self.reloadToken = reloadToken
         self.onRenewSource = onRenewSource
     }
@@ -98,7 +103,10 @@ struct DashboardView: View {
             .navigationDestination(for: DashboardRoute.self) { route in
                 switch route {
                 case .exercises:
-                    ExerciseListView(viewModel: makeExerciseListViewModel())
+                    ExerciseListView(
+                        viewModel: makeExerciseListViewModel(),
+                        makeProgressionViewModel: makeExerciseProgressionViewModel
+                    )
                 }
             }
             .toolbar { exercisesLink }
@@ -136,6 +144,7 @@ struct DashboardView: View {
                 NavigationLink(value: DashboardRoute.exercises) {
                     Label("Exercises", systemImage: "list.bullet")
                 }
+                .accessibilityIdentifier(AccessibilityID.Dashboard.exercisesLink)
             }
         }
     }
@@ -209,7 +218,8 @@ struct DashboardView: View {
         makeWorkoutDetailViewModel: { id in
             WorkoutDetailViewModel(cache: PreviewWorkoutDetailCache.filled, workoutID: id)
         },
-        makeExerciseListViewModel: { ExerciseListViewModel(cache: PreviewExerciseCache.filled) }
+        makeExerciseListViewModel: { ExerciseListViewModel(cache: PreviewExerciseCache.filled) },
+        makeExerciseProgressionViewModel: { _ in PreviewProgressionCache.rising }
     )
 }
 
@@ -219,7 +229,8 @@ struct DashboardView: View {
         makeWorkoutDetailViewModel: { id in
             WorkoutDetailViewModel(cache: PreviewWorkoutDetailCache.filled, workoutID: id)
         },
-        makeExerciseListViewModel: { ExerciseListViewModel(cache: PreviewExerciseCache.filled) }
+        makeExerciseListViewModel: { ExerciseListViewModel(cache: PreviewExerciseCache.filled) },
+        makeExerciseProgressionViewModel: { _ in PreviewProgressionCache.rising }
     )
 }
 #endif
