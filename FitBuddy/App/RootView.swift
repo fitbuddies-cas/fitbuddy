@@ -38,6 +38,7 @@ struct RootView: View {
                     makeSettingsViewModel: makeSettingsViewModel,
                     makeWorkoutDetailViewModel: makeWorkoutDetailViewModel(for:),
                     makeExerciseListViewModel: makeExerciseListViewModel,
+                    makeExerciseProgressionViewModel: makeExerciseProgressionViewModel(for:),
                     makeAnalysisHistoryViewModel: makeAnalysisHistoryViewModel,
                     reloadToken: dashboardReloadToken
                 )
@@ -53,7 +54,21 @@ struct RootView: View {
         .onChange(of: onboardingViewModel.step) { _, step in
             if step != .completed { selectedTab = .dashboard }
         }
-        .task { await onboardingViewModel.bootstrap() }
+        .task {
+            // Before the coordinator resolves, so the first screen past
+            // onboarding already reads a full cache instead of flashing its
+            // empty state (#148). DEBUG-only and inert without the argument.
+            #if DEBUG
+            // `-fbResetState` has to hold for every launch path, not only the
+            // one that walks onboarding: the forced reset otherwise hangs off
+            // `ConsentViewModel.bootstrap()`, which `-fbSkipOnboarding` returns
+            // before ever reaching. Run before the seeding below, or the reset
+            // would take the seeded sync timestamp with it.
+            await MockDataSeeder.resetStateIfRequested()
+            await MockDataSeeder.seedIfRequested(container: modelContext.container)
+            #endif
+            await onboardingViewModel.bootstrap()
+        }
     }
 
     /// Wires the dashboard to the cache and to Hevy (#28).
@@ -163,6 +178,18 @@ struct RootView: View {
     /// over the same container, like the detail screen's — this one only reads.
     private func makeExerciseListViewModel() -> ExerciseListViewModel {
         ExerciseListViewModel(cache: WorkoutStore(modelContainer: modelContext.container))
+    }
+
+    /// One progression screen per tapped movement (US-9, #42). Reads the same
+    /// container the list just read, so the curve and the row it was opened
+    /// from describe the same window.
+    private func makeExerciseProgressionViewModel(
+        for exercise: ExerciseSummary
+    ) -> ExerciseProgressionViewModel {
+        ExerciseProgressionViewModel(
+            cache: WorkoutStore(modelContainer: modelContext.container),
+            exercise: exercise
+        )
     }
 
     /// Wires the settings screen to the Keychain and to the two reset paths

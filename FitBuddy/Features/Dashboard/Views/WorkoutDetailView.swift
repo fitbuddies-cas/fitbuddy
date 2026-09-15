@@ -27,6 +27,7 @@ struct WorkoutDetailView: View {
         }
         .background(Color.fbBackground)
         .navigationTitle(title)
+        .accessibilityIdentifier(AccessibilityID.WorkoutDetail.root)
         .navigationBarTitleDisplayMode(.inline)
         .task { await viewModel.load() }
     }
