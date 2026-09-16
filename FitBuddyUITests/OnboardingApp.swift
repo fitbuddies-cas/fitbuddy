@@ -69,6 +69,19 @@ struct OnboardingApp {
         app.buttons[AccessibilityID.LLMKeys.skipButton]
     }
 
+    /// Step 4 since US-13: the training profile, optional like step 3.
+    var skipTrainingProfileButton: XCUIElement {
+        app.buttons[AccessibilityID.TrainingProfile.skipButton]
+    }
+
+    var trainingProfileSaveButton: XCUIElement {
+        app.buttons[AccessibilityID.TrainingProfile.saveButton]
+    }
+
+    func goalOption(_ goal: String) -> XCUIElement {
+        app.buttons[AccessibilityID.TrainingProfile.goalOption(goal)]
+    }
+
     var dashboard: XCUIElement {
         app.descendants(matching: .any)[AccessibilityID.Dashboard.root]
     }
