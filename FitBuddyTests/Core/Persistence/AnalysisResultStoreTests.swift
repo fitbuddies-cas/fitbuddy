@@ -141,6 +141,35 @@ final class AnalysisResultStoreTests: XCTestCase {
         XCTAssertNil(recent.first?.report)
     }
 
+    /// A version 1 row written before the report had a lead (#170) still
+    /// reads as a report: the lead is derived from its summary.
+    func testReportStoredWithoutALeadDerivesItFromTheSummary() async throws {
+        let json = Data("""
+        {"headline": "Hold steady.", "verdict": "hold", "cards": [],
+         "summary": "Two sessions are too few to judge a trend. Keep the weights. Log another week."}
+        """.utf8)
+        try insertRow(text: "Prose fallback.", reportJSON: json, reportVersion: AnalysisReportFormat.validatedReportV1)
+
+        let latest = try await sut.latest()
+
+        XCTAssertEqual(latest?.report, ValidatedAnalysisReport(
+            headline: "Hold steady.",
+            verdict: .hold,
+            lead: "Two sessions are too few to judge a trend. Keep the weights.",
+            cards: [],
+            summary: "Two sessions are too few to judge a trend. Keep the weights. Log another week."
+        ))
+    }
+
+    /// A stored blank lead is derived the same way.
+    func testReportStoredWithABlankLeadDerivesItFromTheSummary() throws {
+        let json = Data(#"{"headline": "Go.", "verdict": "progress", "lead": " ", "cards": [], "summary": "Add 2.5 kg."}"#.utf8)
+
+        let report = AnalysisReportFormat.decode(json, version: AnalysisReportFormat.validatedReportV1)
+
+        XCTAssertEqual(report?.lead, "Add 2.5 kg.")
+    }
+
     /// A version without bytes is as unreadable as bytes without a version.
     func testReportVersionWithoutJSONFallsBackToTheText() async throws {
         try insertRow(text: "Prose fallback.", reportJSON: nil, reportVersion: AnalysisReportFormat.validatedReportV1)

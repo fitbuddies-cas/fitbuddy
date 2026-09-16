@@ -8,6 +8,7 @@ enum ValidatedAnalysisReportFixtures {
     static let everyCard = ValidatedAnalysisReport(
         headline: "Recover this week.",
         verdict: .recover,
+        lead: "Rest two days before adding load.",
         cards: [
             .recovery(
                 reasoning: "Six training days in a row — rest before adding load.",
