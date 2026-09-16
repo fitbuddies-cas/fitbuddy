@@ -19,8 +19,7 @@ final class AnalysisResultUITests: XCTestCase {
         let sut = SeededApp(seedsAnalysis: true).launch()
 
         sut.assertAppears(sut.dashboard)
-        sut.assertAppears(sut.analysisTab)
-        sut.analysisTab.tap()
+        sut.select(sut.analysisTab)
 
         sut.assertAppears(sut.analysisResult)
         sut.assertAppears(sut.analysisHeadline)
