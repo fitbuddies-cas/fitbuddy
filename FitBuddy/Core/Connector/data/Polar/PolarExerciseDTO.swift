@@ -80,14 +80,12 @@ struct PolarExerciseDTO: Decodable, Equatable, Sendable {
             sport: detailedSportInfo ?? sport
         )
 
-        // TODO(#5): once PR #152 (Strava) lands `Activity.source`, pass
-        // `source: .polar` here explicitly — the default is `.hevy`, which
-        // would silently mislabel every Polar activity.
         return Activity(
             id: "polar-\(id)",
             title: Self.title(sport: sport, detailed: detailedSportInfo),
             startTime: start,
             endTime: seconds.map { start.addingTimeInterval($0) },
+            source: .polar,
             exercises: [],
             metrics: metrics.isEmpty ? nil : metrics
         )

@@ -24,6 +24,7 @@ final class PolarExerciseDTOTests: XCTestCase {
         let activity = try XCTUnwrap(dto.makeActivity())
 
         XCTAssertEqual(activity.id, "polar-aQlC83")
+        XCTAssertEqual(activity.source, .polar)
         XCTAssertEqual(activity.title, "Treadmill Running")
         // 10:40:02 local at +03:00 → 07:40:02 UTC.
         XCTAssertEqual(
