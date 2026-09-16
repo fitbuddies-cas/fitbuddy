@@ -115,6 +115,9 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertFalse(sut.isTakingLong)
         let latest = try await results.latest()
         XCTAssertEqual(latest?.text, AnalysisReportFixtures.progress.summary)
+        // No stored cards until #178 hands the validated report through.
+        XCTAssertNil(latest?.report)
+        XCTAssertEqual(latest?.provider, .claude)
     }
 
     func testStateCarriesTheTextInStreamingAndResult() {
@@ -595,6 +598,23 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(sut.attribution?.attempted, [.claude, .gemini])
         XCTAssertEqual(sut.attribution?.didFallBack, true)
         XCTAssertEqual(sut.attribution?.fallbackNotice, "Claude unavailable — answered by Gemini")
+    }
+
+    /// #176: the history badge names the provider that wrote the answer, not
+    /// the one the user ranked first.
+    func testAFallbackPersistsTheProviderThatAnswered() async throws {
+        await streamer.setEvents([
+            .attempting(.claude),
+            .attempting(.gemini),
+            .text("Recommendation"),
+        ])
+        let sut = makeSUT()
+
+        await sut.start()
+
+        let latest = try await results.latest()
+        XCTAssertEqual(latest?.text, "Recommendation")
+        XCTAssertEqual(latest?.provider, .gemini)
     }
 
     /// DoD: the user never sees two answers merged. Whatever the failed

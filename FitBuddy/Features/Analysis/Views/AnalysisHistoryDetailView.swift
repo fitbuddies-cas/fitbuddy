@@ -17,9 +17,10 @@ struct AnalysisHistoryDetailView: View {
                 AnalysisContextView(context: entry.context)
                 AnalysisResultView(
                     text: entry.text,
-                    // The provider is not stored, so the badge stays the bare
-                    // "AI" rather than naming one on a guess.
-                    attribution: nil,
+                    // Rows from before #176 did not store the provider, so
+                    // their badge stays the bare "AI" rather than naming one
+                    // on a guess.
+                    attribution: entry.provider.map(AnalysisAttribution.init(first:)),
                     age: SyncTimeFormatter.relative(since: entry.generatedAt, now: now)
                 )
             }
@@ -49,7 +50,8 @@ struct AnalysisHistoryDetailView: View {
                 - Give legs a second slot before adding upper-body volume
                 """,
                 generatedAt: .now.addingTimeInterval(-3 * 86_400),
-                context: AnalysisContext(sessionCount: 12, window: .default)
+                context: AnalysisContext(sessionCount: 12, window: .default),
+                provider: .claude
             ),
             now: .now
         )

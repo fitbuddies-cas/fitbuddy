@@ -14,7 +14,7 @@ struct AnalysisResultView: View {
     let text: String
     /// Who answered, and who was asked before them (#79). `nil` only in the
     /// degenerate case of a result with no recorded attempt — and on a
-    /// recommendation restored from disk, which does not store the provider.
+    /// recommendation restored from disk without a stored provider.
     let attribution: AnalysisAttribution?
     /// How old the recommendation is (`"2 h ago"`), or `nil` while it has no
     /// timestamp. Always set for a restored one, where the age is the whole
@@ -70,7 +70,7 @@ struct AnalysisResultView: View {
     /// to the wrong provider would be a lie about where their data went.
     ///
     /// `"AI · CLAUDE"`, or a bare `"AI"` on a recommendation restored from
-    /// disk, which does not store the provider.
+    /// disk without a stored provider.
     private var badge: String {
         guard let attribution else { return "AI" }
         return "AI · \(attribution.provider.displayName)"

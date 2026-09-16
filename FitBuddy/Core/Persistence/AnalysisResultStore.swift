@@ -10,15 +10,30 @@ import SwiftData
 actor AnalysisResultStore {
     /// Appends a finished recommendation and returns its identity.
     ///
+    /// `text` is stored whether or not a `report` comes with it: it is what
+    /// renders when the report cannot be read back (US-14 AC6, #176).
+    /// `provider` is the one that wrote the answer — the last of the fallback
+    /// chain.
+    ///
     /// Insert and trim share one `save()`, so a failing write leaves the
     /// history exactly as it was rather than half-pruned.
     @discardableResult
-    func save(text: String, generatedAt: Date, context: AnalysisContext) throws -> UUID {
+    func save(
+        text: String,
+        report: ValidatedAnalysisReport? = nil,
+        provider: LLMProvider? = nil,
+        generatedAt: Date,
+        context: AnalysisContext
+    ) throws -> UUID {
+        let encoded = AnalysisReportFormat.encode(report)
         let result = AnalysisResult(
             text: text,
             generatedAt: generatedAt,
             windowWeeks: context.window.weeks,
-            sessionCount: context.sessionCount
+            sessionCount: context.sessionCount,
+            reportJSON: encoded.json,
+            reportVersion: encoded.version,
+            providerRawValue: provider?.rawValue
         )
         modelContext.insert(result)
         try trimToLimit()
@@ -91,6 +106,10 @@ actor AnalysisResultStore {
         }
     }
 
+    /// Decodes the report here, once per row, so everything past the store
+    /// deals in a typed `report` or none — never in bytes and versions. A
+    /// report that does not decode leaves the row readable as prose rather
+    /// than failing the whole read (US-14 AC6).
     private static func snapshot(of result: AnalysisResult) -> AnalysisResultSnapshot {
         AnalysisResultSnapshot(
             id: result.id,
@@ -99,7 +118,9 @@ actor AnalysisResultStore {
             context: AnalysisContext(
                 sessionCount: result.sessionCount,
                 window: AnalysisWindow(weeks: result.windowWeeks)
-            )
+            ),
+            report: AnalysisReportFormat.decode(result.reportJSON, version: result.reportVersion),
+            provider: result.provider
         )
     }
 

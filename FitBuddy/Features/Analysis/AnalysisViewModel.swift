@@ -512,8 +512,13 @@ final class AnalysisViewModel: ObservableObject {
         do {
             // The id is kept, so deleting this row from the history clears it
             // off this screen too, rather than whatever is newest by then (#117).
+            // Prose only until #178 hands the validated report through; the
+            // provider is the one that answered, so the history badge can
+            // name it (#176).
             currentResultID = try await resultStore.save(
                 text: text,
+                report: nil,
+                provider: attribution?.provider,
                 generatedAt: timestamp,
                 context: context
             )

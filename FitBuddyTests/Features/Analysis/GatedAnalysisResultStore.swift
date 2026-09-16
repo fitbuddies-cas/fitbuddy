@@ -31,14 +31,26 @@ actor GatedAnalysisResultStore: AnalysisResultStoring {
     }
 
     @discardableResult
-    func save(text: String, generatedAt: Date, context: AnalysisContext) async throws -> UUID {
+    func save(
+        text: String,
+        report: ValidatedAnalysisReport?,
+        provider: LLMProvider?,
+        generatedAt: Date,
+        context: AnalysisContext
+    ) async throws -> UUID {
         didEnter = true
         entered?.resume()
         entered = nil
         if !isReleased {
             await withCheckedContinuation { release = $0 }
         }
-        return try await wrapped.save(text: text, generatedAt: generatedAt, context: context)
+        return try await wrapped.save(
+            text: text,
+            report: report,
+            provider: provider,
+            generatedAt: generatedAt,
+            context: context
+        )
     }
 
     func latest() async throws -> AnalysisResultSnapshot? {
