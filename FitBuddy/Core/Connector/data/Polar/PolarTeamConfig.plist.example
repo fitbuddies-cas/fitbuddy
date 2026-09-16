@@ -5,10 +5,20 @@
 	<!--
 	Team credentials for the Polar OAuth client registered at
 	https://admin.polaraccesslink.com (ADR-11). Copy this file to
-	"PolarTeamConfig.plist" in the same folder, fill in the two values below,
+	"PolarTeamConfig.plist" in the same folder, fill in the values below,
 	and do not commit that copy — it is gitignored on purpose (issue #155).
+
+	SECURITY NOTE (Nachtrag zu ADR-11): Polar's token endpoint requires
+	PolarClientSecret on every request — there is no PKCE-only public-client
+	option, unlike this ADR originally assumed. FitBuddy has no backend to
+	keep that secret behind, so a build carrying it must never be
+	distributed beyond the presenter's own device (e.g. via TestFlight) —
+	it would be extractable from the app binary. This is demo-only wiring
+	for the CAS presentation.
 	-->
 	<key>PolarClientID</key>
+	<string>REPLACE_ME</string>
+	<key>PolarClientSecret</key>
 	<string>REPLACE_ME</string>
 	<key>PolarRedirectURI</key>
 	<string>fitbuddy://polar/callback</string>

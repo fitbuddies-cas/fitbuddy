@@ -283,6 +283,7 @@ Bekannte Lücken im PoC-Design — vor Sprint 3 (AI-Integration) adressieren.
 | TD-1 | **Kein Token-Limit im Prompt-Build** | `400 context_length_exceeded` bei 90 Tagen × vollem Trainingsvolumen | Prompt-Fenster als Konstante definieren (→ W-2); Daten vor API-Call kürzen |
 | TD-3 | **Kein Backgrounding-Handling beim Analyse-Call** | iOS beendet URLSession-Task nach ~30s — Analyse verloren, kein Benutzer-Feedback | `URLSession` mit `background`-Konfiguration oder explizites Timeout + Benutzer-Feedback |
 | TD-4 | **Cert-Pinning für keinen Host umgesetzt** (QA-1, ADR-004) — mit #79 kommen `generativelanguage.googleapis.com` und `api.mistral.ai` zu `api.anthropic.com` und `api.hevyapp.com` dazu, mit ADR-010 zusätzlich `www.strava.com` | MITM im offenen WLAN kann API-Keys und Gesundheitsdaten abgreifen | `URLSessionDelegate` mit Public-Key-Pinning für alle fünf Hosts |
+| TD-5 | **Polar-Client-Secret im Binary** (Nachtrag zu ADR-011) — Polars Token-Endpoint verlangt entgegen der ursprünglichen ADR-Annahme immer ein `clientSecret`; ohne Backend gibt es keinen sicheren Ort dafür. Nur für die CAS-Demo tragbar, nie über TestFlight verteilen. | Secret aus jedem verteilten Build extrahierbar | v1: Backend-Proxy oder BYO-App-Screen analog Strava (#139) |
 
 ---
 

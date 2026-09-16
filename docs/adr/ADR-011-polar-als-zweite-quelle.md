@@ -81,3 +81,19 @@ Zweite Frage: Polars Ausdauer-Kennzahlen (Ø/Max-Herzfrequenz, Kalorien, Trainin
 | Migration `GET /v3/exercises` → v4 `training-sessions` | Mittel | vor v1-Release |
 | Historie über 90 Tage: `exercise-transactions` statt Fenster-Endpoint | Niedrig | v1 |
 | Confidential-Client-Variante (`clientSecret` + Basic Auth) — nur falls je ein Backend kommt | Niedrig | offen |
+
+---
+
+## Nachtrag (2026-09-16): Polar verlangt zwingend ein Client Secret
+
+**Die zentrale Prämisse dieses ADRs — Polar als PKCE-Public-Client ohne Secret, deshalb ohne Backend lösbar (Zeilen 17–19, 23) — ist falsch.** Bei der tatsächlichen Registrierung unter `admin.polaraccesslink.com` zeigt sich: Polar erzeugt für jeden Client ein Secret, und laut offizieller AccessLink-Doku (sowohl v3 `polarremote.com` als auch v4 `auth.polar.com`) authentisiert **jeder** Token-Request per HTTP Basic `client_id:client_secret` — PKCE wird nirgends als Ersatz dafür dokumentiert oder akzeptiert.
+
+**Konsequenz:** Der Vergleich in der Kontext-Tabelle stimmt nicht mehr — Polar braucht, wie Strava, ein Secret, das ohne Backend nirgends sicher unterzubringen ist. Ein Secret im App-Binary ist aus jedem verteilten Build (TestFlight) extrahierbar; das gilt für ein Team-Secret genauso wie für ein persönliches.
+
+**Für die CAS-Abschlusspräsentation (v0-Demo-Scope):** Das Team-Secret wird ausschliesslich lokal in der gitignoreten `PolarTeamConfig.plist` gehalten (issue #155) und nur in einem Build verwendet, der auf dem Gerät des Vortragenden bleibt — nie über TestFlight oder sonst wie verteilt. Das ist dieselbe Art pragmatischer, dokumentierter PoC-Abwägung wie die BYO-Key-Entscheidung in `CLAUDE.md`, aber **ausdrücklich nicht v1-tauglich.**
+
+**Für v1 braucht es eine echte Lösung, analog zur Wahl bei Strava (ADR-10):**
+1. **Backend-Proxy** — das Secret wandert auf einen Server, die App spricht nur noch mit dem eigenen Backend. Bricht ADR-4 (kein Server-Tier im PoC), ist aber der sauberste Weg für ein Produkt mit echten Nutzern.
+2. **BYO-App wie Strava** — jeder Nutzer registriert eine eigene Polar-App und trägt Client-ID + Secret in einem eigenen Credentials-Screen ein (analog `StravaCredentialsView`, #139); das Secret liegt dann im Keychain des jeweiligen Nutzers, nie im Binary. Verliert den heutigen Vorteil "kein Setup pro Nutzer", ist aber ohne Backend umsetzbar.
+
+Diese Entscheidung ist für v1 offen und nicht Teil des aktuellen PoC-Umfangs.

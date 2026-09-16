@@ -62,4 +62,34 @@ final class PolarClientConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.redirectURI, "fitbuddy://polar/callback")
         XCTAssertNil(configuration.clientSecret)
     }
+
+    /// Nachtrag zu ADR-11: Polar's token endpoint requires the secret on every
+    /// request, so a real connection needs this key filled in too.
+    func testLoadReadsTheClientSecretWhenPresent() throws {
+        try writePlist([
+            "PolarClientID": "team-client-id",
+            "PolarRedirectURI": "fitbuddy://polar/callback",
+            "PolarClientSecret": "team-secret",
+        ])
+        let bundle = Bundle(url: bundleDirectory)!
+
+        let configuration = try PolarClientConfiguration.loadFromTeamConfig(bundle: bundle)
+
+        XCTAssertEqual(configuration.clientSecret, "team-secret")
+    }
+
+    /// A still-placeholder secret must not be sent to Polar as a literal
+    /// "REPLACE_ME" — that would fail confusingly, not obviously.
+    func testLoadTreatsAnUnreplacedClientSecretPlaceholderAsMissing() throws {
+        try writePlist([
+            "PolarClientID": "team-client-id",
+            "PolarRedirectURI": "fitbuddy://polar/callback",
+            "PolarClientSecret": "REPLACE_ME",
+        ])
+        let bundle = Bundle(url: bundleDirectory)!
+
+        let configuration = try PolarClientConfiguration.loadFromTeamConfig(bundle: bundle)
+
+        XCTAssertNil(configuration.clientSecret)
+    }
 }
