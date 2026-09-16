@@ -92,6 +92,45 @@ final class AnalysisReportValidatorTests: XCTestCase {
         ])
     }
 
+    /// The step is capped like prompt rule 6: at most
+    /// `max(2.5 kg, 10 % of the working weight)`.
+    func testLoadIncreaseIsCappedAtTheAllowedStep() {
+        XCTAssertEqual(validate([benchPress(from: 60, to: 62.5)]).cards.first?.kind, .progression)
+        XCTAssertEqual(validate([benchPress(from: 60, to: 66)]).cards.first?.kind, .progression)
+        XCTAssertEqual(validate([benchPress(from: 60, to: 67)]).cards.first?.kind, .note)
+        XCTAssertEqual(validate([benchPress(from: 60, to: 100)]).cards, [.note(title: "Bench Press", text: "Clean overload.")])
+    }
+
+    /// 10 % of 8 kg is less than one step; the 2.5 kg floor keeps it open.
+    func testLightDumbbellMayIncreaseByTheMinimumStep() {
+        let evidence = evidence(exercises: [
+            ListedExercise(title: "Lateral Raise", muscleGroup: .shoulders, workingSet: WorkingSet(weightKg: 8, reps: 12)),
+        ])
+
+        XCTAssertEqual(
+            validate([
+                .progression(exercise: "Lateral Raise", muscleGroup: "Shoulders", fromKg: 8, toKg: 10.5, reasoning: "Reps held."),
+            ], evidence: evidence).cards.first?.kind,
+            .progression
+        )
+        XCTAssertEqual(
+            validate([
+                .progression(exercise: "Lateral Raise", muscleGroup: "Shoulders", fromKg: 8, toKg: 11, reasoning: "Reps held."),
+            ], evidence: evidence).cards.first?.kind,
+            .note
+        )
+    }
+
+    /// A card that passes every check but says nothing is dropped, not shown
+    /// with an empty sentence.
+    func testValidProgressionWithoutReasoningIsDropped() {
+        let validated = validate([
+            .progression(exercise: "Bench Press", muscleGroup: "Chest", fromKg: 60, toKg: 62.5, reasoning: "  "),
+        ])
+
+        XCTAssertEqual(validated.cards, [])
+    }
+
     /// A listed bodyweight exercise has no working weight to start from.
     func testExerciseWithoutWorkingWeightBecomesANote() {
         let evidence = evidence(exercises: [ListedExercise(title: "Pull Up", muscleGroup: .back, workingSet: nil)])
@@ -172,6 +211,32 @@ final class AnalysisReportValidatorTests: XCTestCase {
         XCTAssertEqual(validated.cards, [.note(title: "Recommendation", text: "Odd.")])
     }
 
+    func testImbalanceWithEqualFrequenciesBecomesANote() {
+        let evidence = evidence(perWeek: [.chest: 2, .legs: 2])
+
+        XCTAssertEqual(validate([chestVersusLegs(2, 2)], evidence: evidence).cards, [
+            .note(title: "Recommendation", text: "Add a leg session."),
+        ])
+        XCTAssertEqual(validate([chestVersusLegs(0, 0)], evidence: self.evidence(perWeek: [:])).cards.first?.kind, .note)
+    }
+
+    func testImbalanceWithOtherGroupBecomesANote() {
+        let evidence = evidence(perWeek: [.chest: 3, .other: 1])
+        let validated = validate([
+            .imbalance(groupA: "Chest", perWeekA: 3, groupB: "Other", perWeekB: 1, reasoning: "Add cardio."),
+        ], evidence: evidence)
+
+        XCTAssertEqual(validated.cards, [.note(title: "Recommendation", text: "Add cardio.")])
+    }
+
+    func testValidImbalanceWithoutReasoningIsDropped() {
+        let validated = validate([
+            .imbalance(groupA: "Chest", perWeekA: 3, groupB: "Legs", perWeekB: 1, reasoning: ""),
+        ])
+
+        XCTAssertEqual(validated.cards, [])
+    }
+
     /// The prompt states one decimal, so a figure is compared at one decimal:
     /// 0.75 sessions per week is written `0.8`, and `0.8` matches.
     func testImbalanceFrequencyIsComparedAtOneDecimal() {
@@ -206,14 +271,25 @@ final class AnalysisReportValidatorTests: XCTestCase {
         XCTAssertEqual(metrics.suggestedRestHours, 48)
     }
 
-    func testRecoveryCardWithReasoningIsKeptBelowTheThreshold() {
-        let metrics = RecoveryMetrics(sessions: 3, trainingDays: 3, averageRPE: nil)
+    /// Below the threshold the model's reasoning alone does not make a
+    /// recovery card: the schema forces a reasoning onto every card.
+    func testRecoveryCardBelowTheThresholdBecomesANote() {
         let validated = validate(
             [.recovery(reasoning: "RPE 9.5 on every set this week.", suggestedRestHours: 72)],
-            evidence: evidence(recovery: metrics)
+            evidence: evidence(recovery: RecoveryMetrics(sessions: 3, trainingDays: 3, averageRPE: nil))
         )
 
-        XCTAssertEqual(validated.cards, [.recovery(reasoning: "RPE 9.5 on every set this week.", metrics: metrics)])
+        XCTAssertEqual(validated.cards, [.note(title: "Recovery", text: "RPE 9.5 on every set this week.")])
+    }
+
+    /// After a break, a recovery card would read "0 sessions / 7 days".
+    func testRecoveryCardAfterABreakBecomesANote() {
+        let validated = validate(
+            [.recovery(reasoning: "Ease back in.", suggestedRestHours: 48)],
+            evidence: evidence(recovery: RecoveryMetrics(sessions: 0, trainingDays: 0, averageRPE: nil))
+        )
+
+        XCTAssertEqual(validated.cards, [.note(title: "Recovery", text: "Ease back in.")])
     }
 
     func testRecoveryCardWithoutReasoningBelowTheThresholdIsDropped() {
@@ -225,11 +301,13 @@ final class AnalysisReportValidatorTests: XCTestCase {
         XCTAssertEqual(validated.cards, [])
     }
 
-    func testRecoveryCardWithoutReasoningAtTheThresholdIsKept() {
+    func testRecoveryCardWithoutReasoningAtTheThresholdGetsTheAppReasoning() {
         let metrics = RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: nil)
-        let validated = validate([.recovery(reasoning: "", suggestedRestHours: 48)], evidence: evidence(recovery: metrics))
+        let validated = validate([.recovery(reasoning: " ", suggestedRestHours: 48)], evidence: evidence(recovery: metrics))
 
-        XCTAssertEqual(validated.cards, [.recovery(reasoning: "", metrics: metrics)])
+        XCTAssertEqual(validated.cards, [
+            .recovery(reasoning: AnalysisReportValidator.insertedRecoveryReasoning, metrics: metrics),
+        ])
     }
 
     // MARK: - AC4: recovery hint at 6 of 7 days
@@ -242,6 +320,83 @@ final class AnalysisReportValidatorTests: XCTestCase {
             .recovery(reasoning: AnalysisReportValidator.insertedRecoveryReasoning, metrics: metrics),
             .progression(exercise: "Bench Press", muscleGroup: .chest, fromKg: 60, toKg: 62.5, reasoning: "Clean overload."),
         ])
+    }
+
+    func testRecoveryTurnsTheVerdictAndHeadline() {
+        let validated = validate(
+            [benchPress(from: 60, to: 62.5)],
+            evidence: evidence(recovery: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: nil))
+        )
+
+        XCTAssertEqual(validated.verdict, .recover)
+        XCTAssertEqual(validated.headline, "Recover this week.")
+        XCTAssertEqual(validated.summary, "Summary")
+    }
+
+    func testModelRecoverVerdictKeepsItsHeadline() {
+        let report = AnalysisReport(headline: "Take a break.", verdict: .recover, cards: [], summary: "Rest.")
+        let validated = AnalysisReportValidator.validate(
+            report,
+            against: evidence(recovery: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: nil))
+        )
+
+        XCTAssertEqual(validated.verdict, .recover)
+        XCTAssertEqual(validated.headline, "Take a break.")
+    }
+
+    func testVerdictIsKeptBelowTheThreshold() {
+        let validated = validate([benchPress(from: 60, to: 62.5)])
+
+        XCTAssertEqual(validated.verdict, .progress)
+        XCTAssertEqual(validated.headline, "Headline")
+    }
+
+    // MARK: - Card count
+
+    /// Four model cards plus the inserted recovery card: the last note goes.
+    func testInsertedRecoveryCardDropsTheLastNoteBeyondFourCards() {
+        let metrics = RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: nil)
+        let validated = validate([
+            .note(title: "A", text: "One."),
+            benchPress(from: 60, to: 62.5),
+            .note(title: "B", text: "Two."),
+            chestVersusLegs(3, 1),
+        ], evidence: evidence(recovery: metrics))
+
+        XCTAssertEqual(validated.cards.count, 4)
+        XCTAssertEqual(validated.cards.map(\.kind), [.recovery, .note, .progression, .imbalance])
+        XCTAssertEqual(validated.cards[1], .note(title: "A", text: "One."))
+    }
+
+    /// Without notes to drop, the last card that is not the recovery hint goes.
+    func testCapDropsTheLastNonRecoveryCardWhenNoNoteIsLeft() {
+        let metrics = RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: nil)
+        let squat = AnalysisCard.progression(exercise: "Squat", muscleGroup: "Legs", fromKg: 80, toKg: 82.5, reasoning: "Reps held.")
+        let validated = validate(
+            [benchPress(from: 60, to: 62.5), squat, chestVersusLegs(3, 1), squat],
+            evidence: evidence(
+                exercises: [
+                    ListedExercise(title: "Bench Press", muscleGroup: .chest, workingSet: WorkingSet(weightKg: 60, reps: 5)),
+                    ListedExercise(title: "Squat", muscleGroup: .legs, workingSet: WorkingSet(weightKg: 80, reps: 5)),
+                ],
+                recovery: metrics
+            )
+        )
+
+        XCTAssertEqual(validated.cards.map(\.kind), [.recovery, .progression, .progression, .imbalance])
+    }
+
+    func testRecoveryCardIsNeverCutEvenAtTheEnd() {
+        let metrics = RecoveryMetrics(sessions: 7, trainingDays: 7, averageRPE: nil)
+        let validated = validate([
+            benchPress(from: 60, to: 62.5),
+            .note(title: "A", text: "One."),
+            benchPress(from: 60, to: 62.5),
+            benchPress(from: 60, to: 62.5),
+            .recovery(reasoning: "Rest first.", suggestedRestHours: 24),
+        ], evidence: evidence(recovery: metrics))
+
+        XCTAssertEqual(validated.cards.map(\.kind), [.progression, .progression, .progression, .recovery])
     }
 
     func testNoRecoveryCardIsInsertedWhenTheModelSentOne() {
@@ -274,6 +429,10 @@ final class AnalysisReportValidatorTests: XCTestCase {
     }
 
     // MARK: - Note
+
+    func testBlankModelNoteIsDropped() {
+        XCTAssertEqual(validate([.note(title: "Empty", text: " \n")]).cards, [])
+    }
 
     func testModelNotePassesThrough() {
         XCTAssertEqual(

@@ -42,8 +42,11 @@ struct RecoveryMetrics: Codable, Equatable, Sendable {
     /// - 7 of 7 days: 72 h — no rest day at all, three to catch up.
     /// - 6 of 7 days (the US-3 AC6 threshold): 48 h — two rest days, the
     ///   figure of the design mock.
-    /// - fewer: 24 h — one rest day. Only reached when the model gave a reason
-    ///   for recovery the day count alone does not show.
+    /// - fewer: 24 h — one rest day. Keeps the rule total; no recovery card is
+    ///   shown below the threshold (#175).
+    ///
+    /// Only strength sessions count (US-14 is strength-only); counting
+    /// endurance sessions across sources is US-15 (#184).
     static func suggestedRestHours(trainingDays: Int) -> Int {
         switch trainingDays {
         case 7...: return 72
