@@ -54,6 +54,19 @@ actor TrainingProfileStore {
         defaults.removeObject(forKey: Self.experienceKey)
     }
 
+    /// The user removed their profile in Settings (#191): drop the answers
+    /// *and* record the step as settled.
+    ///
+    /// Without the second half a user who answered during onboarding — so no
+    /// skip marker exists — and later removed the profile would have an
+    /// undecided step again, and the next launch would push them back into
+    /// onboarding for a question they just answered with "nothing". Removing
+    /// is an active decision to have no profile, which is what skipping means.
+    func removeProfile() {
+        clearProfile()
+        setSkipped()
+    }
+
     // MARK: - Decisions
 
     var isSkipped: Bool {

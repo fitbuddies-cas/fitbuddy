@@ -22,6 +22,7 @@ struct SettingsView: View {
     private let makeStravaCredentialsViewModel: @MainActor () -> StravaCredentialsViewModel
     private let makePolarConnectionViewModel: @MainActor () -> PolarConnectionViewModel
     private let makePolarCredentialsViewModel: @MainActor () -> PolarCredentialsViewModel
+    private let makeTrainingProfileViewModel: @MainActor () -> TrainingProfileSettingsViewModel
 
     /// - Parameters:
     ///   - viewModel: Built lazily — the autoclosure is evaluated once, when
@@ -37,13 +38,19 @@ struct SettingsView: View {
     ///     connection screen (#157).
     ///   - makePolarCredentialsViewModel: Called once per push of the Polar
     ///     credentials screen (ADR-11), from the connection screen.
+    ///   - makeTrainingProfileViewModel: Called once per push of the training
+    ///     profile screen (#191). Defaults to the standard store — it needs no
+    ///     container, so nothing outside has to supply it.
     init(
         viewModel: @autoclosure @escaping () -> SettingsViewModel,
         path: Binding<[SettingsRoute]> = .constant([]),
         makeStravaConnectionViewModel: @escaping @MainActor () -> StravaConnectionViewModel,
         makeStravaCredentialsViewModel: @escaping @MainActor () -> StravaCredentialsViewModel = { StravaCredentialsViewModel() },
         makePolarConnectionViewModel: @escaping @MainActor () -> PolarConnectionViewModel,
-        makePolarCredentialsViewModel: @escaping @MainActor () -> PolarCredentialsViewModel = { PolarCredentialsViewModel() }
+        makePolarCredentialsViewModel: @escaping @MainActor () -> PolarCredentialsViewModel = { PolarCredentialsViewModel() },
+        makeTrainingProfileViewModel: @escaping @MainActor () -> TrainingProfileSettingsViewModel = {
+            TrainingProfileSettingsViewModel()
+        }
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
         _path = path
@@ -51,6 +58,7 @@ struct SettingsView: View {
         self.makeStravaCredentialsViewModel = makeStravaCredentialsViewModel
         self.makePolarConnectionViewModel = makePolarConnectionViewModel
         self.makePolarCredentialsViewModel = makePolarCredentialsViewModel
+        self.makeTrainingProfileViewModel = makeTrainingProfileViewModel
     }
 
     var body: some View {
@@ -71,10 +79,15 @@ struct SettingsView: View {
                             viewModel: makePolarConnectionViewModel(),
                             makeCredentialsViewModel: makePolarCredentialsViewModel
                         )
+                    case .trainingProfile:
+                        TrainingProfileSettingsView(viewModel: makeTrainingProfileViewModel())
                     }
                 }
         }
         .task { await viewModel.load() }
+        // Fires on the way back from the profile screen too (`.task` does
+        // not), and the row has to show what was just changed there (#191).
+        .onAppear { Task { await viewModel.refreshTrainingProfile() } }
         .sheet(item: $viewModel.editorTarget) { target in
             KeyEditorSheet(viewModel: viewModel, target: target)
         }
@@ -135,6 +148,7 @@ struct SettingsView: View {
             }
             hevySection
             llmSection
+            trainingProfileSection
             privacySection
             dangerSection
         }
@@ -257,6 +271,34 @@ struct SettingsView: View {
             Label("Add a provider", systemImage: "plus")
                 .font(.subheadline)
                 .foregroundStyle(Color.fbAccent)
+        }
+        .listRowBackground(Color.fbCard)
+    }
+
+    /// The training profile from onboarding step 4 (US-13). For an install
+    /// that finished onboarding before the step existed, this row is the only
+    /// way to it (#191).
+    private var trainingProfileSection: some View {
+        Section {
+            NavigationLink(value: SettingsRoute.trainingProfile) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Training profile")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Color.fbInk)
+                    Text(viewModel.trainingProfileSummary)
+                        .font(.footnote)
+                        .foregroundStyle(Color.fbInkSecondary)
+                }
+            }
+            .accessibilityIdentifier(AccessibilityID.TrainingProfile.settingsRow)
+        } header: {
+            Text("AI ANALYSIS")
+                .font(.fbLabel)
+                .foregroundStyle(Color.fbMuted)
+        } footer: {
+            Text("Your goal and experience are sent with your training data when you run an analysis.")
+                .font(.caption)
+                .foregroundStyle(Color.fbMuted)
         }
         .listRowBackground(Color.fbCard)
     }

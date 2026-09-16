@@ -151,6 +151,27 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertEqual(second.step, .trainingProfile)
     }
 
+    /// Removing the profile in Settings (#191) after answering it in onboarding
+    /// leaves no skip marker behind by itself — and an undecided step 4 would
+    /// pull the user back into onboarding on the next launch. The removal has
+    /// to count as the decision it is.
+    func testRemovingTheProfileInSettingsDoesNotReopenStepFour() async {
+        let first = makeSUT()
+        await first.bootstrap()
+        await grantConsent(first)
+        await connectHevyKey(first)
+        await first.llmKeysViewModel.skip()
+        first.trainingProfileViewModel.goal = .buildMuscle
+        await first.trainingProfileViewModel.save()
+        XCTAssertEqual(first.step, .completed)
+
+        await TrainingProfileStore(defaults: defaults).removeProfile()
+
+        let second = makeSUT()
+        await second.bootstrap()
+        XCTAssertEqual(second.step, .completed)
+    }
+
     private func grantConsent(_ sut: OnboardingViewModel) async {
         sut.consentViewModel.hasAcceptedCheckbox = true
         await sut.consentViewModel.confirm()
