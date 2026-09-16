@@ -15,9 +15,12 @@ struct SeededApp {
 
     let app: XCUIApplication
 
-    /// - Parameter profile: Which bundled history to seed — `person-a` trains
-    ///   five times a week, `person-b` twice.
-    init(profile: String = LaunchArgument.Profile.personA) {
+    /// - Parameters:
+    ///   - profile: Which bundled history to seed — `person-a` trains five
+    ///     times a week, `person-b` twice.
+    ///   - seedsAnalysis: Also stores an analysis with a progress report, so
+    ///     the analysis tab opens on its cards (#177).
+    init(profile: String = LaunchArgument.Profile.personA, seedsAnalysis: Bool = false) {
         app = XCUIApplication()
         app.launchArguments = [
             // Honoured on this path too since #148: the forced reset runs
@@ -31,6 +34,9 @@ struct SeededApp {
             LaunchArgument.stubHevy, LaunchArgument.Verdict.accepts,
             LaunchArgument.seedMockData, profile,
         ]
+        if seedsAnalysis {
+            app.launchArguments.append(LaunchArgument.seedAnalysis)
+        }
     }
 
     @discardableResult
@@ -100,6 +106,28 @@ struct SeededApp {
 
     var insufficientDataNotice: XCUIElement {
         app.descendants(matching: .any)[AccessibilityID.Progression.insufficientData]
+    }
+
+    /// The analysis tab in the tab bar. Addressed by its title: a SwiftUI
+    /// `Tab` exposes no identifier of its own.
+    var analysisTab: XCUIElement {
+        app.tabBars.buttons["Analysis"]
+    }
+
+    var analysisResult: XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.Analysis.result]
+    }
+
+    var analysisHeadline: XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.Analysis.headline]
+    }
+
+    var progressionCards: XCUIElementQuery {
+        app.descendants(matching: .any).matching(identifier: AccessibilityID.Analysis.progressionCard)
+    }
+
+    var analysisProse: XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.Analysis.prose]
     }
 
     /// The system back button of the pushed screen.

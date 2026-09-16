@@ -14,9 +14,11 @@ struct AnalysisHistoryDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                AnalysisContextView(context: entry.context)
+                // The same cards the user saw when the row stores a report
+                // (#176); prose for every row from before V3 (US-14 AC6).
                 AnalysisResultView(
-                    text: entry.text,
+                    outcome: AnalysisOutcome(stored: entry),
+                    context: entry.context,
                     // Rows from before #176 did not store the provider, so
                     // their badge stays the bare "AI" rather than naming one
                     // on a guess.
@@ -35,7 +37,25 @@ struct AnalysisHistoryDetailView: View {
 }
 
 #if DEBUG
-#Preview {
+/// A stored report renders its cards, as on the analysis screen (design 3.7b).
+#Preview("Report") {
+    NavigationStack {
+        AnalysisHistoryDetailView(
+            entry: AnalysisResultSnapshot(
+                id: UUID(),
+                text: AnalysisReportSamples.progress.summary,
+                generatedAt: .now.addingTimeInterval(-3 * 86_400),
+                context: AnalysisContext(sessionCount: 12, window: .default),
+                report: AnalysisReportSamples.progress,
+                provider: .claude
+            ),
+            now: .now
+        )
+    }
+}
+
+/// A row stored before V3: prose, and a bare "AI" badge (US-14 AC6).
+#Preview("Prose") {
     NavigationStack {
         AnalysisHistoryDetailView(
             entry: AnalysisResultSnapshot(
@@ -50,8 +70,7 @@ struct AnalysisHistoryDetailView: View {
                 - Give legs a second slot before adding upper-body volume
                 """,
                 generatedAt: .now.addingTimeInterval(-3 * 86_400),
-                context: AnalysisContext(sessionCount: 12, window: .default),
-                provider: .claude
+                context: AnalysisContext(sessionCount: 12, window: .default)
             ),
             now: .now
         )

@@ -15,8 +15,7 @@ enum AnalysisOutcome: Equatable, Sendable {
     case prose(String)
 
     /// The outcome as prose: the text itself, or the report's summary. What
-    /// the history stores as the prose fallback of every row (#176), and what
-    /// the result screen renders until the cards have their views (#177).
+    /// the history stores as the prose fallback of every row (#176).
     var text: String {
         switch self {
         case .report(let report):
@@ -24,6 +23,14 @@ enum AnalysisOutcome: Equatable, Sendable {
         case .prose(let text):
             return text
         }
+    }
+
+    /// The outcome a stored row renders as: its cards when it stored a report
+    /// (#176), its text otherwise — every row from before V3 included (US-14
+    /// AC6). Shared by the restored result and the history detail, so the two
+    /// never show the same row differently.
+    init(stored snapshot: AnalysisResultSnapshot) {
+        self = snapshot.report.map(AnalysisOutcome.report) ?? .prose(snapshot.text)
     }
 
     /// The validated report, or `nil` for prose.

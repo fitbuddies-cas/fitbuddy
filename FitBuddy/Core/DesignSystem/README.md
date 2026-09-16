@@ -31,9 +31,9 @@ gamut, so the catalog stores their exact sRGB values — no Display-P3 needed.
 | Component | Use |
 |---|---|
 | `FBButtonStyle` | `Button("…") { }.buttonStyle(.fb(.primary))` — kinds: `primary`, `accent`, `secondary`, `ghost`, `danger` |
-| `FBCard` | White rounded container with hairline border |
+| `FBCard` | White rounded container with hairline border; `background`/`border` tint it (recovery card, #177) |
 | `FBInfoRow` | Title + paragraph with optional leading SF Symbol (consent disclosures, privacy sections) |
-| `FBStat` | Labelled stat with large tabular value, optional unit + delta |
+| `FBStat` | Labelled stat with large tabular value, optional unit + delta; `size: .compact` for three in a row inside a card (#177) |
 | `FBBar` | Labelled progress bar with trailing value (muscle distribution) |
 | `FBSpinner` | Indeterminate loading ring |
 | `FBToast` | Transient message over the content, dismisses itself (failed pull-to-refresh) |

@@ -1,8 +1,8 @@
 import Foundation
 
 /// Mirror of the app's DEBUG-only launch arguments —
-/// `FirstLaunchResetService.resetLaunchArgument` and
-/// `HevyStubbing.launchArgument`.
+/// `FirstLaunchResetService.resetLaunchArgument`,
+/// `HevyStubbing.launchArgument` and the mock seeders'.
 ///
 /// Same reason as `AccessibilityID`: the UI test drives the app from another
 /// process and cannot import the app module, so the strings exist twice. As
@@ -24,6 +24,9 @@ enum LaunchArgument {
     /// Fills the cache from a bundled mock history; takes a profile
     /// (`MockDataSeeder.launchArgument`, #148).
     static let seedMockData = "-fbSeedMockData"
+    /// Stores an analysis with a progress report, so the analysis tab
+    /// restores its cards (`MockAnalysisSeeder.launchArgument`, #177).
+    static let seedAnalysis = "-fbSeedAnalysis"
 
     enum Verdict {
         static let accepts = "accepts"
