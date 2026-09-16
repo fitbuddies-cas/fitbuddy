@@ -14,12 +14,14 @@ final class ConnectorRegistryTests: XCTestCase {
         let sut = ConnectorRegistry()
         let hevy = MockConnector()
         let strava = makeStravaConnector()
+        let polar = makePolarConnector()
 
         await sut.register(hevy, for: .hevy)
         await sut.register(strava, for: .strava)
+        await sut.register(polar, for: .polar)
 
         let sources = await sut.registeredSources
-        XCTAssertEqual(sources, [.hevy, .strava])
+        XCTAssertEqual(sources, [.hevy, .strava, .polar])
     }
 
     func testRegisteredSourcesIsEmptyForAFreshRegistry() async {
@@ -147,6 +149,19 @@ final class ConnectorRegistryTests: XCTestCase {
         XCTAssertEqual(state, .connected(expiresAt: expiresAt))
     }
 
+    func testConnectingPolarRecordsTheTokenExpiry() async throws {
+        let sut = ConnectorRegistry()
+        await sut.register(makePolarConnector(), for: .polar)
+
+        try await sut.connect(
+            .polar,
+            credentials: .oauth(accessToken: "a", refreshToken: "r", expiresAt: expiresAt)
+        )
+
+        let state = await sut.state(of: .polar, now: beforeExpiry)
+        XCTAssertEqual(state, .connected(expiresAt: expiresAt))
+    }
+
     /// Credentials the connector refuses leave the source disconnected — the
     /// registry does not record a connection the provider never accepted.
     func testConnectingStravaWithAnAPIKeyIsRejectedAndLeavesItDisconnected() async {
@@ -171,6 +186,14 @@ final class ConnectorRegistryTests: XCTestCase {
             session: StubURLProtocol.makeSession(),
             oauth: StubStravaOAuthorizer(),
             credentialStore: StubStravaCredentialStore()
+        )
+    }
+
+    private func makePolarConnector() -> PolarConnector {
+        PolarConnector(
+            configuration: PolarClientConfiguration(clientID: "test-client", redirectURI: "fitbuddy://polar/callback"),
+            memberID: "test-member",
+            session: StubURLProtocol.makeSession()
         )
     }
 

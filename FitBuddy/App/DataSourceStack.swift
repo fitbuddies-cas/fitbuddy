@@ -5,9 +5,10 @@ import Foundation
 /// `ConnectorRegistry` only means something if the connection screen, the
 /// sync and the dashboard all look at the same instance — a registry per
 /// screen would have each of them see a different connection state. This
-/// object is that one instance, plus the Strava collaborators that have to be
-/// shared with it: the credential store the connector persists refreshed
-/// tokens through, and the OAuth service that carries the browser seam.
+/// object is that one instance, plus the Strava and Polar collaborators that
+/// have to be shared with it: the credential stores the connectors persist
+/// refreshed tokens through, and the OAuth services that carry the browser
+/// seam.
 ///
 /// Main-actor bound because `WebAuthenticationSession` is; it is created here
 /// and nowhere else. `RootView` owns one as a `@StateObject` — the one
@@ -21,17 +22,49 @@ final class DataSourceStack: ObservableObject {
     let stravaCredentialStore = StravaCredentialStore()
     let stravaOAuth: StravaOAuthService
     let stravaConnector: StravaConnector
+    let polarCredentialStore = PolarCredentialStore()
+    /// `nil` when the team's `PolarTeamConfig.plist` (#155) is missing or
+    /// still holds its placeholder — a developer machine that has not
+    /// registered a Polar OAuth client yet. The app must still launch, just
+    /// without a `.polar` source in the registry.
+    let polarClientConfiguration: PolarClientConfiguration?
+    private(set) var polarOAuth: PolarOAuthService?
+    private(set) var polarConnector: PolarConnector?
 
     init() {
         stravaOAuth = StravaOAuthService(webAuthenticator: WebAuthenticationSession())
         stravaConnector = StravaConnector(oauth: stravaOAuth, credentialStore: stravaCredentialStore)
+        polarClientConfiguration = try? PolarClientConfiguration.loadFromTeamConfig()
     }
 
-    /// Registers both connectors with the registry. Run once at launch,
-    /// before anything asks the registry a question — the sync (#143) fetches
-    /// every source through it.
+    /// Registers every available connector with the registry. Run once at
+    /// launch, before anything asks the registry a question — the sync
+    /// (#143) fetches every source through it.
     func registerConnectors() async {
         await registry.register(hevyConnector, for: .hevy)
         await registry.register(stravaConnector, for: .strava)
+
+        guard let polarClientConfiguration else { return }
+        let memberID = await resolvedPolarMemberID()
+        let connector = PolarConnector(configuration: polarClientConfiguration, memberID: memberID)
+        polarConnector = connector
+        polarOAuth = PolarOAuthService(
+            configuration: polarClientConfiguration,
+            webAuthenticator: WebAuthenticationSession(),
+            credentialStore: polarCredentialStore
+        )
+        await registry.register(connector, for: .polar)
+    }
+
+    /// The stable AccessLink `member-id` FitBuddy registers this user under
+    /// (ADR-11): whatever is already stored, or a freshly generated one on
+    /// the very first launch that finds a Polar configuration.
+    private func resolvedPolarMemberID() async -> String {
+        if let stored = try? await polarCredentialStore.memberID() {
+            return stored
+        }
+        let generated = UUID().uuidString
+        try? await polarCredentialStore.saveMemberID(generated)
+        return generated
     }
 }
