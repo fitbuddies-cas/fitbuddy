@@ -38,8 +38,8 @@ Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 | AC6 | User hat in den letzten 7 Tagen an ≥6 Tagen trainiert | Analyse wird ausgeführt | Empfehlung enthält expliziten Hinweis auf Recovery-Bedarf — keine Steigerungsempfehlung ohne diesen Hinweis |
 | AC7 | Analyse ist abgeschlossen | Empfehlung wird angezeigt | Nennt mindestens eine konkrete Übung mit konkretem Wert («Erhöhe Bankdrücken von 60 kg auf 62.5 kg») |
 | AC8 | User trainiert Brust 3×/Woche, Beine nur 1×/Woche | Empfehlung wird generiert | AI weist auf Muskelgruppen-Dysbalance hin |
-| AC9 | Empfehlung wurde angezeigt | — | Unter der Empfehlung erscheinen zwei Buttons: «Helpful» / «Not helpful» — Tap wird lokal gespeichert; kein Backend-Call |
-| AC10 | Eine Analyse wurde abgeschlossen | User öffnet die App später erneut | Die neueste Empfehlung wird wieder angezeigt, mit Zeitstempel oben links auf der Karte und dem bereits gegebenen Helpful-/Not-helpful-Verdikt |
+| ~~AC9~~ | — | — | *Entfernt:* «Helpful» / «Not helpful»-Buttons. Die Bewertung blieb nur lokal, wurde nicht ausgewertet und floss in keinen Prompt ein — kein Nutzen für User oder Team. Nummer bleibt frei, damit AC10/AC11 stabil referenzierbar bleiben. |
+| AC10 | Eine Analyse wurde abgeschlossen | User öffnet die App später erneut | Die neueste Empfehlung wird wieder angezeigt, mit Zeitstempel oben links auf der Karte |
 | AC11 | Mehrere Analysen wurden durchgeführt | User öffnet den History-Screen | Alle gespeicherten Analysen erscheinen chronologisch absteigend (max. 20); jede lässt sich per Swipe einzeln löschen |
 
 > **Hinweis:** US-3 ist als Epic geführt und vor Sprint-Planung in Child Stories aufzuteilen (Prompt-Design, UI, Error-Handling, Disclaimer).
@@ -64,10 +64,18 @@ Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 
 | # | Given | When | Then |
 |---|---|---|---|
-| AC1 | Nutzer tippt auf «Quelle hinzufügen» | Er wählt Quelle und schliesst OAuth-Flow ab | Aktivitäten der letzten 30 Tage erscheinen normalisiert im Dashboard neben bestehenden Daten |
+| AC1 | Nutzer tippt auf «Quelle hinzufügen» | Er wählt Quelle und schliesst OAuth-Flow ab | Aktivitäten der letzten 90 Tage erscheinen normalisiert im Dashboard neben bestehenden Daten, die Quelle ist pro Session erkennbar |
 | AC2 | Token einer Quelle ist abgelaufen | Dashboard lädt | Hinweis erscheint («Strava-Verbindung erneuern») mit direktem Link zum Re-Auth-Flow |
+| AC3 | Nutzer hat noch keine Strava-Zugangsdaten hinterlegt | Er öffnet «Quelle hinzufügen» | Screen zur Eingabe von Client ID und Client Secret erscheint mit Anleitung zur eigenen Strava-API-App; beide Werte landen im Keychain |
+| AC4 | Access-Token ist abgelaufen, Refresh-Token ist gültig | Sync läuft | Token wird transparent erneuert, der Sync gelingt ohne Nutzerinteraktion |
 
-> **Hinweis:** Im PoC wird nur das `FitnessConnector`-Interface verankert; der Strava-Connector selbst erst in v1.
+> **Hinweis:** Der Strava-Connector ist im PoC (v0) vollständig umgesetzt: OAuth-Flow im BYO-App-Modell nach ADR-010 (Zugangsdaten der eigenen Strava-API-App des Nutzers, kein Backend), transparenter Token-Refresh, quellenbezogener Cache und Fan-out-Sync über die `ConnectorRegistry`. Strava-Sessions erscheinen im Dashboard (AC1) und lösen den Erneuerungshinweis aus (AC2).
+>
+> Als dritte Quelle ist **Polar AccessLink** nach demselben BYO-App-Modell umgesetzt (ADR-011): eigene AccessLink-App des Nutzers, Verbindung über Settings, quellenbezogener Cache und Sync. AC1–AC3 gelten für Polar sinngemäss. AC4 entfällt, weil AccessLink v3 ein ca. 1 Jahr gültiges Access-Token ohne Refresh-Token ausgibt; nach Ablauf verbindet der Nutzer neu. Polar liefert nur Trainings, die nach dem Verbinden zu Polar Flow hochgeladen wurden.
+>
+> Strava- und Polar-Sessions fliessen weder in die Übungsliste noch in die Progressionskurve oder den Analyse-Prompt ein — die quellenübergreifende Auswertung bleibt v1 (siehe Kapitel 4).
+
+> **Zum Zeitfenster in AC1:** Die ursprünglichen «30 Tage» sind auf die 90 Tage des bestehenden Analyse- und Cache-Fensters (`TrainingWindow`) vereinheitlicht — zwei Fenster würden zwei Cache-Invalidierungsregeln bedeuten. Gleiche Korrektur wie bei der Doku-Synchronisation des Analysezeitraums.
 
 ### 1.2.2 US-6 · Analyse-Kontext transparent machen
 **Als** Nutzer **möchte ich** sehen, auf welcher Datenbasis die AI-Empfehlung generiert wurde, **damit** ich die Empfehlung einordnen und ihr vertrauen oder sie hinterfragen kann.
@@ -84,6 +92,25 @@ Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 |---|---|---|---|
 | AC1 | User öffnet die Übungsübersicht mit ≥10 Einträgen | User tippt in das Suchfeld | Liste filtert in Echtzeit (case-insensitive). Keine Ergebnisse → Hinweis «Keine Übungen gefunden». |
 | AC2 | User öffnet den Muskelgruppen-Filter | User wählt «Beine» | Nur Übungen, die Hevy der Kategorie Beine zuordnet, werden angezeigt. Mehrfachauswahl möglich. |
+
+### 1.2.4 US-13 · Trainingsprofil für gezieltere AI-Empfehlungen
+**Als** Nutzer **möchte ich** beim Onboarding mein Trainingsziel und meine Erfahrung angeben, **damit** die AI-Analyse Empfehlungen gibt, die zu dem passen, worauf ich hintrainiere, statt zu einem Durchschnittsnutzer.
+
+| # | Given | When | Then |
+|---|---|---|---|
+| AC1 | Onboarding Schritt 1–3 abgeschlossen | Schritt 4 erscheint | Zwei Fragen: Ziel (Muskelaufbau / Kraft / Fettabbau / Ausdauer verbessern / Fitness halten) und Krafttrainings-Erfahrung (<1 Jahr / 1–3 Jahre / >3 Jahre) |
+| AC2 | User will die Angaben nicht machen | «Skip for now» wird getippt | Onboarding ist abgeschlossen, die App funktioniert unverändert, der Schritt erscheint nicht erneut |
+| AC3 | Ein Profil ist gespeichert | AI-Analyse wird gestartet | Ziel und Erfahrung stehen als «Profile»-Abschnitt im User-Prompt. Der Abschnitt hält fest, dass nur Kraftsessions vorliegen. Ohne Profil entfällt er ersatzlos. |
+| AC4 | Ein Profil ist gespeichert | Analyse-Screen zeigt die Datenbasis (US-6) | Ziel und Erfahrung sind dort mit aufgeführt |
+| AC5 | Profil wurde gesetzt oder übersprungen | Settings werden geöffnet | Bereich «Training profile» erlaubt Ändern und Entfernen |
+
+> **Fünf Ziele, darunter Ausdauer:** Strava und Polar werden in den Settings verbunden, nicht im Onboarding — Schritt 4 weiss also nicht, ob ein Kraft- oder ein Ausdauersportler davorsitzt, und die Frage muss quellenneutral sein. Ohne «Ausdauer verbessern» wählt eine Läuferin «Fitness halten» und bekommt einen Kraftblock empfohlen. Jetzt ist es ein Enum-Fall, später Migration plus Prompt- und Teständerungen. Dasselbe Ziel kann später den Standard für die Profil-Auswahl in US-15 AC1 setzen, statt dort ein zweites Mal zu fragen.
+>
+> **Erfahrung ist domänenspezifisch:** Gefragt wird nach **Krafttrainings**-Erfahrung, im UI und im Prompt-Abschnitt so benannt. Fünf Jahre Laufen und sechs Monate Krafttraining sind für die Empfehlung zwei verschiedene Werte, und solange nur Kraftsessions analysiert werden, ist die engere Frage die ehrlichere. Mit US-15 (quellenübergreifende Analyse) wäre sie pro Domäne zu stellen oder ausdrücklich als allgemeine Trainingserfahrung zu benennen.
+>
+> **Das Profil darf keinen Kontext erfinden lassen:** `AnalysisPromptBuilder` filtert heute alle Strava-Sessions aus dem Prompt. Wer dreimal läuft und einmal Kraft macht, bekommt sonst eine Analyse dieser einen Session unter einem Ziel, das nach Ausdauerkontext ruft. Der «Profile»-Abschnitt hält deshalb fest, dass die Datenbasis nur Kraftsessions umfasst — bis US-15 das auflöst.
+>
+> **Bewusst minimal:** nur Ziel und Erfahrungslevel. Equipment, Wunschfrequenz und Verletzungen sind ausgeklammert — Verletzungsdaten sind Gesundheitsdaten nach Art. 5 lit. c revDSG und zögen Consent-Text und Risikonotiz nach sich. Die Erfahrung wird in Jahren erhoben statt als Selbsteinschätzung, weil Jahre objektiv sind. Das Profil geht in den User-Prompt, nicht in den System-Prompt: Es ist ein Faktum über diese Person, kein Auftrag an das Modell — der System-Prompt bleibt für alle Nutzer identisch, was die Regel aus US-3 AC3 prüfbar hält.
 
 
 
@@ -133,10 +160,11 @@ Out of Scope — siehe Abschnitt 4.
 | US-2 | 90 Tage Trainingsdaten im Dashboard | **Must** | Datenbasis für AI-Analyse (US-3) und alle Visualisierungen. 90 Tage statt 30, da Progression erst über 8–12 Wochen messbar ist. |
 | US-3 | AI-Analyse auf Knopfdruck | **Must** | Die AI-Empfehlung *ist* das Produkt — ohne sie wird FitBuddy zum reinen Hevy-Viewer. |
 | US-4 | Onboarding in 3 Schritten | **Must** | Zwei API-Keys (Hevy + Claude) sind für nicht-technische User echtes Produktrisiko (R4). Onboarding muss ohne Doku machbar sein. |
-| US-5 | Zweite Datenquelle verbinden | **Should** | Differenzierung durch zweite Quelle ist Produktargument. Connector-Interface wird im PoC architektonisch verankert, Strava-Connector erst v1 (OAuth + Normalisierung + kombinierte Analyse ≈ 1.5–2 Sprints). |
+| US-5 | Zweite Datenquelle verbinden | **Should** | Differenzierung durch zweite Quelle ist Produktargument. Strava- und Polar-Connector (OAuth im BYO-App-Modell, Normalisierung, quellenbezogener Cache) sind im PoC umgesetzt; die kombinierte Analyse über alle Quellen bleibt v1. |
 | US-6 | Analyse-Kontext transparent machen | **Should** | AC1 könnte als AC in US-3 wandern; eigenständige Story v. a. wegen AC2 (Warnung bei dünner Datenbasis). |
 | US-7 | Übungssuche & Filter | **Should** | Wird notwendig, sobald User-Historie >20 Übungen erreicht. Für PoC-Demos mit wenigen Sessions verzichtbar. |
-| US-8 | Datenquelle-Status sichtbar | **Could** | Bei nur einer Quelle (Hevy) reicht im PoC der Sync-Zeitstempel aus US-2 AC2. Vollwertig relevant ab v1. |
+| US-8 | Datenquelle-Status sichtbar | **Could** | Bei nur einer Quelle (Hevy) trägt der Sync-Zeitstempel aus US-2 AC2 den Grossteil. AC1 und AC2 sind in v0 dennoch umgesetzt (Stale-Indikator ab >24 h mit Retry, aktive Benachrichtigung bei widerrufenem Key), weil der blosse Zeitstempel veraltete Daten nicht als solche kenntlich macht. Vollwertig — mehrere Quellen nebeneinander — relevant ab v1. |
+| US-13 | Trainingsprofil für gezieltere AI-Empfehlungen | **Should** | Hebt die Qualität von US-3 spürbar, ohne dass irgendetwas davon abhängt: Ohne Profil verhält sich die App exakt wie bisher. Zwei Felder, überspringbar — der Aufwand steht in keinem Verhältnis zum Gewinn an Treffsicherheit der Empfehlung. |
 | US-9 | Progressionskurven pro Übung | **Could** | US-3 deckt den Hauptnutzen ab. Epley-Formel + Plateau-Detection sind nicht-trivial. |
 | US-10 | Daten manuell neu laden | **Could** | iOS-Pattern, das User erwarten — kein Showstopper. 1–2 Tage Aufwand, ergänzt US-2 AC2. |
 | US-11 | Wochenübersicht als Push-Notification | **Won't** | iOS-Permission-Flow + Background-Scheduling + LLM-Call-Fallback ist eigenes Sub-System. Relevant ab v1.2. |
@@ -169,7 +197,7 @@ Bewusst ausgeschlossen für den PoC. Dokumentiert, damit später kein Scope-Cree
 |---|---|
 | **US-11** Push-Notifications (Wochenübersicht) | iOS-Permission-Flow, Background-Scheduling, LLM-Fallback bei Offline-Zustand — eigenes Sub-System. Frühestens v1.2 sinnvoll, wenn Retention-Daten zeigen, dass User die App nicht regelmässig öffnen. |
 | **US-12** Write-back nach Hevy | Erfordert Hevy PRO, ungeklärtes Write-Target (Routine vs. zukünftiges Workout) und Undo-UX. Falsch übernommene AI-Empfehlung ist ein realer Schaden für den User (R3). |
-| **Strava-Connector (Implementierung)** | Nur das `FitnessConnector`-Interface wird verankert (US-5 / ADR-3). Die OAuth-Implementierung samt Token-Refresh und Cross-Source-Analyse kommt in v1. |
+| **Cross-Source-Analyse** | Die Strava- und Polar-Connectoren samt OAuth-Flow und quellenbezogenem Cache sind mit US-5 im PoC umgesetzt (ADR-010, ADR-011). Ausserhalb des Scope bleibt die quellenübergreifende Auswertung: Cardio-Sessions fliessen in v0 weder in den Analyse-Prompt noch in die Übungsliste oder die Progressionskurve ein. |
 | **Apple Health Integration** | Siehe Risiko 1 — Vorschlag: OUT für PoC. |
 | **i18n / Lokalisierung** | English-only ist Definition of Done — kein Framework, keine zweite Sprache. Spart Übersetzungs-Roundtrips beim Prompt-Tuning. |
 | **App Store Release** | Distribution ausschliesslich via TestFlight / Sideload. Spart App-Store-Review, Marketing-Assets und Compliance-Roundtrips. |

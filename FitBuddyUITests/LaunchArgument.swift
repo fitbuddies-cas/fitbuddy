@@ -14,9 +14,24 @@ enum LaunchArgument {
     static let resetState = "-fbResetState"
     /// Replaces every Hevy collaborator with a stub; takes a verdict.
     static let stubHevy = "-fbStubHevy"
+    /// Skips onboarding altogether (`OnboardingViewModel.skipLaunchArgument`);
+    /// no keys are stored afterwards.
+    static let skipOnboarding = "-fbSkipOnboarding"
+    /// Makes the stubbed sync take a few seconds (`HevyStubbing`).
+    static let slowStubSync = "-fbSlowStubSync"
+    /// Makes the stubbed sync cache the bundled mock workouts (`HevyStubbing`).
+    static let seedMockWorkouts = "-fbSeedMockWorkouts"
+    /// Fills the cache from a bundled mock history; takes a profile
+    /// (`MockDataSeeder.launchArgument`, #148).
+    static let seedMockData = "-fbSeedMockData"
 
     enum Verdict {
         static let accepts = "accepts"
         static let rejects = "rejects"
+    }
+
+    enum Profile {
+        static let personA = "person-a"
+        static let personB = "person-b"
     }
 }

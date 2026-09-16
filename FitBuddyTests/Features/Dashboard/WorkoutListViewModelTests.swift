@@ -241,12 +241,67 @@ final class WorkoutListViewModelTests: XCTestCase {
         XCTAssertEqual(sut.syncStatus, .idle)
     }
 
-    /// A cancelled request is not a connectivity problem and must not put an
-    /// offline banner on a healthy dashboard.
+    /// A sync that ends as a cancellation — the session was reset while the
+    /// window was in flight (#150), or the request was torn down — is not a
+    /// connectivity problem and must not put an offline banner on a healthy
+    /// dashboard. It still has to clear `.syncing`: nothing newer is behind it
+    /// to do so.
     func testCancelledSyncReportsNoFailure() async {
         await syncer.setError(URLError(.cancelled))
         let sut = makeSUT(withSyncer: true)
 
+        await sut.refresh()
+
+        XCTAssertEqual(sut.syncStatus, .idle)
+    }
+
+    // MARK: - Partial sync (#143)
+
+    private func partialResult(failures: [ConnectorSource: WorkoutSyncError]) -> SyncResult {
+        SyncResult(
+            workoutCount: 1,
+            syncedAt: reference,
+            windowStart: TrainingWindow.start(endingAt: reference),
+            failures: failures
+        )
+    }
+
+    /// The data is fresh and the timestamp moved; what the banner has to say
+    /// is which source is missing from it.
+    func testPartialSyncReportsWhichSourceIsMissing() async throws {
+        await syncer.setResult(partialResult(failures: [.strava: .networkUnavailable]))
+        await syncer.recordSyncs(in: timestamps)
+        let sut = makeSUT(withSyncer: true)
+
+        await sut.retry()
+
+        XCTAssertEqual(sut.syncStatus, .degraded(failures: [.strava: .offline]))
+        let stored = try XCTUnwrap(sut.lastSync)
+        XCTAssertEqual(stored.timeIntervalSince1970, reference.timeIntervalSince1970, accuracy: 0.001)
+        XCTAssertNil(sut.refreshNotice, "the moved timestamp is the feedback; no toast on a partial sync")
+    }
+
+    /// US-5 AC2: a rejected Strava pair is the renewal case — a banner, not a
+    /// trip back to onboarding.
+    func testRejectedStravaPairIsReportedAsExpiredNotAsUnauthorized() async {
+        await syncer.setResult(partialResult(failures: [.strava: .unauthorized]))
+        let sut = makeSUT(withSyncer: true)
+        var routed = false
+        sut.onUnauthorized = { routed = true }
+
+        await sut.refresh()
+
+        XCTAssertEqual(sut.syncStatus, .degraded(failures: [.strava: .connectionExpired]))
+        XCTAssertFalse(routed)
+    }
+
+    func testACleanSyncAfterADegradedOneClearsTheStatus() async {
+        await syncer.setResult(partialResult(failures: [.hevy: .serviceUnavailable]))
+        let sut = makeSUT(withSyncer: true)
+        await sut.refresh()
+        XCTAssertEqual(sut.syncStatus, .degraded(failures: [.hevy: .serviceUnavailable]))
+
+        await syncer.setResult(partialResult(failures: [:]))
         await sut.refresh()
 
         XCTAssertEqual(sut.syncStatus, .idle)
@@ -401,34 +456,16 @@ final class WorkoutListViewModelTests: XCTestCase {
         XCTAssertNil(sut.refreshNotice)
     }
 
-    /// SwiftUI cancels the `.refreshable` task when the view goes away — a
-    /// tab switch while the pull is still running. That cancellation reaches
-    /// the sync, and nothing newer is behind it to publish an outcome, so the
-    /// sync itself has to clear `.syncing` before it gives up. Otherwise the
-    /// strip claims "Syncing with Hevy…" for the rest of the app's life.
-    func testRefreshCancelledFromOutsideDoesNotLeaveTheStripSyncing() async {
-        await syncer.gateFirstCall()
-        let sut = makeSUT(withSyncer: true)
-
-        let pull = Task { await sut.retry() }
-        await syncer.waitForFirstCall()
-        XCTAssertEqual(sut.syncStatus, .syncing)
-
-        pull.cancel()
-        await syncer.releaseFirstCall()
-        await pull.value
-
-        // `.idle`, not merely "not syncing": a cancelled request says nothing
-        // about connectivity, so publishing `.failed(.offline)` here would be
-        // the very thing `performSync`'s `isCancellation` guard prevents.
-        XCTAssertEqual(sut.syncStatus, .idle)
-    }
-
-    /// The same teardown, but the sync got through before it was cancelled.
-    /// The workouts are in the cache by then, so the read that follows has to
-    /// publish them — dropping it would leave the dashboard showing the old
-    /// window under a stale timestamp until the user pulls a second time.
-    func testSyncCancelledFromOutsideStillPublishesWhatItCached() async throws {
+    /// SwiftUI cancels the `.refreshable` task on the first re-render of the
+    /// refresh, some 20 ms in (#150) — long before the sync has sent its first
+    /// request. That cancellation has to stop at the ViewModel: the sync runs
+    /// to completion, and the read that follows publishes what it cached,
+    /// under the timestamp it wrote, with the strip back on idle.
+    ///
+    /// The stub throws if the cancellation reached it, so a regression that
+    /// forwards the caller's cancellation into the sync again fails here and
+    /// not only in the UI test.
+    func testCancellingTheCallerLetsTheSyncRunToCompletion() async throws {
         let syncedAt = reference.addingTimeInterval(-30)
         cache.results = [
             [summary(id: "old", daysAgo: 5, volume: 400)],
@@ -441,10 +478,12 @@ final class WorkoutListViewModelTests: XCTestCase {
 
         let pull = Task { await sut.retry() }
         await syncer.waitForFirstCall()
+        XCTAssertEqual(sut.syncStatus, .syncing)
         pull.cancel()
         await syncer.releaseFirstCall()
         await pull.value
 
+        XCTAssertEqual(sut.syncStatus, .idle)
         guard case let .loaded(workouts, _) = sut.state else {
             return XCTFail("Expected .loaded, got \(sut.state)")
         }
@@ -500,6 +539,73 @@ final class WorkoutListViewModelTests: XCTestCase {
         await sut.refresh()
 
         XCTAssertEqual(sut.state, .empty)
+    }
+
+    // MARK: - Data sources (US-8, #40)
+
+    /// The strip is fed from the ViewModel rather than reading the timestamp
+    /// store a second time, so what it reports can never disagree with the
+    /// "last synced" line the dashboard already had.
+    func testDataSourcesReportTheStoredSyncTimestamp() async throws {
+        await timestamps.setLastSync(reference.addingTimeInterval(-3 * 86_400))
+
+        let sut = makeSUT()
+        await sut.load()
+
+        let source = try XCTUnwrap(sut.dataSources.first)
+        XCTAssertEqual(source.source, .hevy)
+        XCTAssertEqual(source.lastSync, sut.lastSync)
+        XCTAssertFalse(source.isSyncing)
+        XCTAssertTrue(source.needsAttention(now: reference))
+    }
+
+    /// Before any sync the strip has exactly one row to draw — a Strava row
+    /// here would promise data nobody has fetched.
+    func testDataSourcesHoldHevyAloneBeforeTheFirstSync() {
+        XCTAssertEqual(makeSUT().dataSources.map(\.source), [.hevy])
+    }
+
+    /// Once a sync covered Strava too (#143), the strip gets its second row —
+    /// including after a partial sync, where the failed source is reported by
+    /// the banner and still listed.
+    func testDataSourcesListEverySourceTheLastSyncCovered() async {
+        await syncer.setResult(SyncResult(
+            workoutCount: 2,
+            syncedAt: reference,
+            windowStart: TrainingWindow.start(endingAt: reference),
+            failures: [.strava: .networkUnavailable],
+            sources: [.hevy, .strava]
+        ))
+        let sut = makeSUT(withSyncer: true)
+
+        await sut.refresh()
+
+        XCTAssertEqual(sut.dataSources.map(\.source), [.hevy, .strava])
+        XCTAssertEqual(sut.syncStatus, .degraded(failures: [.strava: .offline]))
+    }
+
+    func testDataSourceIsFreshAfterASuccessfulSync() async throws {
+        await timestamps.setLastSync(reference.addingTimeInterval(-60))
+
+        let sut = makeSUT()
+        await sut.load()
+
+        let source = try XCTUnwrap(sut.dataSources.first)
+        XCTAssertEqual(source.freshness(now: reference), .fresh)
+        XCTAssertFalse(source.needsAttention(now: reference))
+    }
+
+    func testDataSourceReportsAnInFlightSync() async throws {
+        await syncer.gateFirstCall()
+        let sut = makeSUT(withSyncer: true)
+
+        let running = Task { await sut.refresh() }
+        await syncer.waitForFirstCall()
+        XCTAssertTrue(try XCTUnwrap(sut.dataSources.first).isSyncing)
+
+        await syncer.releaseFirstCall()
+        await running.value
+        XCTAssertFalse(try XCTUnwrap(sut.dataSources.first).isSyncing)
     }
 
     // MARK: - Helpers

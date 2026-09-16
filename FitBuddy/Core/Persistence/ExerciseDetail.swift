@@ -13,6 +13,11 @@ struct ExerciseDetail: Equatable, Identifiable, Sendable {
     let title: String
     /// The user's note on this exercise, if they wrote one.
     let notes: String?
+    /// The source's own identifier for the movement, stable across sessions
+    /// (Hevy's `exercise_template_id`). Carried so a card can open the
+    /// movement's statistics under the same identity the exercise list uses
+    /// (#162) — see `ExerciseIdentity`.
+    let templateID: String?
     /// Hevy's superset grouping id; `nil` when the exercise stands alone.
     let supersetID: Int?
     /// Derived from the title, like everywhere else in the app — v0 does not
@@ -40,6 +45,7 @@ extension ExerciseDetail {
         index: Int,
         title: String,
         notes: String? = nil,
+        templateID: String? = nil,
         supersetID: Int? = nil,
         sets: [SetDetail]
     ) {
@@ -49,6 +55,7 @@ extension ExerciseDetail {
             index: index,
             title: title,
             notes: notes,
+            templateID: templateID,
             supersetID: supersetID,
             muscleGroup: MuscleGroup.from(exerciseTitle: title),
             sets: sets,
@@ -67,14 +74,7 @@ extension ExerciseDetail {
     /// here rather than in the card so that numbering a set and marking it come
     /// from one rule — deriving them separately is what once gave a leading
     /// unknown set the number 0.
-    var numberedSets: [(set: SetDetail, number: Int?)] {
-        var number = 0
-        return sets.map { set in
-            guard set.countsTowardsVolume else { return (set, nil) }
-            number += 1
-            return (set, number)
-        }
-    }
+    var numberedSets: [(set: SetDetail, number: Int?)] { sets.numbered }
 
     /// Reduces a cached exercise, sorting its sets by `index`.
     ///
@@ -88,6 +88,7 @@ extension ExerciseDetail {
             index: exercise.index,
             title: exercise.title,
             notes: exercise.notes,
+            templateID: exercise.templateID,
             supersetID: exercise.supersetID,
             sets: exercise.sets
                 .sorted { $0.index < $1.index }

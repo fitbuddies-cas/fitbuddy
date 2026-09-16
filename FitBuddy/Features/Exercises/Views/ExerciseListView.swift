@@ -11,11 +11,19 @@ import SwiftUI
 /// and combines with the search field (AC3); both hang off the same view model.
 struct ExerciseListView: View {
     @StateObject private var viewModel: ExerciseListViewModel
+    private let makeProgressionViewModel: (ExerciseIdentity) -> ExerciseProgressionViewModel
 
-    /// - Parameter viewModel: Built lazily — the autoclosure is evaluated once,
-    ///   when SwiftUI first creates the view's state.
-    init(viewModel: @autoclosure @escaping () -> ExerciseListViewModel) {
+    /// - Parameters:
+    ///   - viewModel: Built lazily — the autoclosure is evaluated once, when
+    ///     SwiftUI first creates the view's state.
+    ///   - makeProgressionViewModel: Called once per pushed movement, not once
+    ///     per rendered row — see `.navigationDestination` below (#42).
+    init(
+        viewModel: @autoclosure @escaping () -> ExerciseListViewModel,
+        makeProgressionViewModel: @escaping (ExerciseIdentity) -> ExerciseProgressionViewModel
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel())
+        self.makeProgressionViewModel = makeProgressionViewModel
     }
 
     var body: some View {
@@ -23,6 +31,7 @@ struct ExerciseListView: View {
             .background(Color.fbBackground)
             .navigationTitle("Exercises")
             .navigationBarTitleDisplayMode(.inline)
+            .accessibilityIdentifier(AccessibilityID.Exercises.root)
             .task { await viewModel.load() }
     }
 
@@ -101,7 +110,15 @@ struct ExerciseListView: View {
                     if index > 0 {
                         Divider().overlay(Color.fbDivider)
                     }
-                    ExerciseSummaryRow(exercise: exercise)
+                    // The identity, not the summary: the same value a card in
+                    // a workout pushes, so both routes resolve through one
+                    // destination on the stack root (#162).
+                    NavigationLink(value: exercise.identity) {
+                        ExerciseSummaryRow(exercise: exercise)
+                    }
+                    // The row paints itself; the link only makes it tappable.
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier(AccessibilityID.Exercises.row)
                 }
             }
         }
@@ -178,13 +195,19 @@ struct ExerciseListView: View {
 #if DEBUG
 #Preview("With data") {
     NavigationStack {
-        ExerciseListView(viewModel: ExerciseListViewModel(cache: PreviewExerciseCache.filled))
+        ExerciseListView(
+            viewModel: ExerciseListViewModel(cache: PreviewExerciseCache.filled),
+            makeProgressionViewModel: { _ in PreviewProgressionCache.rising }
+        )
     }
 }
 
 #Preview("Empty") {
     NavigationStack {
-        ExerciseListView(viewModel: ExerciseListViewModel(cache: PreviewExerciseCache.empty))
+        ExerciseListView(
+            viewModel: ExerciseListViewModel(cache: PreviewExerciseCache.empty),
+            makeProgressionViewModel: { _ in PreviewProgressionCache.rising }
+        )
     }
 }
 #endif

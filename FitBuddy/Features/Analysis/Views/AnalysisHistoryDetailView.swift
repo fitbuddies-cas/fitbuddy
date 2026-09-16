@@ -3,11 +3,8 @@ import SwiftUI
 /// One stored analysis in full, pushed from the history list (US-3 AC11,
 /// #117).
 ///
-/// The recommendation and the basis it rests on, and nothing else: no feedback
-/// bar and no "New analysis". A verdict belongs to the recommendation the user
-/// has just read on the analysis screen — offering the buttons again weeks
-/// later would collect an opinion about a text whose training data has long
-/// moved on.
+/// The recommendation and the basis it rests on, and nothing else: no "New
+/// analysis" — a new run belongs to the analysis screen, not to an old text.
 struct AnalysisHistoryDetailView: View {
     let entry: AnalysisResultSnapshot
     /// The instant the list rendered against, so the age here matches the row
@@ -52,8 +49,7 @@ struct AnalysisHistoryDetailView: View {
                 - Give legs a second slot before adding upper-body volume
                 """,
                 generatedAt: .now.addingTimeInterval(-3 * 86_400),
-                context: AnalysisContext(sessionCount: 12, window: .default),
-                feedback: .helpful
+                context: AnalysisContext(sessionCount: 12, window: .default)
             ),
             now: .now
         )

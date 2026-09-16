@@ -16,7 +16,6 @@ final class AnalysisViewModelTests: XCTestCase {
     private var defaults: UserDefaults!
     private var suiteName: String!
     private var rateLimit: AnalysisRateLimitStore!
-    private var feedbackStore: AnalysisFeedbackStore!
     private var container: ModelContainer!
     private var results: AnalysisResultStore!
 
@@ -28,7 +27,6 @@ final class AnalysisViewModelTests: XCTestCase {
         suiteName = "fitbuddy.tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
         rateLimit = AnalysisRateLimitStore(defaults: defaults)
-        feedbackStore = AnalysisFeedbackStore(defaults: defaults)
         container = try ModelContainerFactory.makeInMemory()
         results = AnalysisResultStore(modelContainer: container)
     }
@@ -38,7 +36,6 @@ final class AnalysisViewModelTests: XCTestCase {
         results = nil
         container = nil
         rateLimit = nil
-        feedbackStore = nil
         defaults = nil
         streamer = nil
         cache = nil
@@ -58,7 +55,6 @@ final class AnalysisViewModelTests: XCTestCase {
             cache: cache,
             inference: streamer,
             rateLimit: rateLimit,
-            feedbackStore: feedbackStore,
             resultStore: resultStore ?? results,
             calendar: Self.calendar,
             now: { clock.date },
@@ -76,12 +72,17 @@ final class AnalysisViewModelTests: XCTestCase {
         return calendar
     }()
 
-    private static func workout(daysAgo: Int, title: String = "Push Day") -> WorkoutSummary {
+    private static func workout(
+        daysAgo: Int,
+        title: String = "Push Day",
+        source: ConnectorSource = .hevy
+    ) -> WorkoutSummary {
         WorkoutSummary(
             id: "w-\(daysAgo)",
             title: title,
             startTime: reference.addingTimeInterval(-Double(daysAgo) * 86_400),
-            volumeKg: 4_200,
+            source: source,
+            volumeKg: source == .strava ? 0 : 4_200,
             exerciseCount: 5,
             countedSetCount: 18
         )
@@ -150,6 +151,34 @@ final class AnalysisViewModelTests: XCTestCase {
 
         XCTAssertEqual(sut.context?.window, .default)
         XCTAssertEqual(sut.context?.sessionCount, 2)
+    }
+
+    /// The context line describes the strength history the prompt was built
+    /// from (US-6 AC1): Strava sessions count neither here nor in the prompt.
+    func testContextDoesNotCountStravaSessions() async {
+        cache.summaries = [
+            Self.workout(daysAgo: 2),
+            Self.workout(daysAgo: 3, title: "Morning Run", source: .strava),
+            Self.workout(daysAgo: 5),
+        ]
+        await streamer.setChunks(["ok"])
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.sessionCount, 2)
+    }
+
+    /// A cache holding nothing but runs has no strength history to analyse —
+    /// not a window to widen, and not a provider call worth paying for.
+    func testACacheOfOnlyStravaSessionsIsNoTrainingData() async {
+        cache.summaries = [Self.workout(daysAgo: 2, title: "Morning Run", source: .strava)]
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.state, .error(.noTrainingData))
+        XCTAssertNil(sut.context)
     }
 
     /// After a widened window the count has to follow it: the sessions the
@@ -748,84 +777,6 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertFalse(sut.canStartAnalysis)
     }
 
-    // MARK: - Feedback (US-3 AC9)
-
-    func testFeedbackOnAResultIsPublishedAndStored() async throws {
-        await streamer.setChunks(["done"])
-        let sut = makeSUT()
-        await sut.start()
-
-        await sut.submitFeedback(.helpful)
-
-        XCTAssertEqual(sut.feedback, .helpful)
-        // On the row this run wrote, not in a key beside it: with a history,
-        // that is the only place a verdict can say which text it belongs to
-        // (#117).
-        let stored = try await results.latest()
-        XCTAssertEqual(stored?.feedback, .helpful)
-        let tally = await feedbackStore.count(of: .helpful)
-        XCTAssertEqual(tally, 1)
-    }
-
-    /// The verdict has to land on the analysis that was on screen when it was
-    /// given — not on whatever is newest by the time the write happens.
-    func testFeedbackLandsOnTheAnalysisItWasGivenOn() async throws {
-        await streamer.setChunks(["first"])
-        let clock = TestClock(Self.reference)
-        let sut = makeSUT(clock: clock)
-        await sut.start()
-        await sut.submitFeedback(.helpful)
-
-        clock.advance(by: AnalysisRateLimitStore.duration + 1)
-        await streamer.setChunks(["second"])
-        await sut.start()
-
-        let history = try await results.recent(limit: 10)
-        XCTAssertEqual(history.map(\.text), ["second", "first"])
-        XCTAssertNil(history.first?.feedback)
-        XCTAssertEqual(history.last?.feedback, .helpful)
-    }
-
-    /// A tap must not reach the network — US-3 AC9 is "stored locally, no
-    /// backend call", and the stub is the only call path there is.
-    func testFeedbackDoesNotCallClaude() async {
-        await streamer.setChunks(["done"])
-        let sut = makeSUT()
-        await sut.start()
-
-        await sut.submitFeedback(.notHelpful)
-
-        let calls = await streamer.callCount
-        XCTAssertEqual(calls, 1)
-    }
-
-    func testFeedbackIsIgnoredWithoutAResultOnScreen() async {
-        let sut = makeSUT()
-
-        await sut.submitFeedback(.helpful)
-
-        XCTAssertNil(sut.feedback)
-        let tally = await feedbackStore.count(of: .helpful)
-        XCTAssertEqual(tally, 0)
-    }
-
-    /// A verdict belongs to the recommendation it was given for, so the next
-    /// run starts unrated.
-    func testANewRunClearsTheVerdict() async {
-        await streamer.setChunks(["first"])
-        let clock = TestClock(Self.reference)
-        let sut = makeSUT(clock: clock)
-        await sut.start()
-        await sut.submitFeedback(.helpful)
-
-        clock.advance(by: AnalysisRateLimitStore.duration + 1)
-        await streamer.setChunks(["second"])
-        await sut.start()
-
-        XCTAssertEqual(sut.state, .result("second"))
-        XCTAssertNil(sut.feedback)
-    }
-
     // MARK: - Helpers
 
     /// Polls `condition` until it holds, failing the test on timeout instead of
@@ -982,36 +933,6 @@ extension AnalysisViewModelTests {
 
         XCTAssertEqual(sut.state, .idle)
         XCTAssertNil(sut.resultAge)
-    }
-
-    /// US-3 AC10: the verdict the user already gave comes back selected.
-    func testRestoreShowsAVerdictGivenOnThatRecommendation() async throws {
-        let generatedAt = Self.reference.addingTimeInterval(-2 * 3_600)
-        let id = try await storeRecommendation(at: generatedAt)
-        try await results.setFeedback(.helpful, for: id)
-        let sut = makeSUT()
-
-        await sut.restore()
-
-        XCTAssertEqual(sut.feedback, .helpful)
-    }
-
-    /// A verdict given on an *older* analysis stays with that one: it travels
-    /// in its own row, so nothing has to be guessed from timestamps any more
-    /// (#117).
-    func testRestoreShowsNoVerdictWhenOnlyAnOlderAnalysisWasRated() async throws {
-        let older = try await storeRecommendation(
-            "Older advice.",
-            at: Self.reference.addingTimeInterval(-9 * 3_600)
-        )
-        try await results.setFeedback(.notHelpful, for: older)
-        try await storeRecommendation(at: Self.reference.addingTimeInterval(-2 * 3_600))
-        let sut = makeSUT()
-
-        await sut.restore()
-
-        XCTAssertEqual(sut.state, .result("Add 2.5 kg on bench next session."))
-        XCTAssertNil(sut.feedback)
     }
 
     // MARK: - History entry point (#117)
@@ -1209,13 +1130,11 @@ extension AnalysisViewModelTests {
         XCTAssertNil(sut.generatedAt)
     }
 
-    /// The verdict belongs to the recommendation it was given for: a run
-    /// started while `restore()` is reading the feedback store must not end up
-    /// with a pre-selected rating the user never gave on its text.
-    func testRestoreDoesNotAttachAnOldVerdictToARunStartedMeanwhile() async throws {
+    /// A run started while `restore()` is still reading the store must not be
+    /// replaced by the older recommendation the restore comes back with.
+    func testRestoreDoesNotOverwriteARunStartedMeanwhile() async throws {
         let generatedAt = Self.reference.addingTimeInterval(-7 * 3_600)
-        let older = try await storeRecommendation("Older advice.", at: generatedAt)
-        try await results.setFeedback(.helpful, for: older)
+        try await storeRecommendation("Older advice.", at: generatedAt)
         await streamer.setChunks(["Fresh advice."])
         let sut = makeSUT()
 
@@ -1226,7 +1145,6 @@ extension AnalysisViewModelTests {
         _ = await (restored, run)
 
         XCTAssertEqual(sut.state, .result("Fresh advice."))
-        XCTAssertNil(sut.feedback)
     }
 
     /// "New analysis" only clears the screen — the recommendation stays on
@@ -1241,7 +1159,6 @@ extension AnalysisViewModelTests {
         XCTAssertEqual(sut.state, .idle)
         XCTAssertNil(sut.generatedAt)
         XCTAssertNil(sut.resultAge)
-        XCTAssertNil(sut.feedback)
         XCTAssertNil(sut.context)
         let stored = try await results.latest()
         XCTAssertEqual(stored?.text, "Add 2.5 kg on bench next session.")

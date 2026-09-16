@@ -32,6 +32,7 @@ struct RecentSessionsCard: View {
                     // VoiceOver reads the row as a button, and the user has no
                     // way to tell it opens a screen.
                     .accessibilityAddTraits(.isLink)
+                    .accessibilityIdentifier(AccessibilityID.Dashboard.sessionRow)
                 }
                 if remainingCount > 0 {
                     Divider().overlay(Color.fbDivider)

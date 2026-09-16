@@ -2,8 +2,9 @@ import Foundation
 
 /// A training session, normalized across fitness-data providers (ADR-6) so
 /// the dashboard and AI analysis read one shape regardless of source.
-/// `HevyConnector` (#34) maps Hevy's API responses into this shape; a future
-/// `StravaConnector` (#35) does the same for Strava.
+/// `HevyConnector` (#34) maps Hevy's API responses into this shape;
+/// `StravaConnector` (#142, ADR-10) and `PolarConnector` (ADR-11) do the same
+/// for Strava activities and Polar endurance sessions respectively.
 struct Activity: Identifiable, Equatable, Codable, Sendable {
     /// The source provider's own identifier (e.g. Hevy's workout id), so a
     /// re-sync can be matched against what is already cached.
@@ -17,8 +18,23 @@ struct Activity: Identifiable, Equatable, Codable, Sendable {
     /// When the source last modified the activity, when it reports it. Kept
     /// for the delta sync planned on top of `/workouts/events`.
     var updatedAt: Date?
+    /// The provider this activity came from (#141). With two sources side by
+    /// side, the cache needs it to replace one source's window without
+    /// dropping the other's, and the dashboard needs it to say which is which.
+    var source: ConnectorSource
     var exercises: [ActivityExercise]
+    /// Session-level endurance metrics (heart rate, calories, load) when the
+    /// source provides them. `nil` for a strength source like Hevy; set for a
+    /// Polar exercise (ADR-11). Additive — the dashboard and AI prompt builder
+    /// stay valid without reading it.
+    var metrics: ActivityMetrics?
 
+    /// - Parameter source: Defaults to Hevy, the only source before #141, so
+    ///   the mapping and every fixture written against it stay valid. The
+    ///   default is the initializer's only: the synthesized `Codable` still
+    ///   requires the `source` key, so JSON without it does not decode —
+    ///   nothing decodes `Activity` from JSON today, and a fixture that does
+    ///   has to carry the key.
     init(
         id: String,
         title: String,
@@ -26,7 +42,9 @@ struct Activity: Identifiable, Equatable, Codable, Sendable {
         startTime: Date,
         endTime: Date? = nil,
         updatedAt: Date? = nil,
-        exercises: [ActivityExercise] = []
+        source: ConnectorSource = .hevy,
+        exercises: [ActivityExercise] = [],
+        metrics: ActivityMetrics? = nil
     ) {
         self.id = id
         self.title = title
@@ -34,6 +52,8 @@ struct Activity: Identifiable, Equatable, Codable, Sendable {
         self.startTime = startTime
         self.endTime = endTime
         self.updatedAt = updatedAt
+        self.source = source
         self.exercises = exercises
+        self.metrics = metrics
     }
 }

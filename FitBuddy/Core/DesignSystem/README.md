@@ -42,6 +42,13 @@ gamut, so the catalog stores their exact sRGB values — no Display-P3 needed.
 US-10 (#43), after the screen designs were drawn. Port it back when the
 prototype next gets touched.
 
+The same applies to the **stale-source row** from US-8 (#40): `design/fb-screens.jsx`
+draws the dashboard's offline banner but not the warning row a source gets once
+it has not synced in over a day. It is not an atom yet either — its chrome is
+currently copied across `DataSourceStatusView`, `SyncStatusView` and
+`HevyKeyEntryView`, which is what the proposed `FBWarningBanner` atom (#135)
+would collapse.
+
 ## How screens consume it
 
 Set the screen background to `Color.fbBackground`, group related content in

@@ -6,8 +6,7 @@ import Foundation
 /// same reason `WorkoutStore` returns `WorkoutSummary`: a `@Model` instance is
 /// bound to its `ModelContext` and must not cross an actor boundary.
 struct AnalysisResultSnapshot: Equatable, Sendable, Identifiable {
-    /// The stored row's identity — what the history screen deletes and rates
-    /// by (#117).
+    /// The stored row's identity — what the history screen deletes by (#117).
     let id: UUID
     let text: String
     let generatedAt: Date
@@ -15,7 +14,4 @@ struct AnalysisResultSnapshot: Equatable, Sendable, Identifiable {
     /// and session count so the restored screen names the basis exactly as the
     /// live run did (#87, #36).
     let context: AnalysisContext
-    /// The verdict the user gave on this recommendation, or `nil` while none
-    /// was given (#117).
-    let feedback: AnalysisFeedback?
 }

@@ -64,7 +64,17 @@ struct MockWorkoutLoader {
     /// Every workout of `profile`, newest first, as cache models ready to be
     /// inserted into a `ModelContext` or handed to a view.
     func workouts(for profile: MockWorkoutProfile) throws -> [Workout] {
-        try page(for: profile).workouts.map { $0.makeActivity().makeWorkout() }
+        try activities(for: profile).map { $0.makeWorkout() }
+    }
+
+    /// Every workout of `profile` as the normalized `Activity` a connector
+    /// would hand back — what the cache is written from (#148).
+    ///
+    /// The same decoding path as `workouts(for:)`, one step earlier: both go
+    /// payload → `HevyWorkoutDTO` → `Activity`, so the fixtures and a live
+    /// sync cannot drift apart in how they are mapped.
+    func activities(for profile: MockWorkoutProfile) throws -> [Activity] {
+        try page(for: profile).workouts.map { $0.makeActivity() }
     }
 
     /// The profile's whole history as a single decoded page.

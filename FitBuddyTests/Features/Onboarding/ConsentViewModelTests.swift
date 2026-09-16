@@ -29,6 +29,14 @@ final class ConsentViewModelTests: XCTestCase {
         }
     }
 
+    // MARK: - version (#160)
+
+    func testCurrentVersionReflectsThePolarAddition() {
+        // Pinned so a future version bump is a deliberate, reviewed change
+        // rather than an accidental one.
+        XCTAssertEqual(ConsentViewModel.currentVersion, "2026-09-16")
+    }
+
     // MARK: - confirm gating
 
     func testCanConfirmReflectsCheckbox() {
@@ -84,6 +92,19 @@ final class ConsentViewModelTests: XCTestCase {
     func testRefreshStateRequiredOnVersionMismatch() async throws {
         try await keychain.save("v-outdated", for: .consentVersion)
         await sut.refreshState()
+        XCTAssertEqual(sut.state, .required)
+    }
+
+    /// #145: Strava joined the disclosures, so a consent given to the previous
+    /// text no longer covers the processing. An installation that consented on
+    /// 2026-08-21 has to be asked again.
+    func testConsentGivenBeforeStravaIsAskedAgain() async throws {
+        XCTAssertNotEqual(ConsentViewModel.currentVersion, "2026-08-21")
+        try await keychain.save("2026-08-21", for: .consentVersion)
+        try await keychain.save("2026-08-21T10:00:00Z", for: .consentTimestamp)
+
+        await sut.refreshState()
+
         XCTAssertEqual(sut.state, .required)
     }
 

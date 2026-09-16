@@ -52,6 +52,69 @@ final class WorkoutSummaryMuscleLoadTests: XCTestCase {
         ])
     }
 
+    // MARK: - Strava sessions (#144)
+
+    /// A Strava activity is one whole-body effort: it stays out of the muscle
+    /// split, which remains Hevy's strength picture (US-5 AC1).
+    func testStravaSessionsStayOutOfTheSplit() {
+        let summary = WorkoutSummary(workout: stravaRun(distance: 5_000, movingTime: 1_800))
+
+        XCTAssertEqual(summary.muscleLoads, [])
+        XCTAssertEqual(summary.source, .strava)
+        XCTAssertEqual(summary.countedSetCount, 1)
+    }
+
+    func testPolarSessionsStayOutOfTheSplit() {
+        let summary = WorkoutSummary(workout: stravaRun(distance: 5_000, movingTime: 1_800, source: .polar))
+
+        XCTAssertEqual(summary.muscleLoads, [])
+        XCTAssertEqual(summary.source, .polar)
+    }
+
+    /// The figures a cardio row shows instead of kg.
+    func testCardioTotalsAreSummedOverTheCountedSets() {
+        let summary = WorkoutSummary(workout: stravaRun(distance: 5_000, movingTime: 1_800))
+
+        XCTAssertEqual(summary.volumeKg, 0)
+        XCTAssertEqual(summary.distanceMeters, 5_000)
+        XCTAssertEqual(summary.durationSeconds, 1_800)
+        XCTAssertTrue(summary.isCardio)
+    }
+
+    func testAStrengthSessionHasNoCardioTotalsAndIsNotCardio() {
+        let summary = WorkoutSummary(workout: workout(exercises: [
+            ("Bench Press (Barbell)", [(SetType.normal, 100.0, 10)]),
+        ]))
+
+        XCTAssertNil(summary.distanceMeters)
+        XCTAssertNil(summary.durationSeconds)
+        XCTAssertFalse(summary.isCardio)
+    }
+
+    /// A Hevy session logged without any metric at all is not cardio either:
+    /// nothing to show as distance or time, so it keeps reading as volume.
+    func testASessionWithoutAnyMetricIsNotCardio() {
+        let summary = WorkoutSummary(workout: workout(exercises: [
+            ("Plank", [(SetType.normal, nil, nil)]),
+        ]))
+
+        XCTAssertFalse(summary.isCardio)
+    }
+
+    private func stravaRun(distance: Double, movingTime: Int, source: ConnectorSource = .strava) -> Workout {
+        Workout(
+            id: "\(source.rawValue):1",
+            title: "Morning Run",
+            startTime: Date(timeIntervalSince1970: 1_750_000_000),
+            source: source,
+            exercises: [
+                Exercise(index: 0, title: "Run", sets: [
+                    ExerciseSet(index: 0, type: .normal, distanceMeters: distance, durationSeconds: movingTime),
+                ]),
+            ]
+        )
+    }
+
     func testSplitSumsToTheWorkoutVolume() {
         let summary = WorkoutSummary(workout: workout(exercises: [
             ("Bench Press (Barbell)", [(SetType.normal, 100.0, 10)]),

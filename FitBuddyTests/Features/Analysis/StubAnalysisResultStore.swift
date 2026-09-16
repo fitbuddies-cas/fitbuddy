@@ -31,8 +31,7 @@ actor StubAnalysisResultStore: AnalysisResultStoring {
             id: UUID(),
             text: text,
             generatedAt: generatedAt,
-            context: context,
-            feedback: nil
+            context: context
         )
         entries.append(entry)
         entries.sort { $0.generatedAt > $1.generatedAt }
@@ -51,18 +50,6 @@ actor StubAnalysisResultStore: AnalysisResultStoring {
     func delete(id: UUID) throws {
         if deleteFails { throw Failure.unavailable }
         entries.removeAll { $0.id == id }
-    }
-
-    func setFeedback(_ feedback: AnalysisFeedback?, for id: UUID) throws {
-        guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
-        let entry = entries[index]
-        entries[index] = AnalysisResultSnapshot(
-            id: entry.id,
-            text: entry.text,
-            generatedAt: entry.generatedAt,
-            context: entry.context,
-            feedback: feedback
-        )
     }
 
     func deleteAll() throws {

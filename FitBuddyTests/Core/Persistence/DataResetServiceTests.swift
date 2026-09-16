@@ -12,7 +12,6 @@ final class DataResetServiceTests: XCTestCase {
     private var results: AnalysisResultStore!
     private var timestamps: SyncTimestampStore!
     private var rateLimit: AnalysisRateLimitStore!
-    private var feedback: AnalysisFeedbackStore!
     private var priority: LLMPriorityStore!
     private var skip: LLMKeysSkipStore!
     private var defaults: UserDefaults!
@@ -30,7 +29,6 @@ final class DataResetServiceTests: XCTestCase {
         defaults = UserDefaults(suiteName: suiteName)
         timestamps = SyncTimestampStore(defaults: defaults)
         rateLimit = AnalysisRateLimitStore(defaults: defaults)
-        feedback = AnalysisFeedbackStore(defaults: defaults)
         priority = LLMPriorityStore(defaults: defaults)
         skip = LLMKeysSkipStore(defaults: defaults)
         sut = DataResetService(
@@ -39,7 +37,6 @@ final class DataResetServiceTests: XCTestCase {
             results: results,
             timestamps: timestamps,
             rateLimit: rateLimit,
-            feedback: feedback,
             priority: priority,
             skip: skip
         )
@@ -51,7 +48,6 @@ final class DataResetServiceTests: XCTestCase {
         sut = nil
         skip = nil
         priority = nil
-        feedback = nil
         rateLimit = nil
         timestamps = nil
         results = nil
@@ -97,7 +93,7 @@ final class DataResetServiceTests: XCTestCase {
 
     func testDeleteAllDataClearsCachedWorkouts() async throws {
         let activity = ActivityFactory.activity(id: "w-1", start: Date(timeIntervalSince1970: 1_750_000_000))
-        try await workouts.replaceCachedWorkouts(with: [activity])
+        try await workouts.replaceCachedWorkouts(from: .hevy, with: [activity])
 
         await sut.deleteAllData()
 
@@ -166,7 +162,6 @@ final class DataResetServiceTests: XCTestCase {
             results: results,
             timestamps: timestamps,
             rateLimit: rateLimit,
-            feedback: feedback,
             priority: priority,
             skip: skip
         )
@@ -216,15 +211,6 @@ extension DataResetServiceTests {
 
         let stored = try await results.recent(limit: 20)
         XCTAssertTrue(stored.isEmpty)
-    }
-
-    func testDeleteAllDataRemovesTheFeedbackTally() async throws {
-        await feedback.record(.helpful)
-
-        await sut.deleteAllData()
-
-        let tally = await feedback.count(of: .helpful)
-        XCTAssertEqual(tally, 0)
     }
 
     /// Losing the 60s lock is accepted collateral: the same call wipes both

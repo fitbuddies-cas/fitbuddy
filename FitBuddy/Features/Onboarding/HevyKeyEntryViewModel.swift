@@ -13,6 +13,18 @@ final class HevyKeyEntryViewModel: ObservableObject {
         }
     }
     @Published private(set) var state: HevyKeyEntryState = .unknown
+    /// Why the app sent the user here, when it was not their own doing — the
+    /// banner above the form (US-8 AC2). `nil` for every screen the user
+    /// walked into themselves.
+    ///
+    /// - Note: In memory only, so it does not survive an app kill. US-8 AC2
+    ///   asks for a notification *at the sync attempt*, which this meets: the
+    ///   401 arrives while the user is in the app and the banner is up
+    ///   immediately. The gap is the relaunch afterwards — `bootstrap()`
+    ///   resolves back to `.hevyKey` because the key is gone, but without the
+    ///   reason. Closing it means persisting a flag that clears on the first
+    ///   accepted key; deliberately left for v1 (#40 review).
+    @Published private(set) var notice: HevyKeyEntryNotice?
 
     /// Invoked when a key was actively validated and stored (not on a
     /// bootstrap restore) — lets the onboarding coordinator advance to step 3.
@@ -81,18 +93,29 @@ final class HevyKeyEntryViewModel: ObservableObject {
         do {
             try await keychain.save(key, for: .hevyAPIKey)
             state = .connected
+            // The reason the user was sent here is spent: a key Hevy just
+            // accepted is the answer to it, and leaving the banner up would
+            // keep announcing a problem that no longer exists.
+            notice = nil
             onConnected?()
         } catch {
             state = .failed(.keychain)
         }
     }
 
-    /// Returns to fresh input after the stored key was invalidated (HTTP 401
-    /// anywhere in the app). Clears the field so the rejected key cannot be
-    /// resubmitted by accident.
-    func reset() {
+    /// Returns to fresh input after the stored key went away — an HTTP 401
+    /// anywhere in the app, or the user deleting it in Settings. Clears the
+    /// field so the old key cannot be resubmitted by accident.
+    ///
+    /// - Parameter notice: What to tell the user about why they are here.
+    ///   Defaults to nothing, which is right for every reset the user asked
+    ///   for; the revoked-key path passes `.keyRejected` (US-8 AC2).
+    func reset(announcing notice: HevyKeyEntryNotice? = nil) {
         apiKey = ""
         state = .idle
+        // After `apiKey`, whose `didSet` does not touch this but would make the
+        // ordering load-bearing if it ever did.
+        self.notice = notice
     }
 
     /// Resets a failed attempt back to editing (the "Try again" CTA).

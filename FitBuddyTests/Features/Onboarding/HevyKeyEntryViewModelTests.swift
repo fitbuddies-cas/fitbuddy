@@ -139,4 +139,57 @@ final class HevyKeyEntryViewModelTests: XCTestCase {
         await sut.bootstrap()
         XCTAssertEqual(sut.state, .idle)
     }
+
+    // MARK: - Return-to-step-2 notice (US-8 AC2)
+
+    func testResetWithoutAReasonRaisesNoNotice() {
+        sut.apiKey = "stale input"
+        sut.reset()
+
+        XCTAssertNil(sut.notice)
+        XCTAssertEqual(sut.apiKey, "")
+        XCTAssertEqual(sut.state, .idle)
+    }
+
+    /// The user did not ask for this screen and never saw the 401, so the
+    /// reason has to be on it when they arrive.
+    func testResetAnnouncingARejectedKeyRaisesTheNotice() {
+        sut.apiKey = "revoked-key"
+        sut.reset(announcing: .keyRejected)
+
+        XCTAssertEqual(sut.notice, .keyRejected)
+        XCTAssertEqual(sut.apiKey, "")
+        XCTAssertEqual(sut.state, .idle)
+    }
+
+    /// Typing is not an answer to the notice — a half-entered key does not
+    /// make the old one work again, and a banner that vanished on the first
+    /// keystroke would take the explanation with it.
+    func testNoticeSurvivesEditingTheField() {
+        sut.reset(announcing: .keyRejected)
+        sut.apiKey = "hv_live_new"
+
+        XCTAssertEqual(sut.notice, .keyRejected)
+    }
+
+    func testNoticeSurvivesAFailedAttempt() async {
+        sut.reset(announcing: .keyRejected)
+        await validator.setResult(.failure(HevyKeyValidationError.invalidKey))
+        sut.apiKey = "hv_live_wrong"
+        await sut.connect()
+
+        XCTAssertEqual(sut.state, .failed(.invalidKey))
+        XCTAssertEqual(sut.notice, .keyRejected)
+    }
+
+    /// A key Hevy just accepted is the answer to the notice; leaving it up
+    /// would keep announcing a problem that is over.
+    func testConnectingClearsTheNotice() async {
+        sut.reset(announcing: .keyRejected)
+        sut.apiKey = "hv_live_new"
+        await sut.connect()
+
+        XCTAssertEqual(sut.state, .connected)
+        XCTAssertNil(sut.notice)
+    }
 }
