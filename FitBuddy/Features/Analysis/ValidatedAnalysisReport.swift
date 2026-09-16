@@ -16,4 +16,31 @@ struct ValidatedAnalysisReport: Codable, Equatable, Sendable {
     let lead: String
     let cards: [AnalysisReportCard]
     let summary: String
+
+    enum CodingKeys: String, CodingKey {
+        case headline, verdict, lead, cards, summary
+    }
+}
+
+extension ValidatedAnalysisReport {
+    /// Decodes a stored report, including one written before the lead existed
+    /// (#170): a missing or blank `lead` is derived from `summary`, the same
+    /// way `AnalysisReportParser` does for an answer. Such rows only exist on
+    /// unreleased builds, so the stored format stays version 1
+    /// (`AnalysisReportFormat.validatedReportV1`). Declared in an extension so
+    /// the memberwise initialiser stays.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let summary = try container.decode(String.self, forKey: .summary)
+        self.init(
+            headline: try container.decode(String.self, forKey: .headline),
+            verdict: try container.decode(AnalysisVerdict.self, forKey: .verdict),
+            lead: AnalysisLead.resolved(
+                try container.decodeIfPresent(String.self, forKey: .lead) ?? "",
+                summary: summary
+            ),
+            cards: try container.decode([AnalysisReportCard].self, forKey: .cards),
+            summary: summary
+        )
+    }
 }
