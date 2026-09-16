@@ -94,12 +94,14 @@ Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 
 | # | Given | When | Then |
 |---|---|---|---|
-| AC1 | Onboarding Schritt 1–3 abgeschlossen | Schritt 4 erscheint | Zwei Fragen: Ziel (Muskelaufbau / Kraft / Fettabbau / Fitness halten) und Krafttrainings-Erfahrung (<1 Jahr / 1–3 Jahre / >3 Jahre) |
+| AC1 | Onboarding Schritt 1–3 abgeschlossen | Schritt 4 erscheint | Zwei Fragen: Ziel (Muskelaufbau / Kraft / Fettabbau / Ausdauer verbessern / Fitness halten) und Krafttrainings-Erfahrung (<1 Jahr / 1–3 Jahre / >3 Jahre) |
 | AC2 | User will die Angaben nicht machen | «Skip for now» wird getippt | Onboarding ist abgeschlossen, die App funktioniert unverändert, der Schritt erscheint nicht erneut |
 | AC3 | Ein Profil ist gespeichert | AI-Analyse wird gestartet | Ziel und Erfahrung stehen als «Profile»-Abschnitt im User-Prompt. Der Abschnitt hält fest, dass nur Kraftsessions vorliegen. Ohne Profil entfällt er ersatzlos. |
 | AC4 | Ein Profil ist gespeichert | Analyse-Screen zeigt die Datenbasis (US-6) | Ziel und Erfahrung sind dort mit aufgeführt |
 | AC5 | Profil wurde gesetzt oder übersprungen | Settings werden geöffnet | Bereich «Training profile» erlaubt Ändern und Entfernen |
 
+> **Fünf Ziele, darunter Ausdauer:** Strava und Polar werden in den Settings verbunden, nicht im Onboarding — Schritt 4 weiss also nicht, ob ein Kraft- oder ein Ausdauersportler davorsitzt, und die Frage muss quellenneutral sein. Ohne «Ausdauer verbessern» wählt eine Läuferin «Fitness halten» und bekommt einen Kraftblock empfohlen. Jetzt ist es ein Enum-Fall, später Migration plus Prompt- und Teständerungen. Dasselbe Ziel kann später den Standard für die Profil-Auswahl in US-15 AC1 setzen, statt dort ein zweites Mal zu fragen.
+>
 > **Erfahrung ist domänenspezifisch:** Gefragt wird nach **Krafttrainings**-Erfahrung, im UI und im Prompt-Abschnitt so benannt. Fünf Jahre Laufen und sechs Monate Krafttraining sind für die Empfehlung zwei verschiedene Werte, und solange nur Kraftsessions analysiert werden, ist die engere Frage die ehrlichere. Mit US-15 (quellenübergreifende Analyse) wäre sie pro Domäne zu stellen oder ausdrücklich als allgemeine Trainingserfahrung zu benennen.
 >
 > **Das Profil darf keinen Kontext erfinden lassen:** `AnalysisPromptBuilder` filtert heute alle Strava-Sessions aus dem Prompt. Wer dreimal läuft und einmal Kraft macht, bekommt sonst eine Analyse dieser einen Session unter einem Ziel, das nach Ausdauerkontext ruft. Der «Profile»-Abschnitt hält deshalb fest, dass die Datenbasis nur Kraftsessions umfasst — bis US-15 das auflöst.
