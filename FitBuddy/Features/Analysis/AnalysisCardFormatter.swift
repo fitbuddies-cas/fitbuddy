@@ -13,8 +13,12 @@ enum AnalysisCardFormatter {
     /// decimal would print `61.3 kg`, a weight nobody can load, and a delta of
     /// `+1.3 kg`. Locale-aware like those formatters, since this is display
     /// text; trailing zeros are dropped.
-    static func weight(_ kilograms: Double) -> String {
-        kilograms.formatted(.number.precision(.fractionLength(0...2))) + " kg"
+    ///
+    /// Rounded half away from zero by `PlainWeightFormatter` before it is
+    /// formatted, the same rule `delta` rounds by: `62.125` reads `62.13 kg`
+    /// next to `+2.13 kg`, not `62.12 kg` under Foundation's half-even rule.
+    static func weight(_ kilograms: Double, locale: Locale = .current) -> String {
+        number(PlainWeightFormatter.rounded(kilograms), decimals: 0...2, locale: locale) + " kg"
     }
 
     /// The signed step from `fromKg` to `toKg`: `"+2.5 kg"`, `"−1.25 kg"`.
@@ -22,19 +26,29 @@ enum AnalysisCardFormatter {
     /// The difference is rounded to the displayed precision first, so floating
     /// point noise (`62.5 - 60.1`) cannot print as `2.4` next to weights that
     /// read `60.1` and `62.5`.
-    static func delta(fromKg: Double, toKg: Double) -> String {
+    static func delta(fromKg: Double, toKg: Double, locale: Locale = .current) -> String {
         let step = PlainWeightFormatter.rounded(toKg - fromKg)
-        let magnitude = abs(step).formatted(.number.precision(.fractionLength(0...2)))
         let sign = step < 0 ? "\u{2212}" : "+"
-        return "\(sign)\(magnitude) kg"
+        return "\(sign)\(number(abs(step), decimals: 0...2, locale: locale)) kg"
+    }
+
+    /// A per-week frequency: `3`, `0.8` — at the precision the prompt stated
+    /// it (`MuscleGroupFrequency.decimals`), so the card and the model's
+    /// reasoning never disagree about the number. Unlike the prompt, written
+    /// with the locale's separator, like the weights on the same screen.
+    static func frequency(_ perWeek: Double, locale: Locale = .current) -> String {
+        let decimals = MuscleGroupFrequency.decimals
+        return number(
+            PlainWeightFormatter.rounded(perWeek, decimals: decimals),
+            decimals: 0...decimals,
+            locale: locale
+        )
     }
 
     /// A per-week frequency as the imbalance card labels it: `"3×/wk"`,
-    /// `"0.8×/wk"`. The figure is written exactly as the prompt stated it
-    /// (`MuscleGroupFrequency`), so the card and the model's reasoning never
-    /// disagree about the number.
-    static func perWeek(_ perWeek: Double) -> String {
-        "\(MuscleGroupFrequency.string(perWeek))×/wk"
+    /// `"0.8×/wk"`.
+    static func perWeek(_ perWeek: Double, locale: Locale = .current) -> String {
+        "\(frequency(perWeek, locale: locale))×/wk"
     }
 
     /// `"Chest vs Legs"` — the imbalance card's header.
@@ -46,15 +60,15 @@ enum AnalysisCardFormatter {
     /// imbalance card's headline, built from the app's figures, never the
     /// model's. Expects the bars as `ImbalanceBar.bars` orders them, the more
     /// frequent group first.
-    static func imbalanceHeadline(_ bars: [ImbalanceBar]) -> String {
+    static func imbalanceHeadline(_ bars: [ImbalanceBar], locale: Locale = .current) -> String {
         guard bars.count == 2 else { return imbalanceTitle(bars) }
         let high = bars[0]
         let low = bars[1]
         return """
         You're training \(high.group.displayName.lowercased()) \
-        \(MuscleGroupFrequency.string(high.perWeek))×/week but \
+        \(frequency(high.perWeek, locale: locale))×/week but \
         \(low.group.displayName.lowercased()) only \
-        \(MuscleGroupFrequency.string(low.perWeek))×/week.
+        \(frequency(low.perWeek, locale: locale))×/week.
         """
     }
 
@@ -64,13 +78,20 @@ enum AnalysisCardFormatter {
         "You trained \(metrics.trainingDays) of the last 7 days."
     }
 
-    /// `8.25` → `"8.3"`: one decimal, as the design shows it.
-    static func rpe(_ rpe: Double) -> String {
-        rpe.formatted(.number.precision(.fractionLength(1)))
+    /// `8.25` → `"8.3"`: one decimal, as the design shows it, rounded half
+    /// away from zero like the weights.
+    static func rpe(_ rpe: Double, locale: Locale = .current) -> String {
+        number(PlainWeightFormatter.rounded(rpe, decimals: 1), decimals: 1...1, locale: locale)
     }
 
     /// `48` → `"48 h"`.
     static func rest(hours: Int) -> String {
         "\(hours) h"
+    }
+
+    /// `value` with between `decimals` fraction digits, in `locale`. Callers
+    /// round first, so Foundation's own rounding never decides a digit.
+    private static func number(_ value: Double, decimals: ClosedRange<Int>, locale: Locale) -> String {
+        value.formatted(.number.precision(.fractionLength(decimals)).locale(locale))
     }
 }

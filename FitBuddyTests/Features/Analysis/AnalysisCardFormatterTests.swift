@@ -15,6 +15,13 @@ final class AnalysisCardFormatterTests: XCTestCase {
         XCTAssertEqual(AnalysisCardFormatter.weight(61.25), "61.25 kg")
     }
 
+    /// Target and delta round by the same rule, so they never disagree in
+    /// the last digit.
+    func testWeightRoundsHalfAwayFromZeroLikeTheDelta() {
+        XCTAssertEqual(AnalysisCardFormatter.weight(62.125, locale: english), "62.13 kg")
+        XCTAssertEqual(AnalysisCardFormatter.delta(fromKg: 60, toKg: 62.125, locale: english), "+2.13 kg")
+    }
+
     // MARK: - Delta
 
     func testDeltaIsSignedAndInKilograms() {
@@ -56,9 +63,33 @@ final class AnalysisCardFormatterTests: XCTestCase {
         XCTAssertEqual(AnalysisCardFormatter.recoveryHeadline(metrics), "You trained 6 of the last 7 days.")
     }
 
+    func testRPERoundsHalfAwayFromZero() {
+        XCTAssertEqual(AnalysisCardFormatter.rpe(8.25, locale: english), "8.3")
+    }
+
+    // MARK: - Locale
+
+    /// A comma locale gets commas in every figure on the card, not a mix of
+    /// commas in the weights and periods in the frequencies.
+    func testACommaLocaleUsesCommasThroughout() {
+        let german = Locale(identifier: "de_DE")
+
+        XCTAssertEqual(AnalysisCardFormatter.weight(62.5, locale: german), "62,5 kg")
+        XCTAssertEqual(AnalysisCardFormatter.delta(fromKg: 60, toKg: 62.5, locale: german), "+2,5 kg")
+        XCTAssertEqual(AnalysisCardFormatter.perWeek(0.8, locale: german), "0,8×/wk")
+        XCTAssertEqual(AnalysisCardFormatter.rpe(8.2, locale: german), "8,2")
+        let bars = ImbalanceBar.bars(groupA: .chest, perWeekA: 2.5, groupB: .legs, perWeekB: 0.8)
+        XCTAssertEqual(
+            AnalysisCardFormatter.imbalanceHeadline(bars, locale: german),
+            "You're training chest 2,5×/week but legs only 0,8×/week."
+        )
+    }
+
     func testRPEHasOneDecimalAndRestIsInHours() {
         XCTAssertEqual(AnalysisCardFormatter.rpe(8.2), "8.2")
         XCTAssertEqual(AnalysisCardFormatter.rpe(8), "8.0")
         XCTAssertEqual(AnalysisCardFormatter.rest(hours: 48), "48 h")
     }
+
+    private let english = Locale(identifier: "en_US")
 }

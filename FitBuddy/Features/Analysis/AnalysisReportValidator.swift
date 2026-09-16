@@ -35,6 +35,10 @@ enum AnalysisReportValidator {
     /// (US-14 AC4).
     static let recoveryHeadline = "Recover this week."
 
+    /// The headline of a progress report the app turned into a hold verdict,
+    /// because none of its progressions survived (#177).
+    static let holdHeadline = "Hold steady this week."
+
     /// The reasoning of a recovery card the app inserts when the model left it
     /// out, or sent it without a reason (US-14 AC4).
     static let insertedRecoveryReasoning =
@@ -70,10 +74,21 @@ enum AnalysisReportValidator {
             }
         }
 
+        let kept = capped(cards)
+
+        // "You're ready to progress." over cards that name no progression
+        // would contradict the screen it heads (#177): every progression was
+        // downgraded to a note or cut, so the verdict the cards support is to
+        // hold. A recovery verdict forced above is never touched.
+        if verdict == .progress, !kept.contains(where: { $0.kind == .progression }) {
+            verdict = .hold
+            headline = holdHeadline
+        }
+
         return ValidatedAnalysisReport(
             headline: headline,
             verdict: verdict,
-            cards: capped(cards),
+            cards: kept,
             summary: report.summary
         )
     }

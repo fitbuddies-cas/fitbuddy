@@ -175,6 +175,25 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(latest?.provider, .claude)
     }
 
+    /// A report without cards would be a headline over nothing: its summary is
+    /// shown and stored as prose instead (#177).
+    func testAReportWithoutCardsIsShownAndStoredAsItsSummary() async throws {
+        await streamer.setReport(AnalysisReport(
+            headline: "You're ready to progress.",
+            verdict: .progress,
+            cards: [],
+            summary: "Keep training as you do."
+        ))
+        let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache())
+
+        await sut.start()
+
+        XCTAssertEqual(sut.state, .result(.prose("Keep training as you do.")))
+        let latest = try await results.latest()
+        XCTAssertEqual(latest?.text, "Keep training as you do.")
+        XCTAssertNil(latest?.report)
+    }
+
     /// US-14 AC3: a progression on an exercise the prompt did not list is a
     /// note, one on a listed exercise with the cached working weight stays.
     func testAReportIsValidatedAgainstTheReadsOfTheRun() async throws {

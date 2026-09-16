@@ -33,6 +33,17 @@ struct FBStat: View {
             self == .regular ? 0.6 : 0.4
         }
 
+        /// A compact label stays on one line and shrinks a little instead:
+        /// "SUGGESTED REST" in a third of a card would otherwise wrap and push
+        /// its value below the other two.
+        var labelLineLimit: Int? {
+            self == .regular ? nil : 1
+        }
+
+        var labelMinimumScaleFactor: CGFloat {
+            self == .regular ? 1 : 0.8
+        }
+
         var valueFont: Font {
             self == .regular ? .fbStatValue : .title3.weight(.bold)
         }
@@ -50,6 +61,8 @@ struct FBStat: View {
             Text(label.uppercased())
                 .font(size.labelFont)
                 .tracking(size.labelTracking)
+                .lineLimit(size.labelLineLimit)
+                .minimumScaleFactor(size.labelMinimumScaleFactor)
                 .foregroundStyle(Color.fbMuted)
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(value)

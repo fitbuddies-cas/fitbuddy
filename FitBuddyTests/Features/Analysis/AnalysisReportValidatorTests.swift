@@ -351,6 +351,40 @@ final class AnalysisReportValidatorTests: XCTestCase {
         XCTAssertEqual(validated.headline, "Headline")
     }
 
+    /// Every progression failed: the headline must not promise one (#177).
+    func testProgressWithoutASurvivingProgressionBecomesHold() {
+        let validated = validate([benchPress(from: 99, to: 100), chestVersusLegs(3, 1)])
+
+        XCTAssertEqual(validated.cards.map(\.kind), [.note, .imbalance])
+        XCTAssertEqual(validated.verdict, .hold)
+        XCTAssertEqual(validated.headline, AnalysisReportValidator.holdHeadline)
+    }
+
+    func testProgressWithASurvivingProgressionStaysProgress() {
+        let validated = validate([benchPress(from: 99, to: 100), benchPress(from: 60, to: 62.5)])
+
+        XCTAssertEqual(validated.verdict, .progress)
+    }
+
+    /// Recovery wins over the hold downgrade, even without any progression.
+    func testForcedRecoveryIsNotTurnedIntoHold() {
+        let validated = validate(
+            [chestVersusLegs(3, 1)],
+            evidence: evidence(recovery: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: nil))
+        )
+
+        XCTAssertEqual(validated.verdict, .recover)
+    }
+
+    /// A model hold verdict passes through, cards or not.
+    func testModelHoldVerdictIsKept() {
+        let report = AnalysisReport(headline: "Keep going.", verdict: .hold, cards: [chestVersusLegs(3, 1)], summary: "Hold.")
+        let validated = AnalysisReportValidator.validate(report, against: evidence())
+
+        XCTAssertEqual(validated.verdict, .hold)
+        XCTAssertEqual(validated.headline, "Keep going.")
+    }
+
     // MARK: - Card count
 
     /// Four model cards plus the inserted recovery card: the last note goes.

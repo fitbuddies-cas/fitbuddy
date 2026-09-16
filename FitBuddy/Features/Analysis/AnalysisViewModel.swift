@@ -466,7 +466,7 @@ final class AnalysisViewModel: ObservableObject {
             now: reads.now,
             calendar: calendar
         )
-        return .report(AnalysisReportValidator.validate(report, against: evidence))
+        return AnalysisOutcome(validated: AnalysisReportValidator.validate(report, against: evidence))
     }
 
     /// Reads the window and builds the prompt, or publishes the reason it

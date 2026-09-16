@@ -29,7 +29,7 @@ enum AnalysisCardAccessibility {
         case let .imbalance(groupA, perWeekA, groupB, perWeekB, reasoning):
             let bars = ImbalanceBar.bars(groupA: groupA, perWeekA: perWeekA, groupB: groupB, perWeekB: perWeekB)
             let frequencies = bars
-                .map { "\($0.group.displayName) \(MuscleGroupFrequency.string($0.perWeek)) \($0.perWeek == 1 ? "time" : "times") per week" }
+                .map { "\($0.group.displayName) \(AnalysisCardFormatter.frequency($0.perWeek)) \($0.perWeek == 1 ? "time" : "times") per week" }
                 .joined(separator: ", ")
             return "Imbalance. \(frequencies). \(reasoning)"
         case let .note(title, text):

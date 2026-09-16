@@ -4,11 +4,12 @@ import XCTest
 
 /// Rendering smoke tests for the result cards (#177).
 ///
-/// Views carry no unit tests in this project; this is the narrow exception the
-/// dashboard and the progression curve make too. The cards lay out
-/// data-dependent content — a bar width from a share, a metrics row whose cell
-/// count depends on the RPE — and a layout that breaks on one of those fails at
-/// render time, not in an assertion.
+/// Crash smoke tests, not layout tests: they catch a card that fails to
+/// render — a bar width from a share, a metrics row whose cell count depends
+/// on the RPE — but not one that renders wrongly. Views carry no unit tests in
+/// this project; this is the narrow exception the dashboard and the
+/// progression curve make too. The one size check below guards a specific
+/// regression: a wrapping metric label.
 @MainActor
 final class AnalysisResultRenderingTests: XCTestCase {
     // MARK: - Cards
@@ -29,6 +30,25 @@ final class AnalysisResultRenderingTests: XCTestCase {
         XCTAssertFalse(RecoveryMetricCell.cells(for: metrics).contains { $0.label == "Avg RPE" })
 
         try assertRenders(AnalysisReportCardView(card: AnalysisReportSamples.recoveryCardWithoutRPE))
+    }
+
+    /// Three cells or two, the metrics row keeps one line of labels: a
+    /// wrapped "SUGGESTED REST" would push its value down and make the card
+    /// taller than the one without the RPE cell.
+    func testRecoveryCardHeightDoesNotDependOnTheRPECell() throws {
+        let reasoning = "Take two rest days before the next heavy session."
+        // Inset by the screen's 16 pt gutter, so the cells are as narrow as
+        // on a standard iPhone.
+        let withRPE = try render(
+            RecoveryCardView(reasoning: reasoning, metrics: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: 8.2))
+                .padding(.horizontal, 16)
+        )
+        let withoutRPE = try render(
+            RecoveryCardView(reasoning: reasoning, metrics: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: nil))
+                .padding(.horizontal, 16)
+        )
+
+        XCTAssertEqual(withRPE.size.height, withoutRPE.size.height, accuracy: 0.5)
     }
 
     func testImbalanceCardRenders() throws {
@@ -102,8 +122,18 @@ final class AnalysisResultRenderingTests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) throws {
-        let renderer = ImageRenderer(content: view.frame(width: 390, height: height))
-        let image = try XCTUnwrap(renderer.uiImage, file: file, line: line)
+        let image = try render(view, height: height, file: file, line: line)
         XCTAssertGreaterThan(image.size.height, 0, file: file, line: line)
+    }
+
+    /// Renders at the width of a standard iPhone.
+    private func render(
+        _ view: some View,
+        height: CGFloat? = nil,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> UIImage {
+        let renderer = ImageRenderer(content: view.frame(width: 390, height: height))
+        return try XCTUnwrap(renderer.uiImage, file: file, line: line)
     }
 }

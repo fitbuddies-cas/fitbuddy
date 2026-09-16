@@ -30,7 +30,20 @@ enum AnalysisOutcome: Equatable, Sendable {
     /// AC6). Shared by the restored result and the history detail, so the two
     /// never show the same row differently.
     init(stored snapshot: AnalysisResultSnapshot) {
-        self = snapshot.report.map(AnalysisOutcome.report) ?? .prose(snapshot.text)
+        guard let report = snapshot.report else {
+            self = .prose(snapshot.text)
+            return
+        }
+        self.init(validated: report)
+    }
+
+    /// The outcome a validated report renders as: its cards, or its summary
+    /// as prose when no card is left (#177). The schema allows `cards: []`,
+    /// and the validator drops cards without text — a report without cards
+    /// would be a headline over nothing, while its summary still says what
+    /// the model recommends.
+    init(validated report: ValidatedAnalysisReport) {
+        self = report.cards.isEmpty ? .prose(report.summary) : .report(report)
     }
 
     /// The validated report, or `nil` for prose.
