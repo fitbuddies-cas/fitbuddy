@@ -14,6 +14,16 @@ enum AnalysisPromptBuilder {
     /// above already carry the older ones.
     private static let maxListedSessions = 30
 
+    /// Exercises listed individually in the Exercises section (#173).
+    ///
+    /// Ten because the section exists for the recommendation, and a
+    /// recommendation for the next block names a handful of lifts, not a
+    /// whole programme. Ranked by volume, so the lifts the window was built
+    /// around come first; every exercise past the cap costs a line of tokens
+    /// for a movement the model would hardly recommend on. The prompt names
+    /// the cap, so a missing exercise reads as omitted, not as untrained.
+    static let maxListedExercises = 10
+
     /// Builds the prompt pair from the cached window.
     ///
     /// - Parameters:
@@ -21,6 +31,13 @@ enum AnalysisPromptBuilder {
     ///     analysis windows is ignored, so the dashboard's 90-day read can be
     ///     passed in unchanged. Strava sessions are ignored as well — see
     ///     `strengthSessions(in:)`.
+    ///   - exercises: The movements of the analysed window, rolled up per
+    ///     exercise (`exerciseSummaries(since:)` with the window's start). The
+    ///     prompt lists the top `maxListedExercises` of them by volume.
+    ///   - progressions: The progression of each listed movement, keyed by
+    ///     `ExerciseSummary.id`. Sessions before the window's start are
+    ///     ignored, so a wider read changes nothing. A listed movement without
+    ///     an entry is skipped rather than described from its totals alone.
     ///   - window: The window actually analysed — the default, or a wider rung
     ///     of the fallback ladder when the last four weeks are empty (#87).
     ///   - now: Injectable clock, so the windows are testable.
@@ -28,6 +45,8 @@ enum AnalysisPromptBuilder {
     ///     user's time zone.
     static func make(
         summaries: [WorkoutSummary],
+        exercises: [ExerciseSummary] = [],
+        progressions: [String: ExerciseProgression] = [:],
         window: AnalysisWindow = .default,
         now: Date = Date(),
         calendar: Calendar = .current
@@ -36,6 +55,8 @@ enum AnalysisPromptBuilder {
             system: systemPrompt,
             user: userPrompt(
                 summaries: strengthSessions(in: summaries),
+                exercises: exercises,
+                progressions: progressions,
                 window: window,
                 now: now,
                 calendar: calendar
@@ -55,6 +76,23 @@ enum AnalysisPromptBuilder {
     /// filter decides the session count `AnalysisContext` reports (US-6).
     static func strengthSessions(in summaries: [WorkoutSummary]) -> [WorkoutSummary] {
         summaries.filter { !$0.source.isEnduranceSource }
+    }
+
+    /// The movements the Exercises section lists: the top
+    /// `maxListedExercises` by volume in the window (#173).
+    ///
+    /// Public to the feature so `AnalysisViewModel` reads progressions for
+    /// exactly these and no others. Ties are broken by session count, then by
+    /// title, so the same cache always yields the same prompt — and
+    /// bodyweight movements, which carry no kilograms, still rank by how often
+    /// they were trained.
+    static func promptedExercises(from exercises: [ExerciseSummary]) -> [ExerciseSummary] {
+        let ranked = exercises.sorted { lhs, rhs in
+            if lhs.volumeKg != rhs.volumeKg { return lhs.volumeKg > rhs.volumeKg }
+            if lhs.sessionCount != rhs.sessionCount { return lhs.sessionCount > rhs.sessionCount }
+            return lhs.title < rhs.title
+        }
+        return Array(ranked.prefix(maxListedExercises))
     }
 
     // MARK: - System
@@ -96,6 +134,13 @@ enum AnalysisPromptBuilder {
     kilograms, so a group can carry real training load while showing little \
     or no volume. Never read a low kg figure as "untrained" on its own.
 
+    6. Name only exercises and weights from the Exercises section. Spell an \
+    exercise exactly as it is listed there, and start any load change from \
+    the weight listed for its most recent session. Never name an exercise or \
+    a weight that section does not contain. Increase barbell exercises in \
+    steps of 2.5 kg; for every other exercise use the smallest step listed \
+    for it, and where none is listed, progress reps rather than weight.
+
     Answer in English and keep it under 200 words: first what stands out in \
     the data, then a concrete recommendation for the next block.
     """
@@ -104,6 +149,8 @@ enum AnalysisPromptBuilder {
 
     private static func userPrompt(
         summaries: [WorkoutSummary],
+        exercises: [ExerciseSummary],
+        progressions: [String: ExerciseProgression],
         window: AnalysisWindow,
         now: Date,
         calendar: Calendar
@@ -154,6 +201,15 @@ enum AnalysisPromptBuilder {
             )
         )
         sections.append(sessionSection(recent, days: days))
+        sections.append(
+            exerciseSection(
+                exercises,
+                progressions: progressions,
+                window: window,
+                from: recentStart,
+                days: days
+            )
+        )
 
         return sections.joined(separator: "\n\n")
     }
@@ -258,6 +314,154 @@ enum AnalysisPromptBuilder {
         return (["## Sessions (newest first)"] + rows + footer).joined(separator: "\n")
     }
 
+    // MARK: - Exercises (#173)
+
+    /// Per-exercise working weights, reps, RPE and the 1RM trend — the figures
+    /// a concrete recommendation starts from (US-3 AC7, US-14 AC7).
+    ///
+    /// Without this section the model knows session totals but not a single
+    /// working weight, so any "go from 60 to 62.5 kg" it produced would be
+    /// invented. Names are passed exactly as the cache spells them: they are
+    /// the key the recommendation cards are validated against (#175).
+    ///
+    /// Each line opens with the exercise name followed by a colon, so a name
+    /// that itself contains parentheses stays unambiguous.
+    private static func exerciseSection(
+        _ exercises: [ExerciseSummary],
+        progressions: [String: ExerciseProgression],
+        window: AnalysisWindow,
+        from start: Date,
+        days: DayFormatter
+    ) -> String {
+        let header = "## Exercises (last \(window.weeks) weeks)"
+        let rows = promptedExercises(from: exercises).compactMap { exercise -> String? in
+            guard let progression = progressions[exercise.id] else { return nil }
+            return exerciseRow(exercise, progression: progression, from: start, days: days)
+        }
+        guard !rows.isEmpty else {
+            return header + "\nNo exercise-level data is available for this window. "
+                + "Do not name exercises or weights."
+        }
+
+        let legend = "Each line starts with the exercise name exactly as logged, then the "
+            + "heaviest working set (weight × reps) of its most recent session. e1RM is the "
+            + "Epley estimate from a session's best set, at the first and at the most recent "
+            + "session in this window."
+        let omitted = exercises.count - rows.count
+        let footer = omitted > 0
+            ? ["(\(rows.count) exercises with the most volume listed; \(omitted) more in this window omitted)"]
+            : []
+        return ([header, legend] + rows + footer).joined(separator: "\n")
+    }
+
+    private static func exerciseRow(
+        _ exercise: ExerciseSummary,
+        progression: ExerciseProgression,
+        from start: Date,
+        days: DayFormatter
+    ) -> String? {
+        // Rebuilt over the window alone, so the trend and the plateau verdict
+        // describe the same sessions as every other figure in the prompt —
+        // whatever range the progression was read over.
+        let inWindow = ExerciseProgression(
+            id: progression.id,
+            title: progression.title,
+            sessions: progression.sessions.filter { $0.sessionStart >= start }
+        )
+        guard let last = inWindow.sessions.last else { return nil }
+
+        // The working set leads, right after the name: it is the value a
+        // recommendation starts from, and "Bench Press: 60 kg × 5" reads as
+        // one fact rather than two figures to be paired up.
+        var parts = [
+            "- \(exercise.title): \(lastSessionSummary(last)) "
+                + "(most recent session, \(days.string(last.sessionStart)))",
+            "\(exercise.muscleGroup.displayName), \(exercise.sessionCount) sessions, \(kg(exercise.volumeKg))",
+        ]
+        let points = inWindow.points
+        if let first = points.first, let latest = points.last {
+            let now = weight(latest.estimatedOneRepMaxKg, decimals: 1)
+            if points.count == 1 {
+                parts.append("e1RM \(now) kg (one session, no trend yet)")
+            } else {
+                let then = weight(first.estimatedOneRepMaxKg, decimals: 1)
+                let delta = latest.estimatedOneRepMaxKg - first.estimatedOneRepMaxKg
+                parts.append("e1RM \(then) kg at window start, \(now) kg now (\(signed(delta)))")
+            }
+            parts.append(plateauVerdict(inWindow))
+        }
+        if let step = smallestStep(in: inWindow.sessions) {
+            parts.append("Smallest logged step: \(weight(step)) kg")
+        }
+        return parts.joined(separator: ". ") + "."
+    }
+
+    /// The heaviest working set, and the mean RPE over the working sets that
+    /// logged one.
+    ///
+    /// Heaviest by weight, not by Epley: a recommendation moves the working
+    /// weight, and "60 kg × 5" is the number the user will load onto the bar.
+    /// Only sets with both weight and reps qualify, as for `OneRepMax` — a set
+    /// started but not completed is not a working weight.
+    private static func lastSessionSummary(_ session: ExerciseHistoryEntry) -> String {
+        let working = session.sets.filter(\.countsTowardsVolume)
+        let heaviest = working
+            .compactMap { set -> (weightKg: Double, reps: Int)? in
+                guard let weightKg = set.weightKg, let reps = set.reps, weightKg > 0, reps > 0 else {
+                    return nil
+                }
+                return (weightKg, reps)
+            }
+            .max { lhs, rhs in
+                lhs.weightKg != rhs.weightKg ? lhs.weightKg < rhs.weightKg : lhs.reps < rhs.reps
+            }
+
+        var summary: String
+        if let heaviest {
+            summary = "\(weight(heaviest.weightKg)) kg × \(heaviest.reps)"
+        } else if let reps = working.compactMap(\.reps).max(), reps > 0 {
+            summary = "no weight logged, best set \(reps) reps"
+        } else {
+            summary = "no weight or reps logged"
+        }
+
+        let rpes = working.compactMap(\.rpe)
+        if !rpes.isEmpty {
+            summary += ", mean RPE \(weight(rpes.reduce(0, +) / Double(rpes.count), decimals: 1))"
+        }
+        return summary
+    }
+
+    /// `ExerciseProgression.isPlateaued`, with the case it cannot decide said
+    /// out loud: a "no" over three sessions would claim progress nobody
+    /// measured.
+    private static func plateauVerdict(_ progression: ExerciseProgression) -> String {
+        guard progression.points.count > ExerciseProgression.plateauSessionCount else {
+            return "Plateau: too few sessions to tell"
+        }
+        return progression.isPlateaued
+            ? "Plateau: yes, no new e1RM best in the last \(ExerciseProgression.plateauSessionCount) sessions"
+            : "Plateau: no"
+    }
+
+    /// The smallest difference between two distinct working weights the user
+    /// logged for this exercise in the window — the increment their gym
+    /// actually offers, which the system prompt tells the model to step by.
+    /// `nil` when fewer than two distinct weights were logged.
+    private static func smallestStep(in sessions: [ExerciseHistoryEntry]) -> Double? {
+        // Rounded to grams first, so two floating-point spellings of 62.5
+        // cannot turn into a step of 0.0000001 kg.
+        let weights = Set(
+            sessions
+                .flatMap(\.sets)
+                .filter(\.countsTowardsVolume)
+                .compactMap(\.weightKg)
+                .filter { $0 > 0 }
+                .map { ($0 * 1_000).rounded() / 1_000 }
+        ).sorted()
+        return zip(weights, weights.dropFirst()).map { $1 - $0 }.min()
+    }
+
     // MARK: - Aggregation
 
     private static func volume(of summaries: [WorkoutSummary]) -> Double {
@@ -280,6 +484,27 @@ enum AnalysisPromptBuilder {
     /// charm; it needs one unambiguous form.
     private static func kg(_ kilograms: Double) -> String {
         "\(Int(kilograms.rounded())) kg"
+    }
+
+    /// A weight without grouping separators or trailing zeros: `60`, `62.5`,
+    /// `61.25`.
+    ///
+    /// Not `OneRepMaxFormatter`, for the reason `kg(_:)` is not
+    /// `VolumeFormatter`: that one follows the device locale and would send
+    /// `62,5` from a Swiss device. Two decimals by default, because plates
+    /// come in 1.25 kg pairs and `61.3` would be a weight nobody can load.
+    private static func weight(_ kilograms: Double, decimals: Int = 2) -> String {
+        let text = String(format: "%.\(decimals)f", kilograms)
+        guard text.contains(".") else { return text }
+        let trimmed = text.replacingOccurrences(of: "0+$", with: "", options: .regularExpression)
+        return trimmed.hasSuffix(".") ? String(trimmed.dropLast()) : trimmed
+    }
+
+    /// A 1RM change with its direction spelled out.
+    private static func signed(_ kilograms: Double) -> String {
+        let text = weight(abs(kilograms), decimals: 1)
+        guard text != "0" else { return "no change" }
+        return (kilograms > 0 ? "+" : "-") + text + " kg"
     }
 
     private static func frequency(_ trainingDays: Int, window: AnalysisWindow) -> String {

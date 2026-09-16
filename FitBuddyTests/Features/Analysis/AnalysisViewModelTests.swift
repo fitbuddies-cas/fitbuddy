@@ -49,10 +49,12 @@ final class AnalysisViewModelTests: XCTestCase {
         slowThreshold: TimeInterval = 30,
         tickInterval: TimeInterval = 60,
         restingTickInterval: TimeInterval = 60,
-        resultStore: (any AnalysisResultStoring)? = nil
+        resultStore: (any AnalysisResultStoring)? = nil,
+        exerciseCache: StubAnalysisExerciseCache? = nil
     ) -> AnalysisViewModel {
         AnalysisViewModel(
             cache: cache,
+            exerciseCache: exerciseCache,
             inference: streamer,
             rateLimit: rateLimit,
             resultStore: resultStore ?? results,
@@ -129,6 +131,125 @@ final class AnalysisViewModelTests: XCTestCase {
             AnalysisWindow.widest.previousStart(endingAt: Self.reference, calendar: Self.calendar)
         )
         XCTAssertEqual(sut.context?.window, .default)
+    }
+
+    // MARK: - Exercise data (#173)
+
+    /// The run hands the exercise reads to the prompt: the working weight of
+    /// the cached session reaches the model.
+    func testRunSendsTheExerciseDataToThePrompt() async {
+        await streamer.setChunks(["ok"])
+        let exercises = StubAnalysisExerciseCache()
+        let bench = Self.exercise("Bench Press", volume: 4_500)
+        exercises.exercises = [bench]
+        exercises.progressions = [bench.id: Self.progression(bench, weightKg: 60, reps: 5, daysAgo: 2)]
+        let sut = makeSUT(exerciseCache: exercises)
+
+        await sut.start()
+
+        let user = await streamer.userPrompt
+        XCTAssertEqual(user?.contains("## Exercises (last 4 weeks)"), true)
+        XCTAssertEqual(user?.contains("- Bench Press: 60 kg × 5"), true)
+    }
+
+    /// Both reads cover the resolved window — not the 26 weeks the session
+    /// read reaches back — so the ranking is by volume in the analysed window.
+    func testExerciseReadsCoverTheResolvedWindow() async {
+        await streamer.setChunks(["ok"])
+        let exercises = StubAnalysisExerciseCache()
+        let bench = Self.exercise("Bench Press", volume: 4_500)
+        exercises.exercises = [bench]
+        let sut = makeSUT(exerciseCache: exercises)
+
+        await sut.start()
+
+        let start = AnalysisWindow.default.start(endingAt: Self.reference, calendar: Self.calendar)
+        XCTAssertEqual(exercises.requestedSummariesSince, start)
+        XCTAssertEqual(exercises.requestedProgressionSince, start)
+    }
+
+    /// Progressions are read for the listed movements only.
+    func testProgressionsAreReadOnlyForTheListedExercises() async {
+        await streamer.setChunks(["ok"])
+        let exercises = StubAnalysisExerciseCache()
+        exercises.exercises = (1...14).map { Self.exercise("Lift \($0)", volume: Double($0) * 100) }
+        let sut = makeSUT(exerciseCache: exercises)
+
+        await sut.start()
+
+        let expected = AnalysisPromptBuilder.promptedExercises(from: exercises.exercises).map(\.id)
+        XCTAssertEqual(exercises.requestedProgressionIDs, expected)
+        XCTAssertEqual(exercises.requestedProgressionIDs.count, AnalysisPromptBuilder.maxListedExercises)
+    }
+
+    /// A failing exercise read fails the run like a failing session read —
+    /// no provider is paid for a prompt missing the data rule 6 relies on,
+    /// and no data basis is left on screen.
+    func testExerciseReadFailureIsReportedAsCacheUnavailable() async {
+        let exercises = StubAnalysisExerciseCache()
+        exercises.error = StubAnalysisExerciseCache.Failure()
+        let sut = makeSUT(exerciseCache: exercises)
+
+        await sut.start()
+
+        XCTAssertEqual(sut.state, .error(.cacheUnavailable))
+        XCTAssertNil(sut.context)
+        let calls = await streamer.callCount
+        XCTAssertEqual(calls, 0)
+    }
+
+    /// Without an exercise cache — the previews' case — the prompt says there
+    /// is no exercise data instead of leaving the model to invent weights.
+    func testRunWithoutAnExerciseCacheStatesThatThereIsNoExerciseData() async {
+        await streamer.setChunks(["ok"])
+        let sut = makeSUT()
+
+        await sut.start()
+
+        let user = await streamer.userPrompt
+        XCTAssertEqual(user?.contains("No exercise-level data is available"), true)
+    }
+
+    private static func exercise(_ title: String, volume: Double) -> ExerciseSummary {
+        ExerciseSummary(
+            id: ExerciseSummary.key(templateID: nil, title: title),
+            title: title,
+            muscleGroup: MuscleGroup.from(exerciseTitle: title),
+            sessionCount: 1,
+            countedSetCount: 3,
+            volumeKg: volume,
+            lastPerformed: reference
+        )
+    }
+
+    private static func progression(
+        _ summary: ExerciseSummary,
+        weightKg: Double,
+        reps: Int,
+        daysAgo: Int
+    ) -> ExerciseProgression {
+        let sets = (0..<3).map { index in
+            SetDetail(
+                index: index,
+                type: .normal,
+                weightKg: weightKg,
+                reps: reps,
+                distanceMeters: nil,
+                durationSeconds: nil,
+                rpe: nil
+            )
+        }
+        return ExerciseProgression(
+            id: summary.id,
+            title: summary.title,
+            sessions: [
+                ExerciseHistoryEntry(
+                    workoutID: "w-\(daysAgo)",
+                    sessionStart: reference.addingTimeInterval(-Double(daysAgo) * 86_400),
+                    sets: sets
+                ),
+            ]
+        )
     }
 
     // MARK: - Context (US-6, #36)
