@@ -38,6 +38,24 @@ final class ProgressionRenderingTests: XCTestCase {
         XCTAssertGreaterThan(image.size.height, 0)
     }
 
+    // MARK: - History card (#163)
+
+    func testHistoryRendersWithEstimates() throws {
+        let image = try render(
+            ExerciseHistoryCard(sessions: PreviewProgressionCache.sessions([96, 101, 104]))
+        )
+        XCTAssertGreaterThan(image.size.height, 0)
+    }
+
+    /// The case the history exists for: sessions the curve cannot use, where
+    /// every row falls back to what was logged instead of an estimate.
+    func testHistoryRendersWithoutEstimates() throws {
+        let image = try render(
+            ExerciseHistoryCard(sessions: PreviewProgressionCache.cardioSessions(3))
+        )
+        XCTAssertGreaterThan(image.size.height, 0)
+    }
+
     // MARK: - Helpers
 
     private func points(_ estimates: [Double]) -> [ProgressionPoint] {

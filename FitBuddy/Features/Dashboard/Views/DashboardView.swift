@@ -20,12 +20,17 @@ struct DashboardView: View {
     /// Builds the ViewModel behind the exercise list (#37) — same reasoning,
     /// and likewise called once per push rather than once per render.
     private let makeExerciseListViewModel: () -> ExerciseListViewModel
-    private let makeExerciseProgressionViewModel: (ExerciseSummary) -> ExerciseProgressionViewModel
+    private let makeExerciseProgressionViewModel: (ExerciseIdentity) -> ExerciseProgressionViewModel
 
     /// Changes whenever something outside the dashboard invalidated the cache —
-    /// today only a replaced Hevy key (#91). Its value carries no meaning; the
-    /// change itself is the signal to sync again.
+    /// a replaced Hevy key (#91), a Strava connect or disconnect (#140). Its
+    /// value carries no meaning; the change itself is the signal to sync again.
     private let reloadToken: Int
+
+    /// Where the renewal banner's "Reconnect" leads (US-5 AC2, #144). The
+    /// re-auth flow lives on another tab, so only the root can take the user
+    /// there.
+    private let onRenewSource: (ConnectorSource) -> Void
 
     /// The `reloadToken` the dashboard last synced for. `.task(id:)` restarts
     /// whenever the view re-appears, and inside a `TabView` that is every
@@ -45,18 +50,22 @@ struct DashboardView: View {
     ///     (#42).
     ///   - reloadToken: Defaults to a constant, so a preview or a test that
     ///     has no cache-invalidating parent never re-syncs.
+    ///   - onRenewSource: Defaults to nothing, for previews without a
+    ///     settings tab to go to.
     init(
         viewModel: @autoclosure @escaping () -> WorkoutListViewModel,
         makeWorkoutDetailViewModel: @escaping (String) -> WorkoutDetailViewModel,
         makeExerciseListViewModel: @escaping () -> ExerciseListViewModel,
-        makeExerciseProgressionViewModel: @escaping (ExerciseSummary) -> ExerciseProgressionViewModel,
-        reloadToken: Int = 0
+        makeExerciseProgressionViewModel: @escaping (ExerciseIdentity) -> ExerciseProgressionViewModel,
+        reloadToken: Int = 0,
+        onRenewSource: @escaping (ConnectorSource) -> Void = { _ in }
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
         self.makeWorkoutDetailViewModel = makeWorkoutDetailViewModel
         self.makeExerciseListViewModel = makeExerciseListViewModel
         self.makeExerciseProgressionViewModel = makeExerciseProgressionViewModel
         self.reloadToken = reloadToken
+        self.onRenewSource = onRenewSource
     }
 
     var body: some View {
@@ -72,7 +81,8 @@ struct DashboardView: View {
                         SyncStatusView(
                             status: viewModel.syncStatus,
                             sources: viewModel.dataSources,
-                            onRetry: { Task { await viewModel.retry() } }
+                            onRetry: { Task { await viewModel.retry() } },
+                            onRenew: onRenewSource
                         )
                     }
                     content
@@ -89,6 +99,14 @@ struct DashboardView: View {
             // it back costs no sync — the session is already in the cache.
             .navigationDestination(for: WorkoutSummary.self) { workout in
                 WorkoutDetailView(viewModel: makeWorkoutDetailViewModel(workout.id))
+            }
+            // Registered at the stack's root rather than on the screens that
+            // push it: a movement's statistics are reachable from the exercise
+            // list *and* from a card inside a session (#162), and a
+            // destination declared on a pushed screen only resolves while that
+            // screen is the one on top.
+            .navigationDestination(for: ExerciseIdentity.self) { identity in
+                ExerciseProgressionView(viewModel: makeExerciseProgressionViewModel(identity))
             }
             .navigationDestination(for: DashboardRoute.self) { route in
                 switch route {

@@ -122,6 +122,34 @@ final class ExerciseProgressionViewModelTests: XCTestCase {
         XCTAssertFalse(sut.showsPlateauBadge)
     }
 
+    // MARK: - History (#163)
+
+    /// A movement with no usable load has no curve, but its sessions are
+    /// exactly what the screen has left to show.
+    func testAMovementWithoutACurveStillCarriesItsSessions() async {
+        cache.progression = ExerciseProgression(
+            id: "bench",
+            title: "Rowing Machine",
+            sessions: (0..<3).map { offset in
+                ExerciseHistoryEntry(
+                    workoutID: "w-\(offset)",
+                    sessionStart: reference.addingTimeInterval(Double(offset) * 86_400),
+                    sets: [SetDetail(index: 0, type: .normal, weightKg: nil, reps: nil,
+                                     distanceMeters: 2_000, durationSeconds: 480, rpe: nil)]
+                )
+            }
+        )
+
+        let sut = makeSUT()
+        await sut.load()
+
+        guard case .insufficientData(let progression) = sut.state else {
+            return XCTFail("Expected .insufficientData, got \(sut.state)")
+        }
+        XCTAssertEqual(progression.sessions.count, 3)
+        XCTAssertTrue(progression.points.isEmpty)
+    }
+
     // MARK: - The "not enough data" sentence
 
     /// Singular, plural and none — a count folded into prose is a decision
@@ -171,14 +199,10 @@ final class ExerciseProgressionViewModelTests: XCTestCase {
     private func makeSUT() -> ExerciseProgressionViewModel {
         ExerciseProgressionViewModel(
             cache: cache,
-            exercise: ExerciseSummary(
+            exercise: ExerciseIdentity(
                 id: "bench",
                 title: "Bench Press (Barbell)",
-                muscleGroup: .chest,
-                sessionCount: 4,
-                countedSetCount: 16,
-                volumeKg: 12_000,
-                lastPerformed: reference
+                muscleGroup: .chest
             ),
             now: { self.reference }
         )
@@ -188,14 +212,27 @@ final class ExerciseProgressionViewModelTests: XCTestCase {
         ExerciseProgression(
             id: "bench",
             title: "Bench Press (Barbell)",
-            points: estimates.enumerated().map { offset, estimate in
-                ProgressionPoint(
-                    sessionStart: reference.addingTimeInterval(Double(offset) * 86_400),
-                    estimatedOneRepMaxKg: estimate,
-                    weightKg: estimate * 0.8,
-                    reps: 8
-                )
+            sessions: estimates.enumerated().map { offset, estimate in
+                session(estimate, daysAfterReference: offset)
             }
         )
     }
+
+    /// A session whose Epley estimate is exactly `estimate`.
+    ///
+    /// 30 reps at half the weight: the formula's factor is then `1 + 30/30`,
+    /// so the round trip is a division and a multiplication by two — exact in
+    /// binary, which keeps these tests about the plateau rule instead of about
+    /// floating-point noise.
+    private func session(_ estimate: Double, daysAfterReference days: Int) -> ExerciseHistoryEntry {
+        ExerciseHistoryEntry(
+            workoutID: "w-\(days)",
+            sessionStart: reference.addingTimeInterval(Double(days) * 86_400),
+            sets: [
+                SetDetail(index: 0, type: .normal, weightKg: estimate / 2, reps: 30,
+                          distanceMeters: nil, durationSeconds: nil, rpe: nil),
+            ]
+        )
+    }
+
 }

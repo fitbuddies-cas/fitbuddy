@@ -18,10 +18,19 @@ struct ExerciseProgression: Equatable, Sendable {
     let id: String
     /// The title as the most recent session spells it, matching the list.
     let title: String
-    /// Oldest first, one point per session. Only sessions that carry a usable
-    /// set appear: a week of bodyweight-only work leaves no point behind,
-    /// because Epley has nothing to project from.
-    let points: [ProgressionPoint]
+    /// Every session of the movement in the window, oldest first, with all the
+    /// sets it was logged with (#163).
+    let sessions: [ExerciseHistoryEntry]
+
+    /// One point per session that Epley could project from, oldest first.
+    ///
+    /// Derived from `sessions` rather than collected next to them: a week of
+    /// bodyweight-only work or a cardio machine leaves a session behind with
+    /// no point, and two separate walks over the same data are two chances for
+    /// the chart and the list under it to disagree about the same day.
+    var points: [ProgressionPoint] {
+        sessions.compactMap(\.progressionPoint)
+    }
 
     /// Whether the curve can be drawn: two points make a line, one makes a
     /// dot that suggests a trend nobody measured (AC3).

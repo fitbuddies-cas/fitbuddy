@@ -86,9 +86,8 @@ final class AnalysisViewModel: ObservableObject {
     private var didDismissStoredResult = false
     /// The stored row the recommendation on screen came from, so a deletion in
     /// the history can tell whether it removed exactly this one (#117). `nil`
-    /// whenever nothing
-    /// persisted is showing — a preview without a store, or a run whose write
-    /// failed.
+    /// whenever nothing persisted is showing — a preview without a store, or a
+    /// run whose write failed.
     private var currentResultID: UUID?
     /// Guards `restore()` against overlapping itself: the view's `.task` and
     /// `dismissFailure()` can both ask for a restore, and the store read
@@ -401,8 +400,14 @@ final class AnalysisViewModel: ObservableObject {
             // Read wide enough for the widest rung of the ladder and its
             // comparison window; the cache returns what it has, and the
             // resolved window decides what of it is actually analysed.
-            let summaries = try await cache.workoutSummaries(
-                since: AnalysisWindow.widest.previousStart(endingAt: reference, calendar: calendar)
+            // Strava sessions are dropped right here, so the window ladder,
+            // the context line and the prompt all describe the same strength
+            // history (US-6 AC1) — a cache holding nothing but runs is "no
+            // training data" for the analysis, not a window to widen.
+            let summaries = AnalysisPromptBuilder.strengthSessions(
+                in: try await cache.workoutSummaries(
+                    since: AnalysisWindow.widest.previousStart(endingAt: reference, calendar: calendar)
+                )
             )
             guard !Task.isCancelled else { return nil }
 

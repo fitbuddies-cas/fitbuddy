@@ -5,10 +5,13 @@ import OSLog
 /// data" action in Settings (#83) and the deletion right the privacy policy
 /// promises.
 ///
-/// Wipes all Keychain items (both API keys *and* the consent metadata, so
-/// consent is asked for again per US-4 AC5), the SwiftData workout cache, the
-/// whole analysis history, the sync timestamp, the analysis rate limit, the
-/// LLM priority order and the step-3 skip marker.
+/// Wipes all Keychain items (every API key, the Strava credentials *and* the
+/// consent metadata, so consent is asked for again per US-4 AC5), the
+/// SwiftData workout cache, the whole analysis history, the sync timestamp,
+/// the analysis rate limit, the LLM priority order and the step-3 skip
+/// marker. The connectors' in-memory copies of the keys are not reachable
+/// from here; `WorkoutSyncService` drops them on the next sync when it finds
+/// the stored ones gone.
 ///
 /// The rate-limit timestamp is included on purpose (#97). It is the one thing
 /// here whose removal gives the user something back rather than taking it

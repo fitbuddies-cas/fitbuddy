@@ -29,6 +29,21 @@ enum AccessibilityID {
         static let skipButton = "llmKeys.skipButton"
     }
 
+    enum StravaCredentials {
+        static let clientIDField = "stravaCredentials.clientIDField"
+        static let clientSecretField = "stravaCredentials.clientSecretField"
+        static let saveButton = "stravaCredentials.saveButton"
+        static let errorBanner = "stravaCredentials.errorBanner"
+    }
+
+    enum StravaConnection {
+        static let status = "stravaConnection.status"
+        static let connectButton = "stravaConnection.connectButton"
+        static let disconnectButton = "stravaConnection.disconnectButton"
+        static let credentialsLink = "stravaConnection.credentialsLink"
+        static let errorBanner = "stravaConnection.errorBanner"
+    }
+
     enum Dashboard {
         static let root = "dashboard.root"
         /// Every session row carries it — the tests address them by position,
@@ -43,10 +58,17 @@ enum AccessibilityID {
         static func staleSource(_ source: String) -> String {
             "dashboard.staleSource." + source
         }
+        static let sourceBadge = "dashboard.sourceBadge"
+        static let sourceBanner = "dashboard.sourceBanner"
+        static let renewalBanner = "dashboard.renewalBanner"
+        static let renewButton = "dashboard.renewButton"
     }
 
     enum WorkoutDetail {
         static let root = "workoutDetail.root"
+        /// Every exercise card carries it — each one opens that movement's
+        /// statistics (#162).
+        static let exerciseCard = "workoutDetail.exerciseCard"
     }
 
     enum Exercises {
@@ -58,5 +80,12 @@ enum AccessibilityID {
         static let root = "progression.root"
         static let chart = "progression.chart"
         static let insufficientData = "progression.insufficientData"
+        static let unavailable = "progression.unavailable"
+        /// The session history under the curve, and its rows (#163).
+        static let history = "progression.history"
+        static let historyRow = "progression.historyRow"
+        /// A set row inside an opened session — present only while that
+        /// session is expanded.
+        static let historySet = "progression.historySet"
     }
 }

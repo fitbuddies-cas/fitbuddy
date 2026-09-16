@@ -10,13 +10,12 @@ import SwiftData
 /// protection raised to `.complete` so the SQLite file is unreadable while the
 /// device is locked.
 enum ModelContainerFactory {
-    /// Every `@Model` type the app stores: the cached workout hierarchy and
-    /// the last AI recommendation (#97).
-    ///
-    /// `AnalysisResult` joined an existing schema, which SwiftData handles as a
-    /// lightweight migration — a new entity with no relationship to the others
-    /// needs no `VersionedSchema`, and an installed store keeps its workouts.
-    static let schema = Schema([Workout.self, Exercise.self, ExerciseSet.self, AnalysisResult.self])
+    /// Every `@Model` type the app stores, as the current schema version
+    /// declares them (#141). Earlier additions — `AnalysisResult` (#97), its
+    /// `id` and `sessionCount` — rode on SwiftData's implicit lightweight
+    /// migration; from `FitBuddySchemaV2` on, versions are explicit and
+    /// `FitBuddyMigrationPlan` says how a store moves between them.
+    static let schema = Schema(versionedSchema: FitBuddySchemaV2.self)
 
     private static let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "ModelContainer")
 
@@ -50,7 +49,14 @@ enum ModelContainerFactory {
             at: configuration.url.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        let container = try ModelContainer(for: schema, configurations: configuration)
+        // The plan is what lets a store written by the previous build open
+        // under this one; the in-memory container below never has a previous
+        // build to migrate from.
+        let container = try ModelContainer(
+            for: schema,
+            migrationPlan: FitBuddyMigrationPlan.self,
+            configurations: configuration
+        )
         harden(storeURL: configuration.url)
         return container
     }

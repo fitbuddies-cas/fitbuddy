@@ -82,8 +82,16 @@ struct ExerciseProgressionView: View {
             if viewModel.showsPlateauBadge {
                 plateauExplanation
             }
-        case .insufficientData:
+            ExerciseHistoryCard(sessions: progression.sessions)
+        case .insufficientData(let progression):
             insufficientDataView
+            // The sessions are there even when the curve is not: a rowing
+            // machine or a plank logs nothing Epley can project from, and for
+            // those movements the history is the only thing this screen can
+            // show at all (#163).
+            if !progression.sessions.isEmpty {
+                ExerciseHistoryCard(sessions: progression.sessions)
+            }
         case .unavailable:
             unavailableView
         case .failed:
@@ -163,6 +171,7 @@ struct ExerciseProgressionView: View {
             )
         }
         .padding(.top, 28)
+        .accessibilityIdentifier(AccessibilityID.Progression.unavailable)
     }
 
     private var failureView: some View {

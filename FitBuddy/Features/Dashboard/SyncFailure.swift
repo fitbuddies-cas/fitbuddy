@@ -26,6 +26,10 @@ enum SyncFailure: Equatable {
     /// a `WorkoutSyncError`, or a source whose connector is still a stub
     /// (`.notImplemented`, #35) — nothing the user can act on either way.
     case unknown
+    /// A secondary source rejected its token pair and only the user can
+    /// renew it (#143, US-5 AC2). Unlike the Hevy key, nothing was wiped: the
+    /// connection is still there, it just no longer works.
+    case connectionExpired
 
     /// Maps a sync error onto a banner reason.
     ///
@@ -57,13 +61,28 @@ enum SyncFailure: Equatable {
         }
     }
 
+    /// Maps one source's failure inside a partial sync (#143).
+    ///
+    /// The same table as `init(syncError:)`, with one difference: a rejected
+    /// token for a source other than Hevy is not the end of the session — it
+    /// is the renewal case US-5 AC2 describes, and it gets a banner.
+    init?(syncError: WorkoutSyncError, source: ConnectorSource) {
+        if source != .hevy, syncError == .unauthorized {
+            self = .connectionExpired
+            return
+        }
+        self.init(syncError: syncError)
+    }
+
     /// Short reason shown after the sync timestamp in the banner's subtitle.
     var summary: String {
         switch self {
+        case .connectionExpired:
+            return "connection needs renewing"
         case .offline:
             return "no connection"
         case .serviceUnavailable:
-            return "Hevy unavailable"
+            return "service unavailable"
         case .rateLimited(let retryAfter):
             // Hevy's own `Retry-After` is the only part of a rate limit the
             // user can act on: without it "too many requests" leaves them
@@ -90,6 +109,8 @@ enum SyncFailure: Equatable {
     /// repeated failure gives them, so "something went wrong" would waste it.
     var refreshMessage: String {
         switch self {
+        case .connectionExpired:
+            return "A connected source needs renewing. Reconnect it in Settings."
         case .offline:
             return "No connection. Your cached data is still here."
         case .serviceUnavailable:
@@ -117,6 +138,8 @@ enum SyncFailure: Equatable {
     /// go looking for their reception, and the icon is what they read first.
     var symbolName: String {
         switch self {
+        case .connectionExpired:
+            return "exclamationmark.arrow.circlepath"
         case .offline:
             return "antenna.radiowaves.left.and.right.slash"
         case .serviceUnavailable, .rateLimited:

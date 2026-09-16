@@ -77,7 +77,7 @@ enum MockDataSeeder {
         guard let profile = requestedProfile(in: launchArguments) else { return }
         do {
             let activities = try MockWorkoutLoader().activities(for: profile)
-            try await WorkoutStore(modelContainer: container).replaceCachedWorkouts(with: activities)
+            try await WorkoutStore(modelContainer: container).replaceCachedWorkouts(from: .hevy, with: activities)
             await timestamps.setLastSync(now())
             logger.debug("Seeded \(activities.count, privacy: .public) mock workouts")
         } catch {

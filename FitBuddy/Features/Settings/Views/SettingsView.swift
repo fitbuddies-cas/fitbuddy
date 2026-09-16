@@ -14,19 +14,50 @@ import SwiftUI
 struct SettingsView: View {
     @StateObject private var viewModel: SettingsViewModel
 
-    /// - Parameter viewModel: Built lazily — the autoclosure is evaluated once,
-    ///   when SwiftUI first creates the view's state, so presenting this from a
-    ///   parent's `body` does not rebuild it on every render.
-    init(viewModel: @autoclosure @escaping () -> SettingsViewModel) {
+    /// The stack's path, owned by the root so another tab can push onto it
+    /// (#144, US-5 AC2).
+    @Binding private var path: [SettingsRoute]
+
+    private let makeStravaConnectionViewModel: @MainActor () -> StravaConnectionViewModel
+    private let makeStravaCredentialsViewModel: @MainActor () -> StravaCredentialsViewModel
+
+    /// - Parameters:
+    ///   - viewModel: Built lazily — the autoclosure is evaluated once, when
+    ///     SwiftUI first creates the view's state, so presenting this from a
+    ///     parent's `body` does not rebuild it on every render.
+    ///   - path: Defaults to a constant empty path, for previews with nobody
+    ///     outside the tab to push onto it.
+    ///   - makeStravaConnectionViewModel: Called once per push of the Strava
+    ///     connection screen (#140).
+    ///   - makeStravaCredentialsViewModel: Called once per push of the Strava
+    ///     credentials screen (#139), from the connection screen.
+    init(
+        viewModel: @autoclosure @escaping () -> SettingsViewModel,
+        path: Binding<[SettingsRoute]> = .constant([]),
+        makeStravaConnectionViewModel: @escaping @MainActor () -> StravaConnectionViewModel,
+        makeStravaCredentialsViewModel: @escaping @MainActor () -> StravaCredentialsViewModel = { StravaCredentialsViewModel() }
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel())
+        _path = path
+        self.makeStravaConnectionViewModel = makeStravaConnectionViewModel
+        self.makeStravaCredentialsViewModel = makeStravaCredentialsViewModel
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             content
                 .background(Color.fbBackground)
                 .navigationTitle("Settings")
                 .navigationBarTitleDisplayMode(.inline)
+                .navigationDestination(for: SettingsRoute.self) { route in
+                    switch route {
+                    case .strava:
+                        StravaConnectionView(
+                            viewModel: makeStravaConnectionViewModel(),
+                            makeCredentialsViewModel: makeStravaCredentialsViewModel
+                        )
+                    }
+                }
         }
         .task { await viewModel.load() }
         .sheet(item: $viewModel.editorTarget) { target in
@@ -131,6 +162,7 @@ struct SettingsView: View {
                 target: .hevy,
                 canDelete: viewModel.hevyKeyMask != nil
             )
+            stravaRow
         } header: {
             Text("TRAINING DATA")
                 .font(.fbLabel)
@@ -259,6 +291,24 @@ struct SettingsView: View {
 
     // MARK: - Rows
 
+    /// Entry point to the Strava connection (#140): connect, status,
+    /// disconnect, and from there the application credentials (#139). By
+    /// value, so the dashboard's renewal banner can push the same screen
+    /// through the path (#144).
+    private var stravaRow: some View {
+        NavigationLink(value: SettingsRoute.strava) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(StravaKeyPresentation.displayName)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color.fbInk)
+                Text("Connection and API application")
+                    .font(.footnote)
+                    .foregroundStyle(Color.fbInkSecondary)
+            }
+        }
+        .listRowBackground(Color.fbCard)
+    }
+
     /// One credential row: name, masked key, and an actions menu. The key is
     /// only ever shown masked (#83).
     private func keyRow(
@@ -317,8 +367,8 @@ struct SettingsView: View {
         switch target {
         case .hevy:
             return """
-            FitBuddy can no longer sync your workouts, the cached training data is deleted, and you \
-            return to onboarding to enter a new key.
+            FitBuddy can no longer sync your workouts, the cached training data and a Strava \
+            connection are deleted, and you return to onboarding to enter a new key.
             """
         case .llm(let provider):
             if viewModel.llmKeys.count <= 1 {
