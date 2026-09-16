@@ -47,7 +47,13 @@ extension WorkoutStore: ExerciseProgressionReading {
                 .sorted { $0.index < $1.index }
                 .map(SetDetail.init(set:))
 
-            sessions.append(ExerciseHistoryEntry(sessionStart: workout.startTime, sets: sets))
+            sessions.append(
+                ExerciseHistoryEntry(
+                    workoutID: workout.id,
+                    sessionStart: workout.startTime,
+                    sets: sets
+                )
+            )
         }
 
         guard let title else { return nil }

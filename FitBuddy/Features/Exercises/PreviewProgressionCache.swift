@@ -33,6 +33,7 @@ extension PreviewProgressionCache {
         return estimates.enumerated().map { index, estimate in
             let working = (estimate / 1.25).rounded()
             return ExerciseHistoryEntry(
+                workoutID: "preview-\(index)",
                 sessionStart: start.addingTimeInterval(Double(index) * 7 * 86_400),
                 sets: [
                     SetDetail(index: 0, type: .warmup, weightKg: working * 0.6, reps: 10,
@@ -52,6 +53,7 @@ extension PreviewProgressionCache {
         let start = Calendar.current.date(byAdding: .day, value: -7 * count, to: .now) ?? .now
         return (0..<count).map { index in
             ExerciseHistoryEntry(
+                workoutID: "preview-cardio-\(index)",
                 sessionStart: start.addingTimeInterval(Double(index) * 7 * 86_400),
                 sets: [
                     SetDetail(index: 0, type: .normal, weightKg: nil, reps: nil,

@@ -88,6 +88,7 @@ final class ExerciseProgressionTests: XCTestCase {
             title: "Rowing Machine",
             sessions: [
                 ExerciseHistoryEntry(
+                    workoutID: "w-1",
                     sessionStart: reference,
                     sets: [SetDetail(index: 0, type: .normal, weightKg: nil, reps: nil,
                                      distanceMeters: 2_000, durationSeconds: 480, rpe: nil)]
@@ -105,6 +106,7 @@ final class ExerciseProgressionTests: XCTestCase {
     func testOnlySessionsWithALoadReachTheCurve() {
         let withLoad = [session(100, daysAfterReference: 0), session(104, daysAfterReference: 2)]
         let withoutLoad = ExerciseHistoryEntry(
+            workoutID: "w-without-load",
             sessionStart: reference.addingTimeInterval(86_400),
             sets: [SetDetail(index: 0, type: .normal, weightKg: nil, reps: 15,
                              distanceMeters: nil, durationSeconds: nil, rpe: nil)]
@@ -154,6 +156,7 @@ final class ExerciseProgressionTests: XCTestCase {
     /// floating-point noise.
     private func session(_ estimate: Double, daysAfterReference days: Int) -> ExerciseHistoryEntry {
         ExerciseHistoryEntry(
+            workoutID: "w-\(days)",
             sessionStart: reference.addingTimeInterval(Double(days) * 86_400),
             sets: [
                 SetDetail(index: 0, type: .normal, weightKg: estimate / 2, reps: 30,

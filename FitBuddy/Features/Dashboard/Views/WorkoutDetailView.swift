@@ -60,6 +60,11 @@ struct WorkoutDetailView: View {
                 // reads the card as a button and gives no hint that it opens
                 // the movement's statistics.
                 .accessibilityAddTraits(.isLink)
+                // The trait says it navigates, the hint says where. Kept
+                // alongside `.isLink` rather than replacing it, so a card and
+                // the session rows on the dashboard announce themselves the
+                // same way.
+                .accessibilityHint("Shows the progression curve")
                 .accessibilityIdentifier(AccessibilityID.WorkoutDetail.exerciseCard)
             }
             if detail.exercises.isEmpty {

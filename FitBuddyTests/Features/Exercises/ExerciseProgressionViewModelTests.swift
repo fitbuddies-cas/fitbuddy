@@ -132,6 +132,7 @@ final class ExerciseProgressionViewModelTests: XCTestCase {
             title: "Rowing Machine",
             sessions: (0..<3).map { offset in
                 ExerciseHistoryEntry(
+                    workoutID: "w-\(offset)",
                     sessionStart: reference.addingTimeInterval(Double(offset) * 86_400),
                     sets: [SetDetail(index: 0, type: .normal, weightKg: nil, reps: nil,
                                      distanceMeters: 2_000, durationSeconds: 480, rpe: nil)]
@@ -225,6 +226,7 @@ final class ExerciseProgressionViewModelTests: XCTestCase {
     /// floating-point noise.
     private func session(_ estimate: Double, daysAfterReference days: Int) -> ExerciseHistoryEntry {
         ExerciseHistoryEntry(
+            workoutID: "w-\(days)",
             sessionStart: reference.addingTimeInterval(Double(days) * 86_400),
             sets: [
                 SetDetail(index: 0, type: .normal, weightKg: estimate / 2, reps: 30,

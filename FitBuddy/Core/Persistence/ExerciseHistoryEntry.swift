@@ -13,12 +13,17 @@ import Foundation
 /// project from either. Those sessions have no `estimatedOneRepMaxKg` and no
 /// point on the chart — but they are the only thing the screen can show for
 /// such a movement, so they belong in the history all the same.
-// `Equatable` rather than `Hashable`: `SetDetail` is not hashable, and nothing
-// here travels as a navigation value — the entry is identified by its session
-// start, which is what `ForEach` needs.
+/// `Equatable` rather than `Hashable`: `SetDetail` is not hashable, and nothing
+/// here travels as a navigation value.
 struct ExerciseHistoryEntry: Equatable, Identifiable, Sendable {
-    /// Start of the session, and the identity: a movement is folded to one
-    /// entry per session.
+    /// The workout this session was logged in, and the identity.
+    ///
+    /// Not `sessionStart`: two workouts can carry the same start — a manual
+    /// correction in Hevy, a double import — and sharing an id would make
+    /// `ForEach` drop one of them and the two rows open and close together.
+    /// The date stays what it always was, something to show and sort by.
+    let workoutID: String
+    /// Start of the session.
     let sessionStart: Date
     /// Every set of the movement in that session, in the source's order —
     /// warm-ups included, marked as such by their type.
@@ -34,7 +39,7 @@ struct ExerciseHistoryEntry: Equatable, Identifiable, Sendable {
     /// Sets that counted towards `volumeKg` (warm-ups excluded).
     let countedSetCount: Int
 
-    var id: Date { sessionStart }
+    var id: String { workoutID }
 
     /// The point this session contributes to the curve, when it has one.
     ///
@@ -81,13 +86,14 @@ extension ExerciseHistoryEntry {
     /// The deriving initialiser is the only one anything outside this file
     /// should reach for, for the reason `ExerciseDetail`'s is: a caller that
     /// passes its own totals is a caller that can get them wrong.
-    init(sessionStart: Date, sets: [SetDetail]) {
+    init(workoutID: String, sessionStart: Date, sets: [SetDetail]) {
         let countedSets = sets.filter(\.countsTowardsVolume)
         let best = countedSets
             .filter { OneRepMax.epley(of: $0) != nil }
             .max { (OneRepMax.epley(of: $0) ?? 0) < (OneRepMax.epley(of: $1) ?? 0) }
 
         self.init(
+            workoutID: workoutID,
             sessionStart: sessionStart,
             sets: sets,
             estimatedOneRepMaxKg: best.flatMap { OneRepMax.epley(of: $0) },

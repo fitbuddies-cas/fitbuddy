@@ -107,6 +107,22 @@ struct SeededApp {
         app.navigationBars.buttons.firstMatch
     }
 
+    /// Blocks until the progression screen has finished its read — the chart
+    /// or the "not enough data" hint is on screen.
+    ///
+    /// `progression` alone is satisfied by the `.loading` state, so anything
+    /// asserted about the *outcome* before this has waited would be asserted
+    /// against a spinner.
+    func awaitSettledProgression(file: StaticString = #filePath, line: UInt = #line) {
+        let settled = app.descendants(matching: .any).matching(
+            NSPredicate(
+                format: "identifier IN %@",
+                [AccessibilityID.Progression.chart, AccessibilityID.Progression.insufficientData]
+            )
+        )
+        firstRow(of: settled, file: file, line: line)
+    }
+
     // MARK: - Interactions
 
     /// Opens a collapsed session and makes sure it stayed open.

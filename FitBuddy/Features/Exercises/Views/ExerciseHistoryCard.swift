@@ -17,10 +17,10 @@ import SwiftUI
 struct ExerciseHistoryCard: View {
     let sessions: [ExerciseHistoryEntry]
 
-    /// Which sessions are open. A set rather than one selected id: a user
-    /// comparing two sessions wants both on screen, and the accordion that
-    /// closes one to open the next makes that impossible.
-    @State private var expanded: Set<Date> = []
+    /// Which sessions are open, by workout id. A set rather than one selected
+    /// id: a user comparing two sessions wants both on screen, and the
+    /// accordion that closes one to open the next makes that impossible.
+    @State private var expanded: Set<String> = []
 
     var body: some View {
         FBCard(padding: 0) {
@@ -62,7 +62,7 @@ struct ExerciseHistoryCard: View {
 
     @ViewBuilder
     private func row(for session: ExerciseHistoryEntry) -> some View {
-        let isExpanded = expanded.contains(session.sessionStart)
+        let isExpanded = expanded.contains(session.id)
 
         VStack(alignment: .leading, spacing: 0) {
             Button {
@@ -150,10 +150,10 @@ struct ExerciseHistoryCard: View {
     }
 
     private func toggle(_ session: ExerciseHistoryEntry) {
-        if expanded.contains(session.sessionStart) {
-            expanded.remove(session.sessionStart)
+        if expanded.contains(session.id) {
+            expanded.remove(session.id)
         } else {
-            expanded.insert(session.sessionStart)
+            expanded.insert(session.id)
         }
     }
 }

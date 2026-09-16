@@ -10,6 +10,7 @@ final class ExerciseHistoryEntryTests: XCTestCase {
     /// The best *counted* set defines the estimate — a heavy warm-up must not.
     func testTheBestCountedSetDefinesTheEstimate() throws {
         let entry = ExerciseHistoryEntry(
+            workoutID: "w-1",
             sessionStart: reference,
             sets: [
                 set(index: 0, type: .warmup, weight: 140, reps: 10),
@@ -26,6 +27,7 @@ final class ExerciseHistoryEntryTests: XCTestCase {
 
     func testVolumeAndCountedTallyExcludeWarmUps() {
         let entry = ExerciseHistoryEntry(
+            workoutID: "w-1",
             sessionStart: reference,
             sets: [
                 set(index: 0, type: .warmup, weight: 60, reps: 10),
@@ -46,6 +48,7 @@ final class ExerciseHistoryEntryTests: XCTestCase {
     /// session, and the history is the only place it can appear.
     func testACardioSessionHasNoEstimateAndNoPoint() {
         let entry = ExerciseHistoryEntry(
+            workoutID: "w-1",
             sessionStart: reference,
             sets: [set(index: 0, type: .normal, distance: 2_000, duration: 480)]
         )
@@ -61,6 +64,7 @@ final class ExerciseHistoryEntryTests: XCTestCase {
     /// are what the row has left to show.
     func testABodyweightSessionKeepsItsReps() {
         let entry = ExerciseHistoryEntry(
+            workoutID: "w-1",
             sessionStart: reference,
             sets: [
                 set(index: 0, type: .normal, weight: nil, reps: 12),
@@ -73,10 +77,32 @@ final class ExerciseHistoryEntryTests: XCTestCase {
         XCTAssertNil(entry.totalDistanceMeters)
     }
 
+    // MARK: - Identity
+
+    /// Two workouts can carry the same start — a manual correction in Hevy, a
+    /// double import. Identified by the date they would collide in `ForEach`
+    /// and open and close together; identified by the workout they do not.
+    func testTwoSessionsAtTheSameInstantStayDistinct() {
+        let first = ExerciseHistoryEntry(
+            workoutID: "w-1",
+            sessionStart: reference,
+            sets: [set(index: 0, type: .normal, weight: 100, reps: 5)]
+        )
+        let second = ExerciseHistoryEntry(
+            workoutID: "w-2",
+            sessionStart: reference,
+            sets: [set(index: 0, type: .normal, weight: 90, reps: 5)]
+        )
+
+        XCTAssertEqual(first.sessionStart, second.sessionStart)
+        XCTAssertNotEqual(first.id, second.id)
+    }
+
     // MARK: - The point the curve reads
 
     func testASessionWithLoadContributesItsPoint() throws {
         let entry = ExerciseHistoryEntry(
+            workoutID: "w-1",
             sessionStart: reference,
             sets: [set(index: 0, type: .normal, weight: 100, reps: 5)]
         )
