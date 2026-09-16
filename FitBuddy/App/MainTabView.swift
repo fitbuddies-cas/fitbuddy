@@ -25,7 +25,7 @@ struct MainTabView: View {
     private let makeDashboardViewModel: () -> WorkoutListViewModel
     private let makeSettingsViewModel: () -> SettingsViewModel
     private let makeStravaConnectionViewModel: @MainActor () -> StravaConnectionViewModel
-    private let makePolarConnectionViewModel: (@MainActor () -> PolarConnectionViewModel)?
+    private let makePolarConnectionViewModel: @MainActor () -> PolarConnectionViewModel
     private let makeWorkoutDetailViewModel: (String) -> WorkoutDetailViewModel
     private let makeExerciseListViewModel: () -> ExerciseListViewModel
     private let makeExerciseProgressionViewModel: (ExerciseIdentity) -> ExerciseProgressionViewModel
@@ -66,7 +66,7 @@ struct MainTabView: View {
         makeDashboardViewModel: @escaping () -> WorkoutListViewModel,
         makeSettingsViewModel: @escaping () -> SettingsViewModel,
         makeStravaConnectionViewModel: @escaping @MainActor () -> StravaConnectionViewModel,
-        makePolarConnectionViewModel: (@MainActor () -> PolarConnectionViewModel)? = nil,
+        makePolarConnectionViewModel: @escaping @MainActor () -> PolarConnectionViewModel,
         makeWorkoutDetailViewModel: @escaping (String) -> WorkoutDetailViewModel,
         makeExerciseListViewModel: @escaping () -> ExerciseListViewModel,
         makeExerciseProgressionViewModel: @escaping (ExerciseIdentity) -> ExerciseProgressionViewModel,
@@ -156,6 +156,18 @@ private struct PreviewStravaOAuthorizer: StravaOAuthorizing {
     }
 }
 
+/// OAuth that never reaches a browser, so the Polar screen renders in a
+/// preview without a sheet.
+private struct PreviewPolarOAuthorizer: PolarOAuthorizing {
+    func authorize(_ credentials: PolarClientCredentials) async throws -> ConnectorCredentials {
+        throw PolarOAuthError.transport
+    }
+
+    func refresh(_ credentials: PolarClientCredentials, refreshToken: String) async throws -> ConnectorCredentials {
+        throw PolarOAuthError.transport
+    }
+}
+
 /// Holds the selection for the preview the way `RootView` does in the app.
 private struct MainTabViewPreviewHost: View {
     @State private var selection: MainTab = .dashboard
@@ -175,6 +187,14 @@ private struct MainTabViewPreviewHost: View {
                 StravaConnectionViewModel(
                     oauth: PreviewStravaOAuthorizer(),
                     credentialStore: StravaCredentialStore(),
+                    registry: ConnectorRegistry(),
+                    sessionReset: PreviewResetService()
+                )
+            },
+            makePolarConnectionViewModel: {
+                PolarConnectionViewModel(
+                    oauth: PreviewPolarOAuthorizer(),
+                    credentialStore: PolarCredentialStore(),
                     registry: ConnectorRegistry(),
                     sessionReset: PreviewResetService()
                 )

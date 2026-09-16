@@ -191,9 +191,10 @@ final class ConnectorRegistryTests: XCTestCase {
 
     private func makePolarConnector() -> PolarConnector {
         PolarConnector(
-            configuration: PolarClientConfiguration(clientID: "test-client", redirectURI: "fitbuddy://polar/callback"),
-            memberID: "test-member",
-            session: StubURLProtocol.makeSession()
+            accessLink: PolarAccessLinkClient(session: StubURLProtocol.makeSession()),
+            oauth: StubPolarOAuthorizer(),
+            credentialStore: StubPolarCredentialStore(),
+            memberID: "test-member"
         )
     }
 

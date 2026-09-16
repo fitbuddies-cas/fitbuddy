@@ -1,11 +1,12 @@
 import XCTest
 @testable import FitBuddy
 
+/// Mirrors `StravaOAuthServiceTests`-style tests (ADR-11 Nachtrag, BYO-app):
+/// `PolarOAuthService` takes the user's application credentials on every
+/// call and does not persist anything itself — that is `PolarConnectionViewModel`'s
+/// job now, exactly like Strava's.
 final class PolarOAuthServiceTests: XCTestCase {
-    private let configuration = PolarClientConfiguration(
-        clientID: "fitbuddy-client",
-        redirectURI: "fitbuddy://polar/callback"
-    )
+    private let credentials = PolarClientCredentials(clientID: "fitbuddy-client", clientSecret: "s3cr3t")
     private let epoch = Date(timeIntervalSince1970: 1_000_000)
 
     override func tearDown() {
@@ -13,19 +14,11 @@ final class PolarOAuthServiceTests: XCTestCase {
         super.tearDown()
     }
 
-    private func makeSUT(
-        webAuthenticator: StubWebAuthenticator,
-        credentialStore: StubPolarCredentialStore = StubPolarCredentialStore()
-    ) -> PolarOAuthService {
-        PolarOAuthService(
-            configuration: configuration,
-            webAuthenticator: webAuthenticator,
-            credentialStore: credentialStore,
-            session: StubURLProtocol.makeSession()
-        )
+    private func makeSUT(webAuthenticator: StubWebAuthenticator) -> PolarOAuthService {
+        PolarOAuthService(webAuthenticator: webAuthenticator, session: StubURLProtocol.makeSession())
     }
 
-    func testASuccessfulFlowReturnsCredentialsAndPersistsThemInTheStore() async throws {
+    func testASuccessfulFlowReturnsCredentials() async throws {
         StubURLProtocol.handler = { request in
             PolarTestSupport.http(
                 200,
@@ -34,29 +27,25 @@ final class PolarOAuthServiceTests: XCTestCase {
             )
         }
         let webAuthenticator = StubWebAuthenticator(.succeed(code: "auth-code", scope: nil))
-        let credentialStore = StubPolarCredentialStore()
-        let sut = makeSUT(webAuthenticator: webAuthenticator, credentialStore: credentialStore)
+        let sut = makeSUT(webAuthenticator: webAuthenticator)
 
-        let credentials = try await sut.authorize()
+        let credentials = try await sut.authorize(self.credentials)
 
         guard case .oauth(let access, let refresh, _) = credentials else {
             return XCTFail("Expected .oauth credentials")
         }
         XCTAssertEqual(access, "at")
         XCTAssertEqual(refresh, "rt")
-
-        let stored = try await credentialStore.credentials()
-        XCTAssertEqual(stored, credentials)
     }
 
-    func testUsesTheRedirectURISchemeAsTheCallbackScheme() async throws {
+    func testUsesTheFixedRedirectSchemeAsTheCallbackScheme() async throws {
         StubURLProtocol.handler = { request in
             PolarTestSupport.http(200, for: request, body: #"{"access_token":"at","refresh_token":"rt","expires_in":100}"#)
         }
         let webAuthenticator = StubWebAuthenticator(.succeed(code: "c", scope: nil))
         let sut = makeSUT(webAuthenticator: webAuthenticator)
 
-        _ = try await sut.authorize()
+        _ = try await sut.authorize(credentials)
 
         let scheme = await webAuthenticator.receivedSchemes.first
         XCTAssertEqual(scheme, "fitbuddy")
@@ -67,7 +56,7 @@ final class PolarOAuthServiceTests: XCTestCase {
         let sut = makeSUT(webAuthenticator: webAuthenticator)
 
         do {
-            _ = try await sut.authorize()
+            _ = try await sut.authorize(credentials)
             XCTFail("Expected PolarOAuthError.cancelled")
         } catch let error as PolarOAuthError {
             XCTAssertEqual(error, .cancelled)
@@ -83,7 +72,7 @@ final class PolarOAuthServiceTests: XCTestCase {
         let sut = makeSUT(webAuthenticator: webAuthenticator)
 
         do {
-            _ = try await sut.authorize()
+            _ = try await sut.authorize(credentials)
             XCTFail("Expected PolarOAuthError.stateMismatch")
         } catch let error as PolarOAuthError {
             XCTAssertEqual(error, .stateMismatch)
@@ -97,7 +86,7 @@ final class PolarOAuthServiceTests: XCTestCase {
         let sut = makeSUT(webAuthenticator: webAuthenticator)
 
         do {
-            _ = try await sut.authorize()
+            _ = try await sut.authorize(credentials)
             XCTFail("Expected PolarOAuthError.accessDenied")
         } catch let error as PolarOAuthError {
             XCTAssertEqual(error, .accessDenied)
@@ -114,26 +103,21 @@ final class PolarOAuthServiceTests: XCTestCase {
         let sut = makeSUT(webAuthenticator: webAuthenticator)
 
         await assertThrowsConnectorError(.unauthorized) {
-            try await sut.authorize()
+            try await sut.authorize(self.credentials)
         }
     }
 
-    func testAFailingCredentialStoreSurfacesItsError() async {
+    func testRefreshAuthenticatesWithTheGivenCredentials() async throws {
+        nonisolated(unsafe) var authorizationHeader: String?
         StubURLProtocol.handler = { request in
-            PolarTestSupport.http(200, for: request, body: #"{"access_token":"at","refresh_token":"rt","expires_in":100}"#)
+            authorizationHeader = request.value(forHTTPHeaderField: "Authorization")
+            return PolarTestSupport.http(200, for: request, body: #"{"access_token":"at2","expires_in":100}"#)
         }
-        let webAuthenticator = StubWebAuthenticator(.succeed(code: "c", scope: nil))
-        let credentialStore = StubPolarCredentialStore()
-        await credentialStore.setFailWrites(true)
-        let sut = makeSUT(webAuthenticator: webAuthenticator, credentialStore: credentialStore)
+        let sut = makeSUT(webAuthenticator: StubWebAuthenticator(.throw(CancellationError())))
 
-        do {
-            _ = try await sut.authorize()
-            XCTFail("Expected the credential store's error to propagate")
-        } catch is StubPolarCredentialStore.Failure {
-            // expected
-        } catch {
-            XCTFail("Unexpected error: \(error)")
-        }
+        _ = try await sut.refresh(credentials, refreshToken: "old-rt")
+
+        let expectedAuth = "Basic " + Data("fitbuddy-client:s3cr3t".utf8).base64EncodedString()
+        XCTAssertEqual(authorizationHeader, expectedAuth)
     }
 }

@@ -9,6 +9,7 @@ final class PolarCredentialStoreTests: XCTestCase {
     private var sut: PolarCredentialStore!
 
     private static let polarKeys: [KeychainKey] = [
+        .polarClientID, .polarClientSecret,
         .polarAccessToken, .polarRefreshToken, .polarTokenExpiry, .polarMemberID,
     ]
 
@@ -28,6 +29,30 @@ final class PolarCredentialStoreTests: XCTestCase {
         sut = nil
         keychain = nil
         try await super.tearDown()
+    }
+
+    // MARK: - Client credentials
+
+    func testClientCredentialsIsNilWhenNothingStored() async throws {
+        let credentials = try await sut.clientCredentials()
+        XCTAssertNil(credentials)
+    }
+
+    func testSaveClientCredentialsRoundtrip() async throws {
+        let credentials = PolarClientCredentials(clientID: "client-1", clientSecret: "s3cr3t")
+        try await sut.saveClientCredentials(credentials)
+
+        let stored = try await sut.clientCredentials()
+        XCTAssertEqual(stored, credentials)
+    }
+
+    /// A client ID without a secret is not usable for a token exchange, so the
+    /// store reports "not configured" rather than handing out half a pair.
+    func testClientCredentialsIsNilWhenSecretIsMissing() async throws {
+        try await keychain.save("client-1", for: .polarClientID)
+
+        let credentials = try await sut.clientCredentials()
+        XCTAssertNil(credentials)
     }
 
     // MARK: - credentials()
@@ -98,15 +123,30 @@ final class PolarCredentialStoreTests: XCTestCase {
     // MARK: - clear()
 
     func testClearRemovesAllItems() async throws {
+        try await sut.saveClientCredentials(PolarClientCredentials(clientID: "client-1", clientSecret: "s3cr3t"))
         try await sut.saveTokens(accessToken: "access", refreshToken: "refresh", expiresAt: Date())
         try await sut.saveMemberID("member-42")
 
         try await sut.clear()
 
+        let clientCredentials = try await sut.clientCredentials()
         let credentials = try await sut.credentials()
         let memberID = try await sut.memberID()
+        XCTAssertNil(clientCredentials)
         XCTAssertNil(credentials)
         XCTAssertNil(memberID)
+    }
+
+    /// Disconnecting Polar must not log the user out of Hevy.
+    func testClearLeavesOtherKeysUntouched() async throws {
+        try await keychain.save("hv_live_abc", for: .hevyAPIKey)
+        try await sut.saveTokens(accessToken: "access", refreshToken: "refresh", expiresAt: Date())
+
+        try await sut.clear()
+
+        let hevyKey = try await keychain.read(.hevyAPIKey)
+        XCTAssertEqual(hevyKey, "hv_live_abc")
+        try await keychain.delete(.hevyAPIKey)
     }
 }
 

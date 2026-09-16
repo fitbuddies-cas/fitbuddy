@@ -1,10 +1,12 @@
 import XCTest
 @testable import FitBuddy
 
-/// Unit tests for `PolarConnectionViewModel` (#157, US-5 AC1). The OAuth
-/// service and the credential store are the in-memory doubles; the registry
-/// is the real one with a real `PolarConnector` (built on doubles) behind
-/// `.polar`, because the hand-over to the registry is what this type is for.
+/// Unit tests for `PolarConnectionViewModel` (#157, US-5 AC1). Mirrors
+/// `StravaConnectionViewModelTests` since ADR-11's Nachtrag moved Polar onto
+/// the same BYO-app model. The OAuth service and the credential store are the
+/// in-memory doubles; the registry is the real one with a real
+/// `PolarConnector` (built on doubles) behind `.polar`, because the hand-over
+/// to the registry is what this type is for.
 @MainActor
 final class PolarConnectionViewModelTests: XCTestCase {
     private static let now = Date(timeIntervalSince1970: 1_754_400_000)
@@ -14,6 +16,8 @@ final class PolarConnectionViewModelTests: XCTestCase {
     private var registry: ConnectorRegistry!
     private var reset: SessionResetSpy!
     private var sut: PolarConnectionViewModel!
+
+    private static let clientCredentials = PolarClientCredentials(clientID: "client-1", clientSecret: "secret-1")
 
     private static var validPair: ConnectorCredentials {
         .oauth(accessToken: "access-1", refreshToken: "refresh-1", expiresAt: now.addingTimeInterval(4 * 3600))
@@ -26,7 +30,7 @@ final class PolarConnectionViewModelTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         oauth = StubPolarOAuthorizer()
-        store = StubPolarCredentialStore()
+        store = StubPolarCredentialStore(clientCredentials: Self.clientCredentials)
         registry = ConnectorRegistry()
         reset = SessionResetSpy()
         await registry.register(makePolarConnector(), for: .polar)
@@ -54,15 +58,27 @@ final class PolarConnectionViewModelTests: XCTestCase {
 
     private func makePolarConnector() -> PolarConnector {
         PolarConnector(
-            configuration: PolarClientConfiguration(clientID: "test-client", redirectURI: "fitbuddy://polar/callback"),
-            memberID: "test-member",
-            session: StubURLProtocol.makeSession()
+            accessLink: PolarAccessLinkClient(session: StubURLProtocol.makeSession()),
+            oauth: StubPolarOAuthorizer(),
+            credentialStore: StubPolarCredentialStore(),
+            memberID: "test-member"
         )
     }
 
     // MARK: - Bootstrap
 
-    func testBootstrapWithNoPairIsIdle() async {
+    func testBootstrapWithNoClientCredentialsIsMissingCredentials() async {
+        store = StubPolarCredentialStore()
+        sut = makeViewModel()
+
+        await sut.bootstrap()
+
+        XCTAssertEqual(sut.state, .missingCredentials)
+        XCTAssertFalse(sut.canConnect)
+        XCTAssertFalse(sut.isConnected)
+    }
+
+    func testBootstrapWithCredentialsButNoPairIsIdle() async {
         await sut.bootstrap()
 
         XCTAssertEqual(sut.state, .idle)
@@ -73,7 +89,7 @@ final class PolarConnectionViewModelTests: XCTestCase {
     /// A pair a previous launch stored is handed to the registry, so the
     /// renewal prompt and the sync see the same connection this screen does.
     func testBootstrapWithAStoredPairConnectsTheRegistry() async {
-        store = StubPolarCredentialStore(credentials: Self.validPair)
+        store = StubPolarCredentialStore(clientCredentials: Self.clientCredentials, credentials: Self.validPair)
         sut = makeViewModel()
 
         await sut.bootstrap()
@@ -85,7 +101,7 @@ final class PolarConnectionViewModelTests: XCTestCase {
     }
 
     func testBootstrapWithAnExpiredPairIsExpired() async {
-        store = StubPolarCredentialStore(credentials: Self.expiredPair)
+        store = StubPolarCredentialStore(clientCredentials: Self.clientCredentials, credentials: Self.expiredPair)
         sut = makeViewModel()
 
         await sut.bootstrap()
@@ -97,9 +113,9 @@ final class PolarConnectionViewModelTests: XCTestCase {
 
     // MARK: - Connect
 
-    /// `PolarOAuthService` already persisted the pair (#156); this view model
-    /// only has to hand it to the registry and notify.
-    func testConnectConnectsTheRegistryAndNotifiesWithoutWritingTheStoreItself() async {
+    /// This view model persists the pair itself — `PolarOAuthService` no
+    /// longer does, exactly like Strava's.
+    func testConnectStoresThePairConnectsTheRegistryAndNotifies() async {
         var notified = 0
         sut.onConnected = { notified += 1 }
         await oauth.setAuthorizeResult(.success(Self.validPair))
@@ -111,6 +127,8 @@ final class PolarConnectionViewModelTests: XCTestCase {
         XCTAssertEqual(notified, 1)
         let authorized = await oauth.authorizeCallCount
         XCTAssertEqual(authorized, 1)
+        let stored = try? await store.credentials()
+        XCTAssertEqual(stored, Self.validPair)
         let registryState = await registry.state(of: .polar, now: Self.now)
         XCTAssertEqual(registryState, .connected(expiresAt: Self.now.addingTimeInterval(4 * 3600)))
     }
@@ -127,7 +145,7 @@ final class PolarConnectionViewModelTests: XCTestCase {
     }
 
     func testCancelledReconnectKeepsTheExistingConnection() async {
-        store = StubPolarCredentialStore(credentials: Self.validPair)
+        store = StubPolarCredentialStore(clientCredentials: Self.clientCredentials, credentials: Self.validPair)
         sut = makeViewModel()
         await oauth.setAuthorizeResult(.failure(PolarOAuthError.cancelled))
         await sut.bootstrap()
@@ -155,13 +173,25 @@ final class PolarConnectionViewModelTests: XCTestCase {
         XCTAssertEqual(sut.state, .failed(.unauthorized))
     }
 
+    func testConnectWithoutStoredCredentialsIsMissingCredentials() async {
+        store = StubPolarCredentialStore()
+        sut = makeViewModel()
+        await sut.bootstrap()
+
+        await sut.connect()
+
+        XCTAssertEqual(sut.state, .missingCredentials)
+        let authorized = await oauth.authorizeCallCount
+        XCTAssertEqual(authorized, 0)
+    }
+
     // MARK: - Disconnect
 
     /// AC: every Polar item leaves the Keychain and the Polar sessions leave
     /// the cache; the other sources are not touched.
     func testDisconnectClearsEverythingPolarAndNotifies() async {
         var notified = 0
-        store = StubPolarCredentialStore(credentials: Self.validPair)
+        store = StubPolarCredentialStore(clientCredentials: Self.clientCredentials, credentials: Self.validPair)
         sut = makeViewModel()
         sut.onDisconnected = { notified += 1 }
         await sut.bootstrap()
@@ -169,7 +199,7 @@ final class PolarConnectionViewModelTests: XCTestCase {
 
         await sut.disconnect()
 
-        XCTAssertEqual(sut.state, .idle)
+        XCTAssertEqual(sut.state, .missingCredentials)
         XCTAssertEqual(notified, 1)
         let cleared = await store.clearCount
         XCTAssertEqual(cleared, 1)
@@ -182,7 +212,7 @@ final class PolarConnectionViewModelTests: XCTestCase {
     }
 
     func testDisconnectKeychainFailureIsReported() async {
-        store = StubPolarCredentialStore(credentials: Self.validPair)
+        store = StubPolarCredentialStore(clientCredentials: Self.clientCredentials, credentials: Self.validPair)
         sut = makeViewModel()
         await sut.bootstrap()
         await store.setFailWrites(true)
@@ -195,7 +225,7 @@ final class PolarConnectionViewModelTests: XCTestCase {
     // MARK: - Failure presentation
 
     func testEveryOAuthErrorExceptCancellationHasABanner() {
-        let errors: [PolarOAuthError] = [.accessDenied, .stateMismatch, .invalidCallback]
+        let errors: [PolarOAuthError] = [.accessDenied, .stateMismatch, .invalidCallback, .transport]
         for error in errors {
             XCTAssertNotNil(PolarConnectionFailure(error), "\(error) should have a banner")
         }

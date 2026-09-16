@@ -583,10 +583,14 @@ final class WorkoutSyncServiceTests: XCTestCase {
     /// written back to the Keychain — `PolarConnector` deliberately does not
     /// persist itself (unlike `StravaConnector`).
     func testARefreshedPolarPairIsPersistedBackToTheStore() async throws {
-        let configuration = PolarClientConfiguration(clientID: "c", redirectURI: "fitbuddy://polar/callback")
+        let credentials = PolarClientCredentials(clientID: "c", clientSecret: "s")
+        let oauth = StubPolarOAuthorizer(refreshResult: .success(
+            .oauth(accessToken: "fresh-access", refreshToken: "fresh-refresh", expiresAt: Self.now.addingTimeInterval(43_199))
+        ))
         let polar = PolarConnector(
-            oauth: PolarOAuthClient(configuration: configuration, session: StubURLProtocol.makeSession(), now: { Self.now }),
-            accessLink: PolarAccessLinkClient(baseURL: configuration.accessLinkBaseURL, session: StubURLProtocol.makeSession()),
+            accessLink: PolarAccessLinkClient(session: StubURLProtocol.makeSession()),
+            oauth: oauth,
+            credentialStore: StubPolarCredentialStore(clientCredentials: credentials),
             memberID: "member-1",
             now: { Self.now }
         )
@@ -595,17 +599,10 @@ final class WorkoutSyncServiceTests: XCTestCase {
             refreshToken: "refresh-1",
             expiresAt: Self.now.addingTimeInterval(-1)
         )
-        polarStore = StubPolarCredentialStore(credentials: expiredPair)
+        polarStore = StubPolarCredentialStore(clientCredentials: credentials, credentials: expiredPair)
         await registry.register(polar, for: .polar)
         StubURLProtocol.handler = { request in
-            if request.url?.path.contains("oauth/token") == true {
-                return PolarTestSupport.http(
-                    200,
-                    for: request,
-                    body: #"{"access_token":"fresh-access","refresh_token":"fresh-refresh","expires_in":43199}"#
-                )
-            }
-            return PolarTestSupport.http(200, for: request, body: "[]")
+            PolarTestSupport.http(200, for: request, body: "[]")
         }
         sut = await makeService(connector: MockConnector())
 

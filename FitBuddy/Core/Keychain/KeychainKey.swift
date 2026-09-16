@@ -26,6 +26,12 @@ enum KeychainKey: String, CaseIterable {
     case stravaRefreshToken = "fitbuddy.strava.refreshtoken"
     /// ISO8601 expiry of the access token, whole seconds.
     case stravaTokenExpiry = "fitbuddy.strava.expiresat"
+    /// Client ID of the user's own Polar AccessLink API application (ADR-11
+    /// Nachtrag, BYO-app like Strava). Polar's token endpoint requires HTTP
+    /// Basic auth on every request — PKCE does not replace the secret.
+    case polarClientID = "fitbuddy.polar.clientid"
+    /// Client secret of that same application.
+    case polarClientSecret = "fitbuddy.polar.clientsecret"
     /// Polar OAuth access token (ADR-11). Expires after ~12h — refreshed via
     /// `polarRefreshToken`.
     case polarAccessToken = "fitbuddy.polar.accesstoken"

@@ -4,7 +4,10 @@ import Foundation
 ///
 /// A presentation layer over the two error types `PolarConnectionViewModel`
 /// can see: `PolarOAuthError` for the interactive part, `ConnectorError` for
-/// the token endpoint (`PolarHTTP.failure`) and the credential store.
+/// the token endpoint (`PolarHTTP.failure`) and the credential store. Mirrors
+/// `StravaConnectionFailure` (ADR-11 Nachtrag): `pointsToCredentials` sends
+/// the user to the application-credentials screen rather than just offering a
+/// retry.
 enum PolarConnectionFailure: Equatable {
     /// The user declined on Polar's consent page.
     case accessDenied
@@ -12,7 +15,8 @@ enum PolarConnectionFailure: Equatable {
     case invalidResponse
     /// Offline, timeout, DNS.
     case network
-    /// Polar answered with an error status, or rejected the exchange.
+    /// Polar rejected the request — a bad client ID/secret or a dead refresh
+    /// token look the same from here, so both point at the credentials screen.
     case unauthorized
     /// The pair came back but could not be stored on this device.
     case keychain
@@ -25,6 +29,7 @@ enum PolarConnectionFailure: Equatable {
         case .cancelled: return nil
         case .accessDenied: self = .accessDenied
         case .stateMismatch, .invalidCallback: self = .invalidResponse
+        case .transport: self = .network
         }
     }
 
@@ -34,6 +39,14 @@ enum PolarConnectionFailure: Equatable {
         case .unauthorized: self = .unauthorized
         case .networkUnavailable: self = .network
         case .rateLimited, .serviceUnavailable, .invalidResponse, .notImplemented: self = .invalidResponse
+        }
+    }
+
+    /// Whether the fix is on the credentials screen rather than a retry.
+    var pointsToCredentials: Bool {
+        switch self {
+        case .unauthorized, .invalidResponse: return true
+        case .accessDenied, .network, .keychain: return false
         }
     }
 
@@ -58,7 +71,7 @@ enum PolarConnectionFailure: Equatable {
         case .network:
             return "Check your internet connection and try again."
         case .unauthorized:
-            return "Polar rejected the request. Please try connecting again."
+            return "The client ID or client secret does not match an application on admin.polaraccesslink.com. Check both on the credentials screen and try again."
         case .keychain:
             return "Storing on this device failed. Please try again."
         }

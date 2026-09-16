@@ -282,8 +282,7 @@ Bekannte Lücken im PoC-Design — vor Sprint 3 (AI-Integration) adressieren.
 |---|---|---|---|
 | TD-1 | **Kein Token-Limit im Prompt-Build** | `400 context_length_exceeded` bei 90 Tagen × vollem Trainingsvolumen | Prompt-Fenster als Konstante definieren (→ W-2); Daten vor API-Call kürzen |
 | TD-3 | **Kein Backgrounding-Handling beim Analyse-Call** | iOS beendet URLSession-Task nach ~30s — Analyse verloren, kein Benutzer-Feedback | `URLSession` mit `background`-Konfiguration oder explizites Timeout + Benutzer-Feedback |
-| TD-4 | **Cert-Pinning für keinen Host umgesetzt** (QA-1, ADR-004) — mit #79 kommen `generativelanguage.googleapis.com` und `api.mistral.ai` zu `api.anthropic.com` und `api.hevyapp.com` dazu, mit ADR-010 zusätzlich `www.strava.com` | MITM im offenen WLAN kann API-Keys und Gesundheitsdaten abgreifen | `URLSessionDelegate` mit Public-Key-Pinning für alle fünf Hosts |
-| TD-5 | **Polar-Client-Secret im Binary** (Nachtrag zu ADR-011) — Polars Token-Endpoint verlangt entgegen der ursprünglichen ADR-Annahme immer ein `clientSecret`; ohne Backend gibt es keinen sicheren Ort dafür. Nur für die CAS-Demo tragbar, nie über TestFlight verteilen. | Secret aus jedem verteilten Build extrahierbar | v1: Backend-Proxy oder BYO-App-Screen analog Strava (#139) |
+| TD-4 | **Cert-Pinning für keinen Host umgesetzt** (QA-1, ADR-004) — mit #79 kommen `generativelanguage.googleapis.com` und `api.mistral.ai` zu `api.anthropic.com` und `api.hevyapp.com` dazu, mit ADR-010 und ADR-011 (Nachtrag) zusätzlich `www.strava.com` und `auth.polar.com`/`www.polaraccesslink.com` | MITM im offenen WLAN kann API-Keys und Gesundheitsdaten abgreifen | `URLSessionDelegate` mit Public-Key-Pinning für alle sieben Hosts |
 
 ---
 
@@ -301,15 +300,16 @@ Bekannte Lücken im PoC-Design — vor Sprint 3 (AI-Integration) adressieren.
 > [ADR-010](adr/ADR-010-strava-oauth-byo-app.md) aufgelöst: Das Secret gehört nicht dem Team,
 > sondern dem Nutzer. Er legt unter `strava.com/settings/api` seine eigene API-Application an
 > und hinterlegt Client ID und Client Secret im Keychain — kein Secret im Binary, kein Backend,
-> ADR-004 bleibt unverändert. Damit sind Strava **und** Polar ([ADR-011](adr/ADR-011-polar-als-zweite-quelle.md),
-> PKCE-Public-Client, ebenfalls kein Backend nötig) beide als reale, zu Hevy gleichwertige
-> Quellen umsetzbar — keine schliesst die andere aus.
+> ADR-004 bleibt unverändert. Damit sind Strava **und** Polar ([ADR-011](adr/ADR-011-polar-als-zweite-quelle.md) —
+> Nachtrag: entgegen der ursprünglichen Annahme kein PKCE-Public-Client, sondern seit dem zweiten
+> Nachtrag ebenfalls BYO-App wie Strava) beide als reale, zu Hevy gleichwertige Quellen umsetzbar,
+> beide ohne Backend, ADR-004 bleibt unangetastet.
 
 | # | Widerspruch / Unklarheit | Betroffene Dokumente | Handlungsbedarf |
 |---|---|---|---|
 | W-3 | **Certificate Pinning: als aktiv formuliert, laut ADR noch nicht implementiert.** ADR-004 markiert es als «Pflicht in Sprint 2». | `ADR-004` | Formulierung korrigieren: «geplant, Sprint 2». |
 | W-5 | **HealthKit: Entscheid gefordert, aber nirgends getroffen.** Das `Activity`-Modell ist deshalb noch nicht finalisierbar. | `ADR-006` | Entscheid blockiert Protocol-Design und Datenmodell. Empfehlung: OUT für PoC. |
-| W-6 | **Dritte/zweite Quelle je ADR-010 und ADR-011: sowohl Strava als auch Polar sind umgesetzt**, nicht nur eine davon. `StravaConnector` (BYO-App-OAuth) und `PolarConnector` (PKCE-Public-Client) sind beide implementiert und getestet, beide konform zu ADR-004. Offen für v1: OAuth-Consent-UI und Onboarding-Einbindung für Polar, SwiftData-Persistenz der Cardio-Sessions, Migration v3 → v4. | `ADR-004`, `ADR-006`, `ADR-010`, `ADR-011` | v1: Polar-OAuth-Screen + Persistenz. Polar-Recovery/Sleep bleibt ausgeschlossen (session-, nicht workout-förmig — wie `W-5`). |
+| W-6 | **Dritte/zweite Quelle je ADR-010 und ADR-011: sowohl Strava als auch Polar sind umgesetzt**, nicht nur eine davon. `StravaConnector` und `PolarConnector` sind beide BYO-App-OAuth (je eigener Credentials-Screen, Secret im Nutzer-Keychain), beide implementiert und getestet, beide konform zu ADR-004. Offen für v1: SwiftData-Persistenz der Cardio-Sessions, Migration v3 → v4. | `ADR-004`, `ADR-006`, `ADR-010`, `ADR-011` | v1: Persistenz. Polar-Recovery/Sleep bleibt ausgeschlossen (session-, nicht workout-förmig — wie `W-5`). |
 
 ### Offene Architektur-Fragen
 

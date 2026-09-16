@@ -48,7 +48,7 @@ struct RootView: View {
                     makeDashboardViewModel: makeDashboardViewModel,
                     makeSettingsViewModel: makeSettingsViewModel,
                     makeStravaConnectionViewModel: makeStravaConnectionViewModel,
-                    makePolarConnectionViewModel: polarConnectionViewModelFactory,
+                    makePolarConnectionViewModel: makePolarConnectionViewModel,
                     makeWorkoutDetailViewModel: makeWorkoutDetailViewModel(for:),
                     makeExerciseListViewModel: makeExerciseListViewModel,
                     makeExerciseProgressionViewModel: makeExerciseProgressionViewModel(for:),
@@ -283,26 +283,14 @@ struct RootView: View {
         return viewModel
     }
 
-    /// `nil` when the team's Polar client configuration is missing (#159) —
-    /// `MainTabView`/`SettingsView` hide the Polar row entirely in that case.
-    /// Split out of `body` because the type checker chokes on a ternary of
-    /// this shape inline inside `MainTabView`'s initializer call.
-    private var polarConnectionViewModelFactory: (@MainActor () -> PolarConnectionViewModel)? {
-        guard dataSources.polarOAuth != nil else { return nil }
-        return makePolarConnectionViewModel
-    }
-
-    /// Wires the Polar connection screen to the shared registry and to a
+    /// Wires the Polar connection screen to the shared registry, the OAuth
+    /// service and the credential store (ADR-11 Nachtrag, #157), and to a
     /// session reset over the same container the dashboard reads, so a
-    /// disconnect drops exactly the Polar sessions it shows (#157).
-    ///
-    /// Only ever passed to `MainTabView` when `dataSources.polarOAuth` is
-    /// non-nil (via `polarConnectionViewModelFactory` above) — the
-    /// force-unwrap here is that same guard, not a second, unchecked one.
+    /// disconnect drops exactly the Polar sessions it shows.
     private func makePolarConnectionViewModel() -> PolarConnectionViewModel {
         let store = WorkoutStore(modelContainer: modelContext.container)
         let viewModel = PolarConnectionViewModel(
-            oauth: dataSources.polarOAuth!,
+            oauth: dataSources.polarOAuth,
             credentialStore: dataSources.polarCredentialStore,
             registry: dataSources.registry,
             sessionReset: SessionResetService(

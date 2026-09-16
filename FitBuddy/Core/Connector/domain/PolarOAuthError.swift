@@ -1,9 +1,8 @@
 import Foundation
 
 /// Everything that can go wrong in the interactive part of the Polar OAuth
-/// flow (ADR-11) — before the code ever reaches `PolarOAuthClient`'s token
-/// endpoint, whose own failures already map onto `ConnectorError`
-/// (`PolarHTTP.failure`).
+/// flow (ADR-11) — before the code ever reaches the token endpoint, whose own
+/// failures already map onto `ConnectorError` (`PolarHTTP.failure`).
 ///
 /// No case carries a token, so any of these can be logged or shown as-is.
 enum PolarOAuthError: Error, Equatable, Sendable {
@@ -15,4 +14,6 @@ enum PolarOAuthError: Error, Equatable, Sendable {
     case stateMismatch
     /// The callback carried neither a code nor a known error.
     case invalidCallback
+    /// The browser sheet could not be presented at all — offline, timeout.
+    case transport
 }

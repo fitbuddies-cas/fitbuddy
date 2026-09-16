@@ -1,26 +1,32 @@
 import Foundation
 import OSLog
 
-/// Drives the Polar OAuth2 authorization-code + PKCE flow (ADR-11): builds the
-/// authorization URL, exchanges the returned code for tokens, and refreshes an
-/// expired access token.
+/// Drives Polar's OAuth2 authorization-code token plumbing (ADR-11 Nachtrag):
+/// builds the authorization URL, exchanges the returned code for tokens, and
+/// refreshes an expired access token — all against the *user's* own Polar
+/// application credentials (`PolarClientCredentials`), never a team default.
 ///
-/// The interactive part — presenting `authorizationURL` and catching the
-/// redirect — belongs to a ViewModel with `ASWebAuthenticationSession`; this
-/// actor is only the token plumbing, so it stays unit-testable with a stub
-/// `URLSession` and carries no UI dependency.
+/// The interactive part — presenting the authorization URL and catching the
+/// redirect — belongs to `PolarOAuthService`; this actor is only the token
+/// plumbing, so it stays unit-testable with a stub `URLSession` and carries no
+/// UI dependency.
+///
+/// Every request authenticates with HTTP Basic `clientID:clientSecret`. No
+/// PKCE: AccessLink v3's authorization endpoint documents no
+/// `code_challenge`/`code_challenge_method` parameter, unlike the unrelated v4
+/// API — see the Nachtrag on `PolarClientConfiguration`.
 actor PolarOAuthClient {
-    private let configuration: PolarClientConfiguration
+    private let credentials: PolarClientCredentials
     private let session: URLSession
     private let now: () -> Date
     private let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "PolarOAuthClient")
 
     init(
-        configuration: PolarClientConfiguration,
+        credentials: PolarClientCredentials,
         session: URLSession = .fitBuddy,
         now: @escaping () -> Date = Date.init
     ) {
-        self.configuration = configuration
+        self.credentials = credentials
         self.session = session
         self.now = now
     }
@@ -28,39 +34,31 @@ actor PolarOAuthClient {
     /// URL to load in `ASWebAuthenticationSession`. `state` is opaque and must
     /// be compared against the value on the redirect to defend against a
     /// forged callback.
-    func authorizationURL(pkce: PolarPKCE, state: String) -> URL {
+    func authorizationURL(state: String) -> URL {
         var components = URLComponents(
-            url: configuration.authorizationURL,
+            url: PolarClientConfiguration.authorizationURL,
             resolvingAgainstBaseURL: false
         )
         components?.queryItems = [
             URLQueryItem(name: "response_type", value: "code"),
-            URLQueryItem(name: "client_id", value: configuration.clientID),
-            URLQueryItem(name: "redirect_uri", value: configuration.redirectURI),
-            URLQueryItem(name: "scope", value: "accesslink.read_all"),
+            URLQueryItem(name: "client_id", value: credentials.clientID),
+            URLQueryItem(name: "redirect_uri", value: PolarClientConfiguration.redirectURI),
+            URLQueryItem(name: "scope", value: PolarClientConfiguration.scope),
             URLQueryItem(name: "state", value: state),
-            URLQueryItem(name: "code_challenge", value: pkce.challenge),
-            URLQueryItem(name: "code_challenge_method", value: pkce.method),
         ]
         guard let url = components?.url else {
-            preconditionFailure("Malformed Polar authorization URL from \(configuration.authorizationURL)")
+            preconditionFailure("Malformed Polar authorization URL")
         }
         return url
     }
 
     /// Exchanges an authorization `code` for an access/refresh token pair.
-    func exchange(code: String, pkce: PolarPKCE) async throws -> ConnectorCredentials {
-        var fields = [
+    func exchange(code: String) async throws -> ConnectorCredentials {
+        let fields = [
             "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": configuration.redirectURI,
-            "code_verifier": pkce.verifier,
+            "redirect_uri": PolarClientConfiguration.redirectURI,
         ]
-        // A public client identifies itself in the body; a confidential one via
-        // HTTP Basic (added in `tokenRequest`).
-        if configuration.clientSecret == nil {
-            fields["client_id"] = configuration.clientID
-        }
         let response = try await postToken(fields)
         return response.credentials(now: now(), previousRefresh: nil)
     }
@@ -69,13 +67,10 @@ actor PolarOAuthClient {
     /// means the refresh token itself is dead → `.unauthorized`, and the
     /// caller must restart the consent flow.
     func refresh(refreshToken: String) async throws -> ConnectorCredentials {
-        var fields = [
+        let fields = [
             "grant_type": "refresh_token",
             "refresh_token": refreshToken,
         ]
-        if configuration.clientSecret == nil {
-            fields["client_id"] = configuration.clientID
-        }
         let response = try await postToken(fields)
         return response.credentials(now: now(), previousRefresh: refreshToken)
     }
@@ -83,20 +78,22 @@ actor PolarOAuthClient {
     // MARK: - Token endpoint
 
     private func postToken(_ fields: [String: String]) async throws -> PolarTokenResponse {
-        var request = URLRequest(url: configuration.tokenURL)
+        var request = URLRequest(url: PolarClientConfiguration.tokenURL)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let secret = configuration.clientSecret {
-            let raw = "\(configuration.clientID):\(secret)"
-            let encoded = Data(raw.utf8).base64EncodedString()
-            request.setValue("Basic \(encoded)", forHTTPHeaderField: "Authorization")
-        }
+        let raw = "\(credentials.clientID):\(credentials.clientSecret)"
+        let encoded = Data(raw.utf8).base64EncodedString()
+        request.setValue("Basic \(encoded)", forHTTPHeaderField: "Authorization")
         request.httpBody = Self.formBody(fields)
 
         let (data, http) = try await PolarHTTP.send(request, on: session)
         guard (200...299).contains(http.statusCode) else {
-            logger.error("Token endpoint returned \(http.statusCode, privacy: .public)")
+            // The body is logged too: Polar's OAuth errors (RFC 6749 §5.2,
+            // e.g. `invalid_scope`, `invalid_client`, `unauthorized_client`)
+            // explain exactly what's wrong and never contain the secret.
+            let body = String(decoding: data, as: UTF8.self)
+            logger.error("Token endpoint returned \(http.statusCode, privacy: .public): \(body, privacy: .public)")
             throw PolarHTTP.failure(for: http)
         }
         do {

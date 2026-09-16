@@ -2,19 +2,22 @@ import XCTest
 @testable import FitBuddy
 
 final class PolarConnectorTests: XCTestCase {
-    private let configuration = PolarClientConfiguration(
-        clientID: "fitbuddy-client",
-        redirectURI: "fitbuddy://polar-oauth"
-    )
     private let epoch = Date(timeIntervalSince1970: 1_000_000)
+    private var oauth: StubPolarOAuthorizer!
+    private var credentialStore: StubPolarCredentialStore!
     private var sut: PolarConnector!
 
     override func setUp() {
         super.setUp()
+        oauth = StubPolarOAuthorizer()
+        credentialStore = StubPolarCredentialStore(
+            clientCredentials: PolarClientCredentials(clientID: "c", clientSecret: "s")
+        )
         sut = PolarConnector(
-            configuration: configuration,
+            accessLink: PolarAccessLinkClient(session: StubURLProtocol.makeSession()),
+            oauth: oauth,
+            credentialStore: credentialStore,
             memberID: "member-42",
-            session: StubURLProtocol.makeSession(),
             now: { [epoch] in epoch }
         )
     }
@@ -22,6 +25,8 @@ final class PolarConnectorTests: XCTestCase {
     override func tearDown() {
         StubURLProtocol.handler = nil
         sut = nil
+        credentialStore = nil
+        oauth = nil
         super.tearDown()
     }
 
@@ -46,17 +51,15 @@ final class PolarConnectorTests: XCTestCase {
         """#
     }
 
-    /// Routes the stub by path: token / users / exercises.
+    /// Routes the stub by path: users / exercises. The token endpoint is not
+    /// hit here — refreshes go through `oauth`, the double.
     private func route(
         exercisesStatus: Int = 200,
         exercisesBody: String = PolarConnectorTests.exercisesBody(),
-        usersStatus: Int = 201,
-        tokenBody: String = #"{"access_token":"fresh-at","refresh_token":"fresh-rt","expires_in":43199}"#
+        usersStatus: Int = 201
     ) {
         StubURLProtocol.handler = { request in
             switch request.url?.path {
-            case "/oauth/token":
-                return PolarTestSupport.http(200, for: request, body: tokenBody)
             case "/v3/users":
                 return PolarTestSupport.http(usersStatus, for: request)
             case "/v3/exercises":
@@ -122,6 +125,9 @@ final class PolarConnectorTests: XCTestCase {
 
     func testExpiredAccessTokenIsRefreshedBeforeTheDataCall() async throws {
         route()
+        await oauth.setRefreshResult(.success(
+            .oauth(accessToken: "fresh-at", refreshToken: "fresh-rt", expiresAt: epoch.addingTimeInterval(43_199))
+        ))
         try await sut.connect(credentials: liveCredentials(expiresIn: 10)) // inside the 60s leeway
 
         _ = try await sut.fetchActivities(since: .distantPast)
@@ -135,6 +141,26 @@ final class PolarConnectorTests: XCTestCase {
                 expiresAt: epoch.addingTimeInterval(43_199)
             )
         )
+        let stored = try await credentialStore.credentials()
+        XCTAssertEqual(stored, refreshed, "a refresh has to be persisted, not just held in memory")
+    }
+
+    /// Without stored client credentials there is no refresh grant to send —
+    /// the connection is simply rejected, same as a revoked refresh token.
+    func testRefreshWithoutStoredClientCredentialsIsRejected() async throws {
+        credentialStore = StubPolarCredentialStore()
+        sut = PolarConnector(
+            accessLink: PolarAccessLinkClient(session: StubURLProtocol.makeSession()),
+            oauth: oauth,
+            credentialStore: credentialStore,
+            memberID: "member-42",
+            now: { [epoch] in epoch }
+        )
+        try await sut.connect(credentials: liveCredentials(expiresIn: 10))
+
+        await assertThrowsConnectorError(.unauthorized) {
+            _ = try await self.sut.fetchActivities(since: .distantPast)
+        }
     }
 
     func testRateLimitedExerciseCallSurfacesRetryAfter() async throws {
@@ -186,9 +212,10 @@ final class PolarConnectorTests: XCTestCase {
         XCTAssertFalse(isValid)
     }
 
-    func testValidateWithoutCredentialsReturnsFalse() async throws {
-        let isValid = try await sut.validate()
-        XCTAssertFalse(isValid)
+    func testValidateWithoutCredentialsIsUnauthorized() async {
+        await assertThrowsConnectorError(.unauthorized) {
+            try await self.sut.validate()
+        }
     }
 
     // MARK: - disconnect

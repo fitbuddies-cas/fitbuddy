@@ -23,18 +23,15 @@ final class DataSourceStack: ObservableObject {
     let stravaOAuth: StravaOAuthService
     let stravaConnector: StravaConnector
     let polarCredentialStore = PolarCredentialStore()
-    /// `nil` when the team's `PolarTeamConfig.plist` (#155) is missing or
-    /// still holds its placeholder — a developer machine that has not
-    /// registered a Polar OAuth client yet. The app must still launch, just
-    /// without a `.polar` source in the registry.
-    let polarClientConfiguration: PolarClientConfiguration?
-    private(set) var polarOAuth: PolarOAuthService?
+    let polarOAuth: PolarOAuthService
+    /// Built once `registerConnectors()` has resolved the stable member id
+    /// (ADR-11 Nachtrag) — `nil` only in the brief window before that.
     private(set) var polarConnector: PolarConnector?
 
     init() {
         stravaOAuth = StravaOAuthService(webAuthenticator: WebAuthenticationSession())
         stravaConnector = StravaConnector(oauth: stravaOAuth, credentialStore: stravaCredentialStore)
-        polarClientConfiguration = try? PolarClientConfiguration.loadFromTeamConfig()
+        polarOAuth = PolarOAuthService(webAuthenticator: WebAuthenticationSession())
     }
 
     /// Registers every available connector with the registry. Run once at
@@ -44,21 +41,19 @@ final class DataSourceStack: ObservableObject {
         await registry.register(hevyConnector, for: .hevy)
         await registry.register(stravaConnector, for: .strava)
 
-        guard let polarClientConfiguration else { return }
         let memberID = await resolvedPolarMemberID()
-        let connector = PolarConnector(configuration: polarClientConfiguration, memberID: memberID)
-        polarConnector = connector
-        polarOAuth = PolarOAuthService(
-            configuration: polarClientConfiguration,
-            webAuthenticator: WebAuthenticationSession(),
-            credentialStore: polarCredentialStore
+        let connector = PolarConnector(
+            oauth: polarOAuth,
+            credentialStore: polarCredentialStore,
+            memberID: memberID
         )
+        polarConnector = connector
         await registry.register(connector, for: .polar)
     }
 
     /// The stable AccessLink `member-id` FitBuddy registers this user under
     /// (ADR-11): whatever is already stored, or a freshly generated one on
-    /// the very first launch that finds a Polar configuration.
+    /// the very first launch.
     private func resolvedPolarMemberID() async -> String {
         if let stored = try? await polarCredentialStore.memberID() {
             return stored

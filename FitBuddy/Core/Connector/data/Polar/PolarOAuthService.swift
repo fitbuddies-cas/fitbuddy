@@ -1,75 +1,68 @@
 import Foundation
+import OSLog
 
-/// Drives the interactive half of Polar's OAuth2 + PKCE flow (ADR-11, #156):
+/// Drives Polar's OAuth2 authorization-code flow against the *user's own*
+/// Polar API application (ADR-11 Nachtrag, BYO-app — mirrors
+/// `StravaOAuthService`):
 /// presents the consent page through the shared `WebAuthenticating` seam
-/// (#152), validates the callback, exchanges the code via `PolarOAuthClient`,
-/// and — on success — persists the resulting pair through
-/// `PolarCredentialStoring` before handing it back to the caller.
+/// (#152), validates the callback, and exchanges the code via
+/// `PolarOAuthClient`.
 ///
-/// Persisting here rather than in the connection ViewModel (Strava's split)
-/// is deliberate: Polar has no client-secret screen and no per-user
-/// application, so there is nothing left for the ViewModel to own besides
-/// starting the flow and reading the result back out of the store.
+/// Unlike the original design, this service does not persist anything —
+/// exactly like `StravaOAuthService` it takes the user's application
+/// credentials on every call, and the caller (`PolarConnectionViewModel`)
+/// stores the resulting pair. There is no team-wide client any more: every
+/// user registers their own application at `admin.polaraccesslink.com`.
 ///
 /// The `state` parameter is a fresh random value per authorization and the
-/// callback is rejected if it does not echo it, for the same reason
-/// `StravaOAuthService` checks it: a custom URL scheme is not exclusive to
-/// this app, so the state is what proves the callback answers *our* request.
+/// callback is rejected if it does not echo it: a custom URL scheme is not
+/// exclusive to this app, so the state is what proves the callback answers
+/// *our* request.
 actor PolarOAuthService: PolarOAuthorizing {
-    private let client: PolarOAuthClient
+    /// The scheme registered in `Info.plist`; `ASWebAuthenticationSession`
+    /// captures the redirect by it.
+    static let callbackScheme = "fitbuddy"
+
+    private static let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "PolarOAuthService")
+
     private let webAuthenticator: any WebAuthenticating
-    private let credentialStore: any PolarCredentialStoring
-    private let callbackScheme: String
+    private let session: URLSession
 
     /// - Parameters:
-    ///   - configuration: Supplies the authorization URL and the redirect URI
-    ///     whose scheme `ASWebAuthenticationSession` watches for.
     ///   - webAuthenticator: The browser seam. No default on purpose: the real
     ///     `WebAuthenticationSession` is main-actor bound and belongs to the
     ///     composition root.
-    ///   - credentialStore: Where the pair lands on success.
     ///   - session: Injectable for tests; defaults to the ephemeral
-    ///     `.fitBuddy` session so a token-bearing request never hits disk.
-    init(
-        configuration: PolarClientConfiguration,
-        webAuthenticator: any WebAuthenticating,
-        credentialStore: any PolarCredentialStoring,
-        session: URLSession = .fitBuddy
-    ) {
-        self.client = PolarOAuthClient(configuration: configuration, session: session)
+    ///     `.fitBuddy` session so a secret-bearing request never hits disk.
+    init(webAuthenticator: any WebAuthenticating, session: URLSession = .fitBuddy) {
         self.webAuthenticator = webAuthenticator
-        self.credentialStore = credentialStore
-        // `ASWebAuthenticationSession` matches purely on scheme, so the host
-        // and path of the redirect URI ("fitbuddy://polar/callback") do not
-        // matter here — only "fitbuddy" does.
-        self.callbackScheme = URL(string: configuration.redirectURI)?.scheme ?? "fitbuddy"
+        self.session = session
     }
 
     // MARK: - PolarOAuthorizing
 
-    func authorize() async throws -> ConnectorCredentials {
-        let pkce = PolarPKCE()
+    func authorize(_ credentials: PolarClientCredentials) async throws -> ConnectorCredentials {
+        let client = PolarOAuthClient(credentials: credentials, session: session)
         let state = Self.makeState()
 
-        let authorizationURL = await client.authorizationURL(pkce: pkce, state: state)
+        let authorizationURL = await client.authorizationURL(state: state)
         let callback: URL
         do {
             callback = try await webAuthenticator.authenticate(
                 url: authorizationURL,
-                callbackURLScheme: callbackScheme
+                callbackURLScheme: Self.callbackScheme
             )
         } catch {
-            throw error.isCancellation ? PolarOAuthError.cancelled : error
+            throw error.isCancellation ? PolarOAuthError.cancelled : PolarOAuthError.transport
         }
 
         let code = try Self.code(from: callback, expectedState: state)
-        let pair = try await client.exchange(code: code, pkce: pkce)
+        return try await client.exchange(code: code)
+    }
 
-        guard case .oauth(let accessToken, let refreshToken, let expiresAt) = pair else {
-            throw ConnectorError.invalidResponse
-        }
-        try await credentialStore.saveTokens(accessToken: accessToken, refreshToken: refreshToken, expiresAt: expiresAt)
-        return pair
+    func refresh(_ credentials: PolarClientCredentials, refreshToken: String) async throws -> ConnectorCredentials {
+        let client = PolarOAuthClient(credentials: credentials, session: session)
+        return try await client.refresh(refreshToken: refreshToken)
     }
 
     // MARK: - Callback validation
@@ -88,13 +81,27 @@ actor PolarOAuthService: PolarOAuthorizing {
         let items = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems ?? []
         func value(_ name: String) -> String? { items.first { $0.name == name }?.value }
 
-        guard value("state") == expectedState else { throw PolarOAuthError.stateMismatch }
+        // Diagnostic only — no secret or code value is logged, just which
+        // parameters the callback carried, so a failure here can be told
+        // apart from a token-endpoint one without needing device access.
+        logger.notice(
+            "Polar callback: host=\(callback.host ?? "-", privacy: .public) path=\(callback.path, privacy: .public) params=\(items.map(\.name).joined(separator: ","), privacy: .public)"
+        )
+
+        guard value("state") == expectedState else {
+            logger.error("Polar callback state mismatch (state present: \(value("state") != nil, privacy: .public))")
+            throw PolarOAuthError.stateMismatch
+        }
 
         if let error = value("error") {
+            logger.error("Polar callback carried error=\(error, privacy: .public) description=\(value("error_description") ?? "-", privacy: .public)")
             throw error == "access_denied" ? PolarOAuthError.accessDenied : PolarOAuthError.invalidCallback
         }
 
-        guard let code = value("code"), !code.isEmpty else { throw PolarOAuthError.invalidCallback }
+        guard let code = value("code"), !code.isEmpty else {
+            logger.error("Polar callback carried neither a code nor an error")
+            throw PolarOAuthError.invalidCallback
+        }
         return code
     }
 }

@@ -90,10 +90,26 @@ Zweite Frage: Polars Ausdauer-Kennzahlen (Ø/Max-Herzfrequenz, Kalorien, Trainin
 
 **Konsequenz:** Der Vergleich in der Kontext-Tabelle stimmt nicht mehr — Polar braucht, wie Strava, ein Secret, das ohne Backend nirgends sicher unterzubringen ist. Ein Secret im App-Binary ist aus jedem verteilten Build (TestFlight) extrahierbar; das gilt für ein Team-Secret genauso wie für ein persönliches.
 
-**Für die CAS-Abschlusspräsentation (v0-Demo-Scope):** Das Team-Secret wird ausschliesslich lokal in der gitignoreten `PolarTeamConfig.plist` gehalten (issue #155) und nur in einem Build verwendet, der auf dem Gerät des Vortragenden bleibt — nie über TestFlight oder sonst wie verteilt. Das ist dieselbe Art pragmatischer, dokumentierter PoC-Abwägung wie die BYO-Key-Entscheidung in `CLAUDE.md`, aber **ausdrücklich nicht v1-tauglich.**
+**Zwischenlösung (verworfen):** Für die CAS-Abschlusspräsentation war zunächst geplant, ein Team-Secret ausschliesslich lokal in einer gitignoreten `PolarTeamConfig.plist` zu halten und nur in einem nie verteilten Demo-Build zu verwenden. Das wurde **nicht umgesetzt** — siehe zweiter Nachtrag unten.
 
-**Für v1 braucht es eine echte Lösung, analog zur Wahl bei Strava (ADR-10):**
-1. **Backend-Proxy** — das Secret wandert auf einen Server, die App spricht nur noch mit dem eigenen Backend. Bricht ADR-4 (kein Server-Tier im PoC), ist aber der sauberste Weg für ein Produkt mit echten Nutzern.
-2. **BYO-App wie Strava** — jeder Nutzer registriert eine eigene Polar-App und trägt Client-ID + Secret in einem eigenen Credentials-Screen ein (analog `StravaCredentialsView`, #139); das Secret liegt dann im Keychain des jeweiligen Nutzers, nie im Binary. Verliert den heutigen Vorteil "kein Setup pro Nutzer", ist aber ohne Backend umsetzbar.
+## Nachtrag (2026-09-16, Teil 2): Polar wird auf BYO-App umgestellt
 
-Diese Entscheidung ist für v1 offen und nicht Teil des aktuellen PoC-Umfangs.
+Die Team-Secret-Zwischenlösung wurde noch vor der Demo verworfen, zugunsten der sauberen v1-Lösung: **Polar funktioniert jetzt exakt wie Strava (ADR-10) — jeder Nutzer registriert seine eigene AccessLink-App unter `admin.polaraccesslink.com` und trägt Client-ID und Client-Secret auf einem eigenen Credentials-Screen (`PolarCredentialsView`) ein.** Die Werte landen ausschliesslich in der Keychain dieses Nutzers, nie im App-Binary — dieselbe Architektur, die Strava schon aus genau diesem Grund verwendet.
+
+**Konsequenz für die ursprüngliche Entscheidung dieses ADRs:** Der in Zeile 19/23 behauptete Vorteil "kein Backend nötig, weil PKCE das Secret ersetzt" entfällt vollständig — Polar braucht strukturell exakt dasselbe Setup wie Strava. Die einzige verbleibende Differenz zwischen den beiden Connectoren ist das Datenprofil (Ausdauer/Herzfrequenz vs. GPS/Segmente) und der Persistenz-Split in `PolarConnector` (siehe Punkt 3 der ursprünglichen Entscheidung, weiterhin gültig).
+
+**Umgesetzt:** `PolarClientCredentials` (Domain-Typ, analog `StravaClientCredentials`), `PolarCredentialStoring.clientCredentials()/saveClientCredentials()`, `PolarCredentialsViewModel`/`PolarCredentialsView` (analog `StravaCredentialsView`, #139), `PolarConnectionState.missingCredentials`, und `PolarOAuthService`/`PolarOAuthClient`/`PolarConnector`, die die Credentials pro Aufruf statt aus einer Team-Config beziehen. `PolarTeamConfig.plist`/`.example` und der zugehörige Ladepfad sind entfernt — es gibt keine Build-Zeit-Konfiguration mehr.
+
+Die "Offene Punkte"-Tabelle oben ist damit für den Backend-Proxy-Punkt weiterhin gültig (er bleibt eine spätere, echte v1-Option gegenüber BYO-App), der BYO-App-Punkt ist jedoch erledigt, nicht mehr offen.
+
+## Nachtrag (2026-09-16, Teil 3): Falscher OAuth-Host — v3 und v4 sind zwei getrennte Systeme
+
+Der erste echte End-to-End-Verbindungsversuch (nach Teil 2, mit echten Nutzer-Credentials) schlug fehl mit "Polar did not send FitBuddy back correctly". Ursache: **`PolarClientConfiguration` zeigte auf die Autorisierungs-/Token-Endpunkte der v4-API (`auth.polar.com/oauth/authorize`, `auth.polar.com/oauth/token`) — der Connector spricht aber gegen die v3-Ressourcen-API (`www.polaraccesslink.com/v3/exercises`, Registrierung unter `admin.polaraccesslink.com`).** v3 und v4 sind laut offizieller Doku (`polar.com/accesslink-api` vs. `polar.com/polar-api-v4`) getrennte Systeme mit getrennten Hosts; ein v3-registrierter Client kann sich gegen v4-Endpunkte nicht authentisieren.
+
+**Fix:** `PolarClientConfiguration` zeigt jetzt auf die dokumentierten v3-Endpunkte:
+- Autorisierung: `https://flow.polar.com/oauth2/authorization`
+- Token: `https://polarremote.com/v2/oauth2/token`
+
+**Zusätzliche Korrektur:** v3s Autorisierungs-Endpunkt dokumentiert kein `code_challenge`/`code_challenge_method`-Parameter — PKCE ist dort kein unterstützter Mechanismus (anders als bei v4, wo dieser ADR es ursprünglich vermutet hatte). `PolarPKCE` und alle PKCE-Parameter sind aus dem Authorization-Code-Flow entfernt; die Absicherung des Callbacks läuft weiterhin über den zufälligen `state`-Parameter.
+
+**Lehre:** Diese ADR-Historie enthält jetzt drei Korrekturen zur ursprünglichen OAuth-Prämisse (PKCE-only → Secret zwingend → falscher Host). Vor jeder weiteren Polar-Änderung: gegen die offizielle Doku der **v3** AccessLink-API verifizieren, nicht gegen v4 — beide tauchen bei einer Websuche zu "Polar OAuth" gleichberechtigt auf, sind aber nicht kompatibel.

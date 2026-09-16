@@ -2,17 +2,14 @@ import XCTest
 @testable import FitBuddy
 
 final class PolarOAuthClientTests: XCTestCase {
-    private let configuration = PolarClientConfiguration(
-        clientID: "fitbuddy-client",
-        redirectURI: "fitbuddy://polar-oauth"
-    )
+    private let credentials = PolarClientCredentials(clientID: "fitbuddy-client", clientSecret: "s3cr3t")
     private var sut: PolarOAuthClient!
     private let epoch = Date(timeIntervalSince1970: 1_000_000)
 
     override func setUp() {
         super.setUp()
         sut = PolarOAuthClient(
-            configuration: configuration,
+            credentials: credentials,
             session: StubURLProtocol.makeSession(),
             now: { [epoch] in epoch }
         )
@@ -24,26 +21,31 @@ final class PolarOAuthClientTests: XCTestCase {
         super.tearDown()
     }
 
-    func testAuthorizationURLCarriesPKCEChallengeAndRegisteredClientParameters() async {
-        let pkce = PolarPKCE(verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")
-
-        let url = await sut.authorizationURL(pkce: pkce, state: "xyz")
+    /// Nachtrag zu ADR-11: AccessLink v3's authorization endpoint is
+    /// `flow.polar.com`, not the unrelated v4 `auth.polar.com` host, and it
+    /// does not document a PKCE parameter.
+    func testAuthorizationURLCarriesRegisteredClientParametersOnTheV3Host() async {
+        let url = await sut.authorizationURL(state: "xyz")
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems ?? []
         func value(_ name: String) -> String? { items.first { $0.name == name }?.value }
 
-        XCTAssertEqual(url.host, "auth.polar.com")
+        XCTAssertEqual(url.host, "flow.polar.com")
         XCTAssertEqual(value("response_type"), "code")
         XCTAssertEqual(value("client_id"), "fitbuddy-client")
-        XCTAssertEqual(value("redirect_uri"), "fitbuddy://polar-oauth")
-        XCTAssertEqual(value("code_challenge"), "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")
-        XCTAssertEqual(value("code_challenge_method"), "S256")
+        XCTAssertEqual(value("redirect_uri"), "fitbuddy://polar/callback")
         XCTAssertEqual(value("state"), "xyz")
     }
 
-    func testExchangeSendsPKCEVerifierAndPublicClientIDInTheBody() async throws {
+    /// Nachtrag zu ADR-11: every token request authenticates via HTTP Basic
+    /// `clientID:clientSecret` — there is no public-client fallback any more.
+    func testExchangeAuthenticatesWithHTTPBasicOnTheV3TokenHost() async throws {
         nonisolated(unsafe) var body: String?
+        nonisolated(unsafe) var authorizationHeader: String?
+        nonisolated(unsafe) var requestedHost: String?
         StubURLProtocol.handler = { request in
             body = PolarTestSupport.body(of: request)
+            authorizationHeader = request.value(forHTTPHeaderField: "Authorization")
+            requestedHost = request.url?.host
             return PolarTestSupport.http(
                 200,
                 for: request,
@@ -51,16 +53,16 @@ final class PolarOAuthClientTests: XCTestCase {
             )
         }
 
-        let credentials = try await sut.exchange(
-            code: "auth-code",
-            pkce: PolarPKCE(verifier: "verifier-value")
-        )
+        let credentials = try await sut.exchange(code: "auth-code")
 
         let sent = try XCTUnwrap(body)
         XCTAssertTrue(sent.contains("grant_type=authorization_code"))
         XCTAssertTrue(sent.contains("code=auth-code"))
-        XCTAssertTrue(sent.contains("code_verifier=verifier-value"))
-        XCTAssertTrue(sent.contains("client_id=fitbuddy-client"))
+        XCTAssertFalse(sent.contains("code_verifier="), "AccessLink v3 does not support PKCE")
+        XCTAssertFalse(sent.contains("client_id="), "the client id travels via HTTP Basic, not the body")
+        XCTAssertEqual(requestedHost, "polarremote.com")
+        let expectedAuth = "Basic " + Data("fitbuddy-client:s3cr3t".utf8).base64EncodedString()
+        XCTAssertEqual(authorizationHeader, expectedAuth)
         XCTAssertEqual(
             credentials,
             .oauth(accessToken: "at", refreshToken: "rt", expiresAt: epoch.addingTimeInterval(43_199))
@@ -94,7 +96,7 @@ final class PolarOAuthClientTests: XCTestCase {
         StubURLProtocol.handler = { _ in throw URLError(.notConnectedToInternet) }
 
         await assertThrowsConnectorError(.networkUnavailable) {
-            try await self.sut.exchange(code: "c", pkce: PolarPKCE())
+            try await self.sut.exchange(code: "c")
         }
     }
 }

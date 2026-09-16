@@ -2,13 +2,15 @@ import Foundation
 
 /// UI state of the Polar connection screen (#157, US-5 AC1).
 ///
-/// Slimmer than `StravaConnectionState`: there is no `.missingCredentials` —
-/// Polar is a PKCE public client with a team-wide `clientID` (ADR-11), so
-/// there is no per-user application to set up before "Connect" makes sense.
+/// Mirrors `StravaConnectionState` (ADR-11 Nachtrag, BYO-app): Polar's token
+/// endpoint requires the user's own application credentials just like
+/// Strava's does, so `.missingCredentials` is back.
 enum PolarConnectionState: Equatable {
-    /// `bootstrap()` has not read the store yet.
+    /// `bootstrap()` has not read the stores yet.
     case unknown
-    /// No token pair stored. "Connect" is available.
+    /// No client ID and secret stored — nothing to authorize with.
+    case missingCredentials
+    /// Credentials stored, no token pair. "Connect" is available.
     case idle
     /// The browser sheet is up, or the code is being exchanged.
     case authorizing

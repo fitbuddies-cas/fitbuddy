@@ -2,17 +2,26 @@ import SwiftUI
 
 /// Connect, inspect and disconnect the Polar account (#157, US-5 AC1).
 ///
-/// Simpler than `StravaConnectionView`: there is no application-credentials
-/// screen to link to — Polar is a PKCE public client with a team-wide
-/// `clientID` (ADR-11) — so the status card and the two buttons are the whole
-/// screen.
+/// Mirrors `StravaConnectionView` (ADR-11 Nachtrag, BYO-app): one card states
+/// where things stand — no credentials, ready to connect, connected until a
+/// time, expired — and the buttons under it are the only actions there are.
+/// The application credentials have their own screen, reached from here; the
+/// OAuth sheet itself is presented by the system on top of this view.
 struct PolarConnectionView: View {
     @StateObject private var viewModel: PolarConnectionViewModel
+    private let makeCredentialsViewModel: @MainActor () -> PolarCredentialsViewModel
 
-    /// - Parameter viewModel: Built lazily — the autoclosure is evaluated
-    ///   once, when SwiftUI first creates the view's state.
-    init(viewModel: @autoclosure @escaping () -> PolarConnectionViewModel) {
+    /// - Parameters:
+    ///   - viewModel: Built lazily — the autoclosure is evaluated once, when
+    ///     SwiftUI first creates the view's state.
+    ///   - makeCredentialsViewModel: Called once per push of the credentials
+    ///     screen.
+    init(
+        viewModel: @autoclosure @escaping () -> PolarConnectionViewModel,
+        makeCredentialsViewModel: @escaping @MainActor () -> PolarCredentialsViewModel
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel())
+        self.makeCredentialsViewModel = makeCredentialsViewModel
     }
 
     private var isAuthorizing: Bool { viewModel.state == .authorizing }
@@ -30,17 +39,22 @@ struct PolarConnectionView: View {
                     errorBanner(for: failure)
                         .padding(.top, 18)
                 }
+                credentialsLink
+                    .padding(.top, 18)
                 privacyNote
                     .padding(.top, 18)
             }
             .padding(20)
         }
         .background(Color.fbBackground)
-        .navigationTitle(ConnectorSource.polar.displayName)
+        .navigationTitle(PolarKeyPresentation.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) { actions.padding(16) }
         .animation(.easeOut(duration: 0.15), value: viewModel.state)
         .task { await viewModel.bootstrap() }
+        // Coming back from the credentials screen: the pair may have just
+        // been entered (or replaced), and the buttons have to reflect it.
+        .onAppear { Task { await viewModel.refreshStoredState() } }
     }
 
     // MARK: - Sections
@@ -55,7 +69,7 @@ struct PolarConnectionView: View {
 
     private var statusIcon: String {
         switch viewModel.state {
-        case .unknown, .idle: return "link"
+        case .unknown, .idle, .missingCredentials: return "link"
         case .authorizing: return "safari"
         case .connected: return "checkmark.circle"
         case .expired: return "exclamationmark.arrow.circlepath"
@@ -66,6 +80,7 @@ struct PolarConnectionView: View {
     private var statusTitle: String {
         switch viewModel.state {
         case .unknown: return "Checking…"
+        case .missingCredentials: return "Not set up"
         case .idle: return "Not connected"
         case .authorizing: return "Waiting for Polar…"
         case .connected: return "Connected"
@@ -78,6 +93,8 @@ struct PolarConnectionView: View {
         switch viewModel.state {
         case .unknown:
             return "Reading the stored connection."
+        case .missingCredentials:
+            return "Enter the credentials of your Polar API application first. FitBuddy connects through an application that belongs to you."
         case .idle, .failed:
             return "Connect to pull your Polar endurance sessions into the dashboard alongside your Hevy workouts."
         case .authorizing:
@@ -104,6 +121,16 @@ struct PolarConnectionView: View {
             Text(failure.message)
                 .font(.footnote)
                 .foregroundStyle(Color.fbInkSecondary)
+            if failure.pointsToCredentials {
+                NavigationLink {
+                    PolarCredentialsView(viewModel: makeCredentialsViewModel())
+                } label: {
+                    Text("Check the application credentials →")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color.fbRed)
+                }
+                .padding(.top, 6)
+            }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -115,6 +142,40 @@ struct PolarConnectionView: View {
         )
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.PolarConnection.errorBanner)
+    }
+
+    private var credentialsLink: some View {
+        NavigationLink {
+            PolarCredentialsView(viewModel: makeCredentialsViewModel())
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "key.horizontal")
+                    .font(.system(size: 16))
+                    .foregroundStyle(Color.fbAccent)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(viewModel.state == .missingCredentials ? "Enter API application credentials" : "API application credentials")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Color.fbInk)
+                    Text("Client ID and client secret from admin.polaraccesslink.com")
+                        .font(.footnote)
+                        .foregroundStyle(Color.fbInkSecondary)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.fbMuted)
+            }
+            .padding(14)
+            .background(Color.fbCard)
+            .clipShape(RoundedRectangle(cornerRadius: FBRadius.control))
+            .overlay(
+                RoundedRectangle(cornerRadius: FBRadius.control)
+                    .strokeBorder(Color.fbBorder, lineWidth: 1)
+            )
+        }
+        .disabled(isAuthorizing)
+        .accessibilityIdentifier(AccessibilityID.PolarConnection.credentialsLink)
     }
 
     private var privacyNote: some View {
@@ -154,10 +215,10 @@ struct PolarConnectionView: View {
 
     private var connectTitle: String {
         switch viewModel.state {
-        case .authorizing: return "Waiting for \(ConnectorSource.polar.displayName)…"
+        case .authorizing: return "Waiting for \(PolarKeyPresentation.displayName)…"
         case .connected, .expired: return "Reconnect"
         case .failed: return "Try again"
-        case .unknown, .idle: return "Connect with \(ConnectorSource.polar.displayName)"
+        case .unknown, .missingCredentials, .idle: return "Connect with \(PolarKeyPresentation.displayName)"
         }
     }
 }

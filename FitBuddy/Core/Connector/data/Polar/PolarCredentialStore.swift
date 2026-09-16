@@ -12,6 +12,40 @@ actor PolarCredentialStore: PolarCredentialStoring {
         self.keychain = keychain
     }
 
+    // MARK: - Client credentials
+
+    func clientCredentials() async throws -> PolarClientCredentials? {
+        guard let clientID = try await nonEmpty(.polarClientID),
+              let clientSecret = try await nonEmpty(.polarClientSecret)
+        else { return nil }
+
+        return PolarClientCredentials(clientID: clientID, clientSecret: clientSecret)
+    }
+
+    func saveClientCredentials(_ credentials: PolarClientCredentials) async throws {
+        var written: [KeychainKey] = []
+        do {
+            try await keychain.save(credentials.clientID, for: .polarClientID)
+            written.append(.polarClientID)
+            try await keychain.save(credentials.clientSecret, for: .polarClientSecret)
+        } catch {
+            for key in written {
+                try? await keychain.delete(key)
+            }
+            throw error
+        }
+    }
+
+    /// Reads `key`, treating an empty string as absent: for every caller here
+    /// a blank secret is not usable, and the distinction would only produce a
+    /// request that Polar rejects.
+    private func nonEmpty(_ key: KeychainKey) async throws -> String? {
+        guard let value = try await keychain.read(key), !value.isEmpty else { return nil }
+        return value
+    }
+
+    // MARK: - Tokens
+
     func credentials() async throws -> ConnectorCredentials? {
         guard let accessToken = try await keychain.read(.polarAccessToken),
               let refreshToken = try await keychain.read(.polarRefreshToken),
@@ -52,9 +86,28 @@ actor PolarCredentialStore: PolarCredentialStoring {
     }
 
     func clear() async throws {
-        try await keychain.delete(.polarAccessToken)
-        try await keychain.delete(.polarRefreshToken)
-        try await keychain.delete(.polarTokenExpiry)
-        try await keychain.delete(.polarMemberID)
+        // Every delete is attempted even if an earlier one fails: leaving a
+        // live token behind because the client ID could not be removed would be
+        // the worse outcome. The first error is reported afterwards.
+        var firstError: Error?
+        for key in Self.ownedKeys {
+            do {
+                try await keychain.delete(key)
+            } catch {
+                firstError = firstError ?? error
+            }
+        }
+        if let firstError { throw firstError }
     }
+
+    /// The items this store owns. Deliberately not `KeychainKey.allCases` —
+    /// clearing Polar must not touch the Hevy or Strava keys.
+    private static let ownedKeys: [KeychainKey] = [
+        .polarClientID,
+        .polarClientSecret,
+        .polarAccessToken,
+        .polarRefreshToken,
+        .polarTokenExpiry,
+        .polarMemberID,
+    ]
 }

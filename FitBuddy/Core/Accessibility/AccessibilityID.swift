@@ -44,10 +44,18 @@ enum AccessibilityID {
         static let errorBanner = "stravaConnection.errorBanner"
     }
 
+    enum PolarCredentials {
+        static let clientIDField = "polarCredentials.clientIDField"
+        static let clientSecretField = "polarCredentials.clientSecretField"
+        static let saveButton = "polarCredentials.saveButton"
+        static let errorBanner = "polarCredentials.errorBanner"
+    }
+
     enum PolarConnection {
         static let status = "polarConnection.status"
         static let connectButton = "polarConnection.connectButton"
         static let disconnectButton = "polarConnection.disconnectButton"
+        static let credentialsLink = "polarConnection.credentialsLink"
         static let errorBanner = "polarConnection.errorBanner"
     }
 

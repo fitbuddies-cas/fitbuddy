@@ -20,9 +20,8 @@ struct SettingsView: View {
 
     private let makeStravaConnectionViewModel: @MainActor () -> StravaConnectionViewModel
     private let makeStravaCredentialsViewModel: @MainActor () -> StravaCredentialsViewModel
-    /// `nil` when the team has no Polar client configured on this build
-    /// (#159) — the row and the route are both left out of the list.
-    private let makePolarConnectionViewModel: (@MainActor () -> PolarConnectionViewModel)?
+    private let makePolarConnectionViewModel: @MainActor () -> PolarConnectionViewModel
+    private let makePolarCredentialsViewModel: @MainActor () -> PolarCredentialsViewModel
 
     /// - Parameters:
     ///   - viewModel: Built lazily — the autoclosure is evaluated once, when
@@ -35,19 +34,23 @@ struct SettingsView: View {
     ///   - makeStravaCredentialsViewModel: Called once per push of the Strava
     ///     credentials screen (#139), from the connection screen.
     ///   - makePolarConnectionViewModel: Called once per push of the Polar
-    ///     connection screen (#157); `nil` hides the Polar row entirely.
+    ///     connection screen (#157).
+    ///   - makePolarCredentialsViewModel: Called once per push of the Polar
+    ///     credentials screen (ADR-11 Nachtrag), from the connection screen.
     init(
         viewModel: @autoclosure @escaping () -> SettingsViewModel,
         path: Binding<[SettingsRoute]> = .constant([]),
         makeStravaConnectionViewModel: @escaping @MainActor () -> StravaConnectionViewModel,
         makeStravaCredentialsViewModel: @escaping @MainActor () -> StravaCredentialsViewModel = { StravaCredentialsViewModel() },
-        makePolarConnectionViewModel: (@MainActor () -> PolarConnectionViewModel)? = nil
+        makePolarConnectionViewModel: @escaping @MainActor () -> PolarConnectionViewModel,
+        makePolarCredentialsViewModel: @escaping @MainActor () -> PolarCredentialsViewModel = { PolarCredentialsViewModel() }
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
         _path = path
         self.makeStravaConnectionViewModel = makeStravaConnectionViewModel
         self.makeStravaCredentialsViewModel = makeStravaCredentialsViewModel
         self.makePolarConnectionViewModel = makePolarConnectionViewModel
+        self.makePolarCredentialsViewModel = makePolarCredentialsViewModel
     }
 
     var body: some View {
@@ -64,9 +67,10 @@ struct SettingsView: View {
                             makeCredentialsViewModel: makeStravaCredentialsViewModel
                         )
                     case .polar:
-                        if let makePolarConnectionViewModel {
-                            PolarConnectionView(viewModel: makePolarConnectionViewModel())
-                        }
+                        PolarConnectionView(
+                            viewModel: makePolarConnectionViewModel(),
+                            makeCredentialsViewModel: makePolarCredentialsViewModel
+                        )
                     }
                 }
         }
@@ -174,9 +178,7 @@ struct SettingsView: View {
                 canDelete: viewModel.hevyKeyMask != nil
             )
             stravaRow
-            if makePolarConnectionViewModel != nil {
-                polarRow
-            }
+            polarRow
         } header: {
             Text("TRAINING DATA")
                 .font(.fbLabel)
@@ -324,15 +326,15 @@ struct SettingsView: View {
     }
 
     /// Entry point to the Polar connection (#157): connect, status,
-    /// disconnect. Shown only when a Polar client is configured for this
-    /// build (#159).
+    /// disconnect, and from there the application credentials (ADR-11
+    /// Nachtrag, BYO-app like Strava).
     private var polarRow: some View {
         NavigationLink(value: SettingsRoute.polar) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(ConnectorSource.polar.displayName)
+                Text(PolarKeyPresentation.displayName)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(Color.fbInk)
-                Text("Connection")
+                Text("Connection and API application")
                     .font(.footnote)
                     .foregroundStyle(Color.fbInkSecondary)
             }

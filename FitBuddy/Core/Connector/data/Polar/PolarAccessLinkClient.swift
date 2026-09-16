@@ -11,7 +11,7 @@ actor PolarAccessLinkClient {
     private let session: URLSession
     private let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "PolarAccessLinkClient")
 
-    init(baseURL: URL, session: URLSession = .fitBuddy) {
+    init(baseURL: URL = PolarClientConfiguration.accessLinkBaseURL, session: URLSession = .fitBuddy) {
         self.baseURL = baseURL
         self.session = session
     }

@@ -1,18 +1,18 @@
 import Foundation
 
-/// Drives the Polar connection screen (#157, US-5 AC1): runs the OAuth flow,
-/// keeps the registry in step with what is stored, and tears the connection
-/// down again.
+/// Drives the Polar connection screen (#157, US-5 AC1): runs the OAuth flow
+/// with the user's own application credentials, keeps the resulting token pair
+/// and the registry in step, and tears the connection down again.
 ///
-/// Simpler than `StravaConnectionViewModel` in one respect: `PolarOAuthService`
-/// already persists the token pair on a successful `authorize()` (ADR-11,
-/// #156), so this type only has to hand the result to the registry — there is
-/// no separate "store, then connect" step to keep consistent under a crash.
+/// Mirrors `StravaConnectionViewModel` (ADR-11 Nachtrag, BYO-app): a pair that
+/// came back from the browser is stored first and handed to the registry
+/// second, so a crash in between leaves a stored pair the next launch can
+/// pick up rather than a connection only the registry remembers.
 @MainActor
 final class PolarConnectionViewModel: ObservableObject {
     @Published private(set) var state: PolarConnectionState = .unknown
 
-    /// Invoked after the registry accepted a freshly stored pair. The
+    /// Invoked after a pair was stored and the registry accepted it. The
     /// dashboard has to sync again — its own `.task` does not fire when the
     /// user switches back to it.
     var onConnected: (() -> Void)?
@@ -48,13 +48,13 @@ final class PolarConnectionViewModel: ObservableObject {
 
     // MARK: - Derived
 
-    /// "Connect" (or "Reconnect") is offered whenever no flow is running — a
-    /// connected source can be reconnected too, which is how a pair the user
-    /// revoked on polar.com is renewed.
+    /// "Connect" (or "Reconnect") is offered whenever credentials are in
+    /// place and no flow is running — a connected source can be reconnected
+    /// too, which is how a pair tied to replaced credentials is renewed.
     var canConnect: Bool {
         switch state {
         case .idle, .connected, .expired, .failed: return true
-        case .unknown, .authorizing: return false
+        case .unknown, .missingCredentials, .authorizing: return false
         }
     }
 
@@ -62,43 +62,59 @@ final class PolarConnectionViewModel: ObservableObject {
     var isConnected: Bool {
         switch state {
         case .connected, .expired: return true
-        case .unknown, .idle, .authorizing, .failed: return false
+        case .unknown, .missingCredentials, .idle, .authorizing, .failed: return false
         }
     }
 
     // MARK: - Lifecycle
 
-    /// Resolves `.unknown` from what is stored.
+    /// Resolves `.unknown` from what is stored: no credentials, credentials
+    /// without a pair, or a pair the registry is handed so its expiry
+    /// bookkeeping starts.
     func bootstrap() async {
         guard state == .unknown else { return }
         await refreshStoredState()
     }
 
-    /// Re-reads the store and hands a stored pair to the registry so the
-    /// renewal prompt and the sync see the same connection this screen does.
-    /// A running flow is left alone.
+    /// Re-reads the stores, e.g. after the user came back from the
+    /// credentials screen. A running flow is left alone.
     func refreshStoredState() async {
         guard state != .authorizing else { return }
+
+        let client = try? await credentialStore.clientCredentials()
+        guard client != nil else {
+            state = .missingCredentials
+            return
+        }
 
         guard let stored = try? await credentialStore.credentials() else {
             state = .idle
             return
         }
 
+        // A pair the previous launch stored: hand it to the registry so the
+        // renewal prompt and the sync see the same connection this screen
+        // does. A connector that refuses it (empty token) leaves the source
+        // disconnected, and the screen offers to connect afresh.
         try? await registry.connect(.polar, credentials: stored)
         state = Self.state(from: await registry.state(of: .polar, now: now()))
     }
 
-    /// Runs the browser flow and, on success, connects the registry to the
-    /// pair `PolarOAuthService` already stored.
+    /// Runs the browser flow and, on success, stores the pair and connects the
+    /// registry.
     func connect() async {
         guard canConnect else { return }
         let resting = state
-        state = .authorizing
 
+        guard let client = try? await credentialStore.clientCredentials() else {
+            state = .missingCredentials
+            return
+        }
+
+        state = .authorizing
         let pair: ConnectorCredentials
         do {
-            pair = try await oauth.authorize()
+            pair = try await oauth.authorize(client)
         } catch let error as PolarOAuthError {
             // A dismissed sheet is not a failure: back to where the user was.
             state = PolarConnectionFailure(error).map { .failed($0) } ?? resting
@@ -111,17 +127,24 @@ final class PolarConnectionViewModel: ObservableObject {
             return
         }
 
-        guard case let .oauth(_, _, expiresAt) = pair else {
+        guard case let .oauth(accessToken, refreshToken, expiresAt) = pair else {
             state = .failed(.invalidResponse)
+            return
+        }
+
+        do {
+            try await credentialStore.saveTokens(accessToken: accessToken, refreshToken: refreshToken, expiresAt: expiresAt)
+        } catch {
+            state = .failed(.keychain)
             return
         }
 
         do {
             try await registry.connect(.polar, credentials: pair)
         } catch {
-            // The pair is already stored, so the next launch will retry the
-            // hand-over; for now the screen cannot claim a connection the
-            // registry does not have.
+            // The pair is stored, so the next launch will retry the hand-over;
+            // for now the screen cannot claim a connection the registry does
+            // not have.
             state = .failed(.invalidResponse)
             return
         }
@@ -131,8 +154,8 @@ final class PolarConnectionViewModel: ObservableObject {
     }
 
     /// Tears the connection down: the registry forgets it, every Polar item
-    /// leaves the Keychain, and the cached Polar sessions go. The other
-    /// sources are not touched.
+    /// leaves the Keychain — application credentials included — and the
+    /// cached Polar sessions go. The other sources are not touched.
     func disconnect() async {
         guard state != .authorizing else { return }
 
@@ -144,7 +167,7 @@ final class PolarConnectionViewModel: ObservableObject {
             return
         }
         await sessionReset.discardCachedWorkouts(from: .polar)
-        state = .idle
+        state = .missingCredentials
         onDisconnected?()
     }
 
