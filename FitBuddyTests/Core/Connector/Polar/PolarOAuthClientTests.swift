@@ -79,6 +79,16 @@ final class PolarOAuthClientTests: XCTestCase {
         )
     }
 
+    /// A missing `expires_in` falls back to v3's one-year lifetime, not to
+    /// Strava's twelve hours.
+    func testAMissingLifetimeDefaultsToAboutAYear() throws {
+        let data = Data(#"{"access_token":"at"}"#.utf8)
+
+        let response = try JSONDecoder().decode(PolarTokenResponse.self, from: data)
+
+        XCTAssertEqual(response.expiresIn, 31_535_999)
+    }
+
     func testADeadRefreshTokenComesBackAsUnauthorized() async {
         StubURLProtocol.handler = { request in
             PolarTestSupport.http(400, for: request, body: #"{"error":"invalid_grant"}"#)

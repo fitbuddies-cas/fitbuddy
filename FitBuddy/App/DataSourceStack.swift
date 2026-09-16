@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// The app's fitness-data sources, built once and shared (#140).
 ///
@@ -17,6 +18,8 @@ import Foundation
 /// publishes nothing; the conformance is only what `@StateObject` asks for.
 @MainActor
 final class DataSourceStack: ObservableObject {
+    private static let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "DataSourceStack")
+
     let registry = ConnectorRegistry()
     let hevyConnector = HevyConnector()
     let stravaCredentialStore = StravaCredentialStore()
@@ -38,7 +41,7 @@ final class DataSourceStack: ObservableObject {
         await registry.register(hevyConnector, for: .hevy)
         await registry.register(stravaConnector, for: .strava)
 
-        let memberID = await resolvedPolarMemberID()
+        let memberID = await Self.resolvedPolarMemberID(from: polarCredentialStore)
         let connector = PolarConnector(
             oauth: polarOAuth,
             credentialStore: polarCredentialStore,
@@ -50,12 +53,26 @@ final class DataSourceStack: ObservableObject {
     /// The stable AccessLink `member-id` FitBuddy registers this user under
     /// (ADR-11): whatever is already stored, or a freshly generated one on
     /// the very first launch.
-    private func resolvedPolarMemberID() async -> String {
-        if let stored = try? await polarCredentialStore.memberID() {
+    ///
+    /// A Keychain that refuses the read (prewarmed launch, device still
+    /// locked) is not "no ID yet": the stored ID may well exist, so the
+    /// stand-in generated for this process is not saved — saving it would
+    /// replace the stable ID once the Keychain opens up. AccessLink answers a
+    /// registration under the stand-in with `409`, which the connector treats
+    /// as registered.
+    static func resolvedPolarMemberID(from store: any PolarCredentialStoring) async -> String {
+        let stored: String?
+        do {
+            stored = try await store.memberID()
+        } catch {
+            logger.error("Polar member-id unreadable, not replacing it: \(error, privacy: .public)")
+            return UUID().uuidString
+        }
+        if let stored {
             return stored
         }
         let generated = UUID().uuidString
-        try? await polarCredentialStore.saveMemberID(generated)
+        try? await store.saveMemberID(generated)
         return generated
     }
 }

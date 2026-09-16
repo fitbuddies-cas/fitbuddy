@@ -54,7 +54,8 @@ actor StubPolarCredentialStore: PolarCredentialStoring {
     }
 
     func memberID() throws -> String? {
-        storedMemberID
+        if failReads { throw Failure.injected }
+        return storedMemberID
     }
 
     func saveMemberID(_ memberID: String) throws {

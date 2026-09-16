@@ -44,9 +44,13 @@ Der Hard-Logout (US-1 AC3) löscht alle sechs samt der gecachten Polar-Trainings
 
 **5. Integration analog Strava.** `PolarConnector` implementiert `FitnessConnector` unverändert und ist in `DataSourceStack`/`ConnectorRegistry` registriert. `WorkoutSyncService` bezieht Polar in den Sync ein, `Activity.source = .polar` hält den Cache quellengetrennt. Settings bieten Verbinden, Status und Trennen (`PolarConnectionView`). Consent v2 und Privacy Policy nennen Polar als Datenempfänger.
 
-**6. `Activity` wird additiv um `metrics: ActivityMetrics?` erweitert** (`averageHeartRate`, `maximumHeartRate`, `activeCalories`, `distanceMeters`, `durationSeconds`, `trainingLoad`, `sport`, alle optional). Hevy und Strava lassen den Block `nil`, Dashboard und Prompt-Builder bleiben ohne Änderung gültig.
+**6. `Activity` wird additiv um `metrics: ActivityMetrics?` erweitert** (`averageHeartRate`, `maximumHeartRate`, `activeCalories`, `distanceMeters`, `durationSeconds`, `trainingLoad`, `sport`, alle optional). Hevy und Strava lassen den Block `nil`.
 
-**7. Schlaf-, HRV- und Recovery-Daten bleiben ausgeschlossen.** Sie sind tages-, nicht trainingsförmig und passen nicht in `Activity` — dasselbe Problem wie HealthKit (`W-5`, [[ADR-6]]).
+**7. Polar-Sessions bleiben wie Strava aus den Kraft-Auswertungen draussen (v0).** `ConnectorSource.isEnduranceSource` markiert Strava und Polar; Analyse-Prompt, Übungsliste, Progressionskurve und Muskel-Split lassen solche Sessions aus, die Detailansicht zeigt kein «0 kg». Die Eigenschaft ist exhaustiv, damit jede künftige Quelle sich einordnen muss.
+
+**8. Schlaf-, HRV- und Recovery-Daten bleiben ausgeschlossen.** Sie sind tages-, nicht trainingsförmig und passen nicht in `Activity` — dasselbe Problem wie HealthKit (`W-5`, [[ADR-6]]).
+
+**9. Die Member-ID bleibt stabil.** FitBuddy erzeugt sie beim ersten Start und speichert sie. Ist der Keychain beim Start nicht lesbar, gilt für diesen Prozess eine Ersatz-ID, die nicht gespeichert wird; AccessLink beantwortet deren Registrierung mit `409`.
 
 **Code-Ablage:** `PolarConnector`, `PolarOAuthClient`, `PolarOAuthService`, `PolarAccessLinkClient`, `PolarCredentialStore`, `PolarClientConfiguration` und die DTOs unter `Core/Connector/data/Polar/`; Credential-, Fehler- und Protocol-Typen sowie `ActivityMetrics` unter `Core/Connector/domain/`; Screens samt ViewModels unter `Features/Settings/`. Die Web-Auth-Naht `WebAuthenticating` wird mit Strava geteilt.
 
@@ -78,3 +82,4 @@ Der Hard-Logout (US-1 AC3) löscht alle sechs samt der gecachten Polar-Trainings
 | SwiftData-Persistenz von `Activity.metrics` | Hoch | v1 |
 | Migration auf v4 `GET /training-sessions` — prüfen, ob v4 auch Trainings vor der Autorisierung liefert | Mittel | v1 |
 | Import bestehender Polar-Historie (Flow-Datenexport als JSON bzw. FIT/TCX) | Niedrig | v1 |
+| Beim Trennen `DELETE /v3/users/{user-id}` aufrufen, damit Polar das Token widerruft und die Registrierung aufhebt | Mittel | v1 |

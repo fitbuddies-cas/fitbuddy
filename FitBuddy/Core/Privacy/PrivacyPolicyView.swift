@@ -33,8 +33,9 @@ struct PrivacyPolicyView: View {
                             (Claude, Gemini, and/or Mistral), and — for Strava — the client ID \
                             and client secret of your own Strava API application together with \
                             the access and refresh tokens Strava issues for it, and — for Polar \
-                            — the OAuth access and refresh tokens Polar issues once you authorize \
-                            FitBuddy.
+                            — the client ID and client secret of your own Polar AccessLink \
+                            application together with the OAuth access and refresh tokens Polar \
+                            issues once you authorize FitBuddy.
                             • The time and version of your consent.
                             """
                         )
@@ -84,16 +85,16 @@ struct PrivacyPolicyView: View {
                             Addendum), which applies automatically once you create your account. \
                             Mistral AI processes data within the EU. Strava, Inc. likewise \
                             processes data in the USA, under the API agreement of your own \
-                            Strava account. Polar Electro Oy processes data in Finland (EU) — \
-                            connecting Polar is not a third-country transfer.
+                            Strava account. Polar Electro Oy processes data in Finland (EU), a \
+                            country with an adequate level of data protection.
                             """
                         )
                         Divider().overlay(Color.fbDivider)
                         FBInfoRow(
                             title: "Local storage",
                             text: """
-                            API keys, the Strava application credentials and tokens, Polar OAuth \
-                            tokens, and consent data are stored exclusively in your device's iOS \
+                            API keys, the Strava and Polar application credentials and tokens, \
+                            and consent data are stored exclusively in your device's iOS \
                             Keychain (this device only, no iCloud sync). They only leave your \
                             device during your own API calls to Hevy, Strava, Polar or your AI \
                             providers. Disconnecting Strava or Polar in Settings removes every \

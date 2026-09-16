@@ -5,8 +5,12 @@ import Foundation
 ///
 /// Only `access_token` is strictly required. AccessLink v3 sends no
 /// `refresh_token` and an `expires_in` of about a year; a missing lifetime is
-/// defaulted rather than failing the whole connect flow.
+/// defaulted to that year rather than failing the whole connect flow.
 struct PolarTokenResponse: Decodable, Equatable, Sendable {
+    /// Lifetime assumed when `expires_in` is missing: the value AccessLink v3
+    /// documents for its access tokens ("about one year").
+    static let defaultLifetimeSeconds = 31_535_999
+
     let accessToken: String
     let refreshToken: String?
     let expiresIn: Int
@@ -26,7 +30,7 @@ struct PolarTokenResponse: Decodable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         accessToken = try container.decode(String.self, forKey: .accessToken)
         refreshToken = try container.decodeIfPresent(String.self, forKey: .refreshToken)
-        expiresIn = try container.decodeIfPresent(Int.self, forKey: .expiresIn) ?? 43_199
+        expiresIn = try container.decodeIfPresent(Int.self, forKey: .expiresIn) ?? Self.defaultLifetimeSeconds
         userID = try container.decodeIfPresent(Int.self, forKey: .userID)
     }
 

@@ -228,6 +228,16 @@ final class PolarConnectionViewModelTests: XCTestCase {
         }
         XCTAssertNil(PolarConnectionFailure(.cancelled))
     }
+
+    /// A rate limit or an outage says nothing about the credentials: retry,
+    /// not the credentials screen.
+    func testRateLimitAndOutageAreNotCredentialFailures() {
+        for error in [ConnectorError.rateLimited(retryAfter: nil), .serviceUnavailable] {
+            let failure = PolarConnectionFailure(error)
+            XCTAssertEqual(failure, .serviceUnavailable, "\(error)")
+            XCTAssertFalse(failure.pointsToCredentials, "\(error)")
+        }
+    }
 }
 
 /// Records what the reset service was asked to drop.

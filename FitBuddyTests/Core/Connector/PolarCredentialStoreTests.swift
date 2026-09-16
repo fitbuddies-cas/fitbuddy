@@ -8,10 +8,7 @@ final class PolarCredentialStoreTests: XCTestCase {
     private var keychain: KeychainService!
     private var sut: PolarCredentialStore!
 
-    private static let polarKeys: [KeychainKey] = [
-        .polarClientID, .polarClientSecret,
-        .polarAccessToken, .polarRefreshToken, .polarTokenExpiry, .polarMemberID,
-    ]
+    private static let polarKeys = PolarCredentialStore.ownedKeys
 
     override func setUp() async throws {
         try await super.setUp()
