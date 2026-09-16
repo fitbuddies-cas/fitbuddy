@@ -24,6 +24,15 @@ enum AnalysisPromptBuilder {
     /// the cap, so a missing exercise reads as omitted, not as untrained.
     static let maxListedExercises = 10
 
+    /// The largest logged step still offered as an increment, as a share of
+    /// the latest working weight (#173).
+    ///
+    /// The gap between two logged weights is only an increment when it is a
+    /// small one: 8 and 12 kg dumbbells are two different exercises' worth of
+    /// load, not a 4 kg step — that would be +33 % in one session. Past this
+    /// share the step is left out, and rule 6 falls back to reps.
+    static let maxStepShare = 0.10
+
     /// Builds the prompt pair from the cached window.
     ///
     /// - Parameters:
@@ -138,8 +147,9 @@ enum AnalysisPromptBuilder {
     exercise exactly as it is listed there, and start any load change from \
     the weight listed for its most recent session. Never name an exercise or \
     a weight that section does not contain. Increase barbell exercises in \
-    steps of 2.5 kg; for every other exercise use the smallest step listed \
-    for it, and where none is listed, progress reps rather than weight.
+    steps of 2.5 kg; for every other exercise increase by at most the \
+    smallest step listed for it, and where none is listed, progress reps \
+    rather than weight.
 
     Answer in English and keep it under 200 words: first what stands out in \
     the data, then a concrete recommendation for the next block.
@@ -344,9 +354,9 @@ enum AnalysisPromptBuilder {
         }
 
         let legend = "Each line starts with the exercise name exactly as logged, then the "
-            + "heaviest working set (weight × reps) of its most recent session. e1RM is the "
-            + "Epley estimate from a session's best set, at the first and at the most recent "
-            + "session in this window."
+            + "heaviest working set (weight × reps) of its most recent session with working "
+            + "sets. e1RM is the Epley estimate from a session's best set, at the first and at "
+            + "the most recent session in this window that has one."
         let omitted = exercises.count - rows.count
         let footer = omitted > 0
             ? ["(\(rows.count) exercises with the most volume listed; \(omitted) more in this window omitted)"]
@@ -368,7 +378,12 @@ enum AnalysisPromptBuilder {
             title: progression.title,
             sessions: progression.sessions.filter { $0.sessionStart >= start }
         )
-        guard let last = inWindow.sessions.last else { return nil }
+        // The most recent session that logged working sets: one holding only
+        // warm-ups would report "nothing logged" above a trend drawn from the
+        // sessions before it.
+        guard let last = inWindow.sessions.last(where: { $0.countedSetCount > 0 })
+            ?? inWindow.sessions.last
+        else { return nil }
 
         // The working set leads, right after the name: it is the value a
         // recommendation starts from, and "Bench Press: 60 kg × 5" reads as
@@ -380,54 +395,46 @@ enum AnalysisPromptBuilder {
         ]
         let points = inWindow.points
         if let first = points.first, let latest = points.last {
-            let now = weight(latest.estimatedOneRepMaxKg, decimals: 1)
+            let now = PlainWeightFormatter.string(latest.estimatedOneRepMaxKg, decimals: 1)
             if points.count == 1 {
                 parts.append("e1RM \(now) kg (one session, no trend yet)")
             } else {
-                let then = weight(first.estimatedOneRepMaxKg, decimals: 1)
+                let then = PlainWeightFormatter.string(first.estimatedOneRepMaxKg, decimals: 1)
                 let delta = latest.estimatedOneRepMaxKg - first.estimatedOneRepMaxKg
-                parts.append("e1RM \(then) kg at window start, \(now) kg now (\(signed(delta)))")
+                parts.append("e1RM \(then) kg at first session in window, \(now) kg now (\(signed(delta)))")
             }
             parts.append(plateauVerdict(inWindow))
         }
-        if let step = smallestStep(in: inWindow.sessions) {
-            parts.append("Smallest logged step: \(weight(step)) kg")
+        if let latest = last.heaviestWorkingSet,
+           let step = smallestStep(in: inWindow.sessions, latest: latest) {
+            parts.append("Smallest logged step: \(PlainWeightFormatter.string(step)) kg")
         }
         return parts.joined(separator: ". ") + "."
     }
 
-    /// The heaviest working set, and the mean RPE over the working sets that
-    /// logged one.
+    /// The session's working weight, and the mean RPE over the counted sets
+    /// that logged one.
     ///
-    /// Heaviest by weight, not by Epley: a recommendation moves the working
-    /// weight, and "60 kg × 5" is the number the user will load onto the bar.
-    /// Only sets with both weight and reps qualify, as for `OneRepMax` — a set
-    /// started but not completed is not a working weight.
+    /// The working weight is `ExerciseHistoryEntry.heaviestWorkingSet` — the
+    /// same rule the validation of #175 reads, so the figure a card starts
+    /// from and the figure the prompt stated cannot drift apart.
     private static func lastSessionSummary(_ session: ExerciseHistoryEntry) -> String {
-        let working = session.sets.filter(\.countsTowardsVolume)
-        let heaviest = working
-            .compactMap { set -> (weightKg: Double, reps: Int)? in
-                guard let weightKg = set.weightKg, let reps = set.reps, weightKg > 0, reps > 0 else {
-                    return nil
-                }
-                return (weightKg, reps)
-            }
-            .max { lhs, rhs in
-                lhs.weightKg != rhs.weightKg ? lhs.weightKg < rhs.weightKg : lhs.reps < rhs.reps
-            }
-
+        let counted = session.sets.filter(\.countsTowardsVolume)
         var summary: String
-        if let heaviest {
-            summary = "\(weight(heaviest.weightKg)) kg × \(heaviest.reps)"
-        } else if let reps = working.compactMap(\.reps).max(), reps > 0 {
+        if let working = session.heaviestWorkingSet {
+            summary = "\(working.weightText) kg × \(working.reps)"
+        } else if counted.isEmpty {
+            summary = "no working sets logged"
+        } else if let reps = counted.compactMap(\.reps).max(), reps > 0 {
             summary = "no weight logged, best set \(reps) reps"
         } else {
-            summary = "no weight or reps logged"
+            summary = "no set with both weight and reps logged"
         }
 
-        let rpes = working.compactMap(\.rpe)
+        let rpes = counted.compactMap(\.rpe)
         if !rpes.isEmpty {
-            summary += ", mean RPE \(weight(rpes.reduce(0, +) / Double(rpes.count), decimals: 1))"
+            let mean = rpes.reduce(0, +) / Double(rpes.count)
+            summary += ", mean RPE \(PlainWeightFormatter.string(mean, decimals: 1))"
         }
         return summary
     }
@@ -446,20 +453,21 @@ enum AnalysisPromptBuilder {
 
     /// The smallest difference between two distinct working weights the user
     /// logged for this exercise in the window — the increment their gym
-    /// actually offers, which the system prompt tells the model to step by.
-    /// `nil` when fewer than two distinct weights were logged.
-    private static func smallestStep(in sessions: [ExerciseHistoryEntry]) -> Double? {
-        // Rounded to grams first, so two floating-point spellings of 62.5
-        // cannot turn into a step of 0.0000001 kg.
-        let weights = Set(
-            sessions
-                .flatMap(\.sets)
-                .filter(\.countsTowardsVolume)
-                .compactMap(\.weightKg)
-                .filter { $0 > 0 }
-                .map { ($0 * 1_000).rounded() / 1_000 }
-        ).sorted()
-        return zip(weights, weights.dropFirst()).map { $1 - $0 }.min()
+    /// actually offers, which rule 6 caps a load increase at.
+    ///
+    /// Only working sets count, the sets the working weight itself is taken
+    /// from: a carry's weight next to a press's would be a step between two
+    /// different kinds of set. `nil` when fewer than two distinct weights were
+    /// logged, and when the step is larger than `maxStepShare` of `latest` —
+    /// a gap that size is a change of equipment, not an increment.
+    private static func smallestStep(in sessions: [ExerciseHistoryEntry], latest: WorkingSet) -> Double? {
+        // Rounded first, so two floating-point spellings of 62.5 cannot turn
+        // into a step of 0.0000001 kg.
+        let weights = Set(sessions.flatMap(\.workingSets).map(\.roundedWeightKg)).sorted()
+        guard let step = zip(weights, weights.dropFirst()).map({ $1 - $0 }).min(),
+              step <= latest.weightKg * maxStepShare
+        else { return nil }
+        return step
     }
 
     // MARK: - Aggregation
@@ -486,23 +494,9 @@ enum AnalysisPromptBuilder {
         "\(Int(kilograms.rounded())) kg"
     }
 
-    /// A weight without grouping separators or trailing zeros: `60`, `62.5`,
-    /// `61.25`.
-    ///
-    /// Not `OneRepMaxFormatter`, for the reason `kg(_:)` is not
-    /// `VolumeFormatter`: that one follows the device locale and would send
-    /// `62,5` from a Swiss device. Two decimals by default, because plates
-    /// come in 1.25 kg pairs and `61.3` would be a weight nobody can load.
-    private static func weight(_ kilograms: Double, decimals: Int = 2) -> String {
-        let text = String(format: "%.\(decimals)f", kilograms)
-        guard text.contains(".") else { return text }
-        let trimmed = text.replacingOccurrences(of: "0+$", with: "", options: .regularExpression)
-        return trimmed.hasSuffix(".") ? String(trimmed.dropLast()) : trimmed
-    }
-
     /// A 1RM change with its direction spelled out.
     private static func signed(_ kilograms: Double) -> String {
-        let text = weight(abs(kilograms), decimals: 1)
+        let text = PlainWeightFormatter.string(abs(kilograms), decimals: 1)
         guard text != "0" else { return "no change" }
         return (kilograms > 0 ? "+" : "-") + text + " kg"
     }

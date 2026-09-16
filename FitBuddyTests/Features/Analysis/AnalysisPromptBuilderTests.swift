@@ -374,7 +374,7 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         for row in rows {
             XCTAssertTrue(row.contains(" kg × 8"), row)
             XCTAssertTrue(row.contains("e1RM "), row)
-            XCTAssertTrue(row.contains("kg at window start"), row)
+            XCTAssertTrue(row.contains("kg at first session in window"), row)
         }
         XCTAssertFalse(prompt.user.contains("- Lift 1:"))
         XCTAssertFalse(prompt.user.contains("- Lift 2:"))
@@ -462,7 +462,7 @@ final class AnalysisPromptBuilderTests: XCTestCase {
             ])),
         ])
 
-        XCTAssertTrue(prompt.user.contains("e1RM 70 kg at window start, 72.9 kg now (+2.9 kg)"))
+        XCTAssertTrue(prompt.user.contains("e1RM 70 kg at first session in window, 72.9 kg now (+2.9 kg)"))
     }
 
     /// The progression read may reach further back than the window; the
@@ -495,8 +495,8 @@ final class AnalysisPromptBuilderTests: XCTestCase {
             ])),
         ])
 
-        XCTAssertTrue(prompt.user.contains("105 kg at window start, 102.1 kg now (-2.9 kg)"))
-        XCTAssertTrue(prompt.user.contains("66.7 kg at window start, 66.7 kg now (no change)"))
+        XCTAssertTrue(prompt.user.contains("105 kg at first session in window, 102.1 kg now (-2.9 kg)"))
+        XCTAssertTrue(prompt.user.contains("66.7 kg at first session in window, 66.7 kg now (no change)"))
     }
 
     /// The flag is `ExerciseProgression.isPlateaued`, not a second rule.
@@ -535,14 +535,15 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertTrue(prompt.user.contains("Plateau: no."))
     }
 
-    /// The increment the system prompt tells the model to step by, taken
-    /// from the user's own log — warm-ups excluded.
+    /// The increment the system prompt caps a load increase at, taken from
+    /// the user's own log — warm-ups excluded: counting the 26 kg warm-up
+    /// would make the step 1 kg.
     func testSmallestLoggedStepComesFromTheWorkingWeights() {
         let press = exercise("Shoulder Press (Machine)", volume: 3_000, sessions: 2)
         let single = exercise("Row", volume: 1_000, sessions: 1)
         let prompt = makeWithExercises([
             (press, progression(press, sessions: [
-                session(daysAgo: 9, sets: [set(0, .warmup, 21, 10), set(1, .normal, 25, 8)]),
+                session(daysAgo: 9, sets: [set(0, .warmup, 26, 10), set(1, .normal, 25, 8)]),
                 session(daysAgo: 2, sets: [set(0, .normal, 27.5, 8), set(1, .normal, 32.5, 6)]),
             ])),
             (single, progression(single, sessions: [session(daysAgo: 1, sets: working(50, 10))])),
@@ -550,6 +551,100 @@ final class AnalysisPromptBuilderTests: XCTestCase {
 
         XCTAssertTrue(prompt.user.contains("Smallest logged step: 2.5 kg."))
         XCTAssertEqual(prompt.user.components(separatedBy: "Smallest logged step").count, 2)
+    }
+
+    /// A gap larger than `maxStepShare` of the working weight is a change of
+    /// equipment, not an increment: 8 → 12 kg would be +33 % in one session.
+    /// The step is left out, and rule 6 falls back to reps.
+    func testALargeGapBetweenLoggedWeightsIsNoStep() {
+        let raise = exercise("Lateral Raise (Dumbbell)", volume: 1_000, sessions: 2)
+        let machine = exercise("Chest Press (Machine)", volume: 3_000, sessions: 2)
+        let bench = exercise("Bench Press", volume: 5_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (raise, progression(raise, sessions: [
+                session(daysAgo: 9, sets: working(8, 15)),
+                session(daysAgo: 2, sets: working(12, 10)),
+            ])),
+            (machine, progression(machine, sessions: [
+                session(daysAgo: 9, sets: working(40, 12)),
+                session(daysAgo: 2, sets: working(70, 8)),
+            ])),
+            (bench, progression(bench, sessions: [
+                session(daysAgo: 9, sets: working(60, 5)),
+                session(daysAgo: 2, sets: working(62.5, 5)),
+            ])),
+        ])
+
+        XCTAssertEqual(prompt.user.components(separatedBy: "Smallest logged step").count, 2)
+        XCTAssertTrue(prompt.user.contains("Smallest logged step: 2.5 kg."))
+        XCTAssertFalse(prompt.user.contains("Smallest logged step: 4 kg"))
+        XCTAssertFalse(prompt.user.contains("Smallest logged step: 30 kg"))
+    }
+
+    /// A step exactly at the share still counts: 2.5 kg on 25 kg is 10 %.
+    func testAStepAtTheShareIsKept() {
+        let curl = exercise("Bicep Curl (Cable)", volume: 1_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (curl, progression(curl, sessions: [
+                session(daysAgo: 9, sets: working(22.5, 10)),
+                session(daysAgo: 2, sets: working(25, 10)),
+            ])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("Smallest logged step: 2.5 kg."))
+    }
+
+    /// A set with weight but no reps — a loaded carry — is not a working set:
+    /// it neither sets the working weight nor a step. Counted, 102.5 kg would
+    /// make the step 2.5 kg.
+    func testASetWithWeightButNoRepsIsNoWorkingSet() {
+        let deadlift = exercise("Deadlift (Barbell)", volume: 5_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (deadlift, progression(deadlift, sessions: [
+                session(daysAgo: 9, sets: working(100, 5)),
+                session(daysAgo: 2, sets: [
+                    set(0, .normal, 105, 5),
+                    SetDetail(index: 1, type: .normal, weightKg: 120, reps: nil,
+                              distanceMeters: 40, durationSeconds: nil, rpe: nil),
+                    SetDetail(index: 2, type: .normal, weightKg: 102.5, reps: nil,
+                              distanceMeters: 40, durationSeconds: nil, rpe: nil),
+                ]),
+            ])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("- Deadlift (Barbell): 105 kg × 5 "))
+        XCTAssertTrue(prompt.user.contains("Smallest logged step: 5 kg."))
+    }
+
+    /// Only weighted sets without reps: the line says what is missing
+    /// instead of claiming nothing was logged.
+    func testASessionWithWeightsButNoRepsSaysSo() {
+        let carry = exercise("Farmers Walk", volume: 0, sessions: 1)
+        let prompt = makeWithExercises([
+            (carry, progression(carry, sessions: [
+                session(daysAgo: 2, sets: [
+                    SetDetail(index: 0, type: .normal, weightKg: 32, reps: nil,
+                              distanceMeters: 40, durationSeconds: nil, rpe: nil),
+                ]),
+            ])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("- Farmers Walk: no set with both weight and reps logged"))
+    }
+
+    /// A most recent session holding only warm-ups does not hide the working
+    /// weight of the session before it.
+    func testTheWorkingSetComesFromTheLatestSessionWithWorkingSets() {
+        let row = exercise("Bench Press", volume: 3_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (row, progression(row, sessions: [
+                session(daysAgo: 9, sets: working(60, 5)),
+                session(daysAgo: 2, sets: [set(0, .warmup, 40, 10), set(1, .warmup, 50, 5)]),
+            ])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("- Bench Press: 60 kg × 5 (most recent session, 2025-06-06)"))
+        XCTAssertFalse(prompt.user.contains("no working sets logged"))
     }
 
     /// Bodyweight work has no working weight and no Epley estimate: the line
@@ -655,7 +750,7 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertTrue(system.contains("name only exercises and weights from the exercises section"))
         XCTAssertTrue(system.contains("exactly as it is listed"))
         XCTAssertTrue(system.contains("steps of 2.5 kg"))
-        XCTAssertTrue(system.contains("smallest step listed"))
+        XCTAssertTrue(system.contains("at most the smallest step listed"))
     }
 
     // MARK: - Helpers
