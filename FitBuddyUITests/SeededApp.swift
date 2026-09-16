@@ -200,6 +200,31 @@ struct SeededApp {
         )
     }
 
+    /// Switches to a tab and makes sure the switch took.
+    ///
+    /// Same lesson as `expand(_:)`: on a cold simulator the first launch of a
+    /// run is still settling when the tab bar turns up, and a single tap can be
+    /// swallowed — the bar then still has the dashboard selected, and the test
+    /// fails 30 seconds later on the tab's content with nothing pointing at
+    /// the dropped tap (#179). Waits for the tab bar's own selection state, so
+    /// a retry never lands on a screen that already switched.
+    func select(
+        _ tab: XCUIElement,
+        attempts: Int = 3,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        assertAppears(tab, file: file, line: line)
+        let selected = NSPredicate(format: "isSelected == true")
+        for _ in 0..<attempts {
+            guard !tab.isSelected else { return }
+            tab.tap()
+            let expectation = XCTNSPredicateExpectation(predicate: selected, object: tab)
+            _ = XCTWaiter().wait(for: [expectation], timeout: 3)
+        }
+        XCTAssertTrue(tab.isSelected, "The tab did not switch", file: file, line: line)
+    }
+
     // MARK: - Assertions
 
     func assertAppears(

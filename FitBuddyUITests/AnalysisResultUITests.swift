@@ -89,8 +89,7 @@ final class AnalysisResultUITests: XCTestCase {
     @MainActor
     private func openResult(in sut: SeededApp) {
         sut.assertAppears(sut.dashboard)
-        sut.assertAppears(sut.analysisTab)
-        sut.analysisTab.tap()
+        sut.select(sut.analysisTab)
 
         sut.assertAppears(sut.analysisResult)
         sut.assertAppears(sut.analysisHeadline)
