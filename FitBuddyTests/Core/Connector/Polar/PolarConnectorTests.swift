@@ -40,12 +40,12 @@ final class PolarConnectorTests: XCTestCase {
         #"""
         [
           {
-            "id": "old", "start-time": "2020-01-01T08:00:00", "start-time-utc-offset": 0,
+            "id": "old", "start_time": "2020-01-01T08:00:00", "start_time_utc_offset": 0,
             "duration": "PT30M"
           },
           {
-            "id": "new", "start-time": "2020-06-01T08:00:00", "start-time-utc-offset": 0,
-            "duration": "PT45M", "heart-rate": { "average": 150, "maximum": 175 }, "sport": "RUNNING"
+            "id": "new", "start_time": "2020-06-01T08:00:00", "start_time_utc_offset": 0,
+            "duration": "PT45M", "heart_rate": { "average": 150, "maximum": 175 }, "sport": "RUNNING"
           }
         ]
         """#

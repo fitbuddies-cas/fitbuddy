@@ -2,19 +2,22 @@ import XCTest
 @testable import FitBuddy
 
 final class PolarExerciseDTOTests: XCTestCase {
+    /// Nachtrag zu ADR-11: real AccessLink responses use underscore-separated
+    /// keys (verified against the official docs after the first real sync
+    /// failed to decode any exercise at all).
     private static let fullExercise = Data(#"""
     {
       "id": "aQlC83",
-      "upload-time": "2008-10-13T10:40:02Z",
-      "start-time": "2008-10-13T10:40:02",
-      "start-time-utc-offset": 180,
+      "upload_time": "2008-10-13T10:40:02Z",
+      "start_time": "2008-10-13T10:40:02",
+      "start_time_utc_offset": 180,
       "duration": "PT2H44M30S",
       "distance": 1600.2,
-      "heart-rate": { "average": 129, "maximum": 147 },
-      "training-load": 143.22,
+      "heart_rate": { "average": 129, "maximum": 147 },
+      "training_load": 143.22,
       "calories": 530,
       "sport": "OTHER",
-      "detailed-sport-info": "TREADMILL_RUNNING"
+      "detailed_sport_info": "TREADMILL_RUNNING"
     }
     """#.utf8)
 
@@ -45,7 +48,7 @@ final class PolarExerciseDTOTests: XCTestCase {
     }
 
     func testDropsAnExerciseThatHasNoParseableStartTime() throws {
-        let json = Data(#"{ "id": "x", "start-time": "not-a-date" }"#.utf8)
+        let json = Data(#"{ "id": "x", "start_time": "not-a-date" }"#.utf8)
 
         let dto = try JSONDecoder().decode(PolarExerciseDTO.self, from: json)
 
@@ -53,7 +56,7 @@ final class PolarExerciseDTOTests: XCTestCase {
     }
 
     func testMissingOffsetIsTreatedAsUTC() throws {
-        let json = Data(#"{ "id": "x", "start-time": "2020-01-01T12:00:00" }"#.utf8)
+        let json = Data(#"{ "id": "x", "start_time": "2020-01-01T12:00:00" }"#.utf8)
 
         let activity = try XCTUnwrap(
             try JSONDecoder().decode(PolarExerciseDTO.self, from: json).makeActivity()
@@ -64,7 +67,7 @@ final class PolarExerciseDTOTests: XCTestCase {
     }
 
     func testAnExerciseWithNoRecordedMetricsMapsToNilMetricsRatherThanAnEmptyBlock() throws {
-        let json = Data(#"{ "id": "x", "start-time": "2020-01-01T12:00:00", "start-time-utc-offset": 0 }"#.utf8)
+        let json = Data(#"{ "id": "x", "start_time": "2020-01-01T12:00:00", "start_time_utc_offset": 0 }"#.utf8)
 
         let activity = try XCTUnwrap(
             try JSONDecoder().decode(PolarExerciseDTO.self, from: json).makeActivity()

@@ -9,6 +9,10 @@ import Foundation
 /// which ones Polar populates depends on the watch, the sport and whether a
 /// chest strap was worn.
 struct PolarExerciseDTO: Decodable, Equatable, Sendable {
+    /// Nachtrag zu ADR-11: the wire keys are underscore-separated
+    /// (`start_time`, `training_load`, …) — the original hyphenated keys
+    /// (`start-time`) never matched a real response and silently failed the
+    /// whole array decode until the first real device sync surfaced it.
     let id: String
     /// Local wall-clock start, no zone (`2008-10-13T10:40:02`).
     let startTime: String
@@ -26,15 +30,15 @@ struct PolarExerciseDTO: Decodable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id
-        case startTime = "start-time"
-        case startTimeUTCOffsetMinutes = "start-time-utc-offset"
+        case startTime = "start_time"
+        case startTimeUTCOffsetMinutes = "start_time_utc_offset"
         case duration
         case distance
-        case heartRate = "heart-rate"
+        case heartRate = "heart_rate"
         case calories
-        case trainingLoad = "training-load"
+        case trainingLoad = "training_load"
         case sport
-        case detailedSportInfo = "detailed-sport-info"
+        case detailedSportInfo = "detailed_sport_info"
     }
 
     private enum HeartRateKeys: String, CodingKey {

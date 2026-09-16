@@ -68,6 +68,7 @@ Zweite Frage: Polars Ausdauer-Kennzahlen (Ø/Max-Herzfrequenz, Kalorien, Trainin
 - **`ActivityMetrics.trainingLoad` ist providerspezifisch skaliert** — nur als Trend einer Quelle interpretierbar, nie als quellenübergreifender Absolutwert.
 - **v3 wird mittelfristig abgelöst.** Der `PolarExerciseDTO`↔v3-Vertrag muss bei der v4-Migration neu geschrieben werden (analog zur Strava-Feldanalyse ein additiver, kein struktureller Eingriff).
 - **`GET /v3/exercises` liefert nur ein rollendes Fenster** der jüngsten Sessions. Für das 90-Tage-Fenster reicht das im PoC; v1 muss die transaktionsbasierte Historie (`exercise-transactions`) evaluieren.
+- **Keine rückwirkende Historie — auch nicht innerhalb der letzten 30 Tage.** Laut offizieller AccessLink-Doku liefert `GET /v3/exercises` ausschliesslich Trainings, die **nach** der Registrierung (`POST /v3/users`) zu Flow hochgeladen wurden: *"Only exercises that have been uploaded to Flow after the user is registered with your client will be returned."* Bereits vor dem Verbinden vorhandene Polar-Beat-/Flow-Trainings erscheinen im Dashboard also nie — bestätigt durch den ersten realen Testlauf (2026-09-16): erfolgreiche Verbindung, `GET /v3/exercises` liefert `0`, kein Fehler. Für die Demo braucht es ein **nach** dem Verbinden aufgezeichnetes und zu Flow synchronisiertes Training.
 - **Doppelter `member-id`-Lebenszyklus:** FitBuddy vergibt und speichert eine eigene stabile ID pro Nutzer — ein Zustand mehr in der Keychain.
 
 ---
