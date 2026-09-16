@@ -19,11 +19,13 @@ import Foundation
 ///   support them. Whether a weight or a rest period is plausible is
 ///   `AnalysisReportValidator`'s job (#175).
 /// - `minItems` / `maxItems` on `cards` — Claude accepts only `minItems` 0 or 1
-///   and no `maxItems`; the prompt asks for one to four cards instead.
+///   and no `maxItems`; the prompt asks for zero to four cards instead. Zero
+///   is a valid answer: thin data gets a lead and a full analysis, no filler
+///   cards (#170).
 ///
-/// `summary` is declared before `cards`: an answer cut off at the token limit
-/// then usually still carries a complete summary, which
-/// `AnalysisReportParser` salvages as prose. Only Gemini is guaranteed to see
+/// `lead` and `summary` are declared before `cards`: an answer cut off at the
+/// token limit then usually still carries a complete summary, or at least a
+/// complete lead, which `AnalysisReportParser` salvages as prose. Only Gemini is guaranteed to see
 /// that order (`propertyOrdering`); `JSONEncoder` writes object keys in hash
 /// order, so for Claude and Mistral the order the system prompt lists the
 /// fields in is what asks for it.
@@ -52,17 +54,21 @@ enum AnalysisReportSchema {
                 "enum": .array(AnalysisVerdict.allCases.map { .string($0.rawValue) }),
                 "description": "progress: the data supports adding load or reps. recover: rest comes first. hold: neither is justified yet."
             ],
+            "lead": [
+                "type": "string",
+                "description": "The key takeaway in one to three sentences, at most about 50 words, readable on its own."
+            ],
             "summary": [
                 "type": "string",
-                "description": "The whole recommendation as plain prose under 200 words, readable without the cards."
+                "description": "The full analysis as plain prose under 200 words, readable without the cards."
             ],
             "cards": [
                 "type": "array",
-                "description": "One to four recommendation cards, most important first.",
+                "description": "Zero to four recommendation cards, most important first. Empty when the data supports none.",
                 "items": ["anyOf": .array(AnalysisCard.Kind.allCases.map(card))]
             ]
         ],
-        "required": ["headline", "verdict", "summary", "cards"],
+        "required": ["headline", "verdict", "lead", "summary", "cards"],
         "additionalProperties": false
     ]
 

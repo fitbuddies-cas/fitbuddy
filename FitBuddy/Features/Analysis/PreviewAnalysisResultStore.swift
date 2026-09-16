@@ -66,6 +66,7 @@ actor PreviewAnalysisResultStore: AnalysisResultStoring {
     static let report = ValidatedAnalysisReport(
         headline: "You're ready to progress.",
         verdict: .progress,
+        lead: "Bench press is ready for 62.5 kg. Legs need a second slot first.",
         cards: [
             .progression(
                 exercise: "Bench Press (Barbell)",

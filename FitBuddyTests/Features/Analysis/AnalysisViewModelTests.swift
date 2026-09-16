@@ -205,6 +205,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setReport(AnalysisReport(
             headline: "You're ready to progress.",
             verdict: .progress,
+            lead: "Bench press can go up.",
             cards: [
                 .progression(exercise: "Bench Press", muscleGroup: "Chest", fromKg: 60, toKg: 62.5, reasoning: reasoning),
                 .progression(exercise: "Squat", muscleGroup: "Legs", fromKg: 100, toKg: 102.5, reasoning: "Squat is ready."),
@@ -227,6 +228,7 @@ final class AnalysisViewModelTests: XCTestCase {
             .note(title: "Squat", text: "Squat is ready."),
         ])
         XCTAssertEqual(report.verdict, .progress)
+        XCTAssertEqual(report.lead, "Bench press can go up.")
     }
 
     /// US-14 AC4: at six training days of the last seven the app inserts the
@@ -375,6 +377,7 @@ final class AnalysisViewModelTests: XCTestCase {
     private static let noteOnlyReport = AnalysisReport(
         headline: "Keep going.",
         verdict: .progress,
+        lead: "Add reps before weight.",
         cards: [.note(title: "Reps first", text: "Add a rep on rows before adding weight.")],
         summary: "Add a rep on rows before adding weight."
     )
