@@ -137,6 +137,56 @@ final class WorkoutStoreProgressionTests: XCTestCase {
         XCTAssertEqual(progression.title, "Bench Press (Barbell)")
     }
 
+    // MARK: - History (#163)
+
+    /// The history carries every set of the session, warm-ups included and in
+    /// the order they were lifted in.
+    func testASessionCarriesAllItsSetsInOrder() async throws {
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
+            activity(id: "w-1", daysAgo: 2, sets: [(100, 5), (90, 8)], warmUpSets: [(60, 10)]),
+        ])
+
+        let progression = try await XCTUnwrapAsync(
+            try await sut.exerciseProgression(id: templateID, since: windowStart)
+        )
+
+        let session = try XCTUnwrap(progression.sessions.first)
+        XCTAssertEqual(session.sets.map(\.weightKg), [60, 100, 90])
+        XCTAssertEqual(session.sets.map(\.type), [.warmup, .normal, .normal])
+        // The warm-up is shown but not counted, as everywhere else.
+        XCTAssertEqual(session.countedSetCount, 2)
+    }
+
+    /// A movement without a usable load is still a session: the history is the
+    /// only thing the statistics screen can show for it.
+    func testASessionWithoutALoadStillAppearsInTheHistory() async throws {
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
+            activity(id: "w-1", daysAgo: 2, sets: [(nil, nil)]),
+        ])
+
+        let progression = try await XCTUnwrapAsync(
+            try await sut.exerciseProgression(id: templateID, since: windowStart)
+        )
+
+        XCTAssertEqual(progression.sessions.count, 1)
+        XCTAssertTrue(progression.points.isEmpty)
+    }
+
+    /// Both occurrences of a movement logged twice in one workout end up in
+    /// the same session entry, so the history has one row per day.
+    func testAMovementLoggedTwiceInOneSessionKeepsAllSetsInOneEntry() async throws {
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
+            activity(id: "w-1", daysAgo: 2, sets: [(100, 5)], secondOccurrenceSets: [(110, 5)]),
+        ])
+
+        let progression = try await XCTUnwrapAsync(
+            try await sut.exerciseProgression(id: templateID, since: windowStart)
+        )
+
+        XCTAssertEqual(progression.sessions.count, 1)
+        XCTAssertEqual(try XCTUnwrap(progression.sessions.first).sets.count, 2)
+    }
+
     /// A Strava session sharing the movement's key contributes nothing: no
     /// weight, no reps, so at best an empty curve — and, alone, it must not
     /// even produce a titled progression with no points (US-5, #144).
@@ -185,7 +235,11 @@ final class WorkoutStoreProgressionTests: XCTestCase {
                 index: 0,
                 title: title,
                 templateID: templateID,
-                sets: makeSets(warmUpSets, type: .warmup) + makeSets(sets, type: .normal)
+                // Numbered continuously across both groups, as a source does:
+                // restarting at 0 per group gives two sets the same index, and
+                // an order sorted by index is then arbitrary.
+                sets: makeSets(warmUpSets, type: .warmup, startingAt: 0)
+                    + makeSets(sets, type: .normal, startingAt: warmUpSets.count)
             ),
         ]
         if let secondOccurrenceSets {
@@ -194,16 +248,20 @@ final class WorkoutStoreProgressionTests: XCTestCase {
                     index: 1,
                     title: title,
                     templateID: templateID,
-                    sets: makeSets(secondOccurrenceSets, type: .normal)
+                    sets: makeSets(secondOccurrenceSets, type: .normal, startingAt: 0)
                 )
             )
         }
         return Activity(id: id, title: "Session", startTime: start(daysAgo: days), exercises: exercises)
     }
 
-    private func makeSets(_ values: [(Double?, Int?)], type: SetType) -> [ActivityExerciseSet] {
+    private func makeSets(
+        _ values: [(Double?, Int?)],
+        type: SetType,
+        startingAt offset: Int
+    ) -> [ActivityExerciseSet] {
         values.enumerated().map { index, value in
-            ActivityExerciseSet(index: index, type: type, weightKg: value.0, reps: value.1)
+            ActivityExerciseSet(index: offset + index, type: type, weightKg: value.0, reps: value.1)
         }
     }
 

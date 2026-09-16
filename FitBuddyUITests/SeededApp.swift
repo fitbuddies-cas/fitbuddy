@@ -85,6 +85,19 @@ struct SeededApp {
         app.descendants(matching: .any)[AccessibilityID.Progression.unavailable]
     }
 
+    var history: XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.Progression.history]
+    }
+
+    var historyRows: XCUIElementQuery {
+        app.descendants(matching: .any).matching(identifier: AccessibilityID.Progression.historyRow)
+    }
+
+    /// Set rows inside an opened session — none while every row is collapsed.
+    var historySets: XCUIElementQuery {
+        app.descendants(matching: .any).matching(identifier: AccessibilityID.Progression.historySet)
+    }
+
     var insufficientDataNotice: XCUIElement {
         app.descendants(matching: .any)[AccessibilityID.Progression.insufficientData]
     }
@@ -108,6 +121,36 @@ struct SeededApp {
             )
         )
         firstRow(of: settled, file: file, line: line)
+    }
+
+    // MARK: - Interactions
+
+    /// Opens a collapsed session and makes sure it stayed open.
+    ///
+    /// A single tap is not enough right after the screen appears: the query
+    /// resolves a frame, and if the layout is still settling — the chart above
+    /// lays out as the cache read lands — the synthesized tap lands where the
+    /// row no longer is. The test then fails 30 seconds later on the sets,
+    /// which says nothing about the cause. Same lesson as the consent toggle
+    /// in #120.
+    func expand(
+        _ row: XCUIElement,
+        attempts: Int = 3,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        for _ in 0..<attempts {
+            guard historySets.count == 0 else { return }
+            row.tap()
+            _ = historySets.element(boundBy: 0).waitForExistence(timeout: 2)
+        }
+        XCTAssertGreaterThan(
+            historySets.count,
+            0,
+            "The session did not open",
+            file: file,
+            line: line
+        )
     }
 
     // MARK: - Assertions

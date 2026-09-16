@@ -81,5 +81,11 @@ enum AccessibilityID {
         static let chart = "progression.chart"
         static let insufficientData = "progression.insufficientData"
         static let unavailable = "progression.unavailable"
+        /// The session history under the curve, and its rows (#163).
+        static let history = "progression.history"
+        static let historyRow = "progression.historyRow"
+        /// A set row inside an opened session — present only while that
+        /// session is expanded.
+        static let historySet = "progression.historySet"
     }
 }
