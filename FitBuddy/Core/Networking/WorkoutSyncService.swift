@@ -20,6 +20,7 @@ actor WorkoutSyncService: WorkoutSyncing {
     private let registry: ConnectorRegistry
     private let keychain: KeychainService
     private let stravaCredentials: any StravaCredentialStoring
+    private let polarCredentials: any PolarCredentialStoring
     private let workouts: WorkoutStore
     private let timestamps: SyncTimestampStore
     private let sessionReset: SessionResetService
@@ -33,6 +34,7 @@ actor WorkoutSyncService: WorkoutSyncing {
     ///     is synced when it is registered *and* has stored credentials.
     ///   - stravaCredentials: Where the Strava token pair comes from. Hevy's
     ///     key comes from `keychain` directly, as before.
+    ///   - polarCredentials: Where the Polar token pair comes from (#159).
     ///   - sessionReset: Defaults to one built from the other dependencies —
     ///     it cannot be a default argument because it needs them.
     ///   - now: Injectable clock, so window boundaries are testable.
@@ -40,6 +42,7 @@ actor WorkoutSyncService: WorkoutSyncing {
         registry: ConnectorRegistry,
         keychain: KeychainService = KeychainService(),
         stravaCredentials: any StravaCredentialStoring = StravaCredentialStore(),
+        polarCredentials: any PolarCredentialStoring = PolarCredentialStore(),
         workouts: WorkoutStore,
         timestamps: SyncTimestampStore = SyncTimestampStore(),
         sessionReset: SessionResetService? = nil,
@@ -49,6 +52,7 @@ actor WorkoutSyncService: WorkoutSyncing {
         self.registry = registry
         self.keychain = keychain
         self.stravaCredentials = stravaCredentials
+        self.polarCredentials = polarCredentials
         self.workouts = workouts
         self.timestamps = timestamps
         self.sessionReset = sessionReset
@@ -103,6 +107,19 @@ actor WorkoutSyncService: WorkoutSyncing {
             // the process.
             await registry.disconnect(.strava)
         }
+        switch await storedPolarCredentials() {
+        case .available(let pair):
+            credentials[.polar] = pair
+            sources.append(.polar)
+        case .unreadable:
+            // Same rule as for Strava above.
+            if await registry.state(of: .polar, now: syncedAt) != .disconnected {
+                failures[.polar] = .keychainUnavailable
+                sources.append(.polar)
+            }
+        case .notConfigured:
+            await registry.disconnect(.polar)
+        }
         logger.notice("Fetching \(sources.map(\.rawValue).joined(separator: ","), privacy: .public); task cancelled: \(Task.isCancelled, privacy: .public)")
 
         let outcomes = await fetchWindows(from: windowStart, credentials: credentials, sources: sources)
@@ -143,10 +160,11 @@ actor WorkoutSyncService: WorkoutSyncing {
         // `.missingAPIKey` would make it route there a second time, with a
         // "key rejected" notice for a key the user removed themselves.
         guard await sessionIsStillOpen() else {
-            // Both resets that remove the Hevy key take the Strava pair with
-            // it (`SessionResetService.hardLogout()`, `DataResetService`).
+            // Both resets that remove the Hevy key take the Strava and Polar
+            // pairs with it (`SessionResetService.hardLogout()`, `DataResetService`).
             await registry.disconnect(.hevy)
             await registry.disconnect(.strava)
+            await registry.disconnect(.polar)
             throw CancellationError()
         }
 
@@ -231,26 +249,30 @@ actor WorkoutSyncService: WorkoutSyncing {
             }
             let activities = try await connector.fetchActivities(since: windowStart)
 
-            // A Strava fetch may have refreshed the pair on the way; the
-            // registry's expiry bookkeeping has to follow the rotated pair, or
-            // it would prompt for a renewal the connector already did. Only a
-            // pair *newer* than the one recorded is taken: the connector
+            // An OAuth fetch (Strava, Polar) may have refreshed the pair on the
+            // way; the registry's expiry bookkeeping has to follow the rotated
+            // pair, or it would prompt for a renewal the connector already did. Only a
+            // pair *newer* than the one recorded is taken: each connector
             // tolerates a persist that failed (locked Keychain) and keeps the
             // rotated pair in memory, and re-connecting it with the stale
             // stored pair would make every later refresh in this process send
-            // a refresh token Strava has already invalidated.
+            // a refresh token the provider has already invalidated.
             if source == .strava, case .available(let fresh) = await storedStravaCredentials() {
                 try? await registry.connectIfNewer(.strava, credentials: fresh)
+            }
+            if source == .polar, case .available(let fresh) = await storedPolarCredentials() {
+                try? await registry.connectIfNewer(.polar, credentials: fresh)
             }
             return activities
         } catch let error as ConnectorError {
             if error == .unauthorized, source == .hevy {
                 // The stored key was revoked — drop it and the cached data
                 // before the caller routes back to onboarding. The logout
-                // takes the Strava pair with it (US-1 AC3), so the connector's
-                // copy goes too.
+                // takes the Strava and Polar pairs with it (US-1 AC3), so the
+                // connectors' copies go too.
                 await registry.disconnect(.hevy)
                 await registry.disconnect(.strava)
+                await registry.disconnect(.polar)
                 await sessionReset.hardLogout()
             }
             throw WorkoutSyncError(connectorError: error)
@@ -300,12 +322,16 @@ actor WorkoutSyncService: WorkoutSyncing {
             // deletion must not leave the key sitting in the process.
             await registry.disconnect(.hevy)
             await registry.disconnect(.strava)
+            await registry.disconnect(.polar)
             throw WorkoutSyncError.missingAPIKey
         }
         return key
     }
 
-    private enum StoredStravaCredentials {
+    /// Outcome of reading an optional OAuth source's stored pair — shared by
+    /// Strava and Polar, both of which are connected only when the user
+    /// chose to.
+    private enum StoredOAuthCredentials {
         case available(ConnectorCredentials)
         case notConfigured
         case unreadable
@@ -314,11 +340,22 @@ actor WorkoutSyncService: WorkoutSyncing {
     /// Strava is optional: no stored pair means the source is simply not
     /// connected, whereas a Keychain that refuses the read is a failure the
     /// result should carry.
-    private func storedStravaCredentials() async -> StoredStravaCredentials {
+    private func storedStravaCredentials() async -> StoredOAuthCredentials {
         do {
             return try await stravaCredentials.credentials().map { .available($0) } ?? .notConfigured
         } catch {
             logger.error("Strava credentials unreadable: \(error, privacy: .public)")
+            return .unreadable
+        }
+    }
+
+    /// Polar is optional the same way Strava is (#159): no stored pair means
+    /// not connected, an unreadable Keychain is a failure the result carries.
+    private func storedPolarCredentials() async -> StoredOAuthCredentials {
+        do {
+            return try await polarCredentials.credentials().map { .available($0) } ?? .notConfigured
+        } catch {
+            logger.error("Polar credentials unreadable: \(error, privacy: .public)")
             return .unreadable
         }
     }

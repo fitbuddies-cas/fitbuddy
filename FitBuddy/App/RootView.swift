@@ -132,6 +132,7 @@ struct RootView: View {
         return WorkoutSyncService(
             registry: dataSources.registry,
             stravaCredentials: dataSources.stravaCredentialStore,
+            polarCredentials: dataSources.polarCredentialStore,
             workouts: workouts,
             timestamps: timestamps
         )

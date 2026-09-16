@@ -24,6 +24,7 @@ final class WorkoutSyncServiceTests: XCTestCase {
     private var suiteName: String!
     private var registry: ConnectorRegistry!
     private var stravaStore: StubStravaCredentialStore!
+    private var polarStore: StubPolarCredentialStore!
     private var sut: WorkoutSyncService!
 
     /// Requests the stub answered, in order.
@@ -43,6 +44,7 @@ final class WorkoutSyncServiceTests: XCTestCase {
         timestamps = SyncTimestampStore(defaults: defaults)
         registry = ConnectorRegistry()
         stravaStore = StubStravaCredentialStore()
+        polarStore = StubPolarCredentialStore()
         sut = await makeService()
     }
 
@@ -54,6 +56,7 @@ final class WorkoutSyncServiceTests: XCTestCase {
         defaults.removePersistentDomain(forName: suiteName)
         sut = nil
         stravaStore = nil
+        polarStore = nil
         registry = nil
         timestamps = nil
         workouts = nil
@@ -72,6 +75,7 @@ final class WorkoutSyncServiceTests: XCTestCase {
             registry: registry,
             keychain: keychain,
             stravaCredentials: stravaStore,
+            polarCredentials: polarStore,
             workouts: workouts,
             timestamps: timestamps,
             sessionReset: SessionResetService(
@@ -108,6 +112,16 @@ final class WorkoutSyncServiceTests: XCTestCase {
             credentials: Self.stravaPair
         )
         await registry.register(connector, for: .strava)
+    }
+
+    private static var polarPair: ConnectorCredentials {
+        .oauth(accessToken: "polar-access-1", refreshToken: "polar-refresh-1", expiresAt: now.addingTimeInterval(4 * 3600))
+    }
+
+    /// Connects Polar: a stored pair plus a registered connector (#159).
+    private func connectPolar(_ connector: any FitnessConnector) async {
+        polarStore = StubPolarCredentialStore(credentials: Self.polarPair)
+        await registry.register(connector, for: .polar)
     }
 
     // MARK: - Request shape
@@ -521,6 +535,87 @@ final class WorkoutSyncServiceTests: XCTestCase {
         XCTAssertEqual(stravaCredentials, Self.stravaPair, "the stored pair is what Strava is connected with")
         let stored = await timestamps.lastSync()
         XCTAssertEqual(stored, Self.now)
+    }
+
+    private func polarRun(id: Int, daysAgo days: Int) -> Activity {
+        Activity(id: "polar:\(id)", title: "Run", startTime: daysAgo(days), source: .polar)
+    }
+
+    /// AC (#159): the sync fans out to Polar the same generic way it does to
+    /// Strava — no Polar-specific branch in the fan-out itself.
+    func testSyncsPolarAlongsideHevyAndStrava() async throws {
+        let hevy = MockConnector()
+        await hevy.setFetchActivitiesResult(.success([ActivityFactory.activity(id: "hevy-1", start: daysAgo(1))]))
+        let strava = MockConnector()
+        await strava.setFetchActivitiesResult(.success([stravaRun(id: 1, daysAgo: 2)]))
+        await connectStrava(strava)
+        let polar = MockConnector()
+        await polar.setFetchActivitiesResult(.success([polarRun(id: 1, daysAgo: 3)]))
+        await connectPolar(polar)
+        sut = await makeService(connector: hevy)
+
+        let result = try await sut.syncRecentWorkouts()
+
+        XCTAssertEqual(result.workoutCount, 3)
+        XCTAssertTrue(result.failures.isEmpty)
+        XCTAssertEqual(result.sources, [.hevy, .strava, .polar])
+        let ids = try await workouts.cachedWorkoutIDs()
+        XCTAssertEqual(Set(ids), ["hevy-1", "strava:1", "polar:1"])
+        let polarCredentials = await polar.lastConnectedCredentials
+        XCTAssertEqual(polarCredentials, Self.polarPair, "the stored pair is what Polar is connected with")
+    }
+
+    /// Polar is optional: registered but without a stored pair, it is simply
+    /// not part of the sync.
+    func testPolarWithoutStoredCredentialsIsSkipped() async throws {
+        let polar = MockConnector()
+        await registry.register(polar, for: .polar)
+        sut = await makeService(connector: MockConnector())
+
+        let result = try await sut.syncRecentWorkouts()
+
+        XCTAssertTrue(result.failures.isEmpty)
+        let fetches = await polar.fetchActivitiesCallCount
+        XCTAssertEqual(fetches, 0)
+    }
+
+    /// A Polar fetch that refreshed its access token has to have the new pair
+    /// written back to the Keychain — `PolarConnector` deliberately does not
+    /// persist itself (unlike `StravaConnector`).
+    func testARefreshedPolarPairIsPersistedBackToTheStore() async throws {
+        let configuration = PolarClientConfiguration(clientID: "c", redirectURI: "fitbuddy://polar/callback")
+        let polar = PolarConnector(
+            oauth: PolarOAuthClient(configuration: configuration, session: StubURLProtocol.makeSession(), now: { Self.now }),
+            accessLink: PolarAccessLinkClient(baseURL: configuration.accessLinkBaseURL, session: StubURLProtocol.makeSession()),
+            memberID: "member-1",
+            now: { Self.now }
+        )
+        let expiredPair = ConnectorCredentials.oauth(
+            accessToken: "expired-access",
+            refreshToken: "refresh-1",
+            expiresAt: Self.now.addingTimeInterval(-1)
+        )
+        polarStore = StubPolarCredentialStore(credentials: expiredPair)
+        await registry.register(polar, for: .polar)
+        StubURLProtocol.handler = { request in
+            if request.url?.path.contains("oauth/token") == true {
+                return PolarTestSupport.http(
+                    200,
+                    for: request,
+                    body: #"{"access_token":"fresh-access","refresh_token":"fresh-refresh","expires_in":43199}"#
+                )
+            }
+            return PolarTestSupport.http(200, for: request, body: "[]")
+        }
+        sut = await makeService(connector: MockConnector())
+
+        _ = try await sut.syncRecentWorkouts()
+
+        let stored = try await polarStore.credentials()
+        XCTAssertEqual(
+            stored,
+            .oauth(accessToken: "fresh-access", refreshToken: "fresh-refresh", expiresAt: Self.now.addingTimeInterval(43_199))
+        )
     }
 
     /// Strava is optional: registered but without a stored pair, it is simply
