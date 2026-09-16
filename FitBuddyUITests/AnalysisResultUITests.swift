@@ -12,8 +12,13 @@ final class AnalysisResultUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    /// A seeded progress report opens on the verdict headline and at least one
-    /// progression card — and not on the report's summary as prose.
+    /// A stored progress report renders as the verdict headline and at least
+    /// one progression card — not as its summary in prose.
+    ///
+    /// The report goes straight into the store, so the profile does not
+    /// produce it; it is seeded only to put a matching history behind the
+    /// screen. The profile's own path to the card is covered end-to-end in
+    /// `AnalysisMockProfileTests`.
     @MainActor
     func testASeededReportShowsAProgressionCard() {
         let sut = SeededApp(
@@ -31,8 +36,13 @@ final class AnalysisResultUITests: XCTestCase {
         )
     }
 
-    /// US-14 AC4 on screen: a recovery week opens on its own headline and the
-    /// recovery card, with no progression card on offer.
+    /// A stored recovery report renders as its own headline and the recovery
+    /// card, with no progression card and no prose.
+    ///
+    /// Rendering only: the report is stored directly, and the `overreached`
+    /// profile just puts a matching history behind the screen. US-14 AC4 —
+    /// six of seven days forcing the recovery card — is covered end-to-end in
+    /// `AnalysisMockProfileTests`.
     @MainActor
     func testASeededRecoveryReportShowsTheRecoveryCard() {
         let sut = SeededApp(
