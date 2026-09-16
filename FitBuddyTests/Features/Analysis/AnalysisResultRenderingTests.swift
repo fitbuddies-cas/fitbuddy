@@ -73,7 +73,12 @@ final class AnalysisResultRenderingTests: XCTestCase {
     // MARK: - Screens
 
     func testResultRendersEachReport() throws {
-        for report in [AnalysisReportSamples.progress, AnalysisReportSamples.recover, AnalysisReportSamples.hold] {
+        for report in [
+            AnalysisReportSamples.progress,
+            AnalysisReportSamples.recover,
+            AnalysisReportSamples.hold,
+            AnalysisReportSamples.thin,
+        ] {
             try assertRenders(
                 AnalysisResultView(
                     outcome: .report(report),
@@ -83,6 +88,35 @@ final class AnalysisResultRenderingTests: XCTestCase {
                 )
             )
         }
+    }
+
+    /// Open and closed, the disclosure renders — and open is taller, so the
+    /// summary is really laid out below the toggle.
+    func testFullAnalysisRendersCollapsedAndExpanded() throws {
+        let summary = AnalysisReportSamples.thin.summary
+        let collapsed = try render(AnalysisFullAnalysisView(summary: summary, startsExpanded: false))
+        let expanded = try render(AnalysisFullAnalysisView(summary: summary, startsExpanded: true))
+
+        XCTAssertGreaterThan(collapsed.size.height, 0)
+        XCTAssertGreaterThan(expanded.size.height, collapsed.size.height)
+    }
+
+    func testHistoryDetailRendersAStoredReportWithoutCards() throws {
+        let report = AnalysisReportSamples.thin
+        try assertRenders(
+            AnalysisHistoryDetailView(
+                entry: AnalysisResultSnapshot(
+                    id: UUID(),
+                    text: report.summary,
+                    generatedAt: .now,
+                    context: AnalysisContext(sessionCount: 2, window: .default),
+                    report: report,
+                    provider: .mistral
+                ),
+                now: .now
+            ),
+            height: 1_400
+        )
     }
 
     func testResultRendersProse() throws {

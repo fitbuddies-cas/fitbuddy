@@ -31,12 +31,12 @@ final class AnalysisReportSchemaTests: XCTestCase {
 
     // MARK: - Report
 
-    func testTheReportRequiresExactlyItsFourFields() throws {
+    func testTheReportRequiresExactlyItsFiveFields() throws {
         let schema = try encoded(AnalysisReportSchema.schema)
         let properties = try XCTUnwrap(schema["properties"] as? [String: Any])
         let required = try XCTUnwrap(schema["required"] as? [String])
 
-        XCTAssertEqual(Set(properties.keys), ["headline", "verdict", "cards", "summary"])
+        XCTAssertEqual(Set(properties.keys), ["headline", "verdict", "lead", "cards", "summary"])
         XCTAssertEqual(Set(required), Set(properties.keys))
         XCTAssertEqual(schema["additionalProperties"] as? Bool, false)
     }
@@ -134,7 +134,7 @@ final class AnalysisReportSchemaTests: XCTestCase {
     func testGeminiVariantListsThePropertyOrderOfEveryObject() throws {
         let schema = try encoded(AnalysisReportSchema.schema.addingPropertyOrdering())
 
-        XCTAssertEqual(schema["propertyOrdering"] as? [String], ["headline", "verdict", "summary", "cards"])
+        XCTAssertEqual(schema["propertyOrdering"] as? [String], ["headline", "verdict", "lead", "summary", "cards"])
         let properties = try XCTUnwrap(schema["properties"] as? [String: Any])
         let items = try XCTUnwrap((properties["cards"] as? [String: Any])?["items"] as? [String: Any])
         let progression = try XCTUnwrap((items["anyOf"] as? [[String: Any]])?.first)

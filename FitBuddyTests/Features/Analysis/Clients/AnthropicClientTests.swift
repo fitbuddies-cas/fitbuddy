@@ -108,7 +108,7 @@ final class AnthropicClientTests: LLMClientTestCase {
         // arrived. That text is still the model's own recommendation, so it is
         // kept — matching Gemini's `MAX_TOKENS` and Mistral's `length`. Throwing
         // here would, for the Claude-only setup, turn a usable answer into an
-        // error with the lock already started.
+        // error with the tokens already billed.
         stub(body: ClaudeSSEFactory.body(textChunks: ["Increase squat"], stopReason: "max_tokens"))
 
         let chunks = try await collect(try await stream())

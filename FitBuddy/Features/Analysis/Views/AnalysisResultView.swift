@@ -3,10 +3,11 @@ import SwiftUI
 /// The finished recommendation, plus the disclaimer that has to sit with it
 /// (#32).
 ///
-/// A validated report renders as design 3.4/3.5 draws it (US-14 AC1, #177):
-/// the verdict headline, the context line (US-6), one to four cards, the
-/// disclaimer. The report's `summary` is not shown next to the cards — it is
-/// the same recommendation once more, as prose.
+/// A validated report renders as design 3.4/3.4b/3.5 draws it (US-14 AC1,
+/// #177, #170): the verdict headline, the context line (US-6), the lead, zero
+/// to four cards, the full analysis behind "Show full analysis", the
+/// disclaimer. The disclosure starts open when no card is actionable
+/// (`AnalysisFullAnalysis`), so thin data still shows its whole answer.
 ///
 /// A prose answer — a provider without JSON output, a non-conforming answer
 /// (US-14 AC5), a row stored before V3 (AC6) — keeps the look it had before
@@ -27,9 +28,8 @@ struct AnalysisResultView: View {
     /// point: the user has to know they are looking at yesterday's advice
     /// (US-3 AC10, #97).
     var age: String? = nil
-    /// Starts over from the intro screen. `nil` while the lock blocks a
-    /// new run — an enabled button that cannot do anything is worse than no
-    /// button, and the lock label in the footer already explains the wait.
+    /// Starts over from the intro screen. `nil` where no new run belongs, e.g.
+    /// the history detail.
     var onNewAnalysis: (() -> Void)? = nil
 
     var body: some View {
@@ -54,10 +54,10 @@ struct AnalysisResultView: View {
         .accessibilityIdentifier(AccessibilityID.Analysis.result)
     }
 
-    /// Headline, context line, cards — in the order of US-14 AC1. The context
-    /// sits under the verdict rather than above the whole result, as in design
-    /// 3.4: the verdict is what the user came for, the basis is what they read
-    /// it against.
+    /// Headline, context line, lead, cards, full analysis — in the order of
+    /// US-14 AC1. The context sits under the verdict rather than above the
+    /// whole result, as in design 3.4: the verdict is what the user came for,
+    /// the basis is what they read it against.
     private func reportBody(_ report: ValidatedAnalysisReport) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 12) {
@@ -65,13 +65,37 @@ struct AnalysisResultView: View {
                 if let context {
                     AnalysisContextView(context: context)
                 }
-            }
-            VStack(spacing: 10) {
-                ForEach(Array(report.cards.enumerated()), id: \.offset) { item in
-                    AnalysisReportCardView(card: item.element)
+                if !isBlank(report.lead) {
+                    Text(report.lead)
+                        .font(.body)
+                        .foregroundStyle(Color.fbInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 2)
+                        .accessibilityIdentifier(AccessibilityID.Analysis.lead)
                 }
             }
+            if !report.cards.isEmpty {
+                VStack(spacing: 10) {
+                    ForEach(Array(report.cards.enumerated()), id: \.offset) { item in
+                        AnalysisReportCardView(card: item.element)
+                    }
+                }
+            }
+            if !isBlank(report.summary) {
+                AnalysisFullAnalysisView(
+                    summary: report.summary,
+                    startsExpanded: AnalysisFullAnalysis.startsExpanded(for: report.cards)
+                )
+                // A different report starts from its own rule, not from the
+                // state the previous one was left in.
+                .id(report.summary)
+            }
         }
+    }
+
+    private func isBlank(_ text: String) -> Bool {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func proseBody(_ text: String) -> some View {
@@ -192,11 +216,12 @@ private let previewContext = AnalysisContext(sessionCount: 14, window: .default)
     .background(Color.fbBackground)
 }
 
-#Preview("Report · hold") {
+/// Design 3.4b: thin data, no cards, the full analysis open.
+#Preview("Report · thin data") {
     ScrollView {
         AnalysisResultView(
-            outcome: .report(AnalysisReportSamples.hold),
-            context: previewContext,
+            outcome: .report(AnalysisReportSamples.thin),
+            context: AnalysisContext(sessionCount: 2, window: .default),
             attribution: AnalysisAttribution(first: .mistral),
             age: "1 h ago"
         )
@@ -221,7 +246,7 @@ private let previewContext = AnalysisContext(sessionCount: 14, window: .default)
 
 /// A recommendation brought back from disk after an app restart (#97): the
 /// provider and the age are stored (#176), the fallback chain is not, and the
-/// lock has since expired — so the way back to the intro screen is offered.
+/// way back to the intro screen is offered.
 #Preview("Restored") {
     ScrollView {
         AnalysisResultView(

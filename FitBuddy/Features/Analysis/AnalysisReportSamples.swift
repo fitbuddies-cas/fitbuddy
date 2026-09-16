@@ -1,8 +1,8 @@
 import Foundation
 
 #if DEBUG
-/// Validated reports shaped like design 3.4 and 3.5, for the card previews and
-/// for the analysis a UI test seeds (#177).
+/// Validated reports shaped like design 3.4, 3.4b and 3.5, for the card
+/// previews and for the analysis a UI test seeds (#177, #170).
 ///
 /// Built directly as `ValidatedAnalysisReport`s: a live preview has no exercise
 /// cache to validate against (#178), and these are the cards as the validator
@@ -12,6 +12,7 @@ enum AnalysisReportSamples {
     static let progress = ValidatedAnalysisReport(
         headline: "You're ready to progress.",
         verdict: .progress,
+        lead: "Bench press and back squat are ready for 2.5 kg more. Legs need a second session first.",
         cards: [progressionCard, squatCard, imbalanceCard],
         summary: """
             Bench press is ready for 62.5 kg and back squat for 82.5 kg. \
@@ -23,6 +24,7 @@ enum AnalysisReportSamples {
     static let recover = ValidatedAnalysisReport(
         headline: "Recover this week.",
         verdict: .recover,
+        lead: "Six training days out of seven: rest comes before any new load.",
         cards: [recoveryCard],
         summary: "You trained 6 of the last 7 days. Take two rest days before adding load."
     )
@@ -31,8 +33,29 @@ enum AnalysisReportSamples {
     static let hold = ValidatedAnalysisReport(
         headline: "Hold steady this week.",
         verdict: .hold,
+        lead: "Keep your current loads for another week.",
         cards: [noteCard],
         summary: "Keep your current loads for another week."
+    )
+
+    /// Design 3.4b: too little data for any card — the lead and the full
+    /// analysis carry the answer, and the disclosure starts open.
+    static let thin = ValidatedAnalysisReport(
+        headline: "Hold steady this week.",
+        verdict: .hold,
+        lead: "Two sessions in four weeks are too few to judge a trend. Keep your current weights and log a few more sessions.",
+        cards: [],
+        summary: """
+            You logged two sessions in the last four weeks, both upper body.
+
+            **What the data shows**
+            Bench press and rows each appear once, at the same weights as \
+            before. One session per movement says nothing yet about whether \
+            a load is getting easier.
+
+            - Keep your current weights for the next sessions
+            - Log two to three sessions a week so a trend can show
+            """
     )
 
     static let progressionCard = AnalysisReportCard.progression(

@@ -22,7 +22,7 @@ enum AnalysisReportValidator {
     /// where `maxStepShare` would allow less than one plate pair, progressable.
     static let minimumStepKg = 2.5
 
-    /// Cards the result screen shows at most (design 3.4/3.5: one to four).
+    /// Cards the result screen shows at most (design 3.4/3.4b/3.5: zero to four).
     static let maxCards = 4
 
     /// Title of a downgraded card that has no better one.
@@ -60,7 +60,8 @@ enum AnalysisReportValidator {
         // US-3 AC6 / US-14 AC4: at 6 of 7 days no progression is shown without
         // the recovery hint, and the headline says so. A model recovery card
         // always survives at that count, so a missing one means the model left
-        // it out.
+        // it out. The lead stays the model's: it is prose like the summary,
+        // and the recovery card right below it states the hint (#170).
         if evidence.recovery.needsRecovery {
             if !cards.contains(where: { $0.kind == .recovery }) {
                 cards.insert(
@@ -88,6 +89,7 @@ enum AnalysisReportValidator {
         return ValidatedAnalysisReport(
             headline: headline,
             verdict: verdict,
+            lead: report.lead,
             cards: kept,
             summary: report.summary
         )

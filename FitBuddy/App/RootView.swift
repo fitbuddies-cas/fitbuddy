@@ -160,14 +160,11 @@ struct RootView: View {
     ///
     /// Its own `WorkoutStore` over the same container, since the analysis only
     /// reads — unlike the dashboard, it shares no write path with the sync.
-    /// The rate-limit store *is* shared with `InferenceService`, so the label
-    /// on screen and the service's own guard can never disagree.
     ///
     /// The result store goes over the same container as the two reset paths
     /// below, so a wipe removes exactly the history this screen would
     /// otherwise restore from (#97, #117).
     private func makeAnalysisViewModel() -> AnalysisViewModel {
-        let rateLimit = AnalysisRateLimitStore()
         let store = WorkoutStore(modelContainer: modelContext.container)
         return AnalysisViewModel(
             cache: store,
@@ -175,8 +172,7 @@ struct RootView: View {
             // The same store once more: the report's recovery figures read the
             // RPE of the last seven days from it (#175, #178).
             detailCache: store,
-            inference: InferenceService(rateLimit: rateLimit),
-            rateLimit: rateLimit,
+            inference: InferenceService(),
             resultStore: AnalysisResultStore(modelContainer: modelContext.container)
         )
     }

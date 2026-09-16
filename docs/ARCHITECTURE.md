@@ -155,7 +155,7 @@ flowchart TB
 
     PRES["Presentation Layer\nSwiftUI Views · @State · @Binding\nDashboard (US-2) · Onboarding (US-4) · AI-Result-View (US-3)"]:::layer
     VM["ViewModel Layer · @MainActor\n@Observable ViewModels\nDashboardViewModel · AnalysisViewModel · OnboardingViewModel"]:::layer
-    SVC["Service / Domain Layer\nInferenceService · Prompt-Build · 60s-Rate-Limit\nConnectorLayer · FitnessConnector-Protocol · Delta-Sync · Error-Routing"]:::layer
+    SVC["Service / Domain Layer\nInferenceService · Prompt-Build · Fallback-Kette\nConnectorLayer · FitnessConnector-Protocol · Delta-Sync · Error-Routing"]:::layer
     DATA["Data Layer\nHevyConnector · URLSession · Pagination\nKeychainService · SecItemAdd / CopyMatching\nSwiftData Store · ModelActor · Activity / Exercise / ExerciseSet\nExerciseTemplateCache · SwiftData"]:::layer
 
     PRES --> VM --> SVC --> DATA
@@ -179,9 +179,12 @@ flowchart TB
 [4] Prompt-Build       → Daten serialisieren (max_tokens serverseitig gedeckelt)
 [5] HTTPS POST (SSE)   → Provider 1 (api.anthropic.com / generativelanguage.googleapis.com /
                           api.mistral.ai), Streaming; jeder Fehler → Provider 2, dann 3 (#79)
-[6] Rate-Limit-Write   → UserDefaults, genau einmal pro Durchlauf, sobald ein Provider annimmt
-[7] @MainActor Update  → SwiftUI rendert Text inkrementell + Provider-Badge
+[6] @MainActor Update  → SwiftUI rendert die Antwort am Stück (#178) + Provider-Badge
 ```
+
+Eine Sperre nach dem Durchlauf gibt es nicht mehr: Die 60-s-Doppeltipp-Sperre (#117) ist entfernt,
+der «Analysieren»-Button ist nur während eines laufenden Calls deaktiviert. Das harte Kostenlimit
+bleibt das Spending Limit im Account des Users (BYO-Key, ADR-004).
 
 | Lücke | Konsequenz |
 |---|---|
@@ -274,9 +277,10 @@ Alle asynchronen Zugriffe folgen drei fixen Ausführungskontexten — gilt schic
 
 Bekannte Lücken im PoC-Design — vor Sprint 3 (AI-Integration) adressieren.
 
-> TD-2 («Cooldown-Write nach API-Call») ist mit #117 hinfällig: Der 6h-Cooldown ist durch eine
-> 60-s-Doppeltipp-Sperre ersetzt, ein Crash-Window kostet damit höchstens eine Wartesekunde und
-> keine doppelte Analyse. Das Kostenlimit ist das Spending Limit im Account des Users (ADR-004).
+> TD-2 («Cooldown-Write nach API-Call») ist hinfällig: Der 6h-Cooldown wurde mit #117 durch eine
+> 60-s-Doppeltipp-Sperre ersetzt, und auch diese ist inzwischen entfernt — es gibt keinen
+> Cooldown-Write mehr. Doppelte Calls verhindert der gesperrte Button während eines laufenden
+> Calls; das Kostenlimit ist das Spending Limit im Account des Users (ADR-004).
 
 | # | Lücke | Konsequenz | Handlungsbedarf |
 |---|---|---|---|
@@ -292,9 +296,10 @@ Bekannte Lücken im PoC-Design — vor Sprint 3 (AI-Integration) adressieren.
 
 *Vor Sprint 1 auflösen.*
 
-> W-4 («6h-Cooldown-Speicherort undefiniert») ist mit #117 aufgelöst: Die Sperre ist auf 60 s
-> verkürzt und liegt als `fitbuddy.analysis.lastCallTimestamp` in `UserDefaults`
-> (`AnalysisRateLimitStore`) — ein einzelner Skalar, wie der Sync-Zeitstempel (ADR-001).
+> W-4 («6h-Cooldown-Speicherort undefiniert») ist aufgelöst: Mit #117 wurde die Sperre auf 60 s
+> verkürzt und als `fitbuddy.analysis.lastCallTimestamp` in `UserDefaults` abgelegt; inzwischen
+> ist sie ganz entfernt. «Alle Daten löschen» entfernt den alten Zeitstempel noch, falls er von
+> einer früheren Version auf dem Gerät liegt.
 
 > W-6 («Strava OAuth-Secret ohne Backend strukturell unlösbar») ist mit
 > [ADR-010](adr/ADR-010-strava-oauth-byo-app.md) aufgelöst: Das Secret gehört nicht dem Team,

@@ -18,6 +18,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
         let report = AnalysisReport(
             headline: "You're ready to progress.",
             verdict: .progress,
+            lead: "Bench press can go up.",
             cards: [benchPress(from: 60, to: 62.5)],
             summary: "Bench press is ready."
         )
@@ -26,7 +27,30 @@ final class AnalysisReportValidatorTests: XCTestCase {
 
         XCTAssertEqual(validated.headline, "You're ready to progress.")
         XCTAssertEqual(validated.verdict, .progress)
+        XCTAssertEqual(validated.lead, "Bench press can go up.")
         XCTAssertEqual(validated.summary, "Bench press is ready.")
+    }
+
+    /// #170: thin data gets no cards, and that is a valid report — nothing is
+    /// inserted when no recovery is due.
+    func testAReportWithoutCardsStaysValidAndEmpty() {
+        let report = AnalysisReport(
+            headline: "Hold steady.",
+            verdict: .hold,
+            lead: "Too little data for a change yet.",
+            cards: [],
+            summary: "Two sessions are too few to judge a trend."
+        )
+
+        let validated = AnalysisReportValidator.validate(report, against: evidence())
+
+        XCTAssertEqual(validated, ValidatedAnalysisReport(
+            headline: "Hold steady.",
+            verdict: .hold,
+            lead: "Too little data for a change yet.",
+            cards: [],
+            summary: "Two sessions are too few to judge a trend."
+        ))
     }
 
     func testUnknownExerciseBecomesANote() {
@@ -330,11 +354,12 @@ final class AnalysisReportValidatorTests: XCTestCase {
 
         XCTAssertEqual(validated.verdict, .recover)
         XCTAssertEqual(validated.headline, "Recover this week.")
+        XCTAssertEqual(validated.lead, "Lead", "the model's lead survives the recovery override")
         XCTAssertEqual(validated.summary, "Summary")
     }
 
     func testModelRecoverVerdictKeepsItsHeadline() {
-        let report = AnalysisReport(headline: "Take a break.", verdict: .recover, cards: [], summary: "Rest.")
+        let report = AnalysisReport(headline: "Take a break.", verdict: .recover, lead: "Rest first.", cards: [], summary: "Rest.")
         let validated = AnalysisReportValidator.validate(
             report,
             against: evidence(recovery: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: nil))
@@ -378,7 +403,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
 
     /// A model hold verdict passes through, cards or not.
     func testModelHoldVerdictIsKept() {
-        let report = AnalysisReport(headline: "Keep going.", verdict: .hold, cards: [chestVersusLegs(3, 1)], summary: "Hold.")
+        let report = AnalysisReport(headline: "Keep going.", verdict: .hold, lead: "Hold.", cards: [chestVersusLegs(3, 1)], summary: "Hold.")
         let validated = AnalysisReportValidator.validate(report, against: evidence())
 
         XCTAssertEqual(validated.verdict, .hold)
@@ -490,7 +515,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
 
     private func validate(_ cards: [AnalysisCard], evidence: AnalysisReportEvidence? = nil) -> ValidatedAnalysisReport {
         AnalysisReportValidator.validate(
-            AnalysisReport(headline: "Headline", verdict: .progress, cards: cards, summary: "Summary"),
+            AnalysisReport(headline: "Headline", verdict: .progress, lead: "Lead", cards: cards, summary: "Summary"),
             against: evidence ?? self.evidence()
         )
     }

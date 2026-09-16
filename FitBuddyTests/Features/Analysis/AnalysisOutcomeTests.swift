@@ -27,9 +27,10 @@ final class AnalysisOutcomeTests: XCTestCase {
         XCTAssertEqual(AnalysisOutcome(stored: snapshot), .prose("Old prose."))
     }
 
-    /// A stored report whose cards are all gone renders its summary (#177).
-    func testAStoredReportWithoutCardsRendersItsSummary() {
-        let report = ValidatedAnalysisReport(headline: "H", verdict: .hold, cards: [], summary: "Summary.")
+    /// A stored report without cards stays a report: lead and full analysis
+    /// (#170).
+    func testAStoredReportWithoutCardsStaysAReport() {
+        let report = ValidatedAnalysisReport(headline: "H", verdict: .hold, lead: "Lead.", cards: [], summary: "Summary.")
         let snapshot = AnalysisResultSnapshot(
             id: UUID(),
             text: "Stored text.",
@@ -38,7 +39,7 @@ final class AnalysisOutcomeTests: XCTestCase {
             report: report
         )
 
-        XCTAssertEqual(AnalysisOutcome(stored: snapshot), .prose("Summary."))
+        XCTAssertEqual(AnalysisOutcome(stored: snapshot), .report(report))
     }
 
     func testAValidatedReportWithCardsStaysAReport() {
@@ -46,8 +47,8 @@ final class AnalysisOutcomeTests: XCTestCase {
         XCTAssertEqual(AnalysisOutcome(validated: report), .report(report))
     }
 
-    func testAValidatedReportWithoutCardsBecomesProse() {
-        let report = ValidatedAnalysisReport(headline: "H", verdict: .progress, cards: [], summary: "Summary.")
-        XCTAssertEqual(AnalysisOutcome(validated: report), .prose("Summary."))
+    func testAValidatedReportWithoutCardsStaysAReport() {
+        let report = ValidatedAnalysisReport(headline: "H", verdict: .hold, lead: "Lead.", cards: [], summary: "Summary.")
+        XCTAssertEqual(AnalysisOutcome(validated: report), .report(report))
     }
 }

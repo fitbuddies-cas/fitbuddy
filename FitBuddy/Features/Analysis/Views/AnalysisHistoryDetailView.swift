@@ -54,6 +54,23 @@ struct AnalysisHistoryDetailView: View {
     }
 }
 
+/// A stored report without cards: lead and the full analysis, open (#170).
+#Preview("Thin report") {
+    NavigationStack {
+        AnalysisHistoryDetailView(
+            entry: AnalysisResultSnapshot(
+                id: UUID(),
+                text: AnalysisReportSamples.thin.summary,
+                generatedAt: .now.addingTimeInterval(-86_400),
+                context: AnalysisContext(sessionCount: 2, window: .default),
+                report: AnalysisReportSamples.thin,
+                provider: .mistral
+            ),
+            now: .now
+        )
+    }
+}
+
 /// A row stored before V3: prose, and a bare "AI" badge (US-14 AC6).
 #Preview("Prose") {
     NavigationStack {
