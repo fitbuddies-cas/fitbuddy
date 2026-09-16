@@ -9,11 +9,21 @@ struct RootView: View {
 
     @StateObject private var onboardingViewModel = OnboardingViewModel()
 
+    /// The shared connector registry and the Strava collaborators around it
+    /// (#140). One instance for the whole app, so the connection screen, the
+    /// sync and the dashboard agree on what is connected.
+    @StateObject private var dataSources = DataSourceStack()
+
     /// The visible tab. Owned here rather than in `MainTabView`, because
     /// deleting a key sends the user back into onboarding — a step change this
     /// view is the one to react to, and the next start must not land on the
     /// settings tab (#107).
     @State private var selectedTab: MainTab = .dashboard
+
+    /// The settings tab's navigation path (#144). Owned here so the
+    /// dashboard's «Renew your Strava connection» banner can land the user on
+    /// the connection screen on another tab (US-5 AC2).
+    @State private var settingsPath: [SettingsRoute] = []
 
     /// Bumped when the settings screen replaces the Hevy key, which drops the
     /// cached workouts. The dashboard stays alive on its tab and its own
@@ -33,14 +43,17 @@ struct RootView: View {
                 // the ViewModels until SwiftUI first creates each tab's state.
                 MainTabView(
                     selection: $selectedTab,
+                    settingsPath: $settingsPath,
                     analysisViewModel: makeAnalysisViewModel(),
                     makeDashboardViewModel: makeDashboardViewModel,
                     makeSettingsViewModel: makeSettingsViewModel,
+                    makeStravaConnectionViewModel: makeStravaConnectionViewModel,
                     makeWorkoutDetailViewModel: makeWorkoutDetailViewModel(for:),
                     makeExerciseListViewModel: makeExerciseListViewModel,
                     makeExerciseProgressionViewModel: makeExerciseProgressionViewModel(for:),
                     makeAnalysisHistoryViewModel: makeAnalysisHistoryViewModel,
-                    reloadToken: dashboardReloadToken
+                    reloadToken: dashboardReloadToken,
+                    onRenewSource: openConnectionScreen(for:)
                 )
             }
         }
@@ -52,7 +65,10 @@ struct RootView: View {
         // onboarding; the tab bar goes with it, and the selection is put back
         // so the next start lands on the dashboard, not in settings.
         .onChange(of: onboardingViewModel.step) { _, step in
-            if step != .completed { selectedTab = .dashboard }
+            if step != .completed {
+                selectedTab = .dashboard
+                settingsPath = []
+            }
         }
         .task {
             // Before the coordinator resolves, so the first screen past
@@ -67,6 +83,10 @@ struct RootView: View {
             await MockDataSeeder.resetStateIfRequested()
             await MockDataSeeder.seedIfRequested(container: modelContext.container)
             #endif
+            // Connectors first: onboarding resolving to `.completed` is what
+            // shows the tabs, and every screen behind them may ask the
+            // registry right away.
+            await dataSources.registerConnectors()
             await onboardingViewModel.bootstrap()
         }
     }
@@ -81,7 +101,7 @@ struct RootView: View {
         let timestamps = SyncTimestampStore()
         let viewModel = WorkoutListViewModel(
             cache: store,
-            syncer: Self.syncer(workouts: store, timestamps: timestamps),
+            syncer: syncer(workouts: store, timestamps: timestamps),
             timestamps: timestamps
         )
         // Hevy rejected the stored key: `WorkoutSyncService` has already wiped it, so
@@ -93,10 +113,11 @@ struct RootView: View {
         return viewModel
     }
 
-    /// The dashboard's sync for this launch. A UI test walking onboarding with
-    /// a stubbed key gets a sync that reaches no network (#120) — the live one
-    /// would answer that key with a 401 and drop the app back into step 2.
-    private static func syncer(workouts: WorkoutStore, timestamps: SyncTimestampStore) -> any WorkoutSyncing {
+    /// The dashboard's sync for this launch, over every source in the shared
+    /// registry (#143). A UI test walking onboarding with a stubbed key gets a
+    /// sync that reaches no network (#120) — the live one would answer that
+    /// key with a 401 and drop the app back into step 2.
+    private func syncer(workouts: WorkoutStore, timestamps: SyncTimestampStore) -> any WorkoutSyncing {
         #if DEBUG
         if HevyStubbing.isActive() {
             return StubWorkoutSync(
@@ -107,7 +128,12 @@ struct RootView: View {
             )
         }
         #endif
-        return WorkoutSyncService(workouts: workouts, timestamps: timestamps)
+        return WorkoutSyncService(
+            registry: dataSources.registry,
+            stravaCredentials: dataSources.stravaCredentialStore,
+            workouts: workouts,
+            timestamps: timestamps
+        )
     }
 
     #if DEBUG
@@ -217,6 +243,39 @@ struct RootView: View {
         // A key was stored but the session did not end, so onboarding stays
         // out of it: the dashboard simply has to refill the cache it lost.
         viewModel.onHevyKeyStored = { dashboardReloadToken += 1 }
+        return viewModel
+    }
+
+    /// The re-auth link behind the dashboard's renewal banner (US-5 AC2,
+    /// #144): switches to the settings tab and pushes the source's connection
+    /// screen. Only Strava has one; Hevy's key is renewed through onboarding.
+    private func openConnectionScreen(for source: ConnectorSource) {
+        selectedTab = .settings
+        switch source {
+        case .strava: settingsPath = [.strava]
+        case .hevy: settingsPath = []
+        }
+    }
+
+    /// Wires the Strava connection screen to the shared registry, the OAuth
+    /// service and the credential store (#140), and to a session reset over
+    /// the same container the dashboard reads, so a disconnect drops exactly
+    /// the Strava sessions it shows.
+    private func makeStravaConnectionViewModel() -> StravaConnectionViewModel {
+        let store = WorkoutStore(modelContainer: modelContext.container)
+        let viewModel = StravaConnectionViewModel(
+            oauth: dataSources.stravaOAuth,
+            credentialStore: dataSources.stravaCredentialStore,
+            registry: dataSources.registry,
+            sessionReset: SessionResetService(
+                workouts: store,
+                results: AnalysisResultStore(modelContainer: modelContext.container)
+            )
+        )
+        // Either way the dashboard has to re-read: after a connect the next
+        // sync brings Strava sessions in, after a disconnect they are gone.
+        viewModel.onConnected = { dashboardReloadToken += 1 }
+        viewModel.onDisconnected = { dashboardReloadToken += 1 }
         return viewModel
     }
 

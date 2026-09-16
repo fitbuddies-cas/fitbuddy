@@ -1,8 +1,10 @@
 import SwiftUI
 
 /// Consent screen shown before any app access (US-4 / AC4, step 1). Presents
-/// the three mandatory disclosures, a link to the privacy policy, and a
-/// confirm button that stays disabled until the user ticks the checkbox.
+/// the mandatory disclosures — where the training data comes from, where it
+/// goes, and that this is not a medical device — a link to the privacy
+/// policy, and a confirm button that stays disabled until the user ticks the
+/// checkbox.
 /// Styled with the shared design system (`Core/DesignSystem`). Expects to be
 /// hosted inside a `NavigationStack` (provided by `OnboardingFlowView`).
 struct ConsentView: View {
@@ -15,6 +17,17 @@ struct ConsentView: View {
                 header
                 FBCard {
                     VStack(alignment: .leading, spacing: 20) {
+                        FBInfoRow(
+                            icon: "arrow.down.circle",
+                            title: "Training data from Hevy and Strava",
+                            text: """
+                            FitBuddy reads your workouts from Hevy and, if you connect it, your \
+                            activities from Strava — both with credentials that belong to you, \
+                            fetched directly from this device. Strava, Inc. processes data in the \
+                            USA; FitBuddy only ever reads from it and never writes back.
+                            """
+                        )
+                        Divider().overlay(Color.fbDivider)
                         FBInfoRow(
                             icon: "globe",
                             title: "Data transfer to AI providers (USA/EU)",

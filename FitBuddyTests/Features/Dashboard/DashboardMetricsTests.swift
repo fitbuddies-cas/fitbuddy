@@ -25,6 +25,40 @@ final class DashboardMetricsTests: XCTestCase {
         XCTAssertEqual(metrics.workoutCount, 2)
     }
 
+    /// US-5 AC1 / #144: a pure cardio session is a session — it counts and it
+    /// takes a training day — but it moves neither the volume nor the muscle
+    /// split, both of which stay Hevy's strength picture.
+    func testCardioSessionsCountWithoutMovingVolumeOrDistribution() {
+        let strength = WorkoutSummary(
+            id: "hevy-1",
+            title: "Push Day",
+            startTime: reference.addingTimeInterval(-86_400),
+            volumeKg: 1_000,
+            exerciseCount: 1,
+            countedSetCount: 1,
+            muscleLoads: [MuscleLoad(group: .chest, volumeKg: 1_000, setCount: 1)]
+        )
+        let run = WorkoutSummary(
+            id: "strava:1",
+            title: "Morning Run",
+            startTime: reference.addingTimeInterval(-3 * 86_400),
+            source: .strava,
+            volumeKg: 0,
+            exerciseCount: 1,
+            countedSetCount: 1,
+            distanceMeters: 5_000,
+            durationSeconds: 1_800
+        )
+
+        let withRun = DashboardMetrics(summaries: [strength, run], calendar: calendar)
+        let withoutRun = DashboardMetrics(summaries: [strength], calendar: calendar)
+
+        XCTAssertEqual(withRun.totalVolumeKg, withoutRun.totalVolumeKg)
+        XCTAssertEqual(withRun.muscleDistribution, withoutRun.muscleDistribution)
+        XCTAssertEqual(withRun.workoutCount, 2)
+        XCTAssertEqual(withRun.trainingDayCount, 2)
+    }
+
     func testTwoWorkoutsOnTheSameDayCountAsOneTrainingDay() {
         let metrics = DashboardMetrics(
             summaries: [

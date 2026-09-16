@@ -297,6 +297,32 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertEqual(make(summaries), make(summaries))
     }
 
+    // MARK: - Strava sessions (US-5, #144)
+
+    /// A run is not a strength session: passed through, it would count as a
+    /// training day with 0 kg and be read under rule 5 as bodyweight work.
+    /// It stays out of every figure and out of the session list.
+    func testStravaSessionsAreLeftOutOfEveryFigure() {
+        let prompt = make([
+            workout(daysAgo: 1, volume: 3_000, id: "hevy-1", title: "Push Day"),
+            workout(daysAgo: 2, volume: 0, id: "strava:1", title: "Morning Run", source: .strava),
+            workout(daysAgo: 3, volume: 0, id: "strava:2", title: "Evening Run", source: .strava),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("Sessions: 1"))
+        XCTAssertTrue(prompt.user.contains("Training days: 1"))
+        XCTAssertTrue(prompt.user.contains("Push Day"))
+        XCTAssertFalse(prompt.user.contains("Run"))
+    }
+
+    func testAWindowHoldingOnlyStravaSessionsReadsAsEmpty() {
+        let prompt = make([
+            workout(daysAgo: 2, volume: 0, id: "strava:1", title: "Morning Run", source: .strava),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("No workouts are recorded in this window"))
+    }
+
     // MARK: - Helpers
 
     private func make(
@@ -316,6 +342,7 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         volume: Double,
         id: String = "w-1",
         title: String = "Session",
+        source: ConnectorSource = .hevy,
         loads: [MuscleLoad] = []
     ) -> WorkoutSummary {
         WorkoutSummary(
@@ -325,6 +352,7 @@ final class AnalysisPromptBuilderTests: XCTestCase {
             // and make the test depend on rounding rather than on the window.
             startTime: calendar.startOfDay(for: reference)
                 .addingTimeInterval(Double(-daysAgo) * 86_400 + 43_200),
+            source: source,
             volumeKg: volume,
             exerciseCount: 4,
             countedSetCount: 12,

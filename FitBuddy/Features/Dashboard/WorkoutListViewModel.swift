@@ -1,7 +1,8 @@
 import Foundation
+import OSLog
 
-/// Drives the dashboard's workout list, its 90-day metrics and the Hevy sync
-/// that keeps them current (US-2).
+/// Drives the dashboard's workout list, its 90-day metrics and the sync over
+/// every connected source that keeps them current (US-2, US-5).
 ///
 /// Everything on screen is rendered from the SwiftData cache — `load()` never
 /// touches the network. The sync is a separate step that writes into that same
@@ -27,16 +28,23 @@ final class WorkoutListViewModel: ObservableObject {
     /// view can do, so it is handed in as a callback.
     var onUnauthorized: (() async -> Void)?
 
-    /// The sources the status strip reports on (US-8, #40).
+    /// The sources the last sync covered, failed ones included (#143). Hevy
+    /// alone until a sync has run — a Strava row before any sync would promise
+    /// data nobody has fetched.
+    @Published private(set) var syncedSources: [ConnectorSource] = [.hevy]
+
+    /// The sources the status strip reports on (US-8, #40), one row each.
     ///
-    /// Derived rather than stored: `lastSync` and `syncStatus` are both
-    /// published, so SwiftUI re-renders whenever either moves, and a second
-    /// copy of the same facts is a second thing that can be wrong. v0 syncs one
-    /// source — `WorkoutSyncService` fetches Hevy and nothing else — so the
-    /// list holds one entry; a Strava row appears here once its connector stops
-    /// throwing `.notImplemented` (#35).
+    /// Derived rather than stored: `lastSync`, `syncStatus` and
+    /// `syncedSources` are all published, so SwiftUI re-renders whenever any
+    /// of them moves, and a second copy of the same facts is a second thing
+    /// that can be wrong. The timestamp is the sync's, not the source's: one
+    /// sync fills every connected source, and a source that failed inside a
+    /// partial sync is reported by the `degraded` banner rather than by its row.
     var dataSources: [DataSourceStatus] {
-        [DataSourceStatus(source: .hevy, lastSync: lastSync, isSyncing: syncStatus == .syncing)]
+        syncedSources.map {
+            DataSourceStatus(source: $0, lastSync: lastSync, isSyncing: syncStatus == .syncing)
+        }
     }
 
     /// The read currently in flight, so a newer `load()` supersedes it.
@@ -60,6 +68,12 @@ final class WorkoutListViewModel: ObservableObject {
     /// explicit so the check reads the same as `loadGeneration`'s and stays
     /// right should another way to cancel a sync ever appear.
     private var syncGeneration = 0
+
+    /// Sync lifecycle at `notice` level, so a tester's device log shows when
+    /// a sync started, how it ended, and — the case that is otherwise
+    /// invisible — whether the SwiftUI task driving it was cancelled underneath
+    /// it. Never any key material.
+    private let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "DashboardSync")
 
     private let cache: WorkoutSummaryReading
     private let syncer: WorkoutSyncing?
@@ -128,7 +142,9 @@ final class WorkoutListViewModel: ObservableObject {
         // read after the sync publishes the real answer — only from a resting
         // `.loading`, so pull-to-refresh keeps its content on screen.
         let holdsSpinner = syncer != nil && state == .loading
+        logger.notice("Refresh requested (user-triggered: \(announcingFailure, privacy: .public)); caller cancelled: \(Task.isCancelled, privacy: .public)")
         await load(keepingSpinnerWhenEmpty: holdsSpinner)
+        logger.notice("Cache read done; caller cancelled: \(Task.isCancelled, privacy: .public)")
         await sync(announcingFailure: announcingFailure)
     }
 
@@ -238,14 +254,22 @@ final class WorkoutListViewModel: ObservableObject {
         // so this is not reachable today — but it costs one line.
         guard isCurrentSync(generation) else { return }
         syncStatus = .syncing
+        logger.notice("Sync #\(generation, privacy: .public) started; task cancelled on entry: \(Task.isCancelled, privacy: .public)")
         do {
-            try await syncer.syncRecentWorkouts()
+            let result = try await syncer.syncRecentWorkouts()
+            logger.notice("Sync #\(generation, privacy: .public) finished: \(result.workoutCount, privacy: .public) workouts, \(result.failures.count, privacy: .public) failed source(s)")
             guard isCurrentSync(generation) else { return }
             // Clears the banner (#28 AC3) before the reload, so the cached
             // window and the "up to date" claim land in the same render pass.
             // The toast goes with it: a message about a failure that has just
             // been made good would contradict the timestamp above it (#43).
-            syncStatus = .idle
+            //
+            // A partial sync (#143) is neither: the timestamp moved and the
+            // data is fresh, but a source is missing from it. `degraded`
+            // carries which, per source, for the banner to say so. No toast —
+            // the moved timestamp is what tells the user their pull ran.
+            syncStatus = Self.status(after: result)
+            syncedSources = result.sources
             refreshNotice = nil
             await load()
         } catch {
@@ -262,6 +286,7 @@ final class WorkoutListViewModel: ObservableObject {
             // connectivity, so no banner — but `.syncing` has to go, or the
             // strip would claim a sync is running forever.
             guard !error.isCancellation else {
+                logger.notice("Sync #\(generation, privacy: .public) cancelled (superseded by a newer sync: \(!self.isCurrentSync(generation), privacy: .public))")
                 syncStatus = .idle
                 await resolveHeldSpinner()
                 return
@@ -275,6 +300,7 @@ final class WorkoutListViewModel: ObservableObject {
                 await onUnauthorized?()
                 return
             }
+            logger.notice("Sync #\(generation, privacy: .public) failed: \(String(describing: error), privacy: .public)")
             syncStatus = .failed(failure)
             // US-10 AC2: the toast is what tells the user their pull happened
             // and did not work. Raised after the banner, so both describe the
@@ -284,6 +310,18 @@ final class WorkoutListViewModel: ObservableObject {
             }
             await resolveHeldSpinner()
         }
+    }
+
+    /// `idle` for a clean sync, `degraded` with one banner reason per failed
+    /// source otherwise. A source whose failure has no banner wording (an
+    /// auth failure on Hevy would have thrown instead) is left out.
+    private static func status(after result: SyncResult) -> SyncStatus {
+        guard result.isPartial else { return .idle }
+        var failures: [ConnectorSource: SyncFailure] = [:]
+        for (source, error) in result.failures {
+            failures[source] = SyncFailure(syncError: error, source: source)
+        }
+        return failures.isEmpty ? .idle : .degraded(failures: failures)
     }
 
     /// Whether this read is still the one `state` belongs to. Only a newer

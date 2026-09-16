@@ -154,7 +154,43 @@ final class WorkoutStoreExercisesTests: XCTestCase {
         XCTAssertTrue(summaries.isEmpty)
     }
 
+    // MARK: - Strava sessions (US-5, #144)
+
+    /// A run is one "exercise" named after the sport with a single cardio
+    /// set. Listed, it would read as a 0 kg movement over n sessions with a
+    /// guessed muscle group — and fold into a Hevy exercise of the same title.
+    func testStravaSessionsStayOutOfTheListAndDoNotMergeWithAHevyMovement() async throws {
+        try insert([
+            makeWorkout(id: "hevy-1", start: reference, exercises: [
+                (title: "Run", templateID: nil, sets: [(type: .normal, weight: nil, reps: nil)]),
+            ]),
+            makeStravaRun(id: "strava:1", start: reference.addingTimeInterval(-86_400)),
+            makeStravaRun(id: "strava:2", start: reference.addingTimeInterval(-2 * 86_400)),
+        ])
+
+        let summaries = try await sut.exerciseSummaries(since: .distantPast)
+
+        XCTAssertEqual(summaries.count, 1)
+        let run = try XCTUnwrap(summaries.first)
+        XCTAssertEqual(run.sessionCount, 1, "only the Hevy session counts")
+        XCTAssertEqual(run.countedSetCount, 1)
+    }
+
     // MARK: - Helpers
+
+    private func makeStravaRun(id: String, start: Date) -> Workout {
+        Workout(
+            id: id,
+            title: "Morning Run",
+            startTime: start,
+            source: .strava,
+            exercises: [
+                Exercise(index: 0, title: "Run", sets: [
+                    ExerciseSet(index: 0, type: .normal, distanceMeters: 5_000, durationSeconds: 1_800),
+                ]),
+            ]
+        )
+    }
 
     private func insert(_ workouts: [Workout]) throws {
         let context = ModelContext(container)

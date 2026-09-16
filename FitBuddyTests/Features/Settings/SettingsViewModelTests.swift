@@ -491,6 +491,8 @@ private actor SessionResetSpy: SessionResetting {
     func discardCachedWorkouts() async {
         discardCount += 1
     }
+
+    func discardCachedWorkouts(from source: ConnectorSource) async {}
 }
 
 /// Records how often the full wipe ran.

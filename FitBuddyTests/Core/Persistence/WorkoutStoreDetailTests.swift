@@ -6,7 +6,7 @@ import XCTest
 /// workout detail screen (#98).
 ///
 /// The models are inserted directly rather than through
-/// `replaceCachedWorkouts(with:)`: the cases that matter here are the ones the
+/// `replaceCachedWorkouts(from: .hevy, with:)`: the cases that matter here are the ones the
 /// Hevy payload cannot express — exercises stored out of order, a session with
 /// no exercises, sets with no weight at all.
 final class WorkoutStoreDetailTests: XCTestCase {

@@ -71,7 +71,7 @@ actor StubWorkoutSync: WorkoutSyncing {
                 Activity(id: "stub-extra-\(index)", title: "Refreshed session \(index)", startTime: syncedAt)
             }
             let activities = seed.activities + extras
-            try await seed.store.replaceCachedWorkouts(with: activities)
+            try await seed.store.replaceCachedWorkouts(from: .hevy, with: activities)
             await seed.timestamps.setLastSync(syncedAt)
             count = activities.count
         }

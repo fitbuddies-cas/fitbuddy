@@ -2,16 +2,22 @@ import Foundation
 import SwiftData
 
 extension WorkoutStore: ExerciseProgressionReading {
-    /// One point per session that carried a usable set of this movement,
-    /// oldest first (US-9 AC1).
+    /// Every session of this movement in the window, oldest first, with all the
+    /// sets it was logged with — the history (#163) and, derived from it, the
+    /// curve (US-9 AC1).
     ///
     /// Walks the same rows the exercise list walks and folds them by session
     /// instead of by movement, so the two screens agree on what a session is
     /// and on which sets count: warm-ups are excluded here as well, because a
     /// ramp-up set would otherwise define the day's best on a light session.
+    ///
+    /// Strava sessions are skipped for the same reason the list skips them:
+    /// a run has no weight and no reps, so it could only ever contribute an
+    /// empty curve — or, sharing a title with a Hevy movement, a title.
     func exerciseProgression(id: String, since date: Date) throws -> ExerciseProgression? {
+        let cardioSource = ConnectorSource.strava.rawValue
         var descriptor = FetchDescriptor<Workout>(
-            predicate: #Predicate { $0.startTime >= date },
+            predicate: #Predicate { $0.startTime >= date && $0.sourceRawValue != cardioSource },
             sortBy: [SortDescriptor(\.startTime, order: .forward)]
         )
         descriptor.relationshipKeyPathsForPrefetching = [\.exercises]
