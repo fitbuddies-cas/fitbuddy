@@ -793,6 +793,13 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         }
 
         XCTAssertEqual(positions, positions.sorted())
+        // The order sentence follows the field list directly (#170 review).
+        let cards = try XCTUnwrap(system.range(of: "- cards:"))
+        let order = try XCTUnwrap(system.range(of: "Write the fields in this order."))
+        let placeholder = try XCTUnwrap(system.range(of: "Never write placeholder"))
+        XCTAssertLessThan(cards.lowerBound, order.lowerBound)
+        XCTAssertLessThan(order.lowerBound, placeholder.lowerBound)
+        XCTAssertFalse(system[cards.upperBound..<order.lowerBound].contains("Never write placeholder"))
     }
 
     // MARK: - Helpers
