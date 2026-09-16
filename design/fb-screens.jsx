@@ -685,20 +685,29 @@ function FBAnalyzeLoadingScreen({ longWait = false, onCancel }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// US-14 · AI-Empfehlung als strukturierte Karten
+// US-14 · AI recommendation as structured cards
 // ─────────────────────────────────────────────────────────────────────
 //
 // AnalysisReport — the contract the cards below render, and the template for
-// the JSON schema of the structured model output (#174):
+// the JSON schema of the structured model output (#174, #170):
 //
 //   {
-//     verdict: 'progress' | 'recover',   // drives the headline
-//     cards:   Card[1…4],                // rendered top to bottom
+//     verdict: 'progress' | 'recover' | 'hold',  // drives the headline
+//     lead:    string,     // the key takeaway, 1–3 sentences (≤ ~50 words),
+//                          // readable on its own — shown under the context line
+//     summary: string,     // the full analysis as prose (< 200 words), behind
+//                          // "Show full analysis"
+//     cards:   Card[0…4],  // rendered top to bottom; empty for thin data —
+//                          // never filler or placeholder cards
 //   }
 //
 //   Card = { kind: 'progression', …ProgressionRecCard props }
 //        | { kind: 'recovery',    …RecoveryRecCard props }
 //        | { kind: 'imbalance',   …ImbalanceRecCard props }
+//        | { kind: 'note',        title, text }  — not drawn here, not actionable
+//
+// "Show full analysis" starts expanded when no actionable card (progression,
+// recovery, imbalance) is present — 3.4b — and collapsed otherwise (3.4/3.5).
 //
 // Rules the app enforces, not the model:
 // - A card whose exercise is not in the analysis window, or whose `from` is
@@ -707,9 +716,11 @@ function FBAnalyzeLoadingScreen({ longWait = false, onCancel }) {
 // - Output that does not match the schema falls back to today's prose
 //   rendering (AC5). Entries saved before V3 stay prose (AC6) — see 3.7.
 
-// Sample reports, shared by 3.4/3.5, the history (3.7) and its detail (3.7b).
+// Sample reports, shared by 3.4/3.4b/3.5, the history (3.7) and its detail (3.7b).
 const REPORT_PROGRESS = {
   verdict: 'progress',
+  lead: 'Bench press and back squat are ready for 2.5 kg more. Legs need a second session first.',
+  summary: 'Across the last four weeks you trained 14 times. Bench press held 60 kg × 5 for three sessions at RPE 7 or lower, and your back squat 1RM estimate rose 4 %. Chest was trained three times a week, legs once. Add 2.5 kg to both lifts next session and keep the reps. Before pushing chest volume further, give legs a second session this week — squat or RDL focus.',
   cards: [
     {
       kind: 'progression',
@@ -737,6 +748,8 @@ const REPORT_PROGRESS = {
 
 const REPORT_RECOVER = {
   verdict: 'recover',
+  lead: 'Six training days out of seven: rest comes before any new load.',
+  summary: 'You trained on 6 of the last 7 days at an average RPE of 8.2. That density leaves little room to recover. Take two rest days, then one deload session at about 60 % of your usual sets, before adding load to chest or legs again.',
   cards: [
     {
       kind: 'recovery',
@@ -747,14 +760,25 @@ const REPORT_RECOVER = {
   ],
 };
 
+// Thin data (3.4b): no card is backed by the data, so there are none. The lead
+// and the full analysis — open from the start — carry the answer.
+const REPORT_THIN = {
+  verdict: 'hold',
+  lead: 'Two sessions in four weeks are too few to judge a trend. Keep your current weights and log a few more sessions.',
+  summary: 'You logged two sessions in the last four weeks, both upper body. Bench press and rows each appear once, at the same weights as before — one session per movement says nothing yet about whether a load is getting easier. Keep your current weights for the next sessions, and log two to three sessions a week so a trend can show.',
+  cards: [],
+};
+
 function FBAnalysisResultScreen({
   variant = 'progression', sources = ['Hevy'], sessionCount = 14, weeks = 4,
   profile = null, locked = false, provider = 'Claude', age = 'just now',
   onClose, onHistory,
 }) {
-  // variant: 'progression' | 'recovery'
+  // variant: 'progression' | 'recovery' | 'thin'
   // locked:  the 60 s double-tap guard (#117) is running — no hours countdown.
-  const report = variant === 'recovery' ? REPORT_RECOVER : REPORT_PROGRESS;
+  const report = variant === 'recovery' ? REPORT_RECOVER
+    : variant === 'thin' ? REPORT_THIN
+    : REPORT_PROGRESS;
 
   return (
     <FBScreen padding="0">
@@ -819,15 +843,17 @@ function FBIconButton({ children, onClick, label }) {
   );
 }
 
-// Headline verdict, context line (US-6), 1–4 cards, disclaimer (US-14 AC1).
-// Shared by the fresh result (3.4/3.5) and the saved one (3.7b).
+const ACTIONABLE_KINDS = ['progression', 'recovery', 'imbalance'];
+
+// Headline verdict, context line (US-6), lead, 0–4 cards, "Show full
+// analysis", disclaimer (US-14 AC1). Shared by the fresh result (3.4/3.4b/3.5)
+// and the saved one (3.7b).
 function FBAnalysisReportBody({ report, sources, sessionCount, weeks, profile }) {
-  const recover = report.verdict === 'recover';
   return (
     <>
       <div style={{ marginTop: 10, fontSize: 30, fontWeight: 700, letterSpacing: -0.8, lineHeight: 1.1 }}>
-        {recover
-          ? <>Recover<br/>this week.</>
+        {report.verdict === 'recover' ? <>Recover<br/>this week.</>
+          : report.verdict === 'hold' ? <>Hold steady<br/>this week.</>
           : <>You're ready<br/>to progress.</>}
       </div>
 
@@ -835,17 +861,66 @@ function FBAnalysisReportBody({ report, sources, sessionCount, weeks, profile })
         sources={sources} sessionCount={sessionCount} weeks={weeks} profile={profile}
       />
 
-      <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {report.cards.map((card, i) => {
-          if (card.kind === 'progression') return <ProgressionRecCard key={i} {...card} />;
-          if (card.kind === 'recovery') return <RecoveryRecCard key={i} {...card} />;
-          if (card.kind === 'imbalance') return <ImbalanceRecCard key={i} {...card} />;
-          return null;
-        })}
+      {/* Lead — body text, not a card: the takeaway reads before any figure */}
+      <div style={{ marginTop: 14, fontSize: 16, color: FB.ink, lineHeight: 1.4, letterSpacing: -0.2 }}>
+        {report.lead}
       </div>
+
+      {report.cards.length > 0 && (
+        <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {report.cards.map((card, i) => {
+            if (card.kind === 'progression') return <ProgressionRecCard key={i} {...card} />;
+            if (card.kind === 'recovery') return <RecoveryRecCard key={i} {...card} />;
+            if (card.kind === 'imbalance') return <ImbalanceRecCard key={i} {...card} />;
+            return null;
+          })}
+        </div>
+      )}
+
+      <FBFullAnalysis
+        summary={report.summary}
+        defaultOpen={!report.cards.some(card => ACTIONABLE_KINDS.includes(card.kind))}
+      />
 
       <FBDisclaimer />
     </>
+  );
+}
+
+/**
+ * "Show full analysis" — the report's summary behind a disclosure, below the
+ * cards. Starts open when no card is actionable (thin data, 3.4b), closed
+ * otherwise; after that the user decides.
+ *
+ * @prop summary      string   the full analysis as prose
+ * @prop defaultOpen  boolean  the opening rule above
+ */
+function FBFullAnalysis({ summary, defaultOpen }) {
+  const [open, setOpen] = React.useState(defaultOpen);
+  return (
+    <FBCard pad={0} style={{ marginTop: 18, overflow: 'hidden' }}>
+      <button
+        onClick={() => setOpen(v => !v)} aria-expanded={open}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '14px 16px', border: 'none', background: 'transparent', cursor: 'pointer',
+          fontFamily: 'inherit', fontSize: 14, fontWeight: 600, letterSpacing: -0.2, color: FB.ink,
+        }}
+      >
+        <span>{open ? 'Hide full analysis' : 'Show full analysis'}</span>
+        <svg width="12" height="12" viewBox="0 0 12 12" style={{ transform: open ? 'rotate(180deg)' : 'none' }}>
+          <path d="M2.5 4.5L6 8l3.5-3.5" stroke={FB.muted} strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
+      {open && (
+        <div style={{
+          padding: '12px 16px 16px', borderTop: `1px solid ${FB.divider}`,
+          fontSize: 14, color: FB.ink2, lineHeight: 1.5,
+        }}>
+          {summary}
+        </div>
+      )}
+    </FBCard>
   );
 }
 
@@ -1121,7 +1196,9 @@ function FBVerdictChip({ report }) {
     ? ['Text', FB.cardSubtle, FB.muted, FB.border]
     : report.verdict === 'recover'
       ? ['⏸ Recover', FB.warnSoft, FB.warn, `${FB.warn}40`]
-      : ['↑ Progress', FB.accentSoft, FB.accentInk, FB.accentBorder];
+      : report.verdict === 'hold'
+        ? ['= Hold', FB.cardSubtle, FB.ink2, FB.border]
+        : ['↑ Progress', FB.accentSoft, FB.accentInk, FB.accentBorder];
   return (
     <div style={{
       padding: '2px 7px', borderRadius: 999, background: bg,
@@ -1218,7 +1295,7 @@ function FBHistoryRow({ entry, last, swiped, onOpen }) {
 }
 
 /**
- * Saved analysis — renders the same body as 3.4/3.5. No provider is stored,
+ * Saved analysis — renders the same body as 3.4/3.4b/3.5. No provider is stored,
  * so the badge is the bare "AI". Prose entries (report: null) keep the prose
  * card (US-14 AC6).
  */
