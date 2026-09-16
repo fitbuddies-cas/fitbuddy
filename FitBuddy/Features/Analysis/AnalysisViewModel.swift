@@ -295,6 +295,10 @@ final class AnalysisViewModel: ObservableObject {
         guard case .idle = state else { return }
 
         state = .result(stored.text)
+        // The provider that wrote it, when the row recorded one (#176) — so
+        // the badge reads "AI · Gemini" after a restart too. No fallback chain
+        // is stored, so a restored result never shows the switch notice.
+        attribution = stored.provider.map(AnalysisAttribution.init(first:))
         context = stored.context
         generatedAt = stored.generatedAt
         currentResultID = stored.id

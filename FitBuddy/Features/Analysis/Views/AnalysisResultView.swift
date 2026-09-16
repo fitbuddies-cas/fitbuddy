@@ -12,9 +12,10 @@ import SwiftUI
 /// readable text on screen.
 struct AnalysisResultView: View {
     let text: String
-    /// Who answered, and who was asked before them (#79). `nil` only in the
-    /// degenerate case of a result with no recorded attempt — and on a
-    /// recommendation restored from disk without a stored provider.
+    /// Who answered, and who was asked before them (#79). A recommendation
+    /// restored from disk carries only the provider that answered (#176), so
+    /// it never shows the fallback notice. `nil` in the degenerate case of a
+    /// result with no recorded attempt, and on a row stored before #176.
     let attribution: AnalysisAttribution?
     /// How old the recommendation is (`"2 h ago"`), or `nil` while it has no
     /// timestamp. Always set for a restored one, where the age is the whole
@@ -69,8 +70,8 @@ struct AnalysisResultView: View {
     /// first — after a fallback those are different, and attributing the text
     /// to the wrong provider would be a lie about where their data went.
     ///
-    /// `"AI · CLAUDE"`, or a bare `"AI"` on a recommendation restored from
-    /// disk without a stored provider.
+    /// `"AI · CLAUDE"` — live or restored from disk (#176) — or a bare
+    /// `"AI"` on a row stored before the provider was recorded.
     private var badge: String {
         guard let attribution else { return "AI" }
         return "AI · \(attribution.provider.displayName)"
@@ -131,13 +132,13 @@ private let previewRecommendation = """
 }
 
 /// A recommendation brought back from disk after an app restart (#97): the
-/// provider is not stored, the age is, and the lock has since expired — so
-/// the way back to the intro screen is offered.
+/// provider and the age are stored (#176), the fallback chain is not, and the
+/// lock has since expired — so the way back to the intro screen is offered.
 #Preview("Restored") {
     ScrollView {
         AnalysisResultView(
             text: previewRecommendation,
-            attribution: nil,
+            attribution: AnalysisAttribution(first: .gemini),
             age: "7 h ago",
             onNewAnalysis: {}
         )

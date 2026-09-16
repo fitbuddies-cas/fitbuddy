@@ -11,17 +11,20 @@ import SwiftData
 /// `FitBuddySchemaV3.Workout`. The historic `FitBuddySchemaV1` and
 /// `FitBuddySchemaV2` keep their models inline, frozen.
 ///
-/// **One V3, not two.** #180 (`ActivityKind` and cardio fields on `Workout`)
-/// adds its columns to this same version rather than opening a V4 — as long
-/// as V3 has not reached `main`. No build carrying V3 has been distributed
-/// before that, so no installed store can hold a V3 that the extended V3
-/// would fail to recognise. Once V3 is on `main`, it is frozen like V2 and
-/// the next change is a V4.
+/// **One V3, not two.** Two other changes are known to need a V3 as well:
+/// #192 (training profile, PR #199 — `AnalysisResult.goal` and `.experience`)
+/// and #180 (`ActivityKind` and cardio fields on `Workout`). V3 may grow in
+/// place only until the *first* V3 PR merges into `develop`. `develop` builds
+/// already run on the team's devices, and a store written by one V3 is not
+/// recognised by a V3 with other columns: it fails as "unknown model version"
+/// and silently falls back to an empty in-memory container. So the candidates
+/// consolidate into one V3 before the first of them reaches `develop`; any
+/// change after that is a V4.
 ///
-/// When the stored shape changes after that: copy the models of this version
-/// inline into a frozen `FitBuddySchemaV3.swift`, move these extensions to a
-/// V4, and add the stage to `FitBuddyMigrationPlan`. Editing a model of a
-/// shipped version in place makes every installed store unrecognisable.
+/// For that V4: copy the models of this version inline into a frozen
+/// `FitBuddySchemaV3.swift`, move these extensions to V4, and add the stage to
+/// `FitBuddyMigrationPlan`. Editing a model of a version that has reached
+/// `develop` makes every installed store of that version unrecognisable.
 enum FitBuddySchemaV3: VersionedSchema {
     static let versionIdentifier = Schema.Version(3, 0, 0)
 

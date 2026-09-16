@@ -1081,6 +1081,28 @@ extension AnalysisViewModelTests {
         XCTAssertNil(sut.attribution)
     }
 
+    /// #176: a row that recorded its provider is restored with it, so the
+    /// badge reads "AI · Gemini" — and without the fallback notice, since the
+    /// chain that led there is not stored.
+    func testRestoreBringsBackTheStoredProvider() async throws {
+        try await results.save(
+            text: "Give legs a second slot.",
+            report: nil,
+            provider: .gemini,
+            generatedAt: Self.reference.addingTimeInterval(-2 * 3_600),
+            context: AnalysisContext(sessionCount: 6, window: .default)
+        )
+        let sut = makeSUT()
+
+        await sut.restore()
+
+        XCTAssertEqual(sut.state, .result("Give legs a second slot."))
+        XCTAssertEqual(sut.attribution, AnalysisAttribution(first: .gemini))
+        XCTAssertEqual(sut.attribution?.provider.displayName, "Gemini")
+        XCTAssertEqual(sut.attribution?.didFallBack, false)
+        XCTAssertNil(sut.attribution?.fallbackNotice)
+    }
+
     func testRestoreWithoutAStoredRecommendationLeavesTheIntroScreen() async {
         let sut = makeSUT()
 
