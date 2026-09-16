@@ -36,7 +36,7 @@ struct SettingsView: View {
     ///   - makePolarConnectionViewModel: Called once per push of the Polar
     ///     connection screen (#157).
     ///   - makePolarCredentialsViewModel: Called once per push of the Polar
-    ///     credentials screen (ADR-11 Nachtrag), from the connection screen.
+    ///     credentials screen (ADR-11), from the connection screen.
     init(
         viewModel: @autoclosure @escaping () -> SettingsViewModel,
         path: Binding<[SettingsRoute]> = .constant([]),
@@ -326,8 +326,8 @@ struct SettingsView: View {
     }
 
     /// Entry point to the Polar connection (#157): connect, status,
-    /// disconnect, and from there the application credentials (ADR-11
-    /// Nachtrag, BYO-app like Strava).
+    /// disconnect, and from there the application credentials (ADR-11,
+    /// BYO-app like Strava).
     private var polarRow: some View {
         NavigationLink(value: SettingsRoute.polar) {
             VStack(alignment: .leading, spacing: 4) {

@@ -4,7 +4,7 @@ import Foundation
 /// with the user's own application credentials, keeps the resulting token pair
 /// and the registry in step, and tears the connection down again.
 ///
-/// Mirrors `StravaConnectionViewModel` (ADR-11 Nachtrag, BYO-app): a pair that
+/// Mirrors `StravaConnectionViewModel` (ADR-11, BYO-app): a pair that
 /// came back from the browser is stored first and handed to the registry
 /// second, so a crash in between leaves a stored pair the next launch can
 /// pick up rather than a connection only the registry remembers.

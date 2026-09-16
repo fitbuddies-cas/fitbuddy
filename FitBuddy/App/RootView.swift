@@ -284,7 +284,7 @@ struct RootView: View {
     }
 
     /// Wires the Polar connection screen to the shared registry, the OAuth
-    /// service and the credential store (ADR-11 Nachtrag, #157), and to a
+    /// service and the credential store (ADR-11, #157), and to a
     /// session reset over the same container the dashboard reads, so a
     /// disconnect drops exactly the Polar sessions it shows.
     private func makePolarConnectionViewModel() -> PolarConnectionViewModel {

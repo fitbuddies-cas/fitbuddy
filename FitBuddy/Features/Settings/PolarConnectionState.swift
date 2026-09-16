@@ -2,7 +2,7 @@ import Foundation
 
 /// UI state of the Polar connection screen (#157, US-5 AC1).
 ///
-/// Mirrors `StravaConnectionState` (ADR-11 Nachtrag, BYO-app): Polar's token
+/// Mirrors `StravaConnectionState` (ADR-11, BYO-app): Polar's token
 /// endpoint requires the user's own application credentials just like
 /// Strava's does.
 enum PolarConnectionState: Equatable {

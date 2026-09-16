@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 /// Drives Polar's OAuth2 authorization-code flow against the *user's own*
-/// Polar API application (ADR-11 Nachtrag, BYO-app — mirrors
+/// Polar API application (ADR-11, BYO-app — mirrors
 /// `StravaOAuthService`):
 /// presents the consent page through the shared `WebAuthenticating` seam
 /// (#152), validates the callback, and exchanges the code via

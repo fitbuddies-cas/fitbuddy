@@ -1,8 +1,8 @@
 import Foundation
 import OSLog
 
-/// `FitnessConnector` for Polar endurance data (ADR-11): the third source after
-/// Hevy (#34) and ahead of any Strava work (#35).
+/// `FitnessConnector` for Polar endurance data (ADR-11): the third source next
+/// to Hevy (#34) and Strava (#142).
 ///
 /// Maps Polar AccessLink `GET /v3/exercises` onto the normalized `Activity`
 /// model, so the dashboard and AI analysis read a Polar run exactly the way

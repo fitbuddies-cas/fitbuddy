@@ -1,6 +1,6 @@
 import Foundation
 
-/// UI state of the Polar application-credentials screen (ADR-11 Nachtrag,
+/// UI state of the Polar application-credentials screen (ADR-11,
 /// mirrors `StravaCredentialsState`).
 ///
 /// There is no `validating`: the client ID and secret cannot be checked

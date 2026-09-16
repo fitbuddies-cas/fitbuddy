@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-/// Drives Polar's OAuth2 authorization-code token plumbing (ADR-11 Nachtrag):
+/// Drives Polar's OAuth2 authorization-code token plumbing (ADR-11):
 /// builds the authorization URL, exchanges the returned code for tokens, and
 /// refreshes an expired access token — all against the *user's* own Polar
 /// application credentials (`PolarClientCredentials`), never a team default.

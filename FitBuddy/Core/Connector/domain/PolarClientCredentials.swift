@@ -1,8 +1,8 @@
 import Foundation
 
 /// The client half of Polar's OAuth2 flow: the credentials of the API
-/// application the *user* registered at `admin.polaraccesslink.com` (ADR-11
-/// Nachtrag, mirrors `StravaClientCredentials`/ADR-10).
+/// application the *user* registered at `admin.polaraccesslink.com` (ADR-11,
+/// mirrors `StravaClientCredentials`/ADR-10).
 ///
 /// These are not tokens and they do not expire. Polar's token endpoint
 /// requires both on every code exchange and every refresh via HTTP Basic

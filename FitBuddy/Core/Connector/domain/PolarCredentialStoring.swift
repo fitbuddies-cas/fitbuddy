@@ -1,7 +1,7 @@
 import Foundation
 
 /// Persists `PolarConnector`'s OAuth tokens, its stable AccessLink
-/// `member-id`, and (Nachtrag zu ADR-11) the user's own Polar API application
+/// `member-id`, and (ADR-11) the user's own Polar API application
 /// credentials — the piece of the Sync-/Onboarding-Schicht that
 /// `PolarConnector` itself deliberately does not own (it only holds tokens in
 /// memory, see its type comment). Mirrors `StravaCredentialStoring`.

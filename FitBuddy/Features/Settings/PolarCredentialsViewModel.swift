@@ -1,6 +1,6 @@
 import Foundation
 
-/// Drives the Polar application-credentials screen (ADR-11 Nachtrag, mirrors
+/// Drives the Polar application-credentials screen (ADR-11, mirrors
 /// `StravaCredentialsViewModel`): takes the client ID and client secret of the
 /// user's own Polar AccessLink application and stores them in the Keychain.
 ///

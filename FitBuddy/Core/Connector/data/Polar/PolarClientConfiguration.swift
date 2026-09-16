@@ -1,7 +1,7 @@
 import Foundation
 
 /// Fixed, non-secret facts about the Polar AccessLink **v3** API that hold for
-/// every user (ADR-11 Nachtrag): the OAuth and REST endpoints, and the
+/// every user (ADR-11): the OAuth and REST endpoints, and the
 /// redirect URI registered in `Info.plist`. The user-specific half —
 /// `PolarClientCredentials` (clientID/clientSecret) — is entered on the
 /// credentials screen (#139-style, BYO-app) and stored in their own Keychain.

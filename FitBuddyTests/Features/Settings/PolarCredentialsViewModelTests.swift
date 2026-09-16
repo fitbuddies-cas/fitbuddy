@@ -1,7 +1,7 @@
 import XCTest
 @testable import FitBuddy
 
-/// Unit tests for `PolarCredentialsViewModel` (ADR-11 Nachtrag, BYO-app). The
+/// Unit tests for `PolarCredentialsViewModel` (ADR-11, BYO-app). The
 /// store is the in-memory `StubPolarCredentialStore`, so the Keychain failure
 /// path can be exercised as well as the happy one. Mirrors
 /// `StravaCredentialsViewModelTests`.

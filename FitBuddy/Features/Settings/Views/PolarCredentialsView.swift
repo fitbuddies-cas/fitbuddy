@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Enter the client ID and client secret of the user's own Polar AccessLink
-/// application (ADR-11 Nachtrag, mirrors `StravaCredentialsView`). Same shape
+/// application (ADR-11, mirrors `StravaCredentialsView`). Same shape
 /// as `HevyKeyEntryView` and `KeyEditorSheet`: where-to-find card, key fields,
 /// Keychain storage note, failure banner, bottom CTA — pushed from Settings
 /// rather than presented as a sheet, because the connection screen links here

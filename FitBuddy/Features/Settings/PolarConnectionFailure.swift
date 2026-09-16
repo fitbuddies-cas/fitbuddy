@@ -5,7 +5,7 @@ import Foundation
 /// A presentation layer over the two error types `PolarConnectionViewModel`
 /// can see: `PolarOAuthError` for the interactive part, `ConnectorError` for
 /// the token endpoint (`PolarHTTP.failure`) and the credential store. Mirrors
-/// `StravaConnectionFailure` (ADR-11 Nachtrag): `pointsToCredentials` sends
+/// `StravaConnectionFailure` (ADR-11): `pointsToCredentials` sends
 /// the user to the application-credentials screen rather than just offering a
 /// retry.
 enum PolarConnectionFailure: Equatable {

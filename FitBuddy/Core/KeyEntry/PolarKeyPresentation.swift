@@ -1,7 +1,7 @@
 import Foundation
 
 /// Everything the Polar screens need to talk about the user's API application
-/// (ADR-11 Nachtrag): the provider name, placeholders for the two credentials,
+/// (ADR-11): the provider name, placeholders for the two credentials,
 /// and where the user creates them. Counterpart of `StravaKeyPresentation` —
 /// Polar is a single fixed provider too, so this is a namespace rather than an
 /// instance.

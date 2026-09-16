@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Connect, inspect and disconnect the Polar account (#157, US-5 AC1).
 ///
-/// Mirrors `StravaConnectionView` (ADR-11 Nachtrag, BYO-app): one card states
+/// Mirrors `StravaConnectionView` (ADR-11, BYO-app): one card states
 /// where things stand — no credentials, ready to connect, connected until a
 /// time, expired — and the buttons under it are the only actions there are.
 /// The application credentials have their own screen, reached from here; the

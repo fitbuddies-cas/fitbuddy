@@ -1,6 +1,6 @@
 import Foundation
 
-/// The two OAuth operations Polar needs (ADR-11 Nachtrag, mirrors
+/// The two OAuth operations Polar needs (ADR-11, mirrors
 /// `StravaOAuthorizing`): the interactive authorization that yields the first
 /// token pair, and the silent refresh `PolarConnector` runs when the access
 /// token is about to expire.
