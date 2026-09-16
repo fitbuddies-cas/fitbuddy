@@ -759,7 +759,7 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         let system = AnalysisPromptBuilder.systemPrompt
 
         XCTAssertTrue(system.contains("one JSON object that follows the response schema"))
-        for key in ["headline", "verdict", "cards", "summary", "fromKg", "toKg", "suggestedRestHours"] {
+        for key in ["headline", "verdict", "lead", "cards", "summary", "fromKg", "toKg", "suggestedRestHours"] {
             XCTAssertTrue(system.contains(key), key)
         }
         for kind in AnalysisCard.Kind.allCases {
@@ -769,6 +769,30 @@ final class AnalysisPromptBuilderTests: XCTestCase {
             XCTAssertTrue(system.contains("\"\(verdict.rawValue)\""), verdict.rawValue)
         }
         XCTAssertTrue(system.contains("under 200 words"))
+    }
+
+    /// #170: thin data gets no filler cards — zero cards is a valid answer,
+    /// placeholder text never is, and the lead reads on its own.
+    func testSystemPromptAllowsZeroCardsAndForbidsPlaceholders() {
+        let system = AnalysisPromptBuilder.systemPrompt
+
+        XCTAssertTrue(system.contains("zero to four cards"))
+        XCTAssertFalse(system.contains("one to four cards"))
+        XCTAssertTrue(system.contains("return an empty array"))
+        XCTAssertTrue(system.contains("Never write placeholder or filler text in any field"))
+        XCTAssertTrue(system.contains("It must stand on its own"))
+        XCTAssertTrue(system.contains("one to three sentences"))
+    }
+
+    /// The fields are listed in the order the schema declares them, since the
+    /// order in the prompt is what asks Claude and Mistral for it.
+    func testSystemPromptListsTheFieldsInSchemaOrder() throws {
+        let system = AnalysisPromptBuilder.systemPrompt
+        let positions = try ["- headline:", "- verdict:", "- lead:", "- summary:", "- cards:"].map {
+            try XCTUnwrap(system.range(of: $0)?.lowerBound, $0)
+        }
+
+        XCTAssertEqual(positions, positions.sorted())
     }
 
     // MARK: - Helpers

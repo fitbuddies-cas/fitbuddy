@@ -5,12 +5,13 @@ import Foundation
 /// (#174). One report carries every card kind, so a single fixture exercises
 /// the whole schema.
 enum AnalysisReportFixtures {
-    /// A wire answer with one card of each kind, `summary` ahead of `cards` as
-    /// the schema declares it.
+    /// A wire answer with one card of each kind, `lead` and `summary` ahead of
+    /// `cards` as the schema declares them.
     static let progressJSON = """
     {
       "headline": "You're ready to progress.",
       "verdict": "progress",
+      "lead": "Bench press can go up. Legs are behind.",
       "summary": "Bench press is ready for 62.5 kg. Legs need a second session.",
       "cards": [
         {
@@ -47,6 +48,7 @@ enum AnalysisReportFixtures {
     static let progress = AnalysisReport(
         headline: "You're ready to progress.",
         verdict: .progress,
+        lead: "Bench press can go up. Legs are behind.",
         cards: [
             .progression(
                 exercise: "Bench Press",
