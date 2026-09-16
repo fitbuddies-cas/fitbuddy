@@ -4,9 +4,8 @@ import XCTest
 @testable import FitBuddy
 
 /// Unit tests for `AnalysisViewModel` (#31, #117): the state machine, the
-/// cancel path, and the countdown label. No network and no Keychain — the
-/// stream comes from `StubAnalysisStreamer`, the rate limit from an isolated
-/// `UserDefaults` suite.
+/// cancel path, and the result age. No network and no Keychain — the stream
+/// comes from `StubAnalysisStreamer`, the history from an in-memory store.
 @MainActor
 final class AnalysisViewModelTests: XCTestCase {
     /// Fixed reference point, so both analysis windows are deterministic.
