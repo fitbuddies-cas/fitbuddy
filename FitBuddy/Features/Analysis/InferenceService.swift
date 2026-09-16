@@ -166,7 +166,7 @@ actor InferenceService {
                 // stream that never produced a token — a provider can answer
                 // 200 and simply say nothing, or send an error frame its client
                 // does not recognise — and a JSON answer cut off at the token
-                // limit before its summary, which would otherwise reach the
+                // limit before its lead, which would otherwise reach the
                 // screen as raw JSON.
                 lastError = InferenceServiceError.invalidResponse
             } catch {

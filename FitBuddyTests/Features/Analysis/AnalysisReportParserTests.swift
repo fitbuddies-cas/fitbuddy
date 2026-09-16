@@ -35,7 +35,8 @@ final class AnalysisReportParserTests: XCTestCase {
 
     /// A report whose summary is blank still gets prose, built from its
     /// headline and one line per card, so the screen always has text to fall
-    /// back to.
+    /// back to. Its missing lead comes from the cards, not the headline the
+    /// screen shows right above it.
     func testBuildsTheSummaryFromHeadlineAndCardsWhenItIsBlank() {
         let answer = """
         {"headline": "Recover this week.", "verdict": "recover", "summary": " ",
@@ -47,14 +48,78 @@ final class AnalysisReportParserTests: XCTestCase {
             return XCTFail("expected a report")
         }
         XCTAssertEqual(report.summary, "Recover this week.\nSix sessions in seven days.\nKeep sleep regular.")
+        XCTAssertEqual(report.lead, "Six sessions in seven days. Keep sleep regular.")
         XCTAssertEqual(report.verdict, .recover)
         XCTAssertEqual(report.cards.count, 2)
     }
 
     func testAReportWithNothingToReadIsNoAnswer() {
-        let answer = #"{"headline": "", "verdict": "hold", "summary": "", "cards": []}"#
+        let answer = #"{"headline": "", "verdict": "hold", "lead": " ", "summary": "", "cards": []}"#
 
         XCTAssertNil(AnalysisReportParser.event(for: answer))
+    }
+
+    // MARK: - Lead (#170)
+
+    /// A lead-less answer, e.g. one written without the schema, is still a
+    /// report: its lead is the first sentences of the summary.
+    func testDerivesAMissingLeadFromTheSummary() {
+        let answer = """
+        {"headline": "Hold steady.", "verdict": "hold",
+         "summary": "Two sessions are too few to judge a trend. Keep the current weights. Log another week.",
+         "cards": []}
+        """
+
+        XCTAssertEqual(
+            AnalysisReportParser.event(for: answer),
+            .report(AnalysisReport(
+                headline: "Hold steady.",
+                verdict: .hold,
+                lead: "Two sessions are too few to judge a trend. Keep the current weights.",
+                cards: [],
+                summary: "Two sessions are too few to judge a trend. Keep the current weights. Log another week."
+            ))
+        )
+    }
+
+    func testDerivesABlankLeadFromTheSummary() {
+        let answer = """
+        {"headline": "Hold steady.", "verdict": "hold", "lead": "  ",
+         "summary": "Two sessions are too few to judge a trend.", "cards": []}
+        """
+
+        guard case .report(let report)? = AnalysisReportParser.event(for: answer) else {
+            return XCTFail("expected a report")
+        }
+        XCTAssertEqual(report.lead, "Two sessions are too few to judge a trend.")
+    }
+
+    /// Zero cards is a valid answer: thin data gets a lead and a summary.
+    func testAReportWithoutCardsKeepsItsLead() {
+        let answer = """
+        {"headline": "Hold steady.", "verdict": "hold", "lead": "Too little data for a change yet.",
+         "summary": "Two sessions are too few to judge a trend.", "cards": []}
+        """
+
+        guard case .report(let report)? = AnalysisReportParser.event(for: answer) else {
+            return XCTFail("expected a report")
+        }
+        XCTAssertEqual(report.lead, "Too little data for a change yet.")
+        XCTAssertTrue(report.cards.isEmpty)
+    }
+
+    /// A blank summary is rebuilt with the lead in it; the lead stays as sent.
+    func testBuildsTheSummaryFromTheLeadWhenItIsBlank() {
+        let answer = """
+        {"headline": "Hold steady.", "verdict": "hold", "lead": "Too little data yet.",
+         "summary": "", "cards": []}
+        """
+
+        guard case .report(let report)? = AnalysisReportParser.event(for: answer) else {
+            return XCTFail("expected a report")
+        }
+        XCTAssertEqual(report.summary, "Hold steady.\nToo little data yet.")
+        XCTAssertEqual(report.lead, "Too little data yet.")
     }
 
     // MARK: - Summary fallback
@@ -96,19 +161,27 @@ final class AnalysisReportParserTests: XCTestCase {
         )
     }
 
-    /// Only the top-level key counts: the word in a string, or a `summary` key
-    /// nested deeper, is not the report's summary.
+    /// Cut off inside the summary: the complete lead before it is salvaged.
+    func testSalvagesACompleteLeadWhenTheSummaryIsCutOff() throws {
+        let cut = try XCTUnwrap(fixture.range(of: "is ready"))
+        let truncated = String(fixture[..<cut.lowerBound])
+
+        XCTAssertEqual(AnalysisReportParser.event(for: truncated), .text("Bench press can go up. Legs are behind."))
+    }
+
+    /// Only the top-level key counts: the word in a string, or a `summary` or
+    /// `lead` key nested deeper, is not the report's prose.
     func testDoesNotSalvageASummaryFromAnythingButTheTopLevelKey() {
-        let truncated = #"{"headline": "summary", "cards": [{"summary": "Nested."}], "verdict": "progress", "summa"#
+        let truncated = #"{"headline": "summary", "cards": [{"summary": "Nested.", "lead": "Nested."}], "verdict": "progress", "summa"#
 
         XCTAssertNil(AnalysisReportParser.event(for: truncated))
     }
 
     // MARK: - No answer
 
-    /// Cut off before the summary is complete: raw JSON is no recommendation.
-    func testTruncatedJSONWithoutACompleteSummaryIsNoAnswer() throws {
-        let cut = try XCTUnwrap(fixture.range(of: "is ready"))
+    /// Cut off before the lead is complete: raw JSON is no recommendation.
+    func testTruncatedJSONWithoutACompleteSummaryOrLeadIsNoAnswer() throws {
+        let cut = try XCTUnwrap(fixture.range(of: "can go up"))
         let truncated = String(fixture[..<cut.lowerBound])
 
         XCTAssertNil(AnalysisReportParser.event(for: truncated))
