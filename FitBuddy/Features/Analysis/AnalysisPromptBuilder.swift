@@ -190,11 +190,11 @@ enum AnalysisPromptBuilder {
     above; a recommendation you cannot ground in the data does not become a \
     card.
 
+    Write the fields in this order.
+
     Never write placeholder or filler text in any field. A field you have \
     nothing to say in is not a reason to invent something; leave a card out \
     instead.
-
-    Write the fields in this order.
     """
 
     // MARK: - User
