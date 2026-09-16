@@ -87,6 +87,19 @@ final class ConsentViewModelTests: XCTestCase {
         XCTAssertEqual(sut.state, .required)
     }
 
+    /// #145: Strava joined the disclosures, so a consent given to the previous
+    /// text no longer covers the processing. An installation that consented on
+    /// 2026-08-21 has to be asked again.
+    func testConsentGivenBeforeStravaIsAskedAgain() async throws {
+        XCTAssertNotEqual(ConsentViewModel.currentVersion, "2026-08-21")
+        try await keychain.save("2026-08-21", for: .consentVersion)
+        try await keychain.save("2026-08-21T10:00:00Z", for: .consentTimestamp)
+
+        await sut.refreshState()
+
+        XCTAssertEqual(sut.state, .required)
+    }
+
     // MARK: - bootstrap / fresh-install reset
 
     func testBootstrapOnFreshInstallClearsPriorConsent() async throws {

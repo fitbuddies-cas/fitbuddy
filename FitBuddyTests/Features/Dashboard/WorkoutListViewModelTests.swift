@@ -255,6 +255,58 @@ final class WorkoutListViewModelTests: XCTestCase {
         XCTAssertEqual(sut.syncStatus, .idle)
     }
 
+    // MARK: - Partial sync (#143)
+
+    private func partialResult(failures: [ConnectorSource: WorkoutSyncError]) -> SyncResult {
+        SyncResult(
+            workoutCount: 1,
+            syncedAt: reference,
+            windowStart: TrainingWindow.start(endingAt: reference),
+            failures: failures
+        )
+    }
+
+    /// The data is fresh and the timestamp moved; what the banner has to say
+    /// is which source is missing from it.
+    func testPartialSyncReportsWhichSourceIsMissing() async throws {
+        await syncer.setResult(partialResult(failures: [.strava: .networkUnavailable]))
+        await syncer.recordSyncs(in: timestamps)
+        let sut = makeSUT(withSyncer: true)
+
+        await sut.retry()
+
+        XCTAssertEqual(sut.syncStatus, .degraded(failures: [.strava: .offline]))
+        let stored = try XCTUnwrap(sut.lastSync)
+        XCTAssertEqual(stored.timeIntervalSince1970, reference.timeIntervalSince1970, accuracy: 0.001)
+        XCTAssertNil(sut.refreshNotice, "the moved timestamp is the feedback; no toast on a partial sync")
+    }
+
+    /// US-5 AC2: a rejected Strava pair is the renewal case — a banner, not a
+    /// trip back to onboarding.
+    func testRejectedStravaPairIsReportedAsExpiredNotAsUnauthorized() async {
+        await syncer.setResult(partialResult(failures: [.strava: .unauthorized]))
+        let sut = makeSUT(withSyncer: true)
+        var routed = false
+        sut.onUnauthorized = { routed = true }
+
+        await sut.refresh()
+
+        XCTAssertEqual(sut.syncStatus, .degraded(failures: [.strava: .connectionExpired]))
+        XCTAssertFalse(routed)
+    }
+
+    func testACleanSyncAfterADegradedOneClearsTheStatus() async {
+        await syncer.setResult(partialResult(failures: [.hevy: .serviceUnavailable]))
+        let sut = makeSUT(withSyncer: true)
+        await sut.refresh()
+        XCTAssertEqual(sut.syncStatus, .degraded(failures: [.hevy: .serviceUnavailable]))
+
+        await syncer.setResult(partialResult(failures: [:]))
+        await sut.refresh()
+
+        XCTAssertEqual(sut.syncStatus, .idle)
+    }
+
     /// Repeated pull-to-refresh must not leave the older sync's outcome on
     /// screen after the newer one already answered.
     func testSupersededSyncDoesNotOverwriteTheNewerOutcome() async {
@@ -507,10 +559,29 @@ final class WorkoutListViewModelTests: XCTestCase {
         XCTAssertTrue(source.needsAttention(now: reference))
     }
 
-    /// v0 syncs Hevy and nothing else, so the strip has exactly one row to
-    /// draw — a Strava row here would promise data no connector can deliver.
-    func testDataSourcesHoldHevyAloneInV0() {
+    /// Before any sync the strip has exactly one row to draw — a Strava row
+    /// here would promise data nobody has fetched.
+    func testDataSourcesHoldHevyAloneBeforeTheFirstSync() {
         XCTAssertEqual(makeSUT().dataSources.map(\.source), [.hevy])
+    }
+
+    /// Once a sync covered Strava too (#143), the strip gets its second row —
+    /// including after a partial sync, where the failed source is reported by
+    /// the banner and still listed.
+    func testDataSourcesListEverySourceTheLastSyncCovered() async {
+        await syncer.setResult(SyncResult(
+            workoutCount: 2,
+            syncedAt: reference,
+            windowStart: TrainingWindow.start(endingAt: reference),
+            failures: [.strava: .networkUnavailable],
+            sources: [.hevy, .strava]
+        ))
+        let sut = makeSUT(withSyncer: true)
+
+        await sut.refresh()
+
+        XCTAssertEqual(sut.dataSources.map(\.source), [.hevy, .strava])
+        XCTAssertEqual(sut.syncStatus, .degraded(failures: [.strava: .offline]))
     }
 
     func testDataSourceIsFreshAfterASuccessfulSync() async throws {

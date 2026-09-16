@@ -47,6 +47,7 @@ struct HevyWorkoutDTO: Decodable, Equatable, Sendable {
             startTime: startTime,
             endTime: endTime,
             updatedAt: updatedAt,
+            source: .hevy,
             exercises: exercises.enumerated().map {
                 $0.element.makeActivityExercise(position: $0.offset)
             }

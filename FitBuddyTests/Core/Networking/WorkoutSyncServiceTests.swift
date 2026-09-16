@@ -8,6 +8,10 @@ import XCTest
 /// reaches the cache: Keychain access uses the real `KeychainService` on the
 /// simulator, SwiftData runs in-memory and the sync timestamp lives in an
 /// isolated `UserDefaults` suite.
+///
+/// Since #143 the connectors come out of a `ConnectorRegistry`. The Hevy-only
+/// tests register just Hevy and leave Strava unconfigured, so they describe
+/// the same behaviour they always did; the fan-out section registers both.
 final class WorkoutSyncServiceTests: XCTestCase {
     /// Fixed clock so window boundaries are deterministic.
     private static let now = Date(timeIntervalSince1970: 1_754_400_000) // 2025-08-05 14:40 UTC
@@ -18,6 +22,8 @@ final class WorkoutSyncServiceTests: XCTestCase {
     private var timestamps: SyncTimestampStore!
     private var defaults: UserDefaults!
     private var suiteName: String!
+    private var registry: ConnectorRegistry!
+    private var stravaStore: StubStravaCredentialStore!
     private var sut: WorkoutSyncService!
 
     /// Requests the stub answered, in order.
@@ -35,7 +41,9 @@ final class WorkoutSyncServiceTests: XCTestCase {
         suiteName = "fitbuddy.tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
         timestamps = SyncTimestampStore(defaults: defaults)
-        sut = makeService()
+        registry = ConnectorRegistry()
+        stravaStore = StubStravaCredentialStore()
+        sut = await makeService()
     }
 
     override func tearDown() async throws {
@@ -45,6 +53,8 @@ final class WorkoutSyncServiceTests: XCTestCase {
         try await keychain.delete(.hevyAPIKey)
         defaults.removePersistentDomain(forName: suiteName)
         sut = nil
+        stravaStore = nil
+        registry = nil
         timestamps = nil
         workouts = nil
         container = nil
@@ -53,13 +63,15 @@ final class WorkoutSyncServiceTests: XCTestCase {
         try await super.tearDown()
     }
 
-    /// The same service against a different data source, so the tests can
-    /// separate "the sync orchestrates correctly" from "the Hevy connector
+    /// The same service against a different Hevy data source, so the tests
+    /// can separate "the sync orchestrates correctly" from "the Hevy connector
     /// parses correctly".
-    private func makeService(connector: any FitnessConnector) -> WorkoutSyncService {
-        WorkoutSyncService(
-            connector: connector,
+    private func makeService(connector: any FitnessConnector) async -> WorkoutSyncService {
+        await registry.register(connector, for: .hevy)
+        return WorkoutSyncService(
+            registry: registry,
             keychain: keychain,
+            stravaCredentials: stravaStore,
             workouts: workouts,
             timestamps: timestamps,
             sessionReset: SessionResetService(
@@ -81,21 +93,21 @@ final class WorkoutSyncServiceTests: XCTestCase {
         return calendar
     }
 
-    private func makeService() -> WorkoutSyncService {
-        WorkoutSyncService(
-            connector: HevyConnector(session: StubURLProtocol.makeSession()),
-            keychain: keychain,
-            workouts: workouts,
-            timestamps: timestamps,
-            sessionReset: SessionResetService(
-                keychain: keychain,
-                workouts: workouts,
-                results: AnalysisResultStore(modelContainer: workouts.modelContainer),
-                timestamps: timestamps
-            ),
-            calendar: Self.utcCalendar,
-            now: { Self.now }
+    private func makeService() async -> WorkoutSyncService {
+        await makeService(connector: HevyConnector(session: StubURLProtocol.makeSession()))
+    }
+
+    private static var stravaPair: ConnectorCredentials {
+        .oauth(accessToken: "access-1", refreshToken: "refresh-1", expiresAt: now.addingTimeInterval(4 * 3600))
+    }
+
+    /// Connects Strava: a stored pair plus a registered connector.
+    private func connectStrava(_ connector: any FitnessConnector) async {
+        stravaStore = StubStravaCredentialStore(
+            clientCredentials: StravaClientCredentials(clientID: "123456", clientSecret: "s3cr3t"),
+            credentials: Self.stravaPair
         )
+        await registry.register(connector, for: .strava)
     }
 
     // MARK: - Request shape
@@ -388,7 +400,7 @@ final class WorkoutSyncServiceTests: XCTestCase {
             ActivityFactory.activity(id: "a-1", start: daysAgo(1)),
             ActivityFactory.activity(id: "a-2", start: daysAgo(2)),
         ]))
-        let sut = makeService(connector: connector)
+        let sut = await makeService(connector: connector)
 
         let result = try await sut.syncRecentWorkouts()
 
@@ -401,7 +413,7 @@ final class WorkoutSyncServiceTests: XCTestCase {
     /// connector is told where the 90 days start and filters against it.
     func testAsksTheConnectorForTheNinetyDayWindow() async throws {
         let connector = MockConnector()
-        let sut = makeService(connector: connector)
+        let sut = await makeService(connector: connector)
 
         let result = try await sut.syncRecentWorkouts()
 
@@ -411,7 +423,7 @@ final class WorkoutSyncServiceTests: XCTestCase {
 
     func testTheStoredKeyIsHandedToTheConnector() async throws {
         let connector = MockConnector()
-        let sut = makeService(connector: connector)
+        let sut = await makeService(connector: connector)
 
         _ = try await sut.syncRecentWorkouts()
 
@@ -425,7 +437,7 @@ final class WorkoutSyncServiceTests: XCTestCase {
     func testConnectorUnauthorizedRunsTheHardLogoutAndDisconnects() async throws {
         let connector = MockConnector()
         await connector.setFetchActivitiesResult(.failure(.unauthorized))
-        let sut = makeService(connector: connector)
+        let sut = await makeService(connector: connector)
 
         do {
             _ = try await sut.syncRecentWorkouts()
@@ -445,7 +457,7 @@ final class WorkoutSyncServiceTests: XCTestCase {
     func testOtherConnectorFailuresLeaveTheSessionAlone() async throws {
         let connector = MockConnector()
         await connector.setFetchActivitiesResult(.failure(.rateLimited(retryAfter: 30)))
-        let sut = makeService(connector: connector)
+        let sut = await makeService(connector: connector)
 
         do {
             _ = try await sut.syncRecentWorkouts()
@@ -466,7 +478,7 @@ final class WorkoutSyncServiceTests: XCTestCase {
     /// it in the process.
     func testASyncAfterTheKeyIsGoneDropsTheConnectorsCopy() async throws {
         let connector = MockConnector()
-        let sut = makeService(connector: connector)
+        let sut = await makeService(connector: connector)
         _ = try await sut.syncRecentWorkouts()
         let beforeReset = await connector.didDisconnect
         XCTAssertFalse(beforeReset)
@@ -483,6 +495,268 @@ final class WorkoutSyncServiceTests: XCTestCase {
         XCTAssertTrue(didDisconnect)
     }
 
+    // MARK: - Fan-out over the registry (#143)
+
+    private func stravaRun(id: Int, daysAgo days: Int) -> Activity {
+        Activity(id: "strava:\(id)", title: "Run", startTime: daysAgo(days), source: .strava)
+    }
+
+    func testSyncsEveryConnectedSourceAndCachesEachWindow() async throws {
+        let hevy = MockConnector()
+        await hevy.setFetchActivitiesResult(.success([ActivityFactory.activity(id: "hevy-1", start: daysAgo(1))]))
+        let strava = MockConnector()
+        await strava.setFetchActivitiesResult(.success([stravaRun(id: 1, daysAgo: 2)]))
+        await connectStrava(strava)
+        sut = await makeService(connector: hevy)
+
+        let result = try await sut.syncRecentWorkouts()
+
+        XCTAssertEqual(result.workoutCount, 2)
+        XCTAssertTrue(result.failures.isEmpty)
+        XCTAssertFalse(result.isPartial)
+        XCTAssertEqual(result.sources, [.hevy, .strava])
+        let ids = try await workouts.cachedWorkoutIDs()
+        XCTAssertEqual(Set(ids), ["hevy-1", "strava:1"])
+        let stravaCredentials = await strava.lastConnectedCredentials
+        XCTAssertEqual(stravaCredentials, Self.stravaPair, "the stored pair is what Strava is connected with")
+        let stored = await timestamps.lastSync()
+        XCTAssertEqual(stored, Self.now)
+    }
+
+    /// Strava is optional: registered but without a stored pair, it is simply
+    /// not part of the sync.
+    func testStravaWithoutStoredCredentialsIsSkipped() async throws {
+        let strava = MockConnector()
+        await registry.register(strava, for: .strava)
+        sut = await makeService(connector: MockConnector())
+
+        let result = try await sut.syncRecentWorkouts()
+
+        XCTAssertTrue(result.failures.isEmpty)
+        let fetches = await strava.fetchActivitiesCallCount
+        XCTAssertEqual(fetches, 0)
+    }
+
+    /// The point of the fan-out: one source failing does not throw the
+    /// other's fresh data away.
+    func testStravaFailureLeavesHevyDataAndReportsIt() async throws {
+        let hevy = MockConnector()
+        await hevy.setFetchActivitiesResult(.success([ActivityFactory.activity(id: "hevy-1", start: daysAgo(1))]))
+        let strava = MockConnector()
+        await strava.setFetchActivitiesResult(.failure(.rateLimited(retryAfter: nil)))
+        await connectStrava(strava)
+        sut = await makeService(connector: hevy)
+
+        let result = try await sut.syncRecentWorkouts()
+
+        XCTAssertEqual(result.failures, [.strava: .rateLimited(retryAfter: nil)])
+        XCTAssertTrue(result.isPartial)
+        XCTAssertEqual(result.workoutCount, 1)
+        let ids = try await workouts.cachedWorkoutIDs()
+        XCTAssertEqual(ids, ["hevy-1"])
+        let stored = await timestamps.lastSync()
+        XCTAssertEqual(stored, Self.now, "a partial sync still moves the timestamp")
+    }
+
+    func testHevyFailureLeavesStravaDataAndKeepsThePreviousHevyWindow() async throws {
+        try await workouts.replaceCachedWorkouts(from: .hevy, with: [ActivityFactory.activity(id: "hevy-old", start: daysAgo(5))])
+        let hevy = MockConnector()
+        await hevy.setFetchActivitiesResult(.failure(.networkUnavailable))
+        let strava = MockConnector()
+        await strava.setFetchActivitiesResult(.success([stravaRun(id: 1, daysAgo: 2)]))
+        await connectStrava(strava)
+        sut = await makeService(connector: hevy)
+
+        let result = try await sut.syncRecentWorkouts()
+
+        XCTAssertEqual(result.failures, [.hevy: .networkUnavailable])
+        let ids = try await workouts.cachedWorkoutIDs()
+        XCTAssertEqual(Set(ids), ["hevy-old", "strava:1"], "the failed source keeps its previous window")
+    }
+
+    /// Nothing landed, so nothing to report a success about: the first
+    /// source's error is the one thrown, and the timestamp stays put.
+    func testEverySourceFailingThrowsTheFirstSourcesError() async {
+        let hevy = MockConnector()
+        await hevy.setFetchActivitiesResult(.failure(.serviceUnavailable))
+        let strava = MockConnector()
+        await strava.setFetchActivitiesResult(.failure(.networkUnavailable))
+        await connectStrava(strava)
+        sut = await makeService(connector: hevy)
+
+        await assertSyncThrows(.serviceUnavailable)
+
+        let stored = await timestamps.lastSync()
+        XCTAssertNil(stored)
+    }
+
+    /// US-5 AC2 groundwork: a rejected Strava pair is the renewal case. It is
+    /// reported, and nothing — not the pair, not the cache — is wiped, because
+    /// only the user can renew it and the dashboard has to be able to say so.
+    func testStravaUnauthorizedIsReportedWithoutWipingAnything() async throws {
+        try await workouts.replaceCachedWorkouts(from: .strava, with: [stravaRun(id: 9, daysAgo: 9)])
+        let hevy = MockConnector()
+        await hevy.setFetchActivitiesResult(.success([ActivityFactory.activity(id: "hevy-1", start: daysAgo(1))]))
+        let strava = MockConnector()
+        await strava.setFetchActivitiesResult(.failure(.unauthorized))
+        await connectStrava(strava)
+        sut = await makeService(connector: hevy)
+
+        let result = try await sut.syncRecentWorkouts()
+
+        XCTAssertEqual(result.failures, [.strava: .unauthorized])
+        let hevyKey = try await keychain.read(.hevyAPIKey)
+        XCTAssertEqual(hevyKey, "hv_live_abc")
+        let cleared = await stravaStore.clearCount
+        XCTAssertEqual(cleared, 0)
+        let stravaDisconnected = await strava.didDisconnect
+        XCTAssertFalse(stravaDisconnected)
+        let ids = try await workouts.cachedWorkoutIDs()
+        XCTAssertEqual(Set(ids), ["hevy-1", "strava:9"], "the cached Strava window survives")
+    }
+
+    /// A rejected Hevy key ends the session whatever Strava did: the hard
+    /// logout runs and the caller gets the throw it routes on (US-1 AC3).
+    func testHevyUnauthorizedEndsTheSessionEvenWhenStravaSucceeds() async throws {
+        let hevy = MockConnector()
+        await hevy.setFetchActivitiesResult(.failure(.unauthorized))
+        let strava = MockConnector()
+        await strava.setFetchActivitiesResult(.success([stravaRun(id: 1, daysAgo: 2)]))
+        await connectStrava(strava)
+        sut = await makeService(connector: hevy)
+
+        await assertSyncThrows(.unauthorized)
+
+        let hevyKey = try await keychain.read(.hevyAPIKey)
+        XCTAssertNil(hevyKey, "the hard logout must have run")
+        let hevyDisconnected = await hevy.didDisconnect
+        XCTAssertTrue(hevyDisconnected)
+        let cleared = await stravaStore.clearCount
+        XCTAssertEqual(cleared, 0, "Strava's pair is not Hevy's business")
+    }
+
+    /// A Keychain that refuses the Strava read is a failure the result
+    /// carries — unlike a missing pair, which just means "not connected" —
+    /// but only for a connection this process knows about: the read cannot
+    /// tell whether a pair is in there, and a banner for a source the user
+    /// never connected would be wrong. Either way the source counts as
+    /// attempted, so `sources` lists it (the strip's contract).
+    func testUnreadableStravaCredentialsAreReportedAsKeychainUnavailableForAKnownConnection() async throws {
+        let strava = MockConnector()
+        await connectStrava(strava)
+        try await registry.connect(.strava, credentials: Self.stravaPair)
+        await stravaStore.setFailReads(true)
+        sut = await makeService(connector: MockConnector())
+
+        let result = try await sut.syncRecentWorkouts()
+
+        XCTAssertEqual(result.failures, [.strava: .keychainUnavailable])
+        XCTAssertEqual(result.sources, [.hevy, .strava])
+        let fetches = await strava.fetchActivitiesCallCount
+        XCTAssertEqual(fetches, 0)
+    }
+
+    func testUnreadableStravaCredentialsAreNotReportedWithoutAKnownConnection() async throws {
+        let strava = MockConnector()
+        await connectStrava(strava)
+        await stravaStore.setFailReads(true)
+        sut = await makeService(connector: MockConnector())
+
+        let result = try await sut.syncRecentWorkouts()
+
+        XCTAssertEqual(result.failures, [:])
+        XCTAssertEqual(result.sources, [.hevy])
+        let fetches = await strava.fetchActivitiesCallCount
+        XCTAssertEqual(fetches, 0)
+    }
+
+    /// A stored pair that is gone — disconnected by the user, or wiped by
+    /// "delete all data" — takes the connector's in-memory copy with it on
+    /// the next sync, as the Hevy key does (#83).
+    func testASyncWithoutAStoredStravaPairDropsTheConnectorsCopy() async throws {
+        let strava = MockConnector()
+        await connectStrava(strava)
+        try await registry.connect(.strava, credentials: Self.stravaPair)
+        stravaStore = StubStravaCredentialStore()
+        sut = await makeService(connector: MockConnector())
+
+        _ = try await sut.syncRecentWorkouts()
+
+        let didDisconnect = await strava.didDisconnect
+        XCTAssertTrue(didDisconnect)
+        let state = await registry.state(of: .strava, now: Self.now)
+        XCTAssertEqual(state, .disconnected)
+    }
+
+    /// The connector tolerates a refresh whose persist failed (locked
+    /// Keychain) and keeps the rotated pair in memory. The sync must not put
+    /// the stale stored pair back — neither after the fetch nor at the start
+    /// of the next one — or every later refresh would send a refresh token
+    /// Strava has already rotated away.
+    func testARefreshedPairThatCouldNotBePersistedIsNotOverwrittenByTheStoredOne() async throws {
+        let oauth = StubStravaOAuthorizer()
+        stravaStore = StubStravaCredentialStore(
+            clientCredentials: StravaClientCredentials(clientID: "123456", clientSecret: "s3cr3t"),
+            credentials: .oauth(accessToken: "access-old", refreshToken: "refresh-old", expiresAt: Self.now.addingTimeInterval(60))
+        )
+        await stravaStore.setFailWrites(true)
+        await oauth.setRefreshResult(.success(
+            .oauth(accessToken: "access-2", refreshToken: "refresh-2", expiresAt: Self.now.addingTimeInterval(6 * 3600))
+        ))
+        await registry.register(
+            StravaConnector(session: StubURLProtocol.makeSession(), oauth: oauth, credentialStore: stravaStore, now: { Self.now }),
+            for: .strava
+        )
+        StubURLProtocol.handler = { request in
+            Self.captured.append(request)
+            return (Self.http(status: 200, for: request, headers: nil), Data("[]".utf8))
+        }
+        let hevy = MockConnector()
+        sut = await makeService(connector: hevy)
+
+        let first = try await sut.syncRecentWorkouts()
+        // Strava has rotated the pair away: the old refresh token is dead.
+        await oauth.setRefreshResult(.failure(StravaOAuthError.invalidGrant))
+        let second = try await sut.syncRecentWorkouts()
+
+        XCTAssertEqual(first.failures, [:])
+        XCTAssertEqual(second.failures, [:], "the rotated pair in memory must keep serving")
+        let refreshes = await oauth.refreshCalls.map(\.refreshToken)
+        XCTAssertEqual(refreshes, ["refresh-old"], "refreshed once, with the pair that was current then")
+        XCTAssertEqual(Self.captured.compactMap { $0.value(forHTTPHeaderField: "Authorization") }, ["Bearer access-2", "Bearer access-2"])
+    }
+
+    // MARK: - Driven from the dashboard
+
+    /// The whole chain the dashboard runs at launch and on pull-to-refresh —
+    /// view model, sync service, registry, connectors — must carry a sync to
+    /// completion. On a device every request of every sync was found cancelled
+    /// a millisecond after starting; this pins down whether the service cancels
+    /// itself or something above the view model does.
+    @MainActor
+    func testTheDashboardReloadRunsTheSyncToCompletion() async throws {
+        let hevy = MockConnector()
+        await hevy.setFetchActivitiesResult(.success([ActivityFactory.activity(id: "hevy-1", start: daysAgo(1))]))
+        let strava = MockConnector()
+        await strava.setFetchActivitiesResult(.success([stravaRun(id: 1, daysAgo: 2)]))
+        await connectStrava(strava)
+        let service = await makeService(connector: hevy)
+        let viewModel = WorkoutListViewModel(cache: workouts, syncer: service, timestamps: timestamps, now: { Self.now })
+
+        await viewModel.reload()
+
+        XCTAssertEqual(viewModel.syncStatus, .idle)
+        XCTAssertEqual(viewModel.lastSync, Self.now)
+        let hevyFetches = await hevy.fetchActivitiesCallCount
+        let stravaFetches = await strava.fetchActivitiesCallCount
+        XCTAssertEqual(hevyFetches, 1)
+        XCTAssertEqual(stravaFetches, 1)
+        guard case .loaded(let summaries, _) = viewModel.state else {
+            return XCTFail("expected .loaded, got \(viewModel.state)")
+        }
+        XCTAssertEqual(Set(summaries.map(\.id)), ["hevy-1", "strava:1"])
+    }
+
     // MARK: - Reset during a running sync (#150)
 
     /// A sync outlives the pull that started it (#150), so it can still be
@@ -495,7 +769,7 @@ final class WorkoutSyncServiceTests: XCTestCase {
     func testAResetDuringTheFetchVoidsTheSyncInsteadOfRestoringTheCache() async throws {
         let connector = MockConnector()
         await connector.setFetchActivitiesResult(.success([ActivityFactory.activity(id: "a-1", start: daysAgo(1))]))
-        let sut = makeService(connector: connector)
+        sut = await makeService(connector: connector)
         _ = try await sut.syncRecentWorkouts()
         let cachedBefore = try await workouts.workoutCount()
         XCTAssertEqual(cachedBefore, 1)

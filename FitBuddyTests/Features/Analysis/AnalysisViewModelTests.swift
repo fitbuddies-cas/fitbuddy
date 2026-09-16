@@ -76,12 +76,17 @@ final class AnalysisViewModelTests: XCTestCase {
         return calendar
     }()
 
-    private static func workout(daysAgo: Int, title: String = "Push Day") -> WorkoutSummary {
+    private static func workout(
+        daysAgo: Int,
+        title: String = "Push Day",
+        source: ConnectorSource = .hevy
+    ) -> WorkoutSummary {
         WorkoutSummary(
             id: "w-\(daysAgo)",
             title: title,
             startTime: reference.addingTimeInterval(-Double(daysAgo) * 86_400),
-            volumeKg: 4_200,
+            source: source,
+            volumeKg: source == .strava ? 0 : 4_200,
             exerciseCount: 5,
             countedSetCount: 18
         )
@@ -150,6 +155,34 @@ final class AnalysisViewModelTests: XCTestCase {
 
         XCTAssertEqual(sut.context?.window, .default)
         XCTAssertEqual(sut.context?.sessionCount, 2)
+    }
+
+    /// The context line describes the strength history the prompt was built
+    /// from (US-6 AC1): Strava sessions count neither here nor in the prompt.
+    func testContextDoesNotCountStravaSessions() async {
+        cache.summaries = [
+            Self.workout(daysAgo: 2),
+            Self.workout(daysAgo: 3, title: "Morning Run", source: .strava),
+            Self.workout(daysAgo: 5),
+        ]
+        await streamer.setChunks(["ok"])
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.sessionCount, 2)
+    }
+
+    /// A cache holding nothing but runs has no strength history to analyse —
+    /// not a window to widen, and not a provider call worth paying for.
+    func testACacheOfOnlyStravaSessionsIsNoTrainingData() async {
+        cache.summaries = [Self.workout(daysAgo: 2, title: "Morning Run", source: .strava)]
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.state, .error(.noTrainingData))
+        XCTAssertNil(sut.context)
     }
 
     /// After a widened window the count has to follow it: the sessions the

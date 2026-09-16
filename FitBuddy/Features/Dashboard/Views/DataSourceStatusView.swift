@@ -4,9 +4,10 @@ import SwiftUI
 /// last did, and — once that is longer than a day ago — a stale indicator with
 /// a retry button (US-8 AC1, #40).
 ///
-/// One row per source. In v0 that is Hevy alone, which is why the strip reads
-/// as a single line; the loop is what keeps this from being rewritten when
-/// Strava's connector lands (#35).
+/// One row per source: Hevy, and Strava once it is connected and a sync has
+/// covered it (#143). A row says when its source last synced; a source that
+/// failed inside a partial sync is reported by `SyncStatusView`'s banner
+/// instead and has no row while that banner is up.
 ///
 /// Takes `now` rather than reading the clock itself: the caller drives a
 /// `TimelineView`, and a second clock inside here would let the printed age and
