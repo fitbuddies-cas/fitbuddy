@@ -98,6 +98,14 @@ struct StravaCredentialsView: View {
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(Color.fbAccent)
             }
+            NavigationLink {
+                StravaSetupGuideView()
+            } label: {
+                Text("Read the step-by-step setup guide →")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.fbAccent)
+            }
+            .accessibilityIdentifier(AccessibilityID.StravaCredentials.setupGuideLink)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
