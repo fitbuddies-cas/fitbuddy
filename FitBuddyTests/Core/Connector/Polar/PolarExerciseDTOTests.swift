@@ -2,9 +2,7 @@ import XCTest
 @testable import FitBuddy
 
 final class PolarExerciseDTOTests: XCTestCase {
-    /// Nachtrag zu ADR-11: real AccessLink responses use underscore-separated
-    /// keys (verified against the official docs after the first real sync
-    /// failed to decode any exercise at all).
+    /// AccessLink responses use underscore-separated keys.
     private static let fullExercise = Data(#"""
     {
       "id": "aQlC83",

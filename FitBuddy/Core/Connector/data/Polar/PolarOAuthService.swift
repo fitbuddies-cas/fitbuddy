@@ -8,11 +8,9 @@ import OSLog
 /// (#152), validates the callback, and exchanges the code via
 /// `PolarOAuthClient`.
 ///
-/// Unlike the original design, this service does not persist anything —
-/// exactly like `StravaOAuthService` it takes the user's application
-/// credentials on every call, and the caller (`PolarConnectionViewModel`)
-/// stores the resulting pair. There is no team-wide client any more: every
-/// user registers their own application at `admin.polaraccesslink.com`.
+/// Like `StravaOAuthService` it persists nothing: it takes the user's
+/// application credentials on every call, and the caller
+/// (`PolarConnectionViewModel`) stores the resulting pair.
 ///
 /// The `state` parameter is a fresh random value per authorization and the
 /// callback is rejected if it does not echo it: a custom URL scheme is not
@@ -81,9 +79,7 @@ actor PolarOAuthService: PolarOAuthorizing {
         let items = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems ?? []
         func value(_ name: String) -> String? { items.first { $0.name == name }?.value }
 
-        // Diagnostic only — no secret or code value is logged, just which
-        // parameters the callback carried, so a failure here can be told
-        // apart from a token-endpoint one without needing device access.
+        // Parameter names only — never the code or state values.
         logger.notice(
             "Polar callback: host=\(callback.host ?? "-", privacy: .public) path=\(callback.path, privacy: .public) params=\(items.map(\.name).joined(separator: ","), privacy: .public)"
         )

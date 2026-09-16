@@ -9,13 +9,11 @@ import OSLog
 /// they read a Hevy session — the endurance-only numbers (heart rate,
 /// calories, training load) arrive in `Activity.metrics`.
 ///
-/// Built like `StravaConnector` (ADR-11 Nachtrag, BYO-app): an expiring
-/// credential — the access token lives ~12h — so `validate()` and
-/// `fetchActivities` refresh it through `PolarOAuthorizing` before it runs out
-/// (US-5 AC4) and persist the rotated pair through `PolarCredentialStoring`.
-/// The user's own application credentials (clientID/secret) are read fresh
-/// from the store on every refresh, so a pair the user replaced on the
-/// credentials screen is what the next refresh uses.
+/// Built like `StravaConnector` (ADR-11, BYO-app). AccessLink v3 access tokens
+/// last about a year and come without a refresh token, so in practice the
+/// pair is used until it expires or is revoked; the refresh path only runs if
+/// Polar ever does hand out a refresh token, and persists the new pair through
+/// `PolarCredentialStoring`.
 actor PolarConnector: FitnessConnector {
     /// Refresh the access token this long before it actually expires, so a
     /// sync started right on the boundary does not race the clock.
@@ -96,8 +94,9 @@ actor PolarConnector: FitnessConnector {
             }
         }
 
+        guard let accessToken = tokens?.accessToken else { throw ConnectorError.unauthorized }
         do {
-            _ = try await accessLink.exercises(accessToken: tokens!.accessToken)
+            _ = try await accessLink.exercises(accessToken: accessToken)
             return true
         } catch ConnectorError.unauthorized {
             // Contract: `false` is an explicit rejection, a thrown error is
@@ -154,7 +153,9 @@ actor PolarConnector: FitnessConnector {
     /// here, so a pair the user replaced on the credentials screen is what the
     /// next refresh uses.
     private func refresh() async -> RefreshOutcome {
-        guard let current = tokens else { return .rejected }
+        // v3 issues no refresh token: an expired pair can only be renewed by
+        // the user, and sending an empty grant would just earn a 400.
+        guard let current = tokens, !current.refreshToken.isEmpty else { return .rejected }
 
         let client: PolarClientCredentials?
         do {

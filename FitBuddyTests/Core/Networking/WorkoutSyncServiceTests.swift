@@ -579,27 +579,26 @@ final class WorkoutSyncServiceTests: XCTestCase {
         XCTAssertEqual(fetches, 0)
     }
 
-    /// A Polar fetch that refreshed its access token has to have the new pair
-    /// written back to the Keychain — `PolarConnector` deliberately does not
-    /// persist itself (unlike `StravaConnector`).
+    /// A Polar fetch that refreshed its access token leaves the new pair in the
+    /// shared store.
     func testARefreshedPolarPairIsPersistedBackToTheStore() async throws {
         let credentials = PolarClientCredentials(clientID: "c", clientSecret: "s")
         let oauth = StubPolarOAuthorizer(refreshResult: .success(
             .oauth(accessToken: "fresh-access", refreshToken: "fresh-refresh", expiresAt: Self.now.addingTimeInterval(43_199))
         ))
-        let polar = PolarConnector(
-            accessLink: PolarAccessLinkClient(session: StubURLProtocol.makeSession()),
-            oauth: oauth,
-            credentialStore: StubPolarCredentialStore(clientCredentials: credentials),
-            memberID: "member-1",
-            now: { Self.now }
-        )
         let expiredPair = ConnectorCredentials.oauth(
             accessToken: "expired-access",
             refreshToken: "refresh-1",
             expiresAt: Self.now.addingTimeInterval(-1)
         )
         polarStore = StubPolarCredentialStore(clientCredentials: credentials, credentials: expiredPair)
+        let polar = PolarConnector(
+            accessLink: PolarAccessLinkClient(session: StubURLProtocol.makeSession()),
+            oauth: oauth,
+            credentialStore: polarStore,
+            memberID: "member-1",
+            now: { Self.now }
+        )
         await registry.register(polar, for: .polar)
         StubURLProtocol.handler = { request in
             PolarTestSupport.http(200, for: request, body: "[]")

@@ -24,9 +24,6 @@ final class DataSourceStack: ObservableObject {
     let stravaConnector: StravaConnector
     let polarCredentialStore = PolarCredentialStore()
     let polarOAuth: PolarOAuthService
-    /// Built once `registerConnectors()` has resolved the stable member id
-    /// (ADR-11 Nachtrag) — `nil` only in the brief window before that.
-    private(set) var polarConnector: PolarConnector?
 
     init() {
         stravaOAuth = StravaOAuthService(webAuthenticator: WebAuthenticationSession())
@@ -47,7 +44,6 @@ final class DataSourceStack: ObservableObject {
             credentialStore: polarCredentialStore,
             memberID: memberID
         )
-        polarConnector = connector
         await registry.register(connector, for: .polar)
     }
 

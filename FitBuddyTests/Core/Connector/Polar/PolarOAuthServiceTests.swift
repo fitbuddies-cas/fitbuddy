@@ -1,10 +1,8 @@
 import XCTest
 @testable import FitBuddy
 
-/// Mirrors `StravaOAuthServiceTests`-style tests (ADR-11 Nachtrag, BYO-app):
-/// `PolarOAuthService` takes the user's application credentials on every
-/// call and does not persist anything itself — that is `PolarConnectionViewModel`'s
-/// job now, exactly like Strava's.
+/// `PolarOAuthService` takes the user's application credentials on every call
+/// and persists nothing itself — that is `PolarConnectionViewModel`'s job.
 final class PolarOAuthServiceTests: XCTestCase {
     private let credentials = PolarClientCredentials(clientID: "fitbuddy-client", clientSecret: "s3cr3t")
     private let epoch = Date(timeIntervalSince1970: 1_000_000)

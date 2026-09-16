@@ -13,6 +13,3 @@ build/
 *.xcscmblueprint
 *.xccheckout
 
-# Polar team credentials (ADR-11, #155) — real values never checked in;
-# copy PolarTeamConfig.plist.example to the filename below and fill it in.
-FitBuddy/Core/Connector/data/Polar/PolarTeamConfig.plist

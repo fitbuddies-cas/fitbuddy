@@ -1,9 +1,7 @@
 import XCTest
 @testable import FitBuddy
 
-/// Unit tests for `PolarConnectionViewModel` (#157, US-5 AC1). Mirrors
-/// `StravaConnectionViewModelTests` since ADR-11's Nachtrag moved Polar onto
-/// the same BYO-app model. The OAuth service and the credential store are the
+/// Unit tests for `PolarConnectionViewModel` (#157, US-5 AC1). The OAuth service and the credential store are the
 /// in-memory doubles; the registry is the real one with a real
 /// `PolarConnector` (built on doubles) behind `.polar`, because the hand-over
 /// to the registry is what this type is for.
@@ -113,8 +111,7 @@ final class PolarConnectionViewModelTests: XCTestCase {
 
     // MARK: - Connect
 
-    /// This view model persists the pair itself — `PolarOAuthService` no
-    /// longer does, exactly like Strava's.
+    /// This view model persists the pair itself, like Strava's.
     func testConnectStoresThePairConnectsTheRegistryAndNotifies() async {
         var notified = 0
         sut.onConnected = { notified += 1 }

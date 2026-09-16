@@ -13,8 +13,7 @@ import OSLog
 ///
 /// Every request authenticates with HTTP Basic `clientID:clientSecret`. No
 /// PKCE: AccessLink v3's authorization endpoint documents no
-/// `code_challenge`/`code_challenge_method` parameter, unlike the unrelated v4
-/// API — see the Nachtrag on `PolarClientConfiguration`.
+/// `code_challenge`/`code_challenge_method` parameter.
 actor PolarOAuthClient {
     private let credentials: PolarClientCredentials
     private let session: URLSession

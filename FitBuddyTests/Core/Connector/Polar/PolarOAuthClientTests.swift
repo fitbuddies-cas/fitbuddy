@@ -21,9 +21,7 @@ final class PolarOAuthClientTests: XCTestCase {
         super.tearDown()
     }
 
-    /// Nachtrag zu ADR-11: AccessLink v3's authorization endpoint is
-    /// `flow.polar.com`, not the unrelated v4 `auth.polar.com` host, and it
-    /// does not document a PKCE parameter.
+    /// AccessLink v3 authorizes on `flow.polar.com`, without PKCE.
     func testAuthorizationURLCarriesRegisteredClientParametersOnTheV3Host() async {
         let url = await sut.authorizationURL(state: "xyz")
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems ?? []
@@ -36,8 +34,7 @@ final class PolarOAuthClientTests: XCTestCase {
         XCTAssertEqual(value("state"), "xyz")
     }
 
-    /// Nachtrag zu ADR-11: every token request authenticates via HTTP Basic
-    /// `clientID:clientSecret` — there is no public-client fallback any more.
+    /// Every token request authenticates via HTTP Basic `clientID:clientSecret`.
     func testExchangeAuthenticatesWithHTTPBasicOnTheV3TokenHost() async throws {
         nonisolated(unsafe) var body: String?
         nonisolated(unsafe) var authorizationHeader: String?

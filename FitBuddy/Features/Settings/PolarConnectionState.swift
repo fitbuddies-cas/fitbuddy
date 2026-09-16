@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Mirrors `StravaConnectionState` (ADR-11 Nachtrag, BYO-app): Polar's token
 /// endpoint requires the user's own application credentials just like
-/// Strava's does, so `.missingCredentials` is back.
+/// Strava's does.
 enum PolarConnectionState: Equatable {
     /// `bootstrap()` has not read the stores yet.
     case unknown

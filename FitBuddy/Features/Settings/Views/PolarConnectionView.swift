@@ -100,16 +100,16 @@ struct PolarConnectionView: View {
         case .authorizing:
             return "Sign in to Polar in the sheet and allow FitBuddy to read your training sessions."
         case .connected(let expiresAt):
-            return "Your sessions sync with the dashboard. The access token renews itself; it is currently valid until \(Self.expiryFormatter.string(from: expiresAt))."
+            return "Your sessions sync with the dashboard. The connection is valid until \(Self.expiryFormatter.string(from: expiresAt))."
         case .expired:
-            return "The token could not be renewed — Polar may have revoked it. Reconnect to keep syncing."
+            return "The connection has expired or was revoked on Polar. Reconnect to keep syncing."
         }
     }
 
     private static let expiryFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
         return formatter
     }()
 

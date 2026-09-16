@@ -9,10 +9,6 @@ import Foundation
 /// which ones Polar populates depends on the watch, the sport and whether a
 /// chest strap was worn.
 struct PolarExerciseDTO: Decodable, Equatable, Sendable {
-    /// Nachtrag zu ADR-11: the wire keys are underscore-separated
-    /// (`start_time`, `training_load`, …) — the original hyphenated keys
-    /// (`start-time`) never matched a real response and silently failed the
-    /// whole array decode until the first real device sync surfaced it.
     let id: String
     /// Local wall-clock start, no zone (`2008-10-13T10:40:02`).
     let startTime: String
@@ -95,7 +91,7 @@ struct PolarExerciseDTO: Decodable, Equatable, Sendable {
         )
     }
 
-    /// Combines the zone-less `start-time` with `start-time-utc-offset`. Falls
+    /// Combines the zone-less `start_time` with `start_time_utc_offset`. Falls
     /// back to treating the value as UTC when the offset is missing.
     private func resolvedStartTime() -> Date? {
         guard let local = PolarDate.localFormatter.date(from: startTime) else { return nil }
@@ -104,7 +100,7 @@ struct PolarExerciseDTO: Decodable, Equatable, Sendable {
     }
 
     /// A readable session title from Polar's sport labels — `RUNNING` →
-    /// `Running`, preferring the more specific `detailed-sport-info`.
+    /// `Running`, preferring the more specific `detailed_sport_info`.
     static func title(sport: String?, detailed: String?) -> String {
         let raw = detailed ?? sport ?? "Workout"
         return raw

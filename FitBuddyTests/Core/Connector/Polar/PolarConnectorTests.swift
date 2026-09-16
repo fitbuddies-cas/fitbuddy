@@ -163,6 +163,18 @@ final class PolarConnectorTests: XCTestCase {
         }
     }
 
+    /// AccessLink v3 issues no refresh token: an expired pair without one is
+    /// rejected locally instead of sending a grant Polar would refuse.
+    func testExpiredPairWithoutRefreshTokenIsRejectedWithoutARefreshCall() async throws {
+        try await sut.connect(credentials: .oauth(accessToken: "at", refreshToken: "", expiresAt: epoch.addingTimeInterval(-1)))
+
+        await assertThrowsConnectorError(.unauthorized) {
+            _ = try await self.sut.fetchActivities(since: .distantPast)
+        }
+        let refreshCalls = await oauth.refreshCallCount
+        XCTAssertEqual(refreshCalls, 0)
+    }
+
     func testRateLimitedExerciseCallSurfacesRetryAfter() async throws {
         StubURLProtocol.handler = { request in
             if request.url?.path == "/v3/exercises" {

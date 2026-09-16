@@ -32,10 +32,10 @@ enum KeychainKey: String, CaseIterable {
     case polarClientID = "fitbuddy.polar.clientid"
     /// Client secret of that same application.
     case polarClientSecret = "fitbuddy.polar.clientsecret"
-    /// Polar OAuth access token (ADR-11). Expires after ~12h — refreshed via
-    /// `polarRefreshToken`.
+    /// Polar OAuth access token (ADR-11). Valid for about a year.
     case polarAccessToken = "fitbuddy.polar.accesstoken"
-    /// Polar OAuth refresh token (ADR-11).
+    /// Polar OAuth refresh token (ADR-11). Empty for AccessLink v3, which
+    /// issues none.
     case polarRefreshToken = "fitbuddy.polar.refreshtoken"
     /// ISO8601 timestamp of when `polarAccessToken` expires (ADR-11).
     case polarTokenExpiry = "fitbuddy.polar.tokenexpiry"

@@ -6,15 +6,9 @@ import Foundation
 /// `PolarClientCredentials` (clientID/clientSecret) — is entered on the
 /// credentials screen (#139-style, BYO-app) and stored in their own Keychain.
 ///
-/// **These hosts are v3-specific and not interchangeable with v4** (Nachtrag,
-/// found while debugging the first real end-to-end connect attempt): a client
-/// registered at `admin.polaraccesslink.com` (v3) only authenticates against
-/// `flow.polar.com`/`polarremote.com`. The unrelated v4 API
-/// (`polar.com/polar-api-v4`) has its own host, `auth.polar.com` — pointing a
-/// v3 client at it fails with an opaque redirect/response the app cannot
-/// explain, which is exactly what `auth.polar.com` was doing here before this
-/// fix. `PolarConnector` targets the v3 `exercises` resource, so OAuth has to
-/// stay v3 too.
+/// These hosts are v3-specific: a client registered at
+/// `admin.polaraccesslink.com` only authenticates against `flow.polar.com` and
+/// `polarremote.com`, not against the separate v4 API's `auth.polar.com`.
 enum PolarClientConfiguration {
     /// Registered redirect URI. Every user's own Polar application has to
     /// list this same value — it is FitBuddy's URL scheme, not a per-user

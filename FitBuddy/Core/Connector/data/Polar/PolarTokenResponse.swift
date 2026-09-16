@@ -3,11 +3,9 @@ import Foundation
 /// Body of a successful Polar `POST /oauth/token` response (ADR-11), for both
 /// the authorization-code exchange and the refresh call.
 ///
-/// Only `access_token` is strictly required. `refresh_token` is absent from
-/// some refresh responses (Polar may keep the existing one valid), and
-/// `expires_in` is defaulted rather than trusted-or-fail so a schema tweak
-/// does not break the whole connect flow — a missing lifetime is treated as
-/// "refresh on next use".
+/// Only `access_token` is strictly required. AccessLink v3 sends no
+/// `refresh_token` and an `expires_in` of about a year; a missing lifetime is
+/// defaulted rather than failing the whole connect flow.
 struct PolarTokenResponse: Decodable, Equatable, Sendable {
     let accessToken: String
     let refreshToken: String?
@@ -28,7 +26,6 @@ struct PolarTokenResponse: Decodable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         accessToken = try container.decode(String.self, forKey: .accessToken)
         refreshToken = try container.decodeIfPresent(String.self, forKey: .refreshToken)
-        // ~12h per Polar's docs; used only if the response omits the field.
         expiresIn = try container.decodeIfPresent(Int.self, forKey: .expiresIn) ?? 43_199
         userID = try container.decodeIfPresent(Int.self, forKey: .userID)
     }
