@@ -7,7 +7,7 @@ import Foundation
 /// a second endpoint for one chart. The title-based mapping below covers the
 /// common movements and puts anything unrecognised into `.other`, so the
 /// distribution never claims precision it does not have.
-enum MuscleGroup: String, CaseIterable, Sendable, Identifiable {
+enum MuscleGroup: String, Codable, CaseIterable, Sendable, Identifiable {
     case chest
     case back
     case legs

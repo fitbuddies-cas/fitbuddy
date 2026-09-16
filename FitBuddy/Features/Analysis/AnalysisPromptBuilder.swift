@@ -87,6 +87,19 @@ enum AnalysisPromptBuilder {
         summaries.filter { !$0.source.isEnduranceSource }
     }
 
+    /// The strength sessions of the analysed window — what every figure about
+    /// the recent window is computed over, in the prompt and in the check of
+    /// the model's answer against it (#175).
+    static func analysedSessions(
+        in summaries: [WorkoutSummary],
+        window: AnalysisWindow,
+        now: Date,
+        calendar: Calendar = .current
+    ) -> [WorkoutSummary] {
+        let start = window.start(endingAt: now, calendar: calendar)
+        return strengthSessions(in: summaries).filter { $0.startTime >= start }
+    }
+
     /// The movements the Exercises section lists: the top
     /// `maxListedExercises` by volume in the window (#173).
     ///
@@ -165,9 +178,10 @@ enum AnalysisPromptBuilder {
     recent session, toKg the new weight, reasoning one sentence. Use \
     "recovery" when rest comes before any progression, with the rest you \
     recommend in suggestedRestHours. Use "imbalance" when two muscle groups \
-    are trained at clearly different frequencies, with each group's sessions \
-    per week. Use "note" for anything else worth saying, including a rep \
-    progression without a weight change. Every card follows the ground rules \
+    are trained at clearly different frequencies, naming each group and its \
+    sessions per week exactly as the Muscle groups section lists them. Use \
+    "note" for anything else worth saying, including a rep progression \
+    without a weight change. Every card follows the ground rules \
     above; a recommendation you cannot ground in the data does not become a \
     card.
 
@@ -187,7 +201,7 @@ enum AnalysisPromptBuilder {
         let recentStart = window.start(endingAt: now, calendar: calendar)
         let previousStart = window.previousStart(endingAt: now, calendar: calendar)
 
-        let recent = summaries.filter { $0.startTime >= recentStart }
+        let recent = analysedSessions(in: summaries, window: window, now: now, calendar: calendar)
         let previous = summaries.filter { $0.startTime >= previousStart && $0.startTime < recentStart }
 
         let days = DayFormatter(calendar: calendar)
@@ -281,6 +295,9 @@ enum AnalysisPromptBuilder {
         return (["## Volume per week"] + weeks).joined(separator: "\n")
     }
 
+    /// Volume, sets and training frequency per group. The frequency is the
+    /// figure an imbalance card has to quote (#175), so it comes from
+    /// `MuscleGroupFrequency`, which the validator reads as well.
     private static func muscleSection(_ summaries: [WorkoutSummary], window: AnalysisWindow) -> String {
         let distribution = MuscleLoad.merged(summaries.flatMap(\.muscleLoads))
         guard !distribution.isEmpty else {
@@ -288,6 +305,8 @@ enum AnalysisPromptBuilder {
         }
 
         let total = distribution.reduce(0) { $0 + $1.volumeKg }
+        let sessionCounts = MuscleGroupFrequency.sessionCounts(in: summaries)
+        let perWeek = MuscleGroupFrequency.sessionsPerWeek(in: summaries, window: window)
         let rows = distribution.map { load -> String in
             // Sets carry the groups that produce no kilograms at all. Reporting
             // a share of a zero total would be a division by zero dressed up as
@@ -295,7 +314,10 @@ enum AnalysisPromptBuilder {
             let share = total > 0
                 ? " (\(Int((load.volumeKg / total * 100).rounded()))% of volume)"
                 : ""
-            return "- \(load.group.displayName): \(kg(load.volumeKg))\(share), \(load.setCount) working sets"
+            let sessions = sessionCounts[load.group] ?? 0
+            let frequency = MuscleGroupFrequency.string(perWeek[load.group] ?? 0)
+            return "- \(load.group.displayName): \(kg(load.volumeKg))\(share), \(load.setCount) working sets, "
+                + "trained in \(sessions) \(sessions == 1 ? "session" : "sessions") (\(frequency) per week)"
         }
         return (["## Muscle groups (last \(window.weeks) weeks)"] + rows).joined(separator: "\n")
     }
@@ -364,8 +386,10 @@ enum AnalysisPromptBuilder {
     ) -> String {
         let header = "## Exercises (last \(window.weeks) weeks)"
         let rows = promptedExercises(from: exercises).compactMap { exercise -> String? in
-            guard let progression = progressions[exercise.id] else { return nil }
-            return exerciseRow(exercise, progression: progression, from: start, days: days)
+            guard let progression = progressions[exercise.id],
+                  let listing = listing(progression, from: start)
+            else { return nil }
+            return exerciseRow(exercise, listing: listing, days: days)
         }
         guard !rows.isEmpty else {
             return header + "\nNo exercise-level data is available for this window. "
@@ -383,12 +407,39 @@ enum AnalysisPromptBuilder {
         return ([header, legend] + rows + footer).joined(separator: "\n")
     }
 
-    private static func exerciseRow(
-        _ exercise: ExerciseSummary,
-        progression: ExerciseProgression,
-        from start: Date,
-        days: DayFormatter
-    ) -> String? {
+    /// The exercises the Exercises section lists, each reduced to the
+    /// working set its line states — what a progression card is checked
+    /// against (#175).
+    ///
+    /// Walks the same ranking, the same lookup and the same session choice as
+    /// the section itself, so a movement is here exactly when it has a line,
+    /// and with exactly the weight that line names.
+    static func listedExercises(
+        exercises: [ExerciseSummary],
+        progressions: [String: ExerciseProgression],
+        window: AnalysisWindow,
+        now: Date,
+        calendar: Calendar = .current
+    ) -> [ListedExercise] {
+        let start = window.start(endingAt: now, calendar: calendar)
+        return promptedExercises(from: exercises).compactMap { exercise in
+            guard let progression = progressions[exercise.id],
+                  let listing = listing(progression, from: start)
+            else { return nil }
+            return ListedExercise(
+                title: exercise.title,
+                muscleGroup: exercise.muscleGroup,
+                workingSet: listing.last.heaviestWorkingSet
+            )
+        }
+    }
+
+    /// A movement's sessions inside the window, and the session its line
+    /// starts from. `nil` when the window holds none of its sessions.
+    private static func listing(
+        _ progression: ExerciseProgression,
+        from start: Date
+    ) -> (inWindow: ExerciseProgression, last: ExerciseHistoryEntry)? {
         // Rebuilt over the window alone, so the trend and the plateau verdict
         // describe the same sessions as every other figure in the prompt —
         // whatever range the progression was read over.
@@ -403,6 +454,15 @@ enum AnalysisPromptBuilder {
         guard let last = inWindow.sessions.last(where: { $0.countedSetCount > 0 })
             ?? inWindow.sessions.last
         else { return nil }
+        return (inWindow, last)
+    }
+
+    private static func exerciseRow(
+        _ exercise: ExerciseSummary,
+        listing: (inWindow: ExerciseProgression, last: ExerciseHistoryEntry),
+        days: DayFormatter
+    ) -> String {
+        let (inWindow, last) = listing
 
         // The working set leads, right after the name: it is the value a
         // recommendation starts from, and "Bench Press: 60 kg × 5" reads as
