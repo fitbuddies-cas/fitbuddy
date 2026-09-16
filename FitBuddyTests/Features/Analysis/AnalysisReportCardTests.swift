@@ -8,6 +8,7 @@ final class AnalysisReportCardTests: XCTestCase {
         let report = ValidatedAnalysisReport(
             headline: "Recover this week.",
             verdict: .recover,
+            lead: "Rest two days first.",
             cards: [
                 .recovery(
                     reasoning: "Rest first.",

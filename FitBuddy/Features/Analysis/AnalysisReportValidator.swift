@@ -56,7 +56,8 @@ enum AnalysisReportValidator {
         // US-3 AC6 / US-14 AC4: at 6 of 7 days no progression is shown without
         // the recovery hint, and the headline says so. A model recovery card
         // always survives at that count, so a missing one means the model left
-        // it out.
+        // it out. The lead stays the model's: it is prose like the summary,
+        // and the recovery card right below it states the hint (#170).
         if evidence.recovery.needsRecovery {
             if !cards.contains(where: { $0.kind == .recovery }) {
                 cards.insert(
@@ -73,6 +74,7 @@ enum AnalysisReportValidator {
         return ValidatedAnalysisReport(
             headline: headline,
             verdict: verdict,
+            lead: report.lead,
             cards: capped(cards),
             summary: report.summary
         )
