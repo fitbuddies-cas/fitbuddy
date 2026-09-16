@@ -4,7 +4,8 @@ High-fidelity iOS screen designs for the three Must-Have user stories from `REQU
 
 - **US-1** · API-Key sicher speichern (5 screen states)
 - **US-2** · 90 Tage Trainingsdaten im Dashboard (4 screen states)
-- **US-3** · AI-Analyse auf Knopfdruck (6 screen states)
+- **US-3** · AI-Analyse auf Knopfdruck (8 screen states, inkl. gespeicherte Analysen)
+- **US-14** · AI-Empfehlung als strukturierte Karten (3.4, 3.5, 3.7b)
 - **Interactive Prototype** — clickable full-flow walkthrough
 
 ## Run it locally
@@ -24,7 +25,7 @@ Open `index.html` directly in a modern browser. No build step, no install. All d
 |---|---|
 | `index.html` | Entry. Loads scripts and sets up the DesignCanvas. |
 | `fb-atoms.jsx` | FitBuddy design tokens (colors, type) + reusable primitives (`FBButton`, `FBCard`, `FBStat`, `FBBar`, `FBSpinner`). |
-| `fb-screens.jsx` | All 13 screen components (`FBWelcomeScreen`, `FBKeyEntryScreen`, `FBDashboardScreen`, `FBWorkoutDetailScreen`, `FBAnalyzeLoadingScreen`, `FBAnalysisResultScreen`). |
+| `fb-screens.jsx` | All screen components (`FBWelcomeScreen`, `FBKeyEntryScreen`, `FBDashboardScreen`, `FBWorkoutDetailScreen`, `FBAnalyzeLoadingScreen`, `FBAnalysisResultScreen`, `FBAnalysisHistoryScreen`, `FBAnalysisHistoryDetailScreen`). Die Karten-Props (`ProgressionRecCard`, `RecoveryRecCard`, `ImbalanceRecCard`) und das `AnalysisReport`-Format sind dort als Kommentar dokumentiert — Vorlage für das JSON-Schema (#174). |
 | `ios-frame.jsx` | iOS 26 device frame (status bar, dynamic island, keyboard, home indicator). |
 | `design-canvas.jsx` | Pan/zoom canvas wrapper. Sections + artboards. |
 
@@ -58,8 +59,13 @@ Open `index.html` directly in a modern browser. No build step, no install. All d
 | US-3 AC4 (≥2 muscle groups) | 3.4 covers Chest + Legs |
 | US-3 AC6 (recovery if ≥6/7 days) | 3.5 recovery variant |
 | US-3 AC8 (imbalance) | 3.4 Chest 3×/wk vs Legs 1×/wk card |
-| US-3 Rate-Limit-Countdown | 3.6 — Helpful-/Not-helpful-Buttons in 3.4 / 3.5 sind im Mock veraltet, in der App entfernt (#165) |
-| US-3 AC11 (History, Swipe-Delete) | noch kein Mock — Screen ist mit #117 dazugekommen |
+| US-3 60-Sekunden-Sperre gegen Doppeltipp (#117) | 3.6 — kein Stunden-Countdown, kein Feedback (#165) |
+| US-3 AC11 (History, Swipe-Delete) | 3.7 Liste (max. 20, Swipe-Delete) → 3.7b Detail |
+| US-13 AC4 (Profil in der Datenbasis) | 3.4 Kontextzeile «Goal: Build muscle · 1–3 years training» |
+| US-14 AC1 (Headline-Verdikt, Kontextzeile, 1–4 Karten, Disclaimer) | 3.4 / 3.5 |
+| US-14 AC2 (Übung, Muskelgruppe, von → nach, Delta, Begründung) | 3.4 Progression-Karten |
+| US-14 AC4 (Recovery-Kennzahlen aus der App, Ø RPE optional) | 3.5 Recovery-Karte |
+| US-14 AC6 (alte Prosa-Einträge bleiben lesbar) | 3.7 Eintrag «Text» |
 | US-9 AC1–AC3 (Progressionskurve, Plateau-Label, Session-Historie) | noch kein Mock — Screen ist mit #42/#163 dazugekommen |
 
 ---
