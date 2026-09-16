@@ -17,6 +17,10 @@ struct TrainingProfileView: View {
                 Text("What are you training for?")
                     .font(.largeTitle.bold())
                     .foregroundStyle(Color.fbInk)
+                    // On the title, not on the screen: an identifier set on a
+                    // container propagates down and overwrites the buttons'
+                    // own, which is what hid them from the UI tests.
+                    .accessibilityIdentifier(AccessibilityID.TrainingProfile.root)
                 Text("Used to tailor your AI analysis. Both questions are optional, and you can change your answers later in Settings.")
                     .font(.subheadline)
                     .foregroundStyle(Color.fbInkSecondary)
@@ -53,7 +57,6 @@ struct TrainingProfileView: View {
         }
         .background(Color.fbBackground)
         .safeAreaInset(edge: .bottom) { ctaButtons.padding(16) }
-        .accessibilityIdentifier(AccessibilityID.TrainingProfile.root)
         .task { await viewModel.bootstrap() }
     }
 
