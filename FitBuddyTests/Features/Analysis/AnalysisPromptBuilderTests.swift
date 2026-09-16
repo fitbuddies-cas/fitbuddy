@@ -315,6 +315,17 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertFalse(prompt.user.contains("Run"))
     }
 
+    func testPolarSessionsAreLeftOutOfEveryFigure() {
+        let prompt = make([
+            workout(daysAgo: 1, volume: 3_000, id: "hevy-1", title: "Push Day"),
+            workout(daysAgo: 2, volume: 0, id: "polar:1", title: "Cycling", source: .polar),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("Sessions: 1"))
+        XCTAssertTrue(prompt.user.contains("Training days: 1"))
+        XCTAssertFalse(prompt.user.contains("Cycling"))
+    }
+
     func testAWindowHoldingOnlyStravaSessionsReadsAsEmpty() {
         let prompt = make([
             workout(daysAgo: 2, volume: 0, id: "strava:1", title: "Morning Run", source: .strava),

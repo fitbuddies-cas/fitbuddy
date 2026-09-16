@@ -30,6 +30,18 @@ enum ConnectorSource: String, CaseIterable, Identifiable, Codable, Sendable {
         }
     }
 
+    /// Whether the source delivers endurance sessions rather than strength
+    /// workouts. Such a session is mapped to one "exercise" with a cardio set,
+    /// so the strength views — exercise list, progression, muscle split,
+    /// analysis prompt — leave it out instead of reading it as 0 kg of work.
+    /// Exhaustive on purpose: a new source has to decide.
+    var isEnduranceSource: Bool {
+        switch self {
+        case .hevy: return false
+        case .strava, .polar: return true
+        }
+    }
+
     /// Prompt shown when this source's stored credentials have expired
     /// (US-5 AC2) — the label of the link back into the provider's re-auth
     /// flow.

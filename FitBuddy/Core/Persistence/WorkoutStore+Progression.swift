@@ -11,13 +11,13 @@ extension WorkoutStore: ExerciseProgressionReading {
     /// and on which sets count: warm-ups are excluded here as well, because a
     /// ramp-up set would otherwise define the day's best on a light session.
     ///
-    /// Strava sessions are skipped for the same reason the list skips them:
+    /// Strava and Polar sessions are skipped for the same reason the list skips them:
     /// a run has no weight and no reps, so it could only ever contribute an
     /// empty curve — or, sharing a title with a Hevy movement, a title.
     func exerciseProgression(id: String, since date: Date) throws -> ExerciseProgression? {
-        let cardioSource = ConnectorSource.strava.rawValue
+        let enduranceSources = ConnectorSource.allCases.filter(\.isEnduranceSource).map(\.rawValue)
         var descriptor = FetchDescriptor<Workout>(
-            predicate: #Predicate { $0.startTime >= date && $0.sourceRawValue != cardioSource },
+            predicate: #Predicate { $0.startTime >= date && !enduranceSources.contains($0.sourceRawValue) },
             sortBy: [SortDescriptor(\.startTime, order: .forward)]
         )
         descriptor.relationshipKeyPathsForPrefetching = [\.exercises]

@@ -211,6 +211,27 @@ final class WorkoutStoreProgressionTests: XCTestCase {
         XCTAssertNil(progression)
     }
 
+    func testPolarSessionsAreIgnored() async throws {
+        try await sut.replaceCachedWorkouts(from: .polar, with: [
+            Activity(
+                id: "polar:1",
+                title: "Running",
+                startTime: start(daysAgo: 2),
+                source: .polar,
+                exercises: [
+                    ActivityExercise(index: 0, title: "Run", sets: [
+                        ActivityExerciseSet(index: 0, type: .normal, distanceMeters: 5_000, durationSeconds: 1_800),
+                    ]),
+                ]
+            ),
+        ])
+        let runKey = ExerciseSummary.key(templateID: nil, title: "Run")
+
+        let progression = try await sut.exerciseProgression(id: runKey, since: windowStart)
+
+        XCTAssertNil(progression)
+    }
+
     // MARK: - Helpers
 
     private let templateID = "05293BCA"
