@@ -120,7 +120,10 @@ struct PolarCredentialsView: View {
                 Text("Stored application")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(Color.fbInk)
-                Text("Client ID \(viewModel.storedClientID ?? "") · secret \(viewModel.storedSecretMask ?? "")")
+                Text("Client ID: \(viewModel.storedClientID ?? "")")
+                    .font(.system(.footnote, design: .monospaced))
+                    .foregroundStyle(Color.fbInkSecondary)
+                Text("Secret: \(viewModel.storedSecretMask ?? "")")
                     .font(.system(.footnote, design: .monospaced))
                     .foregroundStyle(Color.fbInkSecondary)
             }
