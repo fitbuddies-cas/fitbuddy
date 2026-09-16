@@ -34,6 +34,11 @@ enum MockAnalysisSeeder {
         "thin": AnalysisReportSamples.thin,
     ]
 
+    /// Sessions the context line of a seeded report names. 14 as in design
+    /// 3.4/3.5; the thin report rests on 2, as design 3.4b draws it.
+    static let defaultSessionCount = 14
+    static let sessionCounts: [String: Int] = ["thin": 2]
+
     private static let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "MockAnalysisSeeder")
 
     static func isRequested(in launchArguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
@@ -49,12 +54,24 @@ enum MockAnalysisSeeder {
     static func requestedReport(
         in launchArguments: [String] = ProcessInfo.processInfo.arguments
     ) -> ValidatedAnalysisReport? {
+        requestedReportName(in: launchArguments).flatMap { reports[$0] }
+    }
+
+    /// The context line a seeded report rests on: its own session count, over
+    /// the default window.
+    static func context(forReportNamed name: String) -> AnalysisContext {
+        AnalysisContext(sessionCount: sessionCounts[name] ?? defaultSessionCount, window: .default)
+    }
+
+    /// The report name the launch asked for — the default for a bare argument
+    /// — or `nil` without the argument.
+    private static func requestedReportName(in launchArguments: [String]) -> String? {
         guard let flag = launchArguments.firstIndex(of: launchArgument) else { return nil }
         let value = launchArguments.index(after: flag)
         guard value < launchArguments.endIndex, !launchArguments[value].hasPrefix("-") else {
-            return reports[defaultReportName]
+            return defaultReportName
         }
-        return reports[launchArguments[value]]
+        return launchArguments[value]
     }
 
     /// Replaces the stored history with the requested report.
@@ -71,7 +88,7 @@ enum MockAnalysisSeeder {
         now: () -> Date = Date.init
     ) async {
         guard isRequested(in: launchArguments) else { return }
-        guard let report = requestedReport(in: launchArguments) else {
+        guard let name = requestedReportName(in: launchArguments), let report = reports[name] else {
             logger.error("Unknown analysis report requested; nothing seeded")
             return
         }
@@ -83,7 +100,7 @@ enum MockAnalysisSeeder {
                 report: report,
                 provider: .claude,
                 generatedAt: now(),
-                context: AnalysisContext(sessionCount: 14, window: .default)
+                context: context(forReportNamed: name)
             )
             logger.debug("Seeded a stored analysis")
         } catch {

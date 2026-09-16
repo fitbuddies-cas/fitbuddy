@@ -127,9 +127,10 @@ final class AnalysisMockProfileTests: XCTestCase {
         let report = try XCTUnwrap(outcome?.report)
         XCTAssertEqual(report.verdict, .recover)
         XCTAssertEqual(report.headline, AnalysisReportValidator.recoveryHeadline)
-        // The lead stays the model's: the recovery card right below states the
-        // hint (#170).
-        XCTAssertEqual(report.lead, AnalysisReportFactory.overreached.lead)
+        // The model's lead argued for the load increase the app overruled, so
+        // it gets the app's recovery lead (#170).
+        XCTAssertEqual(report.lead, AnalysisReportValidator.recoveryLead(trainingDays: 6))
+        XCTAssertNotEqual(report.lead, AnalysisReportFactory.overreached.lead)
         XCTAssertEqual(report.cards, [
             .recovery(
                 reasoning: AnalysisReportValidator.insertedRecoveryReasoning,

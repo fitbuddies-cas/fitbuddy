@@ -80,6 +80,7 @@ final class MockAnalysisSeederTests: XCTestCase {
 
         let stored = try await AnalysisResultStore(modelContainer: container).recent(limit: 5)
         XCTAssertEqual(stored.map(\.report), [AnalysisReportSamples.recover])
+        XCTAssertEqual(stored.first?.context, AnalysisContext(sessionCount: 14, window: .default))
     }
 
     /// The thin report survives the store with its lead and without cards,
@@ -95,6 +96,7 @@ final class MockAnalysisSeederTests: XCTestCase {
         XCTAssertEqual(stored.map(\.report), [AnalysisReportSamples.thin])
         XCTAssertEqual(stored.first?.report?.cards, [])
         XCTAssertEqual(stored.first?.report?.lead, AnalysisReportSamples.thin.lead)
+        XCTAssertEqual(stored.first?.context, AnalysisContext(sessionCount: 2, window: .default), "Design 3.4b rests on 2 sessions")
     }
 
     /// A typo stores nothing rather than a report the test did not ask for.
