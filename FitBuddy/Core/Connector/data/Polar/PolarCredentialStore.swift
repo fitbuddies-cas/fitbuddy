@@ -101,8 +101,9 @@ actor PolarCredentialStore: PolarCredentialStoring {
     }
 
     /// The items this store owns. Deliberately not `KeychainKey.allCases` —
-    /// clearing Polar must not touch the Hevy or Strava keys.
-    private static let ownedKeys: [KeychainKey] = [
+    /// clearing Polar must not touch the Hevy or Strava keys. Not private:
+    /// the hard logout deletes them too (US-1 AC3).
+    static let ownedKeys: [KeychainKey] = [
         .polarClientID,
         .polarClientSecret,
         .polarAccessToken,

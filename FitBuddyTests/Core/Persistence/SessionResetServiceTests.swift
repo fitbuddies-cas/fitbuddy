@@ -119,6 +119,31 @@ final class SessionResetServiceTests: XCTestCase {
         }
     }
 
+    func testHardLogoutClearsPolarWorkoutsToo() async throws {
+        let start = Date(timeIntervalSince1970: 1_750_000_000)
+        try await workouts.replaceCachedWorkouts(from: .polar, with: [
+            Activity(id: "polar:1", title: "Cycling", startTime: start, source: .polar),
+        ])
+
+        await sut.hardLogout()
+
+        let ids = try await workouts.cachedWorkoutIDs()
+        XCTAssertTrue(ids.isEmpty)
+    }
+
+    func testHardLogoutDeletesThePolarCredentials() async throws {
+        for key in PolarCredentialStore.ownedKeys {
+            try await keychain.save("polar-\(key.rawValue)", for: key)
+        }
+
+        await sut.hardLogout()
+
+        for key in PolarCredentialStore.ownedKeys {
+            let stored = try await keychain.read(key)
+            XCTAssertNil(stored, "\(key.rawValue) must go with the session")
+        }
+    }
+
     func testHardLogoutClearsSyncTimestamp() async throws {
         await timestamps.setLastSync(Date(timeIntervalSince1970: 1_754_400_000))
 
