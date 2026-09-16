@@ -249,6 +249,43 @@ final class InferenceServiceTests: XCTestCase {
         ])
     }
 
+    /// A JSON answer cut off before its summary would reach the screen as raw
+    /// JSON: it is treated as unreadable, and the chain moves on.
+    func testFallsBackWhenAJSONAnswerIsCutOffBeforeItsSummary() async throws {
+        try await keychain.save("AIza", for: .geminiAPIKey)
+        claude.chunks = [#"{"headline": "Go.", "verdict": "progress", "summ"#]
+        sut = makeService(priority: [.claude, .gemini])
+
+        let events = try await run()
+
+        XCTAssertEqual(attempted(in: events), [.claude, .gemini])
+        XCTAssertEqual(text(of: events), "Gemini answer")
+    }
+
+    func testRaisesInvalidResponseWhenTheLastProviderCutsOffItsJSON() async throws {
+        claude.chunks = [#"{"headline": "Go.", "verdict": "progress", "summ"#]
+
+        do {
+            _ = try await run()
+            XCTFail("expected invalidResponse")
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .invalidResponse)
+        }
+    }
+
+    /// Cut off after the summary: that summary is the answer, and no second
+    /// provider is paid for.
+    func testKeepsTheSalvagedSummaryOfATruncatedAnswer() async throws {
+        try await keychain.save("AIza", for: .geminiAPIKey)
+        claude.chunks = [#"{"headline": "Go.", "verdict": "progress", "summary": "Add 2.5 kg.", "cards": [{"ki"#]
+        sut = makeService(priority: [.claude, .gemini])
+
+        let events = try await run()
+
+        XCTAssertEqual(events, [.attempting(.claude), .text("Add 2.5 kg.")])
+        XCTAssertEqual(gemini.callCount, 0)
+    }
+
     /// Whitespace is not an answer either.
     func testFallsBackWhenAProviderAnswersOnlyWhitespace() async throws {
         try await keychain.save("AIza", for: .geminiAPIKey)

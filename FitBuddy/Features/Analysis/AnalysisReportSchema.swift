@@ -21,6 +21,13 @@ import Foundation
 /// - `minItems` / `maxItems` on `cards` — Claude accepts only `minItems` 0 or 1
 ///   and no `maxItems`; the prompt asks for one to four cards instead.
 ///
+/// `summary` is declared before `cards`: an answer cut off at the token limit
+/// then usually still carries a complete summary, which
+/// `AnalysisReportParser` salvages as prose. Only Gemini is guaranteed to see
+/// that order (`propertyOrdering`); `JSONEncoder` writes object keys in hash
+/// order, so for Claude and Mistral the order the system prompt lists the
+/// fields in is what asks for it.
+///
 /// Per provider (see the request types for the wire shape):
 ///
 /// - Claude: `output_config.format` = `{type: "json_schema", schema}`
@@ -45,17 +52,17 @@ enum AnalysisReportSchema {
                 "enum": .array(AnalysisVerdict.allCases.map { .string($0.rawValue) }),
                 "description": "progress: the data supports adding load or reps. recover: rest comes first. hold: neither is justified yet."
             ],
+            "summary": [
+                "type": "string",
+                "description": "The whole recommendation as plain prose under 200 words, readable without the cards."
+            ],
             "cards": [
                 "type": "array",
                 "description": "One to four recommendation cards, most important first.",
                 "items": ["anyOf": .array(AnalysisCard.Kind.allCases.map(card))]
-            ],
-            "summary": [
-                "type": "string",
-                "description": "The whole recommendation as plain prose under 200 words, readable without the cards."
             ]
         ],
-        "required": ["headline", "verdict", "cards", "summary"],
+        "required": ["headline", "verdict", "summary", "cards"],
         "additionalProperties": false
     ]
 

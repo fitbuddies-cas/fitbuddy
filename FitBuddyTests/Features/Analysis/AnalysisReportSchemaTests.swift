@@ -134,7 +134,7 @@ final class AnalysisReportSchemaTests: XCTestCase {
     func testGeminiVariantListsThePropertyOrderOfEveryObject() throws {
         let schema = try encoded(AnalysisReportSchema.schema.addingPropertyOrdering())
 
-        XCTAssertEqual(schema["propertyOrdering"] as? [String], ["headline", "verdict", "cards", "summary"])
+        XCTAssertEqual(schema["propertyOrdering"] as? [String], ["headline", "verdict", "summary", "cards"])
         let properties = try XCTUnwrap(schema["properties"] as? [String: Any])
         let items = try XCTUnwrap((properties["cards"] as? [String: Any])?["items"] as? [String: Any])
         let progression = try XCTUnwrap((items["anyOf"] as? [[String: Any]])?.first)

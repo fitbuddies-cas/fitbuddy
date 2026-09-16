@@ -33,6 +33,19 @@ enum AnalysisCard: Equatable, Sendable {
         case note
     }
 
+    /// The card's explanatory sentence — what a prose rendering of the card
+    /// says when there is no room for its figures.
+    var prose: String {
+        switch self {
+        case .progression(_, _, _, _, let reasoning),
+             .recovery(let reasoning, _),
+             .imbalance(_, _, _, _, let reasoning):
+            return reasoning
+        case .note(_, let text):
+            return text
+        }
+    }
+
     var kind: Kind {
         switch self {
         case .progression: return .progression

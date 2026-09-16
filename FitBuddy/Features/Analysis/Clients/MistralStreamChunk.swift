@@ -48,6 +48,8 @@ struct MistralStreamChunk: Decodable {
     }
 
     /// The `finish_reason` Mistral uses when generation itself failed. `stop`
-    /// and `length` both leave an answer behind; this one does not.
+    /// and `length` can both leave an answer behind — for a `length` cut-off,
+    /// whether it is still usable is `AnalysisReportParser`'s call; this one
+    /// never does.
     private static let errorFinishReason = "error"
 }

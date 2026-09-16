@@ -28,11 +28,12 @@ struct AnthropicClient: LLMProviderClient {
     /// user's own key and shares the budget above.
     static let effort = "low"
 
-    /// `stop_reason` values that leave an answer behind. `max_tokens`
-    /// truncates, but what arrived is still the model's own prose — the same
-    /// call the Gemini and Mistral clients make for `MAX_TOKENS` and `length`.
-    /// Anything else (`refusal`, …) means there is no answer to publish,
-    /// however much text already arrived.
+    /// `stop_reason` values that may leave an answer behind. `max_tokens`
+    /// truncates, and whether what arrived is still usable is decided by
+    /// `AnalysisReportParser` — a cut-off JSON report often still carries its
+    /// summary. The same call the Gemini and Mistral clients make for
+    /// `MAX_TOKENS` and `length`. Anything else (`refusal`, …) means there is
+    /// no answer to publish, however much text already arrived.
     private static let answeredStopReasons: Set<String> = ["end_turn", "stop_sequence", "max_tokens"]
 
     private static let endpoint = URL(staticString: "https://api.anthropic.com/v1/messages")
@@ -74,14 +75,14 @@ struct AnthropicClient: LLMProviderClient {
                             // entry in the history. Treated as an interruption
                             // so the fallback chain gets its turn.
                             //
-                            // `max_tokens` is deliberately not one of those: a
-                            // truncated recommendation is still usable, and for
-                            // the Claude-only setup there is no chain to fall
-                            // back to — the run would surface as an error with
-                            // the tokens already spent. A run whose thinking
-                            // ate the whole budget yields no text at all, and
-                            // `InferenceService.run()` already falls through on
-                            // `didYieldText == false`.
+                            // `max_tokens` is deliberately not one of those:
+                            // a truncated answer can still be usable — a JSON
+                            // report cut off after its summary, or plain prose.
+                            // `AnalysisReportParser` decides, and
+                            // `InferenceService.run()` falls through to the
+                            // next provider when nothing usable is left,
+                            // including a run whose thinking ate the whole
+                            // budget and yielded no text at all.
                             if let reason = event.delta?.stopReason,
                                !Self.answeredStopReasons.contains(reason) {
                                 throw InferenceServiceError.streamInterrupted(message: reason)

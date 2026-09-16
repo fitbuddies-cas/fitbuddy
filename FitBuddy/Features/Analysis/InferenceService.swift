@@ -155,18 +155,19 @@ actor InferenceService {
                     try Task.checkCancellation()
                     answer += chunk
                 }
-                // A clean stream that never produced a token is not an answer:
-                // hand over to the next candidate rather than ending the run.
-                // The clients recognise the error frames they know, but a
-                // provider can also answer 200 and simply say nothing — that
-                // has to fall back too, or the chain stops at the first one
-                // whose response this version cannot read.
-                if !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    // A report, or prose when the answer does not match the
-                    // schema (US-14 AC5) — never a reason to fall back.
-                    continuation.yield(AnalysisReportParser.event(for: answer))
+                // A report, or prose when the answer does not match the schema
+                // (US-14 AC5) — either one ends the run.
+                if let event = AnalysisReportParser.event(for: answer) {
+                    continuation.yield(event)
                     return
                 }
+                // Nothing to show is not an answer: hand over to the next
+                // candidate rather than ending the run. That covers a clean
+                // stream that never produced a token — a provider can answer
+                // 200 and simply say nothing, or send an error frame its client
+                // does not recognise — and a JSON answer cut off at the token
+                // limit before its summary, which would otherwise reach the
+                // screen as raw JSON.
                 lastError = InferenceServiceError.invalidResponse
             } catch {
                 // The user cancelled: not a provider problem, and asking the

@@ -10,7 +10,9 @@ struct MistralClient: LLMProviderClient {
     /// alias can move to a new version mid-deploy, changing both behaviour and
     /// the price charged to the user's own key.
     static let model = "mistral-medium-2604"
-    static let maxTokens = 4096
+    /// Same budget as the other two: the report is a summary plus up to four
+    /// cards, and a JSON answer cut off before its summary is no answer (#174).
+    static let maxTokens = 8192
 
     /// Terminator of an OpenAI-shaped SSE stream. Not JSON, so it has to be
     /// recognised before the decoder sees it.

@@ -157,6 +157,9 @@ enum AnalysisPromptBuilder {
     - verdict: "progress" when the data supports adding load or reps, \
     "recover" when rest has to come first, "hold" when neither is justified \
     yet.
+    - summary: the whole recommendation as plain prose under 200 words, \
+    readable without the cards: first what stands out in the data, then a \
+    concrete recommendation for the next block.
     - cards: one to four cards, most important first. Use "progression" for \
     a load increase on one exercise: fromKg is the weight listed for its most \
     recent session, toKg the new weight, reasoning one sentence. Use \
@@ -167,9 +170,8 @@ enum AnalysisPromptBuilder {
     progression without a weight change. Every card follows the ground rules \
     above; a recommendation you cannot ground in the data does not become a \
     card.
-    - summary: the whole recommendation as plain prose under 200 words, \
-    readable without the cards: first what stands out in the data, then a \
-    concrete recommendation for the next block.
+
+    Write the fields in this order.
     """
 
     // MARK: - User

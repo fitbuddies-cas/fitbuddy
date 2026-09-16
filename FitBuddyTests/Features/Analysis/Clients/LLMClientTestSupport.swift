@@ -68,7 +68,7 @@ class LLMClientTestCase: XCTestCase {
     }
 
     /// The streamed answer, joined and parsed the way `InferenceService` does.
-    func parsedAnswer(of stream: AsyncThrowingStream<String, Error>) async throws -> AnalysisEvent {
+    func parsedAnswer(of stream: AsyncThrowingStream<String, Error>) async throws -> AnalysisEvent? {
         AnalysisReportParser.event(for: try await collect(stream).joined())
     }
 

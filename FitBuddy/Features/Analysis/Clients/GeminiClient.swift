@@ -8,10 +8,13 @@ import Foundation
 /// Google Cloud credentials rather than an API key and is a v1 migration, not
 /// a drop-in host swap here.
 struct GeminiClient: LLMProviderClient {
-    /// Flash tier: the analysis is a sub-200-word paragraph, and this is billed
-    /// to the user's own key.
+    /// Flash tier: the analysis is a short JSON report, and this is billed to
+    /// the user's own key.
     static let model = "gemini-3.7-flash"
-    static let maxOutputTokens = 4096
+    /// Room for the report — a sub-200-word summary plus up to four cards —
+    /// and the thinking tokens that share this budget. A JSON answer cut off
+    /// before its summary is no answer at all (#174).
+    static let maxOutputTokens = 8192
 
     private static let host = "https://generativelanguage.googleapis.com/v1beta/models/"
 
