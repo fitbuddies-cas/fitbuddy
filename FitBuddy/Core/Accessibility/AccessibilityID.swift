@@ -117,5 +117,11 @@ enum AccessibilityID {
         static let noteCard = "analysis.noteCard"
         /// The prose card of an answer that is not a report (US-14 AC5/AC6).
         static let prose = "analysis.prose"
+        /// The short takeaway under the context line (#170).
+        static let lead = "analysis.lead"
+        /// The "Show full analysis" / "Hide full analysis" button (#170).
+        static let fullAnalysisToggle = "analysis.fullAnalysisToggle"
+        /// The report's summary, present only while the disclosure is open.
+        static let fullAnalysis = "analysis.fullAnalysis"
     }
 }

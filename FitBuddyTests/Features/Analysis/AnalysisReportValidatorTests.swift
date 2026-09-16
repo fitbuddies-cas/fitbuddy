@@ -403,7 +403,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
 
     /// A model hold verdict passes through, cards or not.
     func testModelHoldVerdictIsKept() {
-        let report = AnalysisReport(headline: "Keep going.", verdict: .hold, cards: [chestVersusLegs(3, 1)], summary: "Hold.")
+        let report = AnalysisReport(headline: "Keep going.", verdict: .hold, lead: "Hold.", cards: [chestVersusLegs(3, 1)], summary: "Hold.")
         let validated = AnalysisReportValidator.validate(report, against: evidence())
 
         XCTAssertEqual(validated.verdict, .hold)

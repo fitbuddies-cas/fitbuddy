@@ -22,7 +22,7 @@ enum AnalysisReportValidator {
     /// where `maxStepShare` would allow less than one plate pair, progressable.
     static let minimumStepKg = 2.5
 
-    /// Cards the result screen shows at most (design 3.4/3.5: one to four).
+    /// Cards the result screen shows at most (design 3.4/3.4b/3.5: zero to four).
     static let maxCards = 4
 
     /// Title of a downgraded card that has no better one.

@@ -37,13 +37,12 @@ enum AnalysisOutcome: Equatable, Sendable {
         self.init(validated: report)
     }
 
-    /// The outcome a validated report renders as: its cards, or its summary
-    /// as prose when no card is left (#177). The schema allows `cards: []`,
-    /// and the validator drops cards without text — a report without cards
-    /// would be a headline over nothing, while its summary still says what
-    /// the model recommends.
+    /// The outcome a validated report renders as: always the report, with or
+    /// without cards (#170). A report without cards is what thin data should
+    /// produce — headline, lead and the full analysis opened below — and not a
+    /// reason to fall back to prose.
     init(validated report: ValidatedAnalysisReport) {
-        self = report.cards.isEmpty ? .prose(report.summary) : .report(report)
+        self = .report(report)
     }
 
     /// The validated report, or `nil` for prose.

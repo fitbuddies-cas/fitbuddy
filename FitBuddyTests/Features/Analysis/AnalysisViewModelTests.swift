@@ -175,12 +175,14 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(latest?.provider, .claude)
     }
 
-    /// A report without cards would be a headline over nothing: its summary is
-    /// shown and stored as prose instead (#177).
-    func testAReportWithoutCardsIsShownAndStoredAsItsSummary() async throws {
+    /// Thin data: a report without cards is still a report — shown and
+    /// stored with its lead and summary, not downgraded to prose (#170). A
+    /// progress verdict without a progression card holds (#177).
+    func testAReportWithoutCardsIsShownAndStoredAsAReport() async throws {
         await streamer.setReport(AnalysisReport(
             headline: "You're ready to progress.",
             verdict: .progress,
+            lead: "Too little data for a change yet.",
             cards: [],
             summary: "Keep training as you do."
         ))
@@ -188,10 +190,17 @@ final class AnalysisViewModelTests: XCTestCase {
 
         await sut.start()
 
-        XCTAssertEqual(sut.state, .result(.prose("Keep training as you do.")))
+        let expected = ValidatedAnalysisReport(
+            headline: AnalysisReportValidator.holdHeadline,
+            verdict: .hold,
+            lead: "Too little data for a change yet.",
+            cards: [],
+            summary: "Keep training as you do."
+        )
+        XCTAssertEqual(sut.state, .result(.report(expected)))
         let latest = try await results.latest()
         XCTAssertEqual(latest?.text, "Keep training as you do.")
-        XCTAssertNil(latest?.report)
+        XCTAssertEqual(latest?.report, expected)
     }
 
     /// US-14 AC3: a progression on an exercise the prompt did not list is a
