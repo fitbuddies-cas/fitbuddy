@@ -75,9 +75,7 @@ actor SessionResetService {
     /// The whole analysis history goes too (#97, #117): every one of those
     /// texts was written about the workouts being discarded here, and showing
     /// them over the next account's dashboard would present one Hevy account's
-    /// training as advice for another's. The rate-limit timestamp deliberately
-    /// stays — this is not a deletion request, and clearing it would make a
-    /// logout a way around the lock.
+    /// training as advice for another's.
     func discardCachedWorkouts() async {
         await discardCachedWorkouts(from: .hevy)
         do {

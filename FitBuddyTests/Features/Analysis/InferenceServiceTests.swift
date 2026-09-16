@@ -6,16 +6,12 @@ import XCTest
 /// Drives `StubProviderClient`s rather than stubbed endpoints: what is under
 /// test here is *who gets asked, in what order, and what the run costs* — the
 /// wire format of each provider belongs to its own client's tests. Keychain
-/// access uses the real `KeychainService` on the simulator; the rate limit
-/// timestamp lives in an isolated `UserDefaults` suite.
+/// access uses the real `KeychainService` on the simulator; the priority
+/// order lives in an isolated `UserDefaults` suite.
 final class InferenceServiceTests: XCTestCase {
-    /// Fixed clock so the rate-limit math is deterministic.
-    private static let now = Date(timeIntervalSince1970: 1_788_000_000)
-
     private var keychain: KeychainService!
     private var defaults: UserDefaults!
     private var suiteName: String!
-    private var rateLimit: AnalysisRateLimitStore!
     private var claude: StubProviderClient!
     private var gemini: StubProviderClient!
     private var mistral: StubProviderClient!
@@ -30,7 +26,6 @@ final class InferenceServiceTests: XCTestCase {
         try await keychain.save("sk-ant-test", for: .claudeAPIKey)
         suiteName = "fitbuddy.tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
-        rateLimit = AnalysisRateLimitStore(defaults: defaults)
         claude = StubProviderClient(provider: .claude, chunks: ["Claude answer"])
         gemini = StubProviderClient(provider: .gemini, chunks: ["Gemini answer"])
         mistral = StubProviderClient(provider: .mistral, chunks: ["Mistral answer"])
@@ -46,7 +41,6 @@ final class InferenceServiceTests: XCTestCase {
         claude = nil
         gemini = nil
         mistral = nil
-        rateLimit = nil
         defaults = nil
         keychain = nil
         try await super.tearDown()
@@ -63,9 +57,7 @@ final class InferenceServiceTests: XCTestCase {
         return InferenceService(
             keychain: keychain,
             priority: store,
-            rateLimit: rateLimit,
-            clients: [.claude: claude, .gemini: gemini, .mistral: mistral],
-            now: { Self.now }
+            clients: [.claude: claude, .gemini: gemini, .mistral: mistral]
         )
     }
 
@@ -369,104 +361,6 @@ final class InferenceServiceTests: XCTestCase {
         }
     }
 
-    // MARK: - Rate limit (#117: 60s Doppeltipp-Sperre)
-
-    func testThrowsLockActiveWhenCalledTooSoon() async throws {
-        let lastCall = Self.now.addingTimeInterval(-30)
-        await rateLimit.recordCall(at: lastCall)
-
-        do {
-            _ = try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u")
-            XCTFail("expected lockActive")
-        } catch let error as InferenceServiceError {
-            guard case .lockActive(let availableAt) = error else {
-                return XCTFail("wrong error: \(error)")
-            }
-            XCTAssertEqual(availableAt, lastCall.addingTimeInterval(AnalysisRateLimitStore.duration))
-        }
-        XCTAssertEqual(claude.callCount, 0, "an active lock must not reach a provider")
-    }
-
-    func testSucceedsOnceTheLockHasLifted() async throws {
-        await rateLimit.recordCall(at: Self.now.addingTimeInterval(-AnalysisRateLimitStore.duration - 1))
-
-        let events = try await run()
-
-        XCTAssertEqual(text(of: events), "Claude answer")
-    }
-
-    func testRecordsTheCallAfterASuccessfulRun() async throws {
-        _ = try await run()
-
-        let lastCall = await rateLimit.lastCall()
-        XCTAssertEqual(lastCall, Self.now)
-    }
-
-    /// DoD: the 6h window is spent once per analysis, not once per provider —
-    /// a run that fell back twice must not cost the user three windows.
-    ///
-    /// Counted through the clock rather than by instrumenting the store: with a
-    /// clock that advances on every reading, the recorded timestamp says how
-    /// many times it was read, and therefore how many times it was written. A
-    /// fixed clock cannot tell one write from three.
-    func testRecordsTheCallOnlyOnceAcrossAFallbackChain() async throws {
-        try await keychain.save("AIza", for: .geminiAPIKey)
-        try await keychain.save("mistral-key", for: .mistralAPIKey)
-        // All three accept and then die mid-answer, so every one of them
-        // reaches the point where the lock would be started.
-        claude.streamError = InferenceServiceError.streamInterrupted(message: "boom")
-        gemini.streamError = InferenceServiceError.streamInterrupted(message: "boom")
-        mistral.streamError = InferenceServiceError.streamInterrupted(message: "boom")
-        let clock = TickingClock(start: Self.now)
-        sut = InferenceService(
-            keychain: keychain,
-            priority: LLMPriorityStore(defaults: defaults),
-            rateLimit: rateLimit,
-            clients: [.claude: claude, .gemini: gemini, .mistral: mistral],
-            now: clock.next
-        )
-        defaults.set([LLMProvider.claude, .gemini, .mistral].map(\.rawValue), forKey: LLMPriorityStore.priorityOrderKey)
-
-        _ = try? await run()
-
-        // Tick 0 is the pre-flight lock check, tick 1 the single write. A
-        // per-provider write would have left tick 3 behind.
-        let lastCall = await rateLimit.lastCall()
-        XCTAssertEqual(lastCall, Self.now.addingTimeInterval(1),
-                       "one analysis must start exactly one lock")
-    }
-
-    /// A clock that advances one second per reading, so a test can tell how
-    /// many times the code under test asked what time it is.
-    private final class TickingClock: @unchecked Sendable {
-        private let start: Date
-        private let lock = NSLock()
-        private var tick = 0
-
-        init(start: Date) {
-            self.start = start
-        }
-
-        func next() -> Date {
-            lock.lock()
-            defer { lock.unlock() }
-            defer { tick += 1 }
-            return start.addingTimeInterval(TimeInterval(tick))
-        }
-    }
-
-    func testDoesNotRecordTheCallWhenEveryProviderRejectsTheRequest() async throws {
-        try await keychain.save("AIza", for: .geminiAPIKey)
-        claude.startError = InferenceServiceError.unauthorized
-        gemini.startError = InferenceServiceError.unauthorized
-        sut = makeService(priority: [.claude, .gemini])
-
-        _ = try? await run()
-
-        let lastCall = await rateLimit.lastCall()
-        XCTAssertNil(lastCall, "a request nobody accepted must not start the lock")
-    }
-
     // MARK: - No double-submit (AC: kein zweiter Call möglich während laufendem Call)
 
     func testRejectsAConcurrentCallWhileOneIsRunning() async throws {
@@ -484,7 +378,7 @@ final class InferenceServiceTests: XCTestCase {
     }
 
     /// Regression: `isRunning` must be claimed before the first `await` inside
-    /// `streamAnalysis`, not after the rate-limit/Keychain checks — otherwise two
+    /// `streamAnalysis`, not after the Keychain checks — otherwise two
     /// truly concurrent callers both observe the actor as idle before either
     /// sets the flag. `async let` starts both calls together, unlike a
     /// sequential `await` pair which can never exercise this race.
@@ -514,13 +408,18 @@ final class InferenceServiceTests: XCTestCase {
         }
     }
 
+    /// No cooldown (the lock of #117 is removed): a second run right after
+    /// the first one reaches the provider again.
+    func testASecondRunRightAfterTheFirstReachesTheProviderAgain() async throws {
+        _ = try await run()
+        _ = try await run()
+
+        XCTAssertEqual(claude.callCount, 2)
+    }
+
     func testAllowsANewCallAfterThePreviousOneFinished() async throws {
         claude.chunks = ["First"]
         _ = try await run()
-        // Isolates the `isRunning` reset from the (separately tested) lock:
-        // the fixed clock would otherwise make this second call look like it
-        // arrived seconds after the first, well inside the 6h window.
-        await rateLimit.clear()
 
         claude.chunks = ["Second"]
         let events = try await run()
@@ -541,7 +440,6 @@ final class InferenceServiceTests: XCTestCase {
         // races the assertion below without this: poll rather than guess a
         // fixed delay.
         await waitUntilIdle()
-        await rateLimit.clear()
 
         claude.chunks = ["ok"]
         let events = try await run()

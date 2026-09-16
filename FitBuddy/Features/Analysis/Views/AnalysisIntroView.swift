@@ -3,8 +3,8 @@ import SwiftUI
 /// The resting state of the analysis screen: what the analysis is, what it
 /// sends, and the button that starts it (#32).
 struct AnalysisIntroView: View {
-    /// `"New analysis available in 45s"`, or `nil` while a run is allowed.
-    let lockMessage: String?
+    /// `false` only while a run is in flight — the intro is not on screen
+    /// then, but the button must not be tappable twice in the same frame.
     let canStart: Bool
     let onStart: () -> Void
 
@@ -36,14 +36,6 @@ struct AnalysisIntroView: View {
                 .buttonStyle(.fb(.accent))
                 .disabled(!canStart)
 
-            if let lockMessage {
-                Text(lockMessage)
-                    .font(.footnote)
-                    .fbTabularNumbers()
-                    .foregroundStyle(Color.fbMuted)
-                    .frame(maxWidth: .infinity, alignment: .center)
-            }
-
             AnalysisPrivacyNote()
         }
     }
@@ -51,18 +43,8 @@ struct AnalysisIntroView: View {
 
 #if DEBUG
 #Preview("Ready") {
-    AnalysisIntroView(lockMessage: nil, canStart: true, onStart: {})
+    AnalysisIntroView(canStart: true, onStart: {})
         .padding(16)
         .background(Color.fbBackground)
-}
-
-#Preview("Locked") {
-    AnalysisIntroView(
-        lockMessage: "New analysis available in 45s",
-        canStart: false,
-        onStart: {}
-    )
-    .padding(16)
-    .background(Color.fbBackground)
 }
 #endif
