@@ -61,7 +61,6 @@
       resultProg:     { label: '3.4 Result · progression', render: () => <Phone><FBAnalysisResultScreen variant="progression" profile={PROFILE} /></Phone> },
       resultThin:     { label: '3.4b Result · thin data', render: () => <Phone><FBAnalysisResultScreen variant="thin" sessionCount={2} provider="Mistral" /></Phone> },
       resultRec:      { label: '3.5 Result · recovery',  render: () => <Phone><FBAnalysisResultScreen variant="recovery" /></Phone> },
-      rateLimit:      { label: '3.6 Result · 60 s lock', render: () => <Phone><FBAnalysisResultScreen variant="progression" profile={PROFILE} locked /></Phone> },
       history:        { label: '3.7 Saved analyses',     render: () => <Phone><FBAnalysisHistoryScreen swipedIndex={1} /></Phone> },
       historyDetail:  { label: '3.7b Saved analysis · detail', render: () => <Phone><FBAnalysisHistoryDetailScreen /></Phone> },
     };
@@ -87,7 +86,6 @@
         { id: 'resultProg',    lane: 'US-3', label: 'Result · progression' },
         { id: 'resultThin',    lane: 'US-3', label: 'Result · thin data' },
         { id: 'resultRec',     lane: 'US-3', label: 'Result · recovery' },
-        { id: 'rateLimit',     lane: 'US-3', label: 'New run · 60 s lock' },
         { id: 'history',       lane: 'US-3', label: 'Saved analyses' },
         { id: 'historyDetail', lane: 'US-3', label: 'Saved analysis · detail' },
       ];
@@ -115,8 +113,7 @@
         if (id === 'resultProg')     return <FBAnalysisResultScreen variant="progression" profile={PROFILE} onHistory={() => go('history')} onClose={() => go('dashData2')} />;
         if (id === 'resultThin')     return <FBAnalysisResultScreen variant="thin" sessionCount={2} provider="Mistral" onHistory={() => go('history')} onClose={() => go('dashData2')} />;
         if (id === 'resultRec')      return <FBAnalysisResultScreen variant="recovery" onHistory={() => go('history')} onClose={() => go('dashData2')} />;
-        if (id === 'rateLimit')      return <FBAnalysisResultScreen variant="progression" profile={PROFILE} locked onHistory={() => go('history')} onClose={() => go('dashData2')} />;
-        if (id === 'history')        return <FBAnalysisHistoryScreen onOpen={() => go('historyDetail')} onBack={() => go('rateLimit')} />;
+        if (id === 'history')        return <FBAnalysisHistoryScreen onOpen={() => go('historyDetail')} onBack={() => go('resultRec')} />;
         if (id === 'historyDetail')  return <FBAnalysisHistoryDetailScreen onBack={() => go('history')} />;
         return null;
       })();
@@ -241,7 +238,7 @@
           <DCSection
             id="us3"
             title="US-3 + US-14 · AI-Analyse auf Knopfdruck, Ergebnis als Karten"
-            subtitle="Spinner sofort, Cancel nach 30 s, Ergebnis als Kurzfazit und Karten (US-14), Variante mit wenig Daten, Recovery-Variante, 60-Sekunden-Sperre, gespeicherte Analysen."
+            subtitle="Spinner sofort, Cancel nach 30 s, Ergebnis als Kurzfazit und Karten (US-14), Variante mit wenig Daten, Recovery-Variante, gespeicherte Analysen. Keine Sperre nach einer Analyse (3.6 entfernt)."
           >
             {screenArtboard('us3-1', 'analyzePre')}
             {screenArtboard('us3-2', 'analyzeLoading')}
@@ -249,7 +246,6 @@
             {screenArtboard('us3-4', 'resultProg')}
             {screenArtboard('us3-4b', 'resultThin')}
             {screenArtboard('us3-5', 'resultRec')}
-            {screenArtboard('us3-6', 'rateLimit')}
             {screenArtboard('us3-7', 'history')}
             {screenArtboard('us3-8', 'historyDetail')}
           </DCSection>

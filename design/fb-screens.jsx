@@ -771,11 +771,12 @@ const REPORT_THIN = {
 
 function FBAnalysisResultScreen({
   variant = 'progression', sources = ['Hevy'], sessionCount = 14, weeks = 4,
-  profile = null, locked = false, provider = 'Claude', age = 'just now',
+  profile = null, provider = 'Claude', age = 'just now',
   onClose, onHistory,
 }) {
   // variant: 'progression' | 'recovery' | 'thin'
-  // locked:  the 60 s double-tap guard (#117) is running — no hours countdown.
+  // No cooldown after a run: "New analysis" is always available once a result
+  // shows (the 60 s lock of #117 and its state 3.6 are removed).
   const report = variant === 'recovery' ? REPORT_RECOVER
     : variant === 'thin' ? REPORT_THIN
     : REPORT_PROGRESS;
@@ -808,7 +809,7 @@ function FBAnalysisResultScreen({
         />
       </div>
 
-      {/* Bottom bar — lock label while the 60 s guard runs, else a new run */}
+      {/* Bottom bar — a new run, available right away */}
       <div style={{
         position: 'absolute', left: 0, right: 0, bottom: 0,
         background: 'rgba(248,247,244,0.92)',
@@ -817,17 +818,7 @@ function FBAnalysisResultScreen({
         borderTop: `1px solid ${FB.border}`,
         padding: '14px 16px 44px',
       }}>
-        {locked ? (
-          <div style={{
-            height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 15, fontWeight: 600, letterSpacing: -0.2, color: FB.ink2,
-            fontVariantNumeric: 'tabular-nums',
-          }}>
-            New analysis available in 45s
-          </div>
-        ) : (
-          <FBButton kind="secondary">New analysis</FBButton>
-        )}
+        <FBButton kind="secondary">New analysis</FBButton>
       </div>
     </FBScreen>
   );
