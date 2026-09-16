@@ -41,20 +41,17 @@ actor PreviewAnalysisResultStore: AnalysisResultStoring {
 
     func deleteAll() throws { entries = [] }
 
-    /// Two analyses a week apart — enough for the list and the preview of a
-    /// formatted text.
+    /// Two analyses a week apart — a validated report as a run stores it
+    /// (#178) and an older prose row — enough for the list and the preview of
+    /// a formatted text.
     static let sample: [AnalysisResultSnapshot] = [
         AnalysisResultSnapshot(
             id: UUID(),
-            text: """
-            **Progressive overload**
-            Bench press has sat at 60 kg for five sessions at the same rep count.
-
-            - Add 2.5 kg on your next session and keep the reps
-            - Give legs a second slot before adding upper-body volume
-            """,
+            text: report.summary,
             generatedAt: .now.addingTimeInterval(-2 * 3_600),
-            context: AnalysisContext(sessionCount: 12, window: .default)
+            context: AnalysisContext(sessionCount: 12, window: .default),
+            report: report,
+            provider: .claude
         ),
         AnalysisResultSnapshot(
             id: UUID(),
@@ -63,5 +60,29 @@ actor PreviewAnalysisResultStore: AnalysisResultStoring {
             context: AnalysisContext(sessionCount: 4, window: AnalysisWindow(weeks: 8))
         )
     ]
+
+    /// The stored report of the newest sample: the text doubles as its summary,
+    /// as a run stores it.
+    static let report = ValidatedAnalysisReport(
+        headline: "You're ready to progress.",
+        verdict: .progress,
+        cards: [
+            .progression(
+                exercise: "Bench Press (Barbell)",
+                muscleGroup: .chest,
+                fromKg: 60,
+                toKg: 62.5,
+                reasoning: "Five sessions at 60 kg with the reps held."
+            ),
+            .note(title: "Legs", text: "Give legs a second slot before adding upper-body volume."),
+        ],
+        summary: """
+            **Progressive overload**
+            Bench press has sat at 60 kg for five sessions at the same rep count.
+
+            - Add 2.5 kg on your next session and keep the reps
+            - Give legs a second slot before adding upper-body volume
+            """
+    )
 }
 #endif

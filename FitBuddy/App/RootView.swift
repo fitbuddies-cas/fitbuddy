@@ -171,6 +171,9 @@ struct RootView: View {
         return AnalysisViewModel(
             cache: store,
             exerciseCache: store,
+            // The same store once more: the report's recovery figures read the
+            // RPE of the last seven days from it (#175, #178).
+            detailCache: store,
             inference: InferenceService(rateLimit: rateLimit),
             rateLimit: rateLimit,
             resultStore: AnalysisResultStore(modelContainer: modelContext.container)

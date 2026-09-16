@@ -2,16 +2,21 @@ import Foundation
 import OSLog
 
 /// Drives the on-demand AI analysis: builds the prompt from the local cache,
-/// streams the answer of whichever provider takes the call, and owns the short
-/// lock between two runs (US-3, #31/#79/#117).
+/// waits for the complete answer of whichever provider takes the call,
+/// validates a structured one against the same reads, and owns the short lock
+/// between two runs (US-3, #31/#79/#117, US-14 #178).
 ///
 /// Several things are published separately because they answer different
 /// questions. `state` says what the screen shows right now, `attribution` says
 /// who is answering it and who was asked before them, `lockMessage` says
 /// when the next run is allowed, `resultAge` says how old the recommendation
 /// on screen is, and `isTakingLong` says whether this run has passed the 30s
-/// mark without a single token — the moment US-3 AC1 wants the cancel button
-/// to appear.
+/// mark without an answer — the moment US-3 AC1 wants the cancel button to
+/// appear.
+///
+/// The answer is taken in one step (#178): a report is JSON, and half of it is
+/// neither a report nor readable prose. The transport still streams underneath,
+/// which is what keeps timeouts, cancel and the fallback chain working.
 ///
 /// Every finished recommendation is persisted, and the newest one is restored
 /// (`restore()`), so it survives an app restart and the ones before it stay
@@ -22,7 +27,7 @@ import OSLog
 /// handles.
 @MainActor
 final class AnalysisViewModel: ObservableObject {
-    /// How long a run may go without a first token before the screen offers to
+    /// How long a run may go without an answer before the screen offers to
     /// cancel it (US-3 AC1). Not a deadline: the request keeps running, and
     /// `URLSession`'s own idle timeout still applies underneath. Killing a slow
     /// but healthy stream automatically would spend the user's tokens on
@@ -37,8 +42,8 @@ final class AnalysisViewModel: ObservableObject {
     /// `"New analysis available in 45s"`, or `nil` while a run is allowed.
     @Published private(set) var lockMessage: String?
     /// Whether the running call has passed `slowThreshold` without answering.
-    /// Cleared as soon as the first token arrives, and on every state change
-    /// out of a running state.
+    /// Cleared as soon as the answer arrives, and on every state change out of
+    /// the running state.
     @Published private(set) var isTakingLong = false
     /// What the analysis on screen rests on: how many sessions, over which
     /// period, from which sources (US-6, #36). `nil` until a run has resolved
@@ -67,7 +72,7 @@ final class AnalysisViewModel: ObservableObject {
     /// replaced it. A finished run refreshes the lock label before it lets
     /// go, and the user can start the next one during exactly that await.
     private var runID: UInt64 = 0
-    /// Fires once `slowThreshold` has passed without a first token.
+    /// Fires once `slowThreshold` has passed without an answer.
     private var slowTask: Task<Void, Never>?
     /// The ticker's current sleep, held so a lock that starts while the ticker
     /// is resting can cut that sleep short (#117).
@@ -96,6 +101,7 @@ final class AnalysisViewModel: ObservableObject {
 
     private let cache: WorkoutSummaryReading
     private let exerciseCache: (any ExerciseSummaryReading & ExerciseProgressionReading)?
+    private let detailCache: (any WorkoutDetailReading)?
     private let inference: AnalysisStreaming
     private let rateLimit: AnalysisRateLimitStore
     private let resultStore: (any AnalysisResultStoring)?
@@ -113,7 +119,13 @@ final class AnalysisViewModel: ObservableObject {
     ///     section (#173) — `WorkoutStore` in the app, like `cache`. `nil` —
     ///     the default — builds the prompt without exercise data, which is
     ///     what SwiftUI previews get: the prompt then says there is none, and
-    ///     the system prompt forbids naming a weight it was not given.
+    ///     the system prompt forbids naming a weight it was not given. It is
+    ///     also what a report is validated against (#175), so without it a
+    ///     report is shown as its prose summary rather than as cards nothing
+    ///     has checked.
+    ///   - detailCache: Full workouts of the last seven days, for the mean RPE
+    ///     of the recovery figures (#175) — `WorkoutStore` in the app. `nil` —
+    ///     the default — validates without RPE.
     ///   - inference: The streaming call (`InferenceService` in the app).
     ///   - rateLimit: The shared lock store — the same one the service writes
     ///     to, so the label and the service's own guard never disagree.
@@ -131,6 +143,7 @@ final class AnalysisViewModel: ObservableObject {
     init(
         cache: WorkoutSummaryReading,
         exerciseCache: (any ExerciseSummaryReading & ExerciseProgressionReading)? = nil,
+        detailCache: (any WorkoutDetailReading)? = nil,
         inference: AnalysisStreaming,
         rateLimit: AnalysisRateLimitStore = AnalysisRateLimitStore(),
         resultStore: (any AnalysisResultStoring)? = nil,
@@ -142,6 +155,7 @@ final class AnalysisViewModel: ObservableObject {
     ) {
         self.cache = cache
         self.exerciseCache = exerciseCache
+        self.detailCache = detailCache
         self.inference = inference
         self.rateLimit = rateLimit
         self.resultStore = resultStore
@@ -154,7 +168,8 @@ final class AnalysisViewModel: ObservableObject {
 
     // MARK: - Run
 
-    /// Runs one analysis: cache read → prompt → stream → result.
+    /// Runs one analysis: cache read → prompt → complete answer → validation →
+    /// result.
     ///
     /// Never throws. Every failure lands in `state`, so the screen always has
     /// something to show and the button always comes back (#31 AC1). A second
@@ -165,7 +180,7 @@ final class AnalysisViewModel: ObservableObject {
         // Claim the slot before the first await: an await releases the main
         // actor, so two taps landing in that window would otherwise both pass
         // the guard above and start a run each.
-        state = .loading
+        state = .running
         // Cleared before the lock branch below can return: that branch
         // publishes an error which `AnalysisErrorView` renders together with
         // the attribution, and the providers of the *previous* run have nothing
@@ -188,7 +203,7 @@ final class AnalysisViewModel: ObservableObject {
         }
         // A `cancel()` that landed during the await above already published a
         // resting state; it wins over the run it stopped before it started.
-        guard case .loading = state else { return }
+        guard case .running = state else { return }
 
         currentResultID = nil
         context = nil
@@ -205,11 +220,10 @@ final class AnalysisViewModel: ObservableObject {
 
     /// Stops the running call — the cancel button of US-3 AC1.
     ///
-    /// Returns to `.idle` rather than keeping the half-written text: a
-    /// recommendation cut off mid-sentence is not a recommendation, and
-    /// presenting one as a result would be worse than showing none. The
-    /// lock may still have started, so `lockMessage` explains why the
-    /// button does not immediately come back.
+    /// Returns to `.idle`: an answer that has not arrived in full is not a
+    /// recommendation, and nothing of it has been shown. The lock may still
+    /// have started, so `lockMessage` explains why the button does not
+    /// immediately come back.
     func cancel() {
         guard state.isRunning else { return }
         runTask?.cancel()
@@ -294,7 +308,9 @@ final class AnalysisViewModel: ObservableObject {
         // meantime, and the restore must never overwrite it.
         guard case .idle = state else { return }
 
-        state = .result(stored.text)
+        // The cards the user saw, when the row stored them (#176); prose for
+        // every other row, including those written before V3.
+        state = .result(stored.report.map(AnalysisOutcome.report) ?? .prose(stored.text))
         // The provider that wrote it, when the row recorded one (#176) — so
         // the badge reads "AI · Gemini" after a restart too. No fallback chain
         // is stored, so a restored result never shows the switch notice.
@@ -335,71 +351,87 @@ final class AnalysisViewModel: ObservableObject {
     }
 
     private func performAnalysis(_ id: UInt64) async {
-        // `state` is already `.loading` — `start()` claimed the slot there.
+        // `state` is already `.running` — `start()` claimed the slot there.
         startSlowTimer()
 
-        guard let prompt = await buildPrompt() else { return await finish(id) }
+        guard let built = await buildPrompt() else { return await finish(id) }
 
-        var text = ""
+        // Collected, never shown while the run is in flight: the answer only
+        // means something once the stream has ended, and a provider that gives
+        // way before then takes its answer with it (#178).
+        var prose = ""
+        var report: AnalysisReport?
         do {
-            let stream = try await inference.streamAnalysis(systemPrompt: prompt.system, userPrompt: prompt.user)
+            let stream = try await inference.streamAnalysis(
+                systemPrompt: built.prompt.system,
+                userPrompt: built.prompt.user
+            )
             for try await event in stream {
                 try Task.checkCancellation()
                 switch event {
                 case .attempting(let provider):
-                    // A provider is taking over. Everything streamed so far
-                    // came from one that has since failed, and showing it
-                    // alongside the new answer would read as one recommendation
-                    // written by two models — so it goes.
-                    text = ""
+                    // A provider is taking over. Whatever arrived before came
+                    // from one that has since failed, and keeping it would
+                    // present one model's answer under another's name.
+                    prose = ""
+                    report = nil
                     if attribution != nil {
                         attribution?.append(provider)
-                        // Back to the spinner: the new provider has not sent
-                        // anything yet.
-                        state = .loading
-                        // And the slow hint with it: the first `.text` of the
-                        // provider that gave way already stopped the timer, so
-                        // without a restart here the cancel button of US-3 AC1
-                        // never comes back while the new provider hangs.
-                        startSlowTimer()
+                        // The slow hint keeps counting from the tap: the user
+                        // has been looking at the same spinner all along, and a
+                        // handover must not take away a cancel button they may
+                        // be about to press. Only when a discarded answer had
+                        // already stopped the timer does it start again —
+                        // otherwise the cancel button of US-3 AC1 would never
+                        // come back while the new provider hangs.
+                        if slowTask == nil {
+                            startSlowTimer()
+                        }
                     } else {
                         attribution = AnalysisAttribution(first: provider)
                     }
-                case .text(let chunk):
-                    // The first token is the answer arriving: the slow hint has
-                    // served its purpose, whatever the rest of the stream costs.
+                case .text(let text):
+                    // The answer is in: the slow hint has served its purpose.
                     stopSlowTimer()
-                    text += chunk
-                    state = .streaming(text)
-                case .report(let report):
-                    // Shown and stored as its prose summary until the cards
-                    // have a screen (#177) and a stored format (#176); #178
-                    // reworks this loop around the report.
+                    prose = text
+                    report = nil
+                case .report(let received):
                     stopSlowTimer()
-                    text = report.summary
-                    state = .streaming(text)
+                    report = received
+                    prose = ""
                 }
             }
             guard !Task.isCancelled else { return await finish(id) }
-            // A stream that ends without a single token is not an empty
-            // recommendation — it is a response this version could not read.
-            if text.isEmpty {
-                state = .error(.unreadableResponse(attribution?.provider))
+
+            let outcome: AnalysisOutcome
+            if let report {
+                outcome = await self.outcome(for: report, reads: built.reads)
+            } else if !prose.isEmpty {
+                outcome = .prose(prose)
             } else {
-                await persist(text)
-                // Before `.result`, not after: `canStartAnalysis` reads
-                // `lockMessage`, and a value still nil from before the run
-                // makes `AnalysisResultView` offer "New analysis" for a run
-                // that `start()` would immediately refuse — replacing the
-                // recommendation that just arrived with a lock error. While
-                // these awaits run the state stays `.streaming`, so the button
-                // is never enabled in between.
-                await refreshLock()
-                // A `cancel()` during the awaits above already published a
-                // resting state; it wins over the run it stopped.
-                guard !Task.isCancelled else { return await finish(id) }
-                state = .result(text)
+                // A stream that ends without an answer is not an empty
+                // recommendation — it is a response this version could not
+                // read.
+                state = .error(.unreadableResponse(attribution?.provider))
+                return await finish(id)
             }
+            // The detail reads above release the main actor.
+            guard !Task.isCancelled else { return await finish(id) }
+
+            await persist(outcome)
+            // Before `.result`, not after: `canStartAnalysis` reads
+            // `lockMessage`, and a value still nil from before the run makes
+            // `AnalysisResultView` offer "New analysis" for a run that
+            // `start()` would immediately refuse — replacing the
+            // recommendation that just arrived with a lock error. While these
+            // awaits run the state stays `.running`, so the button is never
+            // enabled in between.
+            await refreshLock()
+            // A `cancel()` during the awaits above already published a resting
+            // state; it wins over the run it stopped.
+            guard !Task.isCancelled else { return await finish(id) }
+            // The whole answer in one step (#178).
+            state = .result(outcome)
         } catch {
             // A cancelled run already published `.idle` in `cancel()`; the
             // error here is only the echo of that, and must not overwrite it.
@@ -411,9 +443,68 @@ final class AnalysisViewModel: ObservableObject {
         await finish(id)
     }
 
+    /// What a report becomes on screen: validated against the reads its prompt
+    /// was built from (US-14 AC3/AC4, #175).
+    ///
+    /// Without an exercise cache — the previews' case — the prompt carried no
+    /// exercise data, so every progression card would be downgraded for lack
+    /// of data rather than for being wrong. The report is then shown as its
+    /// summary, which is what the model wrote for exactly that purpose, and
+    /// never as cards nothing has checked.
+    private func outcome(for report: AnalysisReport, reads: AnalysisRunReads) async -> AnalysisOutcome {
+        guard exerciseCache != nil else { return .prose(report.summary) }
+        let details = await recentDetails(in: reads)
+        let evidence = AnalysisReportEvidence(
+            summaries: reads.summaries,
+            exercises: reads.exercises,
+            progressions: reads.progressions,
+            details: details,
+            window: reads.window,
+            now: reads.now,
+            calendar: calendar
+        )
+        return .report(AnalysisReportValidator.validate(report, against: evidence))
+    }
+
+    /// The full workouts of the last seven days, for the mean RPE of the
+    /// recovery figures (#175).
+    ///
+    /// A failing read does not fail the run: the answer is paid for and in
+    /// hand, and the RPE is the one recovery figure the card can do without —
+    /// `RecoveryMetrics` shows none whenever no set logged one. The failure is
+    /// logged and no details are used at all, rather than the part that
+    /// happened to be readable: a mean over an unknown subset of the week
+    /// would read as the week's.
+    private func recentDetails(in reads: AnalysisRunReads) async -> [WorkoutDetail] {
+        guard let detailCache else { return [] }
+        let sessions = RecoveryMetrics.lastSevenDaysSessions(
+            in: reads.summaries,
+            now: reads.now,
+            calendar: calendar
+        )
+        var details: [WorkoutDetail] = []
+        do {
+            for session in sessions {
+                guard !Task.isCancelled else { return [] }
+                // `nil` is a session a sync replaced since the prompt was
+                // built; it has no sets left to count.
+                if let detail = try await detailCache.workoutDetail(id: session.id) {
+                    details.append(detail)
+                }
+            }
+        } catch {
+            logger.error("Workout details for the recovery figures not readable: \(error, privacy: .public)")
+            return []
+        }
+        return details
+    }
+
     /// Reads the window and builds the prompt, or publishes the reason it
     /// could not. `nil` means the run is over.
-    private func buildPrompt() async -> AnalysisPrompt? {
+    ///
+    /// Returns the reads alongside the prompt, so a report can be validated
+    /// against exactly what the model was shown (#178).
+    private func buildPrompt() async -> (prompt: AnalysisPrompt, reads: AnalysisRunReads)? {
         let reference = now()
         do {
             // Read wide enough for the widest rung of the ladder and its
@@ -459,14 +550,22 @@ final class AnalysisViewModel: ObservableObject {
                 sessionCount: summaries.filter { $0.startTime >= start }.count,
                 window: window
             )
-            return AnalysisPromptBuilder.make(
+            let reads = AnalysisRunReads(
                 summaries: summaries,
                 exercises: exercises.summaries,
                 progressions: exercises.progressions,
                 window: window,
-                now: reference,
+                now: reference
+            )
+            let prompt = AnalysisPromptBuilder.make(
+                summaries: reads.summaries,
+                exercises: reads.exercises,
+                progressions: reads.progressions,
+                window: reads.window,
+                now: reads.now,
                 calendar: calendar
             )
+            return (prompt, reads)
         } catch {
             guard !Task.isCancelled, !error.isCancellation else { return nil }
             state = .error(.cacheUnavailable)
@@ -506,22 +605,24 @@ final class AnalysisViewModel: ObservableObject {
     /// A failing write is logged, not surfaced: the recommendation is on screen
     /// and readable, and an error banner over it would be about the next
     /// launch, not about anything the user can act on now.
-    private func persist(_ text: String) async {
+    private func persist(_ outcome: AnalysisOutcome) async {
         let timestamp = now()
         generatedAt = timestamp
         refreshResultAge()
         // Both are set by the time a run reaches `.result`: the context is
-        // written when the window resolves, well before the first token.
+        // written when the window resolves, well before the answer.
         guard let resultStore, let context else { return }
         do {
             // The id is kept, so deleting this row from the history clears it
             // off this screen too, rather than whatever is newest by then (#117).
-            // Prose only until #178 hands the validated report through; the
-            // provider is the one that answered, so the history badge can
-            // name it (#176).
+            // The validated report is stored as shown, so the history brings
+            // back the same cards rather than re-validating against a cache
+            // that has moved on; its summary is the row's prose fallback. The
+            // provider is the one that answered, so the history badge can name
+            // it (#176).
             currentResultID = try await resultStore.save(
-                text: text,
-                report: nil,
+                text: outcome.text,
+                report: outcome.report,
                 provider: attribution?.provider,
                 generatedAt: timestamp,
                 context: context
@@ -566,16 +667,16 @@ final class AnalysisViewModel: ObservableObject {
                 return
             }
             guard let self, !Task.isCancelled else { return }
-            // Only while nothing has arrived: a stream already producing text
-            // is slow but visibly alive, and does not need the hint.
-            guard case .loading = self.state else { return }
+            // Only while the run is still in flight: a finished or cancelled
+            // run has nothing left to cancel.
+            guard case .running = self.state else { return }
             self.isTakingLong = true
         }
     }
 
     private func stopSlowTimer() {
-        // Called for every chunk of the stream: without this, each token would
-        // publish an `isTakingLong` change nothing is listening for.
+        // Called for every answer event: without this, each one would publish
+        // an `isTakingLong` change nothing is listening for.
         guard slowTask != nil || isTakingLong else { return }
         slowTask?.cancel()
         slowTask = nil

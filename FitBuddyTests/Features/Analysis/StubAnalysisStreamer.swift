@@ -15,7 +15,7 @@ actor StubAnalysisStreamer: AnalysisStreaming {
     private var events: [AnalysisEvent] = []
     /// When set, `streamAnalysis` throws instead of returning a stream.
     private var startError: InferenceServiceError?
-    /// When set, the stream yields `chunks` and then fails.
+    /// When set, the stream yields `events` and then fails.
     private var streamError: InferenceServiceError?
     /// Holds the call before it returns a stream, until `release()`.
     private var gated = false
@@ -34,9 +34,15 @@ actor StubAnalysisStreamer: AnalysisStreaming {
     private var arrival: CheckedContinuation<Void, Never>?
     private var callArrived = false
 
-    /// Convenience for the common case: one provider that answers.
-    func setChunks(_ chunks: [String], from provider: LLMProvider = .claude) {
-        events = [.attempting(provider)] + chunks.map(AnalysisEvent.text)
+    /// Convenience for the common case: one provider that answers in prose,
+    /// in one piece like `InferenceService` (#174, #178).
+    func setText(_ text: String, from provider: LLMProvider = .claude) {
+        events = [.attempting(provider), .text(text)]
+    }
+
+    /// One provider that answers with a structured report (#178).
+    func setReport(_ report: AnalysisReport, from provider: LLMProvider = .claude) {
+        events = [.attempting(provider), .report(report)]
     }
 
     /// The exact event sequence, for tests about fallback ordering.
@@ -53,7 +59,7 @@ actor StubAnalysisStreamer: AnalysisStreaming {
     }
 
     /// Makes the next call block before returning its stream, so a test can
-    /// observe `.loading` and cancel from there.
+    /// observe `.running` and cancel from there.
     func gateCall() {
         gated = true
     }

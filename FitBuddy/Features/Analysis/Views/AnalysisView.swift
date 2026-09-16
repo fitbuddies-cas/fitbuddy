@@ -4,9 +4,9 @@ import SwiftUI
 ///
 /// Its own tab in `MainTabView` (#107). Renders `AnalysisViewModel`'s state
 /// and nothing else: the spinner appears the moment `start()` publishes
-/// `.loading`, the recommendation grows chunk by chunk while `.streaming`, and
-/// the cancel button joins the spinner once the run has gone 30s without a
-/// first token (US-3 AC1).
+/// `.running` and stays until the whole answer is in, the answer then appears
+/// in one step (#178), and the cancel button joins the spinner once the run
+/// has gone 30s without an answer (US-3 AC1).
 ///
 /// Switching tabs does not cancel a running stream: in a tab bar, tapping
 /// away is not leaving the screen, and the tokens are spent either way. The
@@ -29,7 +29,7 @@ struct AnalysisView: View {
                     // not after (#87, #36) — and the thin-data warning of US-6
                     // AC2 is worth least at the bottom of a text the user has
                     // already believed.
-                    if viewModel.state.text != nil, let context = viewModel.context {
+                    if viewModel.state.outcome != nil, let context = viewModel.context {
                         AnalysisContextView(context: context)
                     }
                     content
@@ -91,23 +91,17 @@ struct AnalysisView: View {
                 canStart: viewModel.canStartAnalysis,
                 onStart: start
             )
-        case .loading:
+        case .running:
             AnalysisProgressView(
-                text: nil,
                 provider: viewModel.attribution?.provider,
                 isTakingLong: viewModel.isTakingLong,
                 onCancel: viewModel.cancel
             )
-        case .streaming(let text):
-            AnalysisProgressView(
-                text: text,
-                provider: viewModel.attribution?.provider,
-                isTakingLong: viewModel.isTakingLong,
-                onCancel: viewModel.cancel
-            )
-        case .result(let text):
+        case .result(let outcome):
+            // A report renders as its summary until the cards have their
+            // views (#177), which switch on `outcome` right here.
             AnalysisResultView(
-                text: text,
+                text: outcome.text,
                 attribution: viewModel.attribution,
                 age: viewModel.resultAge,
                 // Offered only while a new run is actually possible: while the lock
@@ -145,7 +139,7 @@ struct AnalysisView: View {
             if let lockMessage = viewModel.lockMessage {
                 lockBar(lockMessage)
             }
-        case .idle, .loading, .streaming:
+        case .idle, .running:
             EmptyView()
         }
     }
@@ -197,6 +191,15 @@ private struct AnalysisViewPreviewHost: View {
         cache: PreviewWorkoutCache.filled,
         inference: PreviewAnalysisStreamer.recommendation,
         resultStore: PreviewAnalysisResultStore()
+    ))
+}
+
+/// Tapping "Analyze with AI" here has Mistral answer in prose instead of a
+/// report — the fallback of US-14 AC5.
+#Preview("Prose answer") {
+    AnalysisViewPreviewHost(viewModel: AnalysisViewModel(
+        cache: PreviewWorkoutCache.filled,
+        inference: PreviewAnalysisStreamer.prose
     ))
 }
 

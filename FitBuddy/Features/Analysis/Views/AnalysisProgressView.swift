@@ -1,11 +1,13 @@
 import SwiftUI
 
 /// The screen while a run is in flight: the spinner that appears immediately
-/// after the tap, the text as it arrives, and — once the run has gone 30s
-/// without a first token — the reason and the cancel button (US-3 AC1, #32).
+/// after the tap and stays until the whole answer is in, and — once the run
+/// has gone 30s without an answer — the reason and the cancel button (US-3
+/// AC1, #32).
+///
+/// No partial text (#178): the answer is a JSON report that only means
+/// something once it is complete.
 struct AnalysisProgressView: View {
-    /// What has arrived so far, or `nil` while nothing has (the spinner phase).
-    let text: String?
     /// Who is answering. `nil` only in the instant between the tap and the
     /// first provider being picked, where there is no name to show yet (#79).
     let provider: LLMProvider?
@@ -15,16 +17,6 @@ struct AnalysisProgressView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             header
-            if let text, !text.isEmpty {
-                FBCard(padding: 18) {
-                    // The same formatter the finished result uses, so the
-                    // answer does not re-flow the moment the run ends — and so
-                    // a marker the stream has not closed yet stays invisible
-                    // instead of flashing up as a stray asterisk (#117).
-                    AnalysisFormattedText(text: text)
-                }
-                .transition(.opacity)
-            }
             if isTakingLong {
                 slowNotice
                 Button("Cancel analysis", action: onCancel)
@@ -41,7 +33,6 @@ struct AnalysisProgressView: View {
     /// likely to wonder who is being asked, and the one place a fallback shows
     /// up live as the name changes mid-run.
     private var headline: String {
-        guard text == nil else { return "Writing your recommendation" }
         guard let provider else { return "Analysing your last 4 weeks" }
         return "Analysing with \(provider.displayName)…"
     }
@@ -87,24 +78,13 @@ struct AnalysisProgressView: View {
 
 #if DEBUG
 #Preview("Spinner") {
-    AnalysisProgressView(text: nil, provider: .claude, isTakingLong: false, onCancel: {})
+    AnalysisProgressView(provider: .claude, isTakingLong: false, onCancel: {})
         .padding(16)
         .background(Color.fbBackground)
 }
 
-#Preview("Streaming") {
-    AnalysisProgressView(
-        text: "Your last four weeks show 14 sessions with steady volume.\n\n**Progressive over",
-        provider: .claude,
-        isTakingLong: false,
-        onCancel: {}
-    )
-    .padding(16)
-    .background(Color.fbBackground)
-}
-
 #Preview("Taking long") {
-    AnalysisProgressView(text: nil, provider: .gemini, isTakingLong: true, onCancel: {})
+    AnalysisProgressView(provider: .gemini, isTakingLong: true, onCancel: {})
         .padding(16)
         .background(Color.fbBackground)
 }
