@@ -75,4 +75,31 @@ final class ActivityTests: XCTestCase {
         XCTAssertNil(activity.endTime)
         XCTAssertEqual(activity.exercises, [])
     }
+
+    // MARK: - Source (#141)
+
+    /// Every activity before #141 was a Hevy one; the default keeps that true
+    /// for every caller and fixture that predates the field.
+    func testSourceDefaultsToHevy() {
+        let activity = Activity(id: "w-1", title: "Leg Day", startTime: .distantPast)
+
+        XCTAssertEqual(activity.source, .hevy)
+    }
+
+    func testSourceSurvivesTheCodableRoundTrip() throws {
+        let activity = Activity(id: "strava:1", title: "Run", startTime: .distantPast, source: .strava)
+
+        let data = try JSONEncoder().encode(activity)
+        let decoded = try JSONDecoder().decode(Activity.self, from: data)
+
+        XCTAssertEqual(decoded.source, .strava)
+        XCTAssertEqual(decoded, activity)
+    }
+
+    func testActivitiesDifferingOnlyInSourceAreNotEqual() {
+        let hevy = Activity(id: "1", title: "Run", startTime: .distantPast, source: .hevy)
+        let strava = Activity(id: "1", title: "Run", startTime: .distantPast, source: .strava)
+
+        XCTAssertNotEqual(hevy, strava)
+    }
 }

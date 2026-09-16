@@ -5,15 +5,18 @@ description: Build FitBuddy and run the XCTest suite on the iOS simulator. Use b
 
 # Build & test FitBuddy
 
-Run the full test suite (builds first, so no separate build step is needed):
+Run the unit test suite (builds first, so no separate build step is needed):
 
 ```bash
 xcodebuild test \
   -project FitBuddy.xcodeproj \
   -scheme FitBuddy \
   -destination 'platform=iOS Simulator,name=iPhone 17' \
+  -skip-testing:FitBuddyUITests \
   2>&1 | tail -60
 ```
+
+**Unit tests only — never the XCUITests.** `-skip-testing:FitBuddyUITests` is not optional: the UI suite boots a simulator and drives the app for minutes per run and ties up the machine. It belongs in CI, where the `ui-test` job runs it on a PR into `main`, on a manual run, or when a PR carries the `ui-tests` label. Writing or changing UI tests locally is fine — push them and let CI run them. Run them locally only if the user explicitly asks.
 
 - Scheme is `FitBuddy` (the only one); tests live in the `FitBuddyTests` target.
 - Any available iPhone simulator works; `iPhone 17` is the default on team machines. If it is missing, pick one from `xcrun simctl list devices available`.

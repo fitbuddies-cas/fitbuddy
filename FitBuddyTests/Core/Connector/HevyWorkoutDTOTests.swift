@@ -42,6 +42,8 @@ final class HevyWorkoutDTOTests: XCTestCase {
         let activity = dto.makeActivity()
         XCTAssertEqual(activity.title, "Workout")
         XCTAssertEqual(activity.exercises.count, 0)
+        // Set explicitly by the mapping, not left to the default (#141).
+        XCTAssertEqual(activity.source, .hevy)
     }
 
     func testWholeNumbersSentAsDecimalsStillDecode() throws {

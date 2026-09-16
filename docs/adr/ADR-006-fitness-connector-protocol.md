@@ -85,6 +85,14 @@ Der in Sprint 1 verschobene Stub ist mit #35 ausgeliefert, zusammen mit der `Con
 
 Die Strava-API-Feldanalyse (Punkt 2 des Nachtrags zu #33, bestätigt in Punkt 4 des Nachtrags zu #34) bleibt offen — der Stub bildet keine Strava-Daten ab und beantwortet die Frage nach `Activity`-Zusatzfeldern daher nicht.
 
+### Nachtrag: Strava-Feldanalyse beantwortet (ADR-10)
+
+Die seit #33 offene Feldanalyse ist mit [[ADR-10]] erledigt, und zwar negativ: **`Activity` wird für Strava nicht erweitert.** Eine Strava-Aktivität bildet auf genau eine `ActivityExercise` (Titel = `sport_type`) mit genau einem `ActivityExerciseSet` ab, dessen bereits vorhandene Felder `distanceMeters` und `durationSeconds` die Cardio-Kennzahlen tragen. GPS-Route, Lap-Splits, Power, VO2max und HR-Zonen kommen nicht ins Modell — weder als optionale Felder noch über einen `metadata`-Escape-Hatch.
+
+Damit bleibt die ursprünglich formulierte Bedingung *«sofern das `Activity`-Modell vorab die nötigen optionalen Felder enthält»* ohne Gegenstand: Der für v1 nötige additive Eingriff ist nicht der Cardio-Datensatz, sondern die Unterscheidung der Quelle (`Activity.source` und `Workout.sourceRawValue`, Issue #141) — sonst verwirft ein Hevy-Sync die Strava-Aktivitäten desselben Zeitfensters mit.
+
+Der OAuth-Entscheid selbst (BYO-App des Nutzers statt Team-Secret, `ASWebAuthenticationSession`, fünf Keychain-Items statt des in [[ADR-3]] reservierten `fitbuddy.strava.token`) steht in [[ADR-10]]. Punkt 2 des Nachtrags zu #35 bleibt unverändert gültig: Der Refresh liegt im `StravaConnector`, die Ablauf-Buchführung in der `ConnectorRegistry`.
+
 ---
 
 ## Konsequenzen
@@ -111,10 +119,11 @@ Die Strava-API-Feldanalyse (Punkt 2 des Nachtrags zu #33, bestätigt in Punkt 4 
 | Frage | Priorität | Fällig |
 |---|---|---|
 | **HealthKit IN oder OUT of Scope? — Bei IN: separates `HealthDataProvider`-Protocol designen** | **Kritisch** | **vor Sprint 1** |
-| **Strava-API-Feldanalyse: GPS, Lap-Splits, Power, VO2max, HR Zones — `Activity`-Modell um optionale Felder erweitern** | **Hoch** | **Sprint 1, vor HevyConnector-Implementierung** |
+| ~~**Strava-API-Feldanalyse: GPS, Lap-Splits, Power, VO2max, HR Zones — `Activity`-Modell um optionale Felder erweitern**~~ — beantwortet in [[ADR-10]]: keine Erweiterung, Cardio bildet auf `distanceMeters` / `durationSeconds` ab. **(geschlossen)** | — | — |
 | **`ConnectorError`-Enum finalisieren und in alle `throws`-Signaturen einsetzen** | **Hoch** | **Sprint 1** |
 | **`MockConnector` mit Fehler-Injection und konfigurierbaren Responses implementieren** | **Hoch** | **Sprint 1** |
-| **`kSecAttrAccessGroup` + `ConnectorCredentials`-Struktur für OAuth-Token (Strava) vs. API-Key (Hevy) definieren** | Hoch | Sprint 1 |
+| ~~**`ConnectorCredentials`-Struktur für OAuth-Token (Strava) vs. API-Key (Hevy) definieren**~~ — `ConnectorCredentials.oauth(accessToken:refreshToken:expiresAt:)` seit #35; die Keychain-Ablage dahinter definiert [[ADR-10]] (fünf Items). **(geschlossen)** | — | — |
+| `kSecAttrAccessGroup` setzen — in [[ADR-3]] und [[ADR-10]] bewusst offen gelassen, fällig erst mit Watch-Extension oder Widget | Niedrig | v1.0 |
 | Pagination-Strategie für v1.0 evaluieren: `AsyncStream<Activity>` vs. Cursor-Modell | Mittel | vor v1.0 |
 | Hevy-spezifische Features (Routinen-Metadaten): Sub-Interface oder Verzicht? | Niedrig | Sprint 2 |
 | Protocol-Extension-Strategie für zukünftige Methoden festlegen (Sub-Protocol vs. `extension`-Default) | Niedrig | vor v1.0 |

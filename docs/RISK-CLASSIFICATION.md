@@ -28,7 +28,7 @@
 
 * **Data 4** greift wegen der *besonderen Kategorie*: Trainingsdaten sind Gesundheitsdaten nach nDSG Art. 5 lit. c. Zahlungsdaten verarbeitet FitBuddy nicht.
 * **Autonomy 2:** Claude generiert ausschliesslich Text (Trainingsempfehlung). Kein Tool-Use, kein Write-back nach Hevy (US-12 = Won't). Die Umsetzung jeder Empfehlung liegt beim User — das ist zugleich der geforderte Human-in-the-Loop.
-* **Exposure 4:** Daten verlassen das Gerät zu zwei externen Empfängern (Hevy, Anthropic/USA).
+* **Exposure 4:** Daten verlassen das Gerät zu drei externen Empfängern: Hevy und — sobald verbunden — Strava (USA) als Quellen der Trainingsdaten, Anthropic (USA) bzw. der gewählte LLM-Anbieter als Empfänger der Analyse-Daten. Strava erhält dabei nur die Autorisierung und die Lese-Anfragen der nutzereigenen API-Application (ADR-010), nie Hevy-Daten oder die Analyse.
 
 ## 2. Entwicklungsprozess — Claude Code
 
@@ -93,7 +93,7 @@ Auf diesem Level ist eine Ausnahme eine Entscheidung mit Namen dran — keine Ko
 | Personendaten im Prompt dokumentiert (DSGVO/nDSG) | Datenschutzerklärung-Screen: bearbeitete Daten, Zweck, Empfänger |
 | Sicherheitsrelevante Ereignisse geloggt | 401-Handling mit aktiver Benachrichtigung (US-1 AC3, US-8 AC2) |
 | Datenschutz-Folgenabschätzung geprüft (DPIA nötig?) | Geprüft: volle DSFA ist v1-Material; für v0 genügt diese Risikonotiz + Consent (Entscheid siehe CLAUDE.md, Verhältnismässigkeit bei BFH-Datenschutzstelle) |
-| Least-Privilege-Zugriff auf Tools und Daten | Hevy-Key nur lesend genutzt; Keys nur im Keychain (`ThisDeviceOnly`), nur in Services |
+| Least-Privilege-Zugriff auf Tools und Daten | Hevy-Key nur lesend genutzt; Strava nur mit dem Scope `activity:read_all` (kein Schreib-Scope, ADR-010); Keys, Client-Credentials und Tokens nur im Keychain (`ThisDeviceOnly`), nur in Services |
 | Zahlungsdaten erreichen das Modell nie (PCI) | Nicht anwendbar — FitBuddy verarbeitet keine Zahlungsdaten |
 | DPIA / FRIA abgeschlossen | Für v0 durch diese Notiz abgedeckt (siehe oben); vollständige DSFA vor kommerziellem Launch (v1) |
 | Mensch bestätigt die Aktion | App: AI-Analyse nur auf Knopfdruck (US-3), Empfehlungen werden nie automatisch umgesetzt. Prozess: kein Merge ohne Human Review |

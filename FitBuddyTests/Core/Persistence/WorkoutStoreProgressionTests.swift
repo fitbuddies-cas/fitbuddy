@@ -23,7 +23,7 @@ final class WorkoutStoreProgressionTests: XCTestCase {
     }
 
     func testUnknownMovementHasNoProgression() async throws {
-        try await sut.replaceCachedWorkouts(with: [activity(id: "w-1", daysAgo: 2)])
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [activity(id: "w-1", daysAgo: 2)])
 
         let progression = try await sut.exerciseProgression(id: "nothing-here", since: windowStart)
 
@@ -32,7 +32,7 @@ final class WorkoutStoreProgressionTests: XCTestCase {
 
     /// One point per session, oldest first — the order the chart plots in.
     func testOnePointPerSessionOldestFirst() async throws {
-        try await sut.replaceCachedWorkouts(with: [
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
             activity(id: "w-1", daysAgo: 6, sets: [(100, 5)]),
             activity(id: "w-2", daysAgo: 3, sets: [(105, 5)]),
         ])
@@ -49,7 +49,7 @@ final class WorkoutStoreProgressionTests: XCTestCase {
     /// The best set of the day defines the point, not the last one — a
     /// back-off set after the top set must not read as a worse session.
     func testTheSessionsBestSetDefinesItsPoint() async throws {
-        try await sut.replaceCachedWorkouts(with: [
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
             activity(id: "w-1", daysAgo: 2, sets: [(100, 5), (80, 8)]),
         ])
 
@@ -65,7 +65,7 @@ final class WorkoutStoreProgressionTests: XCTestCase {
     /// Warm-ups are excluded here as they are everywhere else: a ramp-up set
     /// must not define the day's best on a light session.
     func testWarmUpSetsDoNotDefineAPoint() async throws {
-        try await sut.replaceCachedWorkouts(with: [
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
             activity(id: "w-1", daysAgo: 2, sets: [(60, 10)], warmUpSets: [(140, 10)]),
         ])
 
@@ -81,7 +81,7 @@ final class WorkoutStoreProgressionTests: XCTestCase {
     /// that is not the same as the movement being absent, which is why the
     /// progression itself still comes back.
     func testASessionWithoutUsableSetsLeavesNoPoint() async throws {
-        try await sut.replaceCachedWorkouts(with: [
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
             activity(id: "w-1", daysAgo: 2, sets: [(nil, nil)]),
         ])
 
@@ -96,7 +96,7 @@ final class WorkoutStoreProgressionTests: XCTestCase {
     /// A movement performed twice inside one workout is still one session, or
     /// the plateau rule would count a single day as three.
     func testAMovementLoggedTwiceInOneSessionYieldsOnePoint() async throws {
-        try await sut.replaceCachedWorkouts(with: [
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
             activity(id: "w-1", daysAgo: 2, sets: [(100, 5)], secondOccurrenceSets: [(110, 5)]),
         ])
 
@@ -110,7 +110,7 @@ final class WorkoutStoreProgressionTests: XCTestCase {
 
     /// Sessions outside the window are none of this screen's business.
     func testSessionsBeforeTheWindowAreIgnored() async throws {
-        try await sut.replaceCachedWorkouts(with: [
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
             activity(id: "old", daysAgo: 200, sets: [(200, 5)]),
             activity(id: "w-1", daysAgo: 2, sets: [(100, 5)]),
         ])
@@ -125,7 +125,7 @@ final class WorkoutStoreProgressionTests: XCTestCase {
 
     /// The title follows the most recent session, as the exercise list does.
     func testTitleComesFromTheMostRecentSession() async throws {
-        try await sut.replaceCachedWorkouts(with: [
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
             activity(id: "w-1", daysAgo: 6, sets: [(100, 5)], title: "Bench Press"),
             activity(id: "w-2", daysAgo: 3, sets: [(100, 5)], title: "Bench Press (Barbell)"),
         ])
@@ -135,6 +135,30 @@ final class WorkoutStoreProgressionTests: XCTestCase {
         )
 
         XCTAssertEqual(progression.title, "Bench Press (Barbell)")
+    }
+
+    /// A Strava session sharing the movement's key contributes nothing: no
+    /// weight, no reps, so at best an empty curve — and, alone, it must not
+    /// even produce a titled progression with no points (US-5, #144).
+    func testStravaSessionsAreIgnored() async throws {
+        try await sut.replaceCachedWorkouts(from: .strava, with: [
+            Activity(
+                id: "strava:1",
+                title: "Morning Run",
+                startTime: start(daysAgo: 2),
+                source: .strava,
+                exercises: [
+                    ActivityExercise(index: 0, title: "Run", sets: [
+                        ActivityExerciseSet(index: 0, type: .normal, distanceMeters: 5_000, durationSeconds: 1_800),
+                    ]),
+                ]
+            ),
+        ])
+        let runKey = ExerciseSummary.key(templateID: nil, title: "Run")
+
+        let progression = try await sut.exerciseProgression(id: runKey, since: windowStart)
+
+        XCTAssertNil(progression)
     }
 
     // MARK: - Helpers

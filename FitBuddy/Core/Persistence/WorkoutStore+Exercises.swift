@@ -13,9 +13,17 @@ extension WorkoutStore: ExerciseSummaryReading {
     /// order is stable — SwiftData does not guarantee the order of a to-many
     /// relationship, and a list that reshuffles between two reads of the same
     /// cache would look like the data changed.
+    ///
+    /// Strava sessions stay out (US-5 AC1, US-9): a run is mapped to one
+    /// "exercise" named after the sport with a single cardio set, and listed
+    /// it would read as a movement with 0 kg over n sessions, carry a guessed
+    /// muscle group, and merge with a Hevy exercise of the same title. The
+    /// exercise list is the strength picture, like the muscle split in
+    /// `WorkoutSummary`.
     func exerciseSummaries(since date: Date) throws -> [ExerciseSummary] {
+        let cardioSource = ConnectorSource.strava.rawValue
         var descriptor = FetchDescriptor<Workout>(
-            predicate: #Predicate { $0.startTime >= date },
+            predicate: #Predicate { $0.startTime >= date && $0.sourceRawValue != cardioSource },
             sortBy: [SortDescriptor(\.startTime, order: .reverse)]
         )
         descriptor.relationshipKeyPathsForPrefetching = [\.exercises]

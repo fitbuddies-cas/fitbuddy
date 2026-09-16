@@ -97,7 +97,7 @@ final class DataResetServiceTests: XCTestCase {
 
     func testDeleteAllDataClearsCachedWorkouts() async throws {
         let activity = ActivityFactory.activity(id: "w-1", start: Date(timeIntervalSince1970: 1_750_000_000))
-        try await workouts.replaceCachedWorkouts(with: [activity])
+        try await workouts.replaceCachedWorkouts(from: .hevy, with: [activity])
 
         await sut.deleteAllData()
 

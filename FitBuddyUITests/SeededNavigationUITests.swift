@@ -64,22 +64,54 @@ final class SeededNavigationUITests: XCTestCase {
         sut.firstRow(of: sut.sessionRows).tap()
         sut.assertAppears(sut.workoutDetail)
 
-        sut.firstRow(of: sut.exerciseCards).tap()
+        let card = sut.firstRow(of: sut.exerciseCards)
+        // The card is one combined accessibility element, so its label carries
+        // the exercise title — read it before the tap, to compare afterwards.
+        let cardLabel = card.label
+        card.tap()
 
         sut.assertAppears(sut.progression)
+        // Wait for the read to land before ruling anything out: the root is on
+        // screen while the state is still `.loading`, and `.unavailable` can
+        // only follow the read. Asserting earlier would pass on every run,
+        // including the ones with a broken identity.
+        sut.awaitSettledProgression()
+
         // The point of this route is the identity: a key built from the title
         // alone would miss every movement that carries a template id, and the
         // screen would answer "not in this window" for the exercise the user
-        // is looking at. That failure has its own state, so assert it away.
+        // is looking at.
         XCTAssertFalse(
             sut.unavailableNotice.exists,
             "The tapped exercise must resolve to the same movement the list would open"
         )
-        // Whether a curve or the "not enough data" hint follows is the
-        // movement's business, not this route's: the first card of a session
-        // can be a cardio machine, which logs no weight and reps for Epley to
-        // work from. What must hold is that the screen is about that movement.
-        XCTAssertFalse(sut.app.navigationBars.element(boundBy: 0).identifier.isEmpty)
+        // And it is *that* movement: whether a curve or the "not enough data"
+        // hint follows is the movement's business — the first card of a session
+        // can be a cardio machine, which logs nothing Epley can work from.
+        let title = sut.app.navigationBars.element(boundBy: 0).identifier
+        XCTAssertFalse(title.isEmpty)
+        XCTAssertTrue(
+            cardLabel.contains(title),
+            "The screen must be about the exercise that was tapped"
+        )
+    }
+
+    /// The way back out of the second route, which the first route has its own
+    /// test for: a session is where the user was, and where they expect to
+    /// land again.
+    @MainActor
+    func testBackFromTheCurveReturnsToTheSession() {
+        let sut = SeededApp().launch()
+
+        sut.assertAppears(sut.dashboard)
+        sut.firstRow(of: sut.sessionRows).tap()
+        sut.assertAppears(sut.workoutDetail)
+        sut.firstRow(of: sut.exerciseCards).tap()
+        sut.assertAppears(sut.progression)
+
+        sut.backButton.tap()
+
+        sut.assertAppears(sut.workoutDetail)
     }
 
     /// Back out of the curve and the list is still the list — the forward path

@@ -24,10 +24,14 @@ struct PrivacyPolicyView: View {
                         FBInfoRow(
                             title: "What data we process",
                             text: """
-                            • Training data from your Hevy account (workouts, exercises, sets) — \
-                            this qualifies as health data under Art. 5 lit. c nDSG.
-                            • Your Hevy API key and the API keys of the AI providers you \
-                            connect (Claude, Gemini, and/or Mistral).
+                            • Training data from your Hevy account (workouts, exercises, sets) \
+                            and, if you connect it, your Strava account (activities with \
+                            distance and duration) — this qualifies as health data under \
+                            Art. 5 lit. c nDSG.
+                            • Your Hevy API key, the API keys of the AI providers you connect \
+                            (Claude, Gemini, and/or Mistral), and — for Strava — the client ID \
+                            and client secret of your own Strava API application together with \
+                            the access and refresh tokens Strava issues for it.
                             • The time and version of your consent.
                             """
                         )
@@ -46,6 +50,11 @@ struct PrivacyPolicyView: View {
                             text: """
                             • Hevy: source of your training data, fetched directly from your device \
                             with your own API key.
+                            • Strava, Inc. (USA), if you connect it: source of your activities, \
+                            fetched directly from your device through an API application that \
+                            you register in your own Strava account. Strava receives your \
+                            authorization and the read requests; it never receives your Hevy \
+                            data or the AI analysis.
                             • AI providers — Anthropic (Claude), Google (Gemini), Mistral AI: \
                             recipients of the training data for the AI analysis, called directly \
                             from your device with your own API keys. Only the providers you have \
@@ -66,16 +75,21 @@ struct PrivacyPolicyView: View {
                             based on the API terms of your own account with that provider — for \
                             Anthropic, the DPA (incl. Standard Contractual Clauses and Swiss \
                             Addendum), which applies automatically once you create your account. \
-                            Mistral AI processes data within the EU.
+                            Mistral AI processes data within the EU. Strava, Inc. likewise \
+                            processes data in the USA, under the API agreement of your own \
+                            Strava account.
                             """
                         )
                         Divider().overlay(Color.fbDivider)
                         FBInfoRow(
                             title: "Local storage",
                             text: """
-                            API keys and consent data are stored exclusively in your device's iOS \
-                            Keychain (this device only, no iCloud sync). They only leave your device \
-                            during your own API calls to Hevy or your AI providers.
+                            API keys, the Strava application credentials and tokens, and consent \
+                            data are stored exclusively in your device's iOS Keychain (this device \
+                            only, no iCloud sync). They only leave your device during your own API \
+                            calls to Hevy, Strava or your AI providers. Disconnecting Strava in \
+                            Settings removes every Strava item from the Keychain and every Strava \
+                            activity from the local cache.
                             """
                         )
                         Divider().overlay(Color.fbDivider)

@@ -19,7 +19,8 @@ enum AnalysisPromptBuilder {
     /// - Parameters:
     ///   - summaries: Cached workouts, in any order. Anything outside the two
     ///     analysis windows is ignored, so the dashboard's 90-day read can be
-    ///     passed in unchanged.
+    ///     passed in unchanged. Strava sessions are ignored as well — see
+    ///     `strengthSessions(in:)`.
     ///   - window: The window actually analysed — the default, or a wider rung
     ///     of the fallback ladder when the last four weeks are empty (#87).
     ///   - now: Injectable clock, so the windows are testable.
@@ -33,8 +34,26 @@ enum AnalysisPromptBuilder {
     ) -> AnalysisPrompt {
         AnalysisPrompt(
             system: systemPrompt,
-            user: userPrompt(summaries: summaries, window: window, now: now, calendar: calendar)
+            user: userPrompt(
+                summaries: strengthSessions(in: summaries),
+                window: window,
+                now: now,
+                calendar: calendar
+            )
         )
+    }
+
+    /// The sessions the analysis is about: Hevy's, not Strava's (US-5, #144).
+    ///
+    /// The system prompt describes strength training, and rule 5 explains a
+    /// 0 kg line as bodyweight or timed work. A run passed through as a
+    /// session would be read exactly that way — "1 exercise, 1 working set,
+    /// 0 kg" — and someone running four times a week would be told about a
+    /// volume collapse that never happened (US-3 AC3). Cardio context is v1
+    /// material; for v0 the figures at least have to be right, so the same
+    /// filter decides the session count `AnalysisContext` reports (US-6).
+    static func strengthSessions(in summaries: [WorkoutSummary]) -> [WorkoutSummary] {
+        summaries.filter { $0.source != .strava }
     }
 
     // MARK: - System

@@ -29,6 +29,21 @@ enum AccessibilityID {
         static let skipButton = "llmKeys.skipButton"
     }
 
+    enum StravaCredentials {
+        static let clientIDField = "stravaCredentials.clientIDField"
+        static let clientSecretField = "stravaCredentials.clientSecretField"
+        static let saveButton = "stravaCredentials.saveButton"
+        static let errorBanner = "stravaCredentials.errorBanner"
+    }
+
+    enum StravaConnection {
+        static let status = "stravaConnection.status"
+        static let connectButton = "stravaConnection.connectButton"
+        static let disconnectButton = "stravaConnection.disconnectButton"
+        static let credentialsLink = "stravaConnection.credentialsLink"
+        static let errorBanner = "stravaConnection.errorBanner"
+    }
+
     enum Dashboard {
         static let root = "dashboard.root"
         /// Every session row carries it — the tests address them by position,
@@ -43,6 +58,10 @@ enum AccessibilityID {
         static func staleSource(_ source: String) -> String {
             "dashboard.staleSource." + source
         }
+        static let sourceBadge = "dashboard.sourceBadge"
+        static let sourceBanner = "dashboard.sourceBanner"
+        static let renewalBanner = "dashboard.renewalBanner"
+        static let renewButton = "dashboard.renewButton"
     }
 
     enum WorkoutDetail {

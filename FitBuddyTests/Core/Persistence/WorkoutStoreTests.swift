@@ -26,7 +26,7 @@ final class WorkoutStoreTests: XCTestCase {
 
     func testStoresWorkoutHierarchyFromActivities() async throws {
         let start = Date(timeIntervalSince1970: 1_750_000_000)
-        try await sut.replaceCachedWorkouts(with: [
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
             ActivityFactory.activity(id: "w-1", start: start),
         ])
 
@@ -64,13 +64,13 @@ final class WorkoutStoreTests: XCTestCase {
 
     func testReplaceDropsWorkoutsMissingFromTheNewWindow() async throws {
         let start = Date(timeIntervalSince1970: 1_750_000_000)
-        try await sut.replaceCachedWorkouts(with: [
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
             ActivityFactory.activity(id: "w-1", start: start),
             ActivityFactory.activity(id: "w-2", start: start),
         ])
 
         // Second sync: the user deleted w-1 in Hevy.
-        try await sut.replaceCachedWorkouts(with: [
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
             ActivityFactory.activity(id: "w-2", start: start),
         ])
 
@@ -82,8 +82,8 @@ final class WorkoutStoreTests: XCTestCase {
         let start = Date(timeIntervalSince1970: 1_750_000_000)
         let activity = ActivityFactory.activity(id: "w-1", start: start)
 
-        try await sut.replaceCachedWorkouts(with: [activity])
-        try await sut.replaceCachedWorkouts(with: [activity])
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [activity])
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [activity])
 
         let count = try await sut.workoutCount()
         XCTAssertEqual(count, 1)
@@ -91,10 +91,10 @@ final class WorkoutStoreTests: XCTestCase {
 
     func testReplaceCascadeDeletesExercisesAndSets() async throws {
         let start = Date(timeIntervalSince1970: 1_750_000_000)
-        try await sut.replaceCachedWorkouts(with: [
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
             ActivityFactory.activity(id: "w-1", start: start),
         ])
-        try await sut.replaceCachedWorkouts(with: [])
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [])
 
         let context = ModelContext(container)
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<Workout>()), 0)
@@ -105,7 +105,7 @@ final class WorkoutStoreTests: XCTestCase {
     func testCachedWorkoutIDsAreSortedNewestFirst() async throws {
         let old = Date(timeIntervalSince1970: 1_700_000_000)
         let recent = Date(timeIntervalSince1970: 1_750_000_000)
-        try await sut.replaceCachedWorkouts(with: [
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
             ActivityFactory.activity(id: "older", start: old),
             ActivityFactory.activity(id: "newer", start: recent),
         ])
@@ -118,8 +118,93 @@ final class WorkoutStoreTests: XCTestCase {
 
     func testDeleteAllEmptiesTheCache() async throws {
         let start = Date(timeIntervalSince1970: 1_750_000_000)
-        try await sut.replaceCachedWorkouts(with: [
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
             ActivityFactory.activity(id: "w-1", start: start),
+        ])
+
+        try await sut.deleteAll()
+
+        let count = try await sut.workoutCount()
+        XCTAssertEqual(count, 0)
+    }
+
+    // MARK: - Per-source windows (#141)
+
+    /// The reason `source` exists: a Hevy sync must not wipe the Strava
+    /// sessions cached next to it, or the dashboard flickers between sources.
+    func testReplacingOneSourceLeavesTheOtherSourceUntouched() async throws {
+        let start = Date(timeIntervalSince1970: 1_750_000_000)
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
+            ActivityFactory.activity(id: "hevy-1", start: start),
+        ])
+        try await sut.replaceCachedWorkouts(from: .strava, with: [
+            Activity(id: "strava:1", title: "Run", startTime: start, source: .strava),
+        ])
+
+        // Next Hevy sync, with a different window.
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
+            ActivityFactory.activity(id: "hevy-2", start: start),
+        ])
+
+        let ids = try await sut.cachedWorkoutIDs()
+        XCTAssertEqual(Set(ids), ["hevy-2", "strava:1"])
+        let hevyCount = try await sut.workoutCount(from: .hevy)
+        let stravaCount = try await sut.workoutCount(from: .strava)
+        XCTAssertEqual(hevyCount, 1)
+        XCTAssertEqual(stravaCount, 1)
+    }
+
+    func testReplacingWithAnEmptyWindowClearsOnlyThatSource() async throws {
+        let start = Date(timeIntervalSince1970: 1_750_000_000)
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
+            ActivityFactory.activity(id: "hevy-1", start: start),
+        ])
+        try await sut.replaceCachedWorkouts(from: .strava, with: [
+            Activity(id: "strava:1", title: "Run", startTime: start, source: .strava),
+        ])
+
+        try await sut.replaceCachedWorkouts(from: .strava, with: [])
+
+        let ids = try await sut.cachedWorkoutIDs()
+        XCTAssertEqual(ids, ["hevy-1"])
+    }
+
+    func testDeleteCachedWorkoutsFromOneSourceKeepsTheOther() async throws {
+        let start = Date(timeIntervalSince1970: 1_750_000_000)
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
+            ActivityFactory.activity(id: "hevy-1", start: start),
+        ])
+        try await sut.replaceCachedWorkouts(from: .strava, with: [
+            Activity(id: "strava:1", title: "Run", startTime: start, source: .strava),
+        ])
+
+        try await sut.deleteCachedWorkouts(from: .strava)
+
+        let ids = try await sut.cachedWorkoutIDs()
+        XCTAssertEqual(ids, ["hevy-1"])
+        let context = ModelContext(container)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<Workout>()), 1)
+    }
+
+    func testSourceTravelsIntoTheSummaryAndTheDetail() async throws {
+        let start = Date(timeIntervalSince1970: 1_750_000_000)
+        try await sut.replaceCachedWorkouts(from: .strava, with: [
+            Activity(id: "strava:1", title: "Run", startTime: start, source: .strava),
+        ])
+
+        let summaries = try await sut.workoutSummaries(since: .distantPast)
+        let detail = try await sut.workoutDetail(id: "strava:1")
+        XCTAssertEqual(summaries.map(\.source), [.strava])
+        XCTAssertEqual(detail?.source, .strava)
+    }
+
+    func testDeleteAllClearsEverySource() async throws {
+        let start = Date(timeIntervalSince1970: 1_750_000_000)
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
+            ActivityFactory.activity(id: "hevy-1", start: start),
+        ])
+        try await sut.replaceCachedWorkouts(from: .strava, with: [
+            Activity(id: "strava:1", title: "Run", startTime: start, source: .strava),
         ])
 
         try await sut.deleteAll()
@@ -138,7 +223,7 @@ final class WorkoutStoreTests: XCTestCase {
         let start = Date(timeIntervalSince1970: 1_750_000_000)
         try await Self.withDiskContainer(at: storeURL) { container in
             let store = WorkoutStore(modelContainer: container)
-            try await store.replaceCachedWorkouts(with: [
+            try await store.replaceCachedWorkouts(from: .hevy, with: [
                 ActivityFactory.activity(id: "w-1", start: start),
             ])
         }
