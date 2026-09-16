@@ -35,9 +35,21 @@ enum AnalysisReportValidator {
     /// (US-14 AC4).
     static let recoveryHeadline = "Recover this week."
 
+    /// The lead of a report the app turned into a recovery verdict (US-14 AC4,
+    /// #170). Replaces the model's, which was written for the verdict the app
+    /// overruled and would contradict the headline right above it.
+    static func recoveryLead(trainingDays: Int) -> String {
+        "You trained on \(trainingDays) of the last 7 days. Take the suggested rest before adding load."
+    }
+
     /// The headline of a progress report the app turned into a hold verdict,
     /// because none of its progressions survived (#177).
     static let holdHeadline = "Hold steady this week."
+
+    /// The lead of a progress report the app turned into a hold verdict
+    /// (#170). The model's lead argued for a load increase no card backs.
+    static let holdLead =
+        "Your data doesn't back a specific load increase yet. Keep your current weights and read the full analysis below."
 
     /// The reasoning of a recovery card the app inserts when the model left it
     /// out, or sent it without a reason (US-14 AC4).
@@ -56,12 +68,13 @@ enum AnalysisReportValidator {
         var cards = report.cards.compactMap { validate($0, against: evidence) }
         var verdict = report.verdict
         var headline = report.headline
+        var lead = report.lead
 
         // US-3 AC6 / US-14 AC4: at 6 of 7 days no progression is shown without
         // the recovery hint, and the headline says so. A model recovery card
         // always survives at that count, so a missing one means the model left
-        // it out. The lead stays the model's: it is prose like the summary,
-        // and the recovery card right below it states the hint (#170).
+        // it out. An overruled verdict takes the model's lead with it: that
+        // lead argues for the verdict the app just replaced (#170).
         if evidence.recovery.needsRecovery {
             if !cards.contains(where: { $0.kind == .recovery }) {
                 cards.insert(
@@ -72,6 +85,7 @@ enum AnalysisReportValidator {
             if verdict != .recover {
                 verdict = .recover
                 headline = recoveryHeadline
+                lead = recoveryLead(trainingDays: evidence.recovery.trainingDays)
             }
         }
 
@@ -80,16 +94,18 @@ enum AnalysisReportValidator {
         // "You're ready to progress." over cards that name no progression
         // would contradict the screen it heads (#177): every progression was
         // downgraded to a note or cut, so the verdict the cards support is to
-        // hold. A recovery verdict forced above is never touched.
+        // hold. A recovery verdict forced above is never touched. The lead goes
+        // with the verdict it argued for (#170).
         if verdict == .progress, !kept.contains(where: { $0.kind == .progression }) {
             verdict = .hold
             headline = holdHeadline
+            lead = holdLead
         }
 
         return ValidatedAnalysisReport(
             headline: headline,
             verdict: verdict,
-            lead: report.lead,
+            lead: lead,
             cards: kept,
             summary: report.summary
         )

@@ -354,7 +354,11 @@ final class AnalysisReportValidatorTests: XCTestCase {
 
         XCTAssertEqual(validated.verdict, .recover)
         XCTAssertEqual(validated.headline, "Recover this week.")
-        XCTAssertEqual(validated.lead, "Lead", "the model's lead survives the recovery override")
+        XCTAssertEqual(
+            validated.lead,
+            "You trained on 6 of the last 7 days. Take the suggested rest before adding load.",
+            "An overruled verdict gets the app's lead, not the model's"
+        )
         XCTAssertEqual(validated.summary, "Summary")
     }
 
@@ -367,6 +371,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
 
         XCTAssertEqual(validated.verdict, .recover)
         XCTAssertEqual(validated.headline, "Take a break.")
+        XCTAssertEqual(validated.lead, "Rest first.", "No override, so the model's lead stays")
     }
 
     func testVerdictIsKeptBelowTheThreshold() {
@@ -374,6 +379,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
 
         XCTAssertEqual(validated.verdict, .progress)
         XCTAssertEqual(validated.headline, "Headline")
+        XCTAssertEqual(validated.lead, "Lead")
     }
 
     /// Every progression failed: the headline must not promise one (#177).
@@ -383,12 +389,14 @@ final class AnalysisReportValidatorTests: XCTestCase {
         XCTAssertEqual(validated.cards.map(\.kind), [.note, .imbalance])
         XCTAssertEqual(validated.verdict, .hold)
         XCTAssertEqual(validated.headline, AnalysisReportValidator.holdHeadline)
+        XCTAssertEqual(validated.lead, AnalysisReportValidator.holdLead, "The model's progress lead goes with its verdict")
     }
 
     func testProgressWithASurvivingProgressionStaysProgress() {
         let validated = validate([benchPress(from: 99, to: 100), benchPress(from: 60, to: 62.5)])
 
         XCTAssertEqual(validated.verdict, .progress)
+        XCTAssertEqual(validated.lead, "Lead")
     }
 
     /// Recovery wins over the hold downgrade, even without any progression.
@@ -399,6 +407,11 @@ final class AnalysisReportValidatorTests: XCTestCase {
         )
 
         XCTAssertEqual(validated.verdict, .recover)
+        XCTAssertEqual(
+            validated.lead,
+            AnalysisReportValidator.recoveryLead(trainingDays: 6),
+            "The recovery lead, not the hold lead"
+        )
     }
 
     /// A model hold verdict passes through, cards or not.
@@ -408,6 +421,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
 
         XCTAssertEqual(validated.verdict, .hold)
         XCTAssertEqual(validated.headline, "Keep going.")
+        XCTAssertEqual(validated.lead, "Hold.")
     }
 
     // MARK: - Card count
@@ -509,6 +523,34 @@ final class AnalysisReportValidatorTests: XCTestCase {
         ])
 
         XCTAssertEqual(validated.cards.map(\.kind), [.note, .note, .imbalance])
+    }
+
+    // MARK: - Lead and full analysis (#170)
+
+    private func report(lead: String, summary: String) -> ValidatedAnalysisReport {
+        ValidatedAnalysisReport(headline: "H", verdict: .hold, lead: lead, cards: [], summary: summary)
+    }
+
+    func testALeadWithTextIsShown() {
+        XCTAssertTrue(report(lead: "Keep going.", summary: "More.").hasLead)
+        XCTAssertFalse(report(lead: " \n ", summary: "More.").hasLead)
+    }
+
+    func testASummaryDistinctFromTheLeadIsAFullAnalysis() {
+        XCTAssertTrue(report(lead: "Keep going.", summary: "Two sessions are too few. Keep going.").hasFullAnalysis)
+        XCTAssertTrue(report(lead: "", summary: "Two sessions are too few.").hasFullAnalysis)
+    }
+
+    func testABlankSummaryIsNoFullAnalysis() {
+        XCTAssertFalse(report(lead: "Keep going.", summary: "  ").hasFullAnalysis)
+    }
+
+    /// Whitespace, case and Markdown aside, a summary that repeats the lead
+    /// adds nothing.
+    func testASummaryThatRepeatsTheLeadIsNoFullAnalysis() {
+        XCTAssertFalse(report(lead: "Keep your loads.", summary: " keep  your\nloads. ").hasFullAnalysis)
+        XCTAssertFalse(report(lead: "Keep your loads.", summary: "**Keep your loads.**").hasFullAnalysis)
+        XCTAssertFalse(report(lead: "Rest two days. Keep your loads.", summary: "Keep your loads.").hasFullAnalysis)
     }
 
     // MARK: - Helpers

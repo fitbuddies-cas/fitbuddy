@@ -119,6 +119,27 @@ final class AnalysisResultRenderingTests: XCTestCase {
         )
     }
 
+    /// A summary that only repeats the lead gets no disclosure, and the
+    /// result still renders (#170 review).
+    func testResultRendersAReportWhoseSummaryRepeatsItsLead() throws {
+        let report = ValidatedAnalysisReport(
+            headline: "Hold steady this week.",
+            verdict: .hold,
+            lead: "Keep your current loads.",
+            cards: [],
+            summary: "Keep your current loads."
+        )
+        XCTAssertFalse(report.hasFullAnalysis)
+
+        try assertRenders(
+            AnalysisResultView(
+                outcome: .report(report),
+                context: AnalysisContext(sessionCount: 2, window: .default),
+                attribution: nil
+            )
+        )
+    }
+
     func testResultRendersProse() throws {
         try assertRenders(
             AnalysisResultView(

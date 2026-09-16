@@ -44,4 +44,64 @@ final class AnalysisLeadTests: XCTestCase {
     func testResolvedDerivesABlankLead() {
         XCTAssertEqual(AnalysisLead.resolved("  ", summary: "Other text. More."), "Other text. More.")
     }
+
+    // MARK: - Markdown and abbreviations (#170 review)
+
+    /// The shape of the thin sample: an opening paragraph, a bold heading, a
+    /// paragraph with a line break, a list.
+    func testSkipsHeadingsAndListsOfAStructuredSummary() {
+        let summary = """
+            You logged two sessions in the last four weeks, both upper body.
+
+            **What the data shows**
+            Bench press and rows each appear once, at the same weights as \
+            before.
+
+            - Keep your current weights for the next sessions
+            - Log two to three sessions a week so a trend can show
+            """
+
+        XCTAssertEqual(
+            AnalysisLead.derived(from: summary),
+            "You logged two sessions in the last four weeks, both upper body. Bench press and rows each appear once, at the same weights as before."
+        )
+    }
+
+    func testStripsEmphasisMarkers() {
+        XCTAssertEqual(
+            AnalysisLead.derived(from: "**Bench press** is ready for *62.5 kg*. Legs lag."),
+            "Bench press is ready for 62.5 kg. Legs lag."
+        )
+    }
+
+    func testANumberedListDoesNotLeakItsMarkers() {
+        let summary = """
+            **Plan**
+            1. Add 2.5 kg on bench.
+            2. Keep squats where they are.
+
+            Legs need a second session.
+            """
+
+        XCTAssertEqual(AnalysisLead.derived(from: summary), "Legs need a second session.")
+    }
+
+    func testASummaryThatIsOnlyAListFallsBackToItsItems() {
+        let summary = "- Add 2.5 kg on bench.\n- Keep squats where they are.\n- Sleep well."
+
+        XCTAssertEqual(AnalysisLead.derived(from: summary), "Add 2.5 kg on bench. Keep squats where they are.")
+    }
+
+    func testAbbreviationsDoNotEndASentence() {
+        let summary = "Bench press moved approx. 5 % in four weeks, e.g. from 60 to 62.5 kg. Legs lag behind. Rest well."
+
+        XCTAssertEqual(
+            AnalysisLead.derived(from: summary),
+            "Bench press moved approx. 5 % in four weeks, e.g. from 60 to 62.5 kg. Legs lag behind."
+        )
+    }
+
+    func testAHeadingOnlySummaryHasNoLead() {
+        XCTAssertEqual(AnalysisLead.derived(from: "**Summary**"), "")
+    }
 }

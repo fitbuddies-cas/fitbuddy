@@ -446,6 +446,39 @@ final class InferenceServiceTests: XCTestCase {
         XCTAssertEqual(text(of: events), "ok")
     }
 
+    /// "Cancel", then "Analyze" right away: the cancelled run still holds the
+    /// slot while its request unwinds, and the new call waits for it instead
+    /// of failing with `.alreadyInProgress` (shown as an unreadable answer).
+    func testANewCallRightAfterACancelWaitsForTheCancelledRunAndReachesTheProvider() async throws {
+        claude.gatesStream = true
+        let stream = try await sut.streamAnalysis(systemPrompt: "s", userPrompt: "u")
+        let consumer = Task { for try await _ in stream {} }
+        await waitUntilProviderCalled(claude, times: 1)
+        consumer.cancel()
+        _ = try? await consumer.value
+        let isStillRunning = await sut.isRunning
+        XCTAssertTrue(isStillRunning, "The cancelled run must still be unwinding for this test to mean anything")
+
+        claude.gatesStream = false
+        claude.chunks = ["ok"]
+        let second = Task { try await self.run() }
+        // Lets the second call arrive while the first still holds the slot.
+        try await Task.sleep(for: .milliseconds(100))
+        claude.releaseStream()
+        let events = try await second.value
+
+        XCTAssertEqual(text(of: events), "ok")
+        XCTAssertEqual(claude.callCount, 2)
+    }
+
+    private func waitUntilProviderCalled(_ client: StubProviderClient, times: Int, timeout: TimeInterval = 1) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while client.callCount < times, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        XCTAssertEqual(client.callCount, times)
+    }
+
     /// A bounded poll on `isRunning` (`private(set)`, readable from tests in
     /// the same module) instead of a fixed sleep — avoids both a flake on a
     /// loaded CI and an arbitrarily long wait on a fast one.
