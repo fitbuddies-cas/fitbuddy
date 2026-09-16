@@ -32,22 +32,15 @@ final class AnalysisMockProfileTests: XCTestCase {
     private var container: ModelContainer!
     private var store: WorkoutStore!
     private var streamer: StubAnalysisStreamer!
-    private var defaults: UserDefaults!
-    private var suiteName: String!
 
     override func setUp() async throws {
         try await super.setUp()
         container = try ModelContainerFactory.makeInMemory()
         store = WorkoutStore(modelContainer: container)
         streamer = StubAnalysisStreamer()
-        suiteName = "fitbuddy.tests.\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suiteName)
     }
 
     override func tearDown() async throws {
-        defaults.removePersistentDomain(forName: suiteName)
-        defaults = nil
-        suiteName = nil
         streamer = nil
         store = nil
         container = nil
@@ -77,6 +70,7 @@ final class AnalysisMockProfileTests: XCTestCase {
         XCTAssertEqual(report, ValidatedAnalysisReport(
             headline: "You're ready to progress.",
             verdict: .progress,
+            lead: AnalysisReportFactory.progressionReady.lead,
             cards: [
                 .progression(
                     exercise: "Bench Press (Barbell)",
@@ -133,6 +127,9 @@ final class AnalysisMockProfileTests: XCTestCase {
         let report = try XCTUnwrap(outcome?.report)
         XCTAssertEqual(report.verdict, .recover)
         XCTAssertEqual(report.headline, AnalysisReportValidator.recoveryHeadline)
+        // The lead stays the model's: the recovery card right below states the
+        // hint (#170).
+        XCTAssertEqual(report.lead, AnalysisReportFactory.overreached.lead)
         XCTAssertEqual(report.cards, [
             .recovery(
                 reasoning: AnalysisReportValidator.insertedRecoveryReasoning,
@@ -146,6 +143,22 @@ final class AnalysisMockProfileTests: XCTestCase {
                 reasoning: "Two sessions at 70 kg × 5 this week."
             ),
         ])
+    }
+
+    // MARK: - Thin data (#170)
+
+    /// A model that finds nothing to put on a card answers with none, and the
+    /// screen gets a report — lead and summary — rather than the prose
+    /// fallback. The disclosure then starts open.
+    func testAThinAnswerStaysAReportWithoutCards() async throws {
+        let outcome = try await run(.progressionReady, answer: AnalysisReportFactory.thin).outcome
+
+        let report = try XCTUnwrap(outcome?.report)
+        XCTAssertTrue(report.cards.isEmpty)
+        XCTAssertEqual(report.verdict, .hold)
+        XCTAssertEqual(report.lead, AnalysisReportFactory.thin.lead)
+        XCTAssertEqual(report.summary, AnalysisReportFactory.thin.summary)
+        XCTAssertTrue(AnalysisFullAnalysis.startsExpanded(for: report.cards))
     }
 
     // MARK: - Helpers
@@ -164,7 +177,6 @@ final class AnalysisMockProfileTests: XCTestCase {
             exerciseCache: store,
             detailCache: store,
             inference: streamer,
-            rateLimit: AnalysisRateLimitStore(defaults: defaults),
             calendar: Self.calendar,
             now: { now }
         )

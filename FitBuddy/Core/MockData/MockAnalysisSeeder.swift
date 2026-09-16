@@ -16,7 +16,8 @@ import SwiftData
 /// also covers its persistence and the restore path.
 ///
 /// `-fbSeedAnalysis` turns it on and stores the progress report of design 3.4;
-/// `-fbSeedAnalysis recover` (or `progress`, `hold`) picks the report (#179).
+/// `-fbSeedAnalysis recover` (or `progress`, `hold`, `thin`) picks the report
+/// (#179, #170).
 /// Without the argument nothing here runs.
 enum MockAnalysisSeeder {
     static let launchArgument = "-fbSeedAnalysis"
@@ -29,6 +30,8 @@ enum MockAnalysisSeeder {
         "progress": AnalysisReportSamples.progress,
         "recover": AnalysisReportSamples.recover,
         "hold": AnalysisReportSamples.hold,
+        // Design 3.4b: no cards, the full analysis open (#170).
+        "thin": AnalysisReportSamples.thin,
     ]
 
     private static let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "MockAnalysisSeeder")

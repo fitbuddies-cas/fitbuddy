@@ -12,8 +12,9 @@ final class AnalysisResultUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    /// A stored progress report renders as the verdict headline and at least
-    /// one progression card — not as its summary in prose.
+    /// A stored progress report renders as the verdict headline, its lead and
+    /// at least one progression card — not as its summary in prose. With an
+    /// actionable card on screen, the full analysis starts collapsed (#170).
     ///
     /// The report goes straight into the store, so the profile does not
     /// produce it; it is seeded only to put a matching history behind the
@@ -29,11 +30,35 @@ final class AnalysisResultUITests: XCTestCase {
         openResult(in: sut)
 
         XCTAssertEqual(sut.analysisHeadline.label, "You're ready to progress.")
+        sut.assertAppears(sut.analysisLead)
         sut.firstRow(of: sut.progressionCards)
         XCTAssertFalse(
             sut.analysisProse.exists,
             "A stored report must render as cards, not as its summary"
         )
+        sut.assertAppears(sut.fullAnalysisToggle)
+        XCTAssertFalse(sut.fullAnalysis.exists, "With cards on screen the full analysis starts collapsed")
+    }
+
+    /// Thin data (design 3.4b, #170): a stored report without cards shows its
+    /// lead and the full analysis already open — no card and no prose
+    /// fallback.
+    @MainActor
+    func testASeededThinReportShowsTheLeadAndTheOpenFullAnalysis() {
+        let sut = SeededApp(
+            profile: LaunchArgument.Profile.personB,
+            analysisReport: LaunchArgument.Report.thin
+        ).launch()
+
+        openResult(in: sut)
+
+        XCTAssertEqual(sut.analysisHeadline.label, "Hold steady this week.")
+        sut.assertAppears(sut.analysisLead)
+        sut.assertAppears(sut.fullAnalysisToggle)
+        sut.assertAppears(sut.fullAnalysis)
+        XCTAssertEqual(sut.progressionCards.count, 0)
+        XCTAssertEqual(sut.recoveryCards.count, 0)
+        XCTAssertFalse(sut.analysisProse.exists)
     }
 
     /// A stored recovery report renders as its own headline and the recovery

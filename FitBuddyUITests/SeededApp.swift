@@ -132,6 +132,19 @@ struct SeededApp {
         app.descendants(matching: .any).matching(identifier: AccessibilityID.Analysis.recoveryCard)
     }
 
+    var analysisLead: XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.Analysis.lead]
+    }
+
+    var fullAnalysisToggle: XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.Analysis.fullAnalysisToggle]
+    }
+
+    /// Present only while the "Show full analysis" disclosure is open.
+    var fullAnalysis: XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.Analysis.fullAnalysis]
+    }
+
     var analysisProse: XCUIElement {
         app.descendants(matching: .any)[AccessibilityID.Analysis.prose]
     }

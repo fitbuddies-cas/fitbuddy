@@ -59,6 +59,7 @@ final class MockAnalysisSeederTests: XCTestCase {
             AnalysisReportSamples.recover
         )
         XCTAssertEqual(MockAnalysisSeeder.requestedReport(in: ["-fbSeedAnalysis", "hold"]), AnalysisReportSamples.hold)
+        XCTAssertEqual(MockAnalysisSeeder.requestedReport(in: ["-fbSeedAnalysis", "thin"]), AnalysisReportSamples.thin)
         XCTAssertNil(MockAnalysisSeeder.requestedReport(in: []))
     }
 
@@ -79,6 +80,21 @@ final class MockAnalysisSeederTests: XCTestCase {
 
         let stored = try await AnalysisResultStore(modelContainer: container).recent(limit: 5)
         XCTAssertEqual(stored.map(\.report), [AnalysisReportSamples.recover])
+    }
+
+    /// The thin report survives the store with its lead and without cards,
+    /// so the restored screen opens the full analysis (#170).
+    func testTheThinArgumentStoresTheReportWithoutCards() async throws {
+        await MockAnalysisSeeder.seedIfRequested(
+            container: container,
+            launchArguments: ["-fbSeedAnalysis", "thin"],
+            now: { self.reference }
+        )
+
+        let stored = try await AnalysisResultStore(modelContainer: container).recent(limit: 5)
+        XCTAssertEqual(stored.map(\.report), [AnalysisReportSamples.thin])
+        XCTAssertEqual(stored.first?.report?.cards, [])
+        XCTAssertEqual(stored.first?.report?.lead, AnalysisReportSamples.thin.lead)
     }
 
     /// A typo stores nothing rather than a report the test did not ask for.

@@ -46,5 +46,6 @@ enum LaunchArgument {
         static let progress = "progress"
         static let recover = "recover"
         static let hold = "hold"
+        static let thin = "thin"
     }
 }

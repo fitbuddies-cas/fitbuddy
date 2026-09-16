@@ -17,12 +17,13 @@ import Foundation
 enum AnalysisReportFactory {
     // MARK: - Model answers
 
-    /// A wire answer with one card of each kind, `summary` ahead of `cards` as
-    /// the schema declares it.
+    /// A wire answer with one card of each kind, `lead` and `summary` ahead of
+    /// `cards` as the schema declares them.
     static let progressJSON = """
     {
       "headline": "You're ready to progress.",
       "verdict": "progress",
+      "lead": "Bench press can go up. Legs are behind.",
       "summary": "Bench press is ready for 62.5 kg. Legs need a second session.",
       "cards": [
         {
@@ -59,6 +60,7 @@ enum AnalysisReportFactory {
     static let progress = AnalysisReport(
         headline: "You're ready to progress.",
         verdict: .progress,
+        lead: "Bench press can go up. Legs are behind.",
         cards: AnalysisCard.Kind.allCases.map(card),
         summary: "Bench press is ready for 62.5 kg. Legs need a second session."
     )
@@ -67,6 +69,7 @@ enum AnalysisReportFactory {
     static let recover = AnalysisReport(
         headline: "Recover this week.",
         verdict: .recover,
+        lead: "Rest comes before any new load this week.",
         cards: [card(.recovery), card(.note)],
         summary: "You trained almost every day. Rest for two days before adding load."
     )
@@ -75,8 +78,19 @@ enum AnalysisReportFactory {
     static let hold = AnalysisReport(
         headline: "Hold steady this week.",
         verdict: .hold,
+        lead: "Keep your current loads for another week.",
         cards: [card(.note)],
         summary: "Keep your current loads for another week."
+    )
+
+    /// Thin data (#170): nothing supports a card, so there is none — the lead
+    /// and the summary carry the answer.
+    static let thin = AnalysisReport(
+        headline: "Hold steady this week.",
+        verdict: .hold,
+        lead: "Two sessions are too few to judge a trend. Keep your current weights.",
+        cards: [],
+        summary: "You logged two sessions in four weeks. Keep your current weights and log a few more sessions."
     )
 
     /// A model answer of each verdict.
@@ -132,6 +146,7 @@ enum AnalysisReportFactory {
     static let validatedEveryCard = ValidatedAnalysisReport(
         headline: "Recover this week.",
         verdict: .recover,
+        lead: "Rest two days before adding load.",
         cards: [
             validatedCard(.recovery),
             validatedCard(.progression),
@@ -170,7 +185,8 @@ enum AnalysisReportFactory {
         }
     }
 
-    /// A validated report of each verdict, shaped like design 3.4/3.5.
+    /// A validated report of each verdict, shaped like design 3.4/3.5. The
+    /// report without cards of design 3.4b is `AnalysisReportSamples.thin`.
     static func validated(_ verdict: AnalysisVerdict) -> ValidatedAnalysisReport {
         switch verdict {
         case .progress: return AnalysisReportSamples.progress
@@ -192,6 +208,7 @@ enum AnalysisReportFactory {
     static let progressionReady = AnalysisReport(
         headline: "You're ready to progress.",
         verdict: .progress,
+        lead: "Bench press is ready for 62.5 kg.",
         cards: [
             .progression(
                 exercise: "Bench Press (Barbell)",
@@ -210,6 +227,7 @@ enum AnalysisReportFactory {
     static let overreached = AnalysisReport(
         headline: "You're ready to progress.",
         verdict: .progress,
+        lead: "Bench press can go up to 72.5 kg.",
         cards: [
             .progression(
                 exercise: "Bench Press (Barbell)",

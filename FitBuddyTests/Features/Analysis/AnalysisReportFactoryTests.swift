@@ -29,10 +29,29 @@ final class AnalysisReportFactoryTests: XCTestCase {
     }
 
     func testTheProfileAnswersDecodeFromTheWire() throws {
-        for report in [AnalysisReportFactory.progressionReady, AnalysisReportFactory.overreached] {
+        for report in [
+            AnalysisReportFactory.progressionReady,
+            AnalysisReportFactory.overreached,
+            AnalysisReportFactory.thin,
+        ] {
             let json = try XCTUnwrap(String(data: JSONEncoder().encode(report), encoding: .utf8))
 
             XCTAssertEqual(AnalysisReportParser.event(for: json), .report(report))
         }
+    }
+
+    /// #170: every model answer carries a lead, and the thin one no card.
+    func testEveryAnswerHasALeadAndTheThinOneNoCards() {
+        let answers = AnalysisVerdict.allCases.map(AnalysisReportFactory.report) + [
+            AnalysisReportFactory.progressionReady,
+            AnalysisReportFactory.overreached,
+            AnalysisReportFactory.thin,
+        ]
+        for answer in answers {
+            XCTAssertFalse(answer.lead.trimmingCharacters(in: .whitespaces).isEmpty, answer.headline)
+        }
+        XCTAssertTrue(AnalysisReportFactory.thin.cards.isEmpty)
+        XCTAssertTrue(AnalysisReportSamples.thin.cards.isEmpty)
+        XCTAssertFalse(AnalysisReportFactory.validatedEveryCard.lead.isEmpty)
     }
 }
