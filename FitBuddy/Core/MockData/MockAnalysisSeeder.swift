@@ -15,9 +15,21 @@ import SwiftData
 /// AC10). The report goes through the real `AnalysisResultStore`, so the test
 /// also covers its persistence and the restore path.
 ///
-/// `-fbSeedAnalysis` turns it on; without the argument nothing here runs.
+/// `-fbSeedAnalysis` turns it on and stores the progress report of design 3.4;
+/// `-fbSeedAnalysis recover` (or `progress`, `hold`) picks the report (#179).
+/// Without the argument nothing here runs.
 enum MockAnalysisSeeder {
     static let launchArgument = "-fbSeedAnalysis"
+
+    /// The report a bare `-fbSeedAnalysis` stores.
+    static let defaultReportName = "progress"
+
+    /// The reports a launch can ask for, by the name after the argument.
+    static let reports: [String: ValidatedAnalysisReport] = [
+        "progress": AnalysisReportSamples.progress,
+        "recover": AnalysisReportSamples.recover,
+        "hold": AnalysisReportSamples.hold,
+    ]
 
     private static let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "MockAnalysisSeeder")
 
@@ -25,7 +37,24 @@ enum MockAnalysisSeeder {
         launchArguments.contains(launchArgument)
     }
 
-    /// Replaces the stored history with the progress report of design 3.4.
+    /// The report the launch asked for, or `nil` when it asked for none.
+    ///
+    /// A bare argument — last, or followed by another flag — means the
+    /// progress report, as before #179. An unknown name means none, as an
+    /// unknown profile does in `MockDataSeeder`: a typo leaves the tab empty
+    /// rather than on a silently different report.
+    static func requestedReport(
+        in launchArguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> ValidatedAnalysisReport? {
+        guard let flag = launchArguments.firstIndex(of: launchArgument) else { return nil }
+        let value = launchArguments.index(after: flag)
+        guard value < launchArguments.endIndex, !launchArguments[value].hasPrefix("-") else {
+            return reports[defaultReportName]
+        }
+        return reports[launchArguments[value]]
+    }
+
+    /// Replaces the stored history with the requested report.
     ///
     /// Replaces rather than appends: `-fbResetState` clears the Keychain and
     /// the defaults but not SwiftData, so without the wipe a second launch
@@ -39,8 +68,11 @@ enum MockAnalysisSeeder {
         now: () -> Date = Date.init
     ) async {
         guard isRequested(in: launchArguments) else { return }
+        guard let report = requestedReport(in: launchArguments) else {
+            logger.error("Unknown analysis report requested; nothing seeded")
+            return
+        }
         let store = AnalysisResultStore(modelContainer: container)
-        let report = AnalysisReportSamples.progress
         do {
             try await store.deleteAll()
             try await store.save(

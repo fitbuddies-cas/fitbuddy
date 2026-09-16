@@ -4,7 +4,7 @@ import XCTest
 /// How a stored row becomes what the screen renders (US-14 AC6, #177).
 final class AnalysisOutcomeTests: XCTestCase {
     func testAStoredReportRendersAsItsCards() {
-        let report = ValidatedAnalysisReportFixtures.everyCard
+        let report = AnalysisReportFactory.validatedEveryCard
         let snapshot = AnalysisResultSnapshot(
             id: UUID(),
             text: report.summary,
@@ -42,7 +42,7 @@ final class AnalysisOutcomeTests: XCTestCase {
     }
 
     func testAValidatedReportWithCardsStaysAReport() {
-        let report = ValidatedAnalysisReportFixtures.everyCard
+        let report = AnalysisReportFactory.validatedEveryCard
         XCTAssertEqual(AnalysisOutcome(validated: report), .report(report))
     }
 

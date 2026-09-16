@@ -58,7 +58,7 @@ final class AnalysisCardTests: XCTestCase {
     }
 
     func testEveryCardSurvivesAnEncodeDecodeRoundTrip() throws {
-        for card in AnalysisReportFixtures.progress.cards {
+        for card in AnalysisReportFactory.progress.cards {
             let data = try JSONEncoder().encode(card)
             XCTAssertEqual(try JSONDecoder().decode(AnalysisCard.self, from: data), card)
         }
@@ -87,10 +87,10 @@ final class AnalysisCardTests: XCTestCase {
     func testDecodesAReportWithEveryCardKind() throws {
         let report = try JSONDecoder().decode(
             AnalysisReport.self,
-            from: Data(AnalysisReportFixtures.progressJSON.utf8)
+            from: Data(AnalysisReportFactory.progressJSON.utf8)
         )
 
-        XCTAssertEqual(report, AnalysisReportFixtures.progress)
+        XCTAssertEqual(report, AnalysisReportFactory.progress)
     }
 
     func testDecodesTheHoldVerdict() throws {

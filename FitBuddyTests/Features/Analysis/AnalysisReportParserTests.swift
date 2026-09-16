@@ -5,18 +5,18 @@ import XCTest
 /// parser produces something to show — or `nil` when showing it would mean
 /// showing raw JSON, so the chain can ask the next provider.
 final class AnalysisReportParserTests: XCTestCase {
-    private let fixture = AnalysisReportFixtures.progressJSON
+    private let fixture = AnalysisReportFactory.progressJSON
 
     // MARK: - Report
 
     func testDecodesASchemaConformingAnswer() {
-        XCTAssertEqual(AnalysisReportParser.event(for: fixture), .report(AnalysisReportFixtures.progress))
+        XCTAssertEqual(AnalysisReportParser.event(for: fixture), .report(AnalysisReportFactory.progress))
     }
 
     func testDecodesAnAnswerWrappedInACodeFence() {
         let event = AnalysisReportParser.event(for: "```json\n\(fixture)\n```")
 
-        XCTAssertEqual(event, .report(AnalysisReportFixtures.progress))
+        XCTAssertEqual(event, .report(AnalysisReportFactory.progress))
     }
 
     func testDecodesAnAnswerInASingleLineFence() {
@@ -24,13 +24,13 @@ final class AnalysisReportParserTests: XCTestCase {
 
         let event = AnalysisReportParser.event(for: "```json \(oneLine)```")
 
-        XCTAssertEqual(event, .report(AnalysisReportFixtures.progress))
+        XCTAssertEqual(event, .report(AnalysisReportFactory.progress))
     }
 
     func testDecodesAnAnswerWithTextBeforeTheFence() {
         let event = AnalysisReportParser.event(for: "Here is your report:\n```json\n\(fixture)\n```\nGood luck!")
 
-        XCTAssertEqual(event, .report(AnalysisReportFixtures.progress))
+        XCTAssertEqual(event, .report(AnalysisReportFactory.progress))
     }
 
     /// A report whose summary is blank still gets prose, built from its

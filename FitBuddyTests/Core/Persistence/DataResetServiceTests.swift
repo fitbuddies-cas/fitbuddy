@@ -204,7 +204,7 @@ extension DataResetServiceTests {
         for index in 0..<3 {
             try await results.save(
                 text: "Analysis \(index)",
-                report: index == 0 ? ValidatedAnalysisReportFixtures.everyCard : nil,
+                report: index == 0 ? AnalysisReportFactory.validatedEveryCard : nil,
                 provider: .claude,
                 generatedAt: reference.addingTimeInterval(Double(index) * 3_600),
                 context: AnalysisContext(sessionCount: 12, window: .default)

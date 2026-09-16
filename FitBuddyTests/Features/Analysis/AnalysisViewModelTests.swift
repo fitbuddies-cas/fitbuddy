@@ -107,7 +107,7 @@ final class AnalysisViewModelTests: XCTestCase {
     }
 
     func testOnlyTheResultCarriesAnOutcome() {
-        let report = ValidatedAnalysisReportFixtures.everyCard
+        let report = AnalysisReportFactory.validatedEveryCard
         XCTAssertEqual(AnalysisState.result(.prose("whole")).outcome, .prose("whole"))
         XCTAssertEqual(AnalysisState.result(.report(report)).outcome, .report(report))
         XCTAssertNil(AnalysisState.running.outcome)
@@ -120,7 +120,7 @@ final class AnalysisViewModelTests: XCTestCase {
     }
 
     func testTheOutcomeReadsAsProse() {
-        let report = ValidatedAnalysisReportFixtures.everyCard
+        let report = AnalysisReportFactory.validatedEveryCard
         XCTAssertEqual(AnalysisOutcome.report(report).text, report.summary)
         XCTAssertEqual(AnalysisOutcome.report(report).report, report)
         XCTAssertEqual(AnalysisOutcome.prose("whole").text, "whole")
@@ -137,7 +137,7 @@ final class AnalysisViewModelTests: XCTestCase {
             .attempting(.claude),
             .text("An answer from a provider that then fails"),
             .attempting(.gemini),
-            .report(AnalysisReportFixtures.progress),
+            .report(AnalysisReportFactory.progress),
         ])
         let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache())
         var published: [AnalysisState] = []
@@ -156,21 +156,21 @@ final class AnalysisViewModelTests: XCTestCase {
         guard case .report(let report)? = published.last?.outcome else {
             return XCTFail("expected a report outcome, got \(String(describing: published.last))")
         }
-        XCTAssertEqual(report.summary, AnalysisReportFixtures.progress.summary)
+        XCTAssertEqual(report.summary, AnalysisReportFactory.progress.summary)
     }
 
     /// Previews have no exercise cache: the prompt carried no exercise data,
     /// so the cards cannot be checked and the summary is shown instead.
     func testAReportWithoutAnExerciseCacheIsShownAndStoredAsItsSummary() async throws {
-        await streamer.setReport(AnalysisReportFixtures.progress)
+        await streamer.setReport(AnalysisReportFactory.progress)
         let sut = makeSUT()
 
         await sut.start()
 
-        XCTAssertEqual(sut.state, .result(.prose(AnalysisReportFixtures.progress.summary)))
+        XCTAssertEqual(sut.state, .result(.prose(AnalysisReportFactory.progress.summary)))
         XCTAssertFalse(sut.isTakingLong)
         let latest = try await results.latest()
-        XCTAssertEqual(latest?.text, AnalysisReportFixtures.progress.summary)
+        XCTAssertEqual(latest?.text, AnalysisReportFactory.progress.summary)
         XCTAssertNil(latest?.report)
         XCTAssertEqual(latest?.provider, .claude)
     }
@@ -353,7 +353,7 @@ final class AnalysisViewModelTests: XCTestCase {
     /// summary as the prose fallback and the provider, and a restart brings
     /// back the same cards.
     func testTheValidatedReportIsStoredAndRestored() async throws {
-        await streamer.setReport(AnalysisReportFixtures.progress, from: .gemini)
+        await streamer.setReport(AnalysisReportFactory.progress, from: .gemini)
         let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache())
         await sut.start()
         let shown = try XCTUnwrap(sut.state.outcome?.report)

@@ -24,8 +24,9 @@ enum LaunchArgument {
     /// Fills the cache from a bundled mock history; takes a profile
     /// (`MockDataSeeder.launchArgument`, #148).
     static let seedMockData = "-fbSeedMockData"
-    /// Stores an analysis with a progress report, so the analysis tab
-    /// restores its cards (`MockAnalysisSeeder.launchArgument`, #177).
+    /// Stores an analysis with a report, so the analysis tab restores its
+    /// cards; takes a report name (`MockAnalysisSeeder.launchArgument`, #177,
+    /// #179).
     static let seedAnalysis = "-fbSeedAnalysis"
 
     enum Verdict {
@@ -36,5 +37,14 @@ enum LaunchArgument {
     enum Profile {
         static let personA = "person-a"
         static let personB = "person-b"
+        static let progressionReady = "progression-ready"
+        static let overreached = "overreached"
+    }
+
+    /// The reports `seedAnalysis` can store (`MockAnalysisSeeder.reports`).
+    enum Report {
+        static let progress = "progress"
+        static let recover = "recover"
+        static let hold = "hold"
     }
 }

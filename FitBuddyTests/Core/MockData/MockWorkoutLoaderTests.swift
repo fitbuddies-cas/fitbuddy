@@ -132,6 +132,52 @@ final class MockWorkoutLoaderTests: XCTestCase {
         XCTAssertEqual(sessions, 2, accuracy: 0.5)
     }
 
+    // MARK: - Analysis profiles (#179)
+
+    /// US-14 AC2: bench press ends on three sessions at 60 kg × 5, every
+    /// working set at RPE 7 or lower, after a lighter one — a load the lift
+    /// grew into rather than one it started on.
+    func testProgressionReadyEndsBenchOnThreeCleanSessionsAtSixtyKilos() throws {
+        let sessions = try benchSessions(of: .progressionReady)
+        XCTAssertGreaterThan(sessions.count, 3)
+
+        for sets in sessions.suffix(3) {
+            XCTAssertFalse(sets.isEmpty)
+            for set in sets {
+                XCTAssertEqual(set.weightKg, 60)
+                XCTAssertEqual(set.reps, 5)
+                XCTAssertLessThanOrEqual(try XCTUnwrap(set.rpe), 7)
+            }
+        }
+        let before = try XCTUnwrap(sessions.dropLast(3).last)
+        XCTAssertTrue(before.allSatisfy { ($0.weightKg ?? 0) < 60 })
+    }
+
+    /// US-14 AC4: six training days in the seven the recovery figures count,
+    /// whatever the time of day the loader re-anchors at — the reference day
+    /// or the day before can hold the newest session.
+    func testOverreachedTrainsOnSixOfTheLastSevenDaysAtAnyHour() throws {
+        for hour in [0, 6, 12, 18, 23] {
+            let reference = utcMidnight(of: now).addingTimeInterval(Double(hour) * 3_600 + 60)
+            let workouts = try MockWorkoutLoader(bundle: Bundle(for: Workout.self), now: { reference })
+                .workouts(for: .overreached)
+
+            XCTAssertEqual(trainingDaysInLastSeven(of: workouts, endingAt: reference), 6, "at \(hour):01 UTC")
+        }
+    }
+
+    /// The progression profile stays clear of the recovery threshold, so its
+    /// progression is shown without a recovery card.
+    func testProgressionReadyStaysBelowTheRecoveryThresholdAtAnyHour() throws {
+        for hour in [0, 6, 12, 18, 23] {
+            let reference = utcMidnight(of: now).addingTimeInterval(Double(hour) * 3_600 + 60)
+            let workouts = try MockWorkoutLoader(bundle: Bundle(for: Workout.self), now: { reference })
+                .workouts(for: .progressionReady)
+
+            XCTAssertLessThan(trainingDaysInLastSeven(of: workouts, endingAt: reference), 6, "at \(hour):01 UTC")
+        }
+    }
+
     // MARK: - Re-anchoring
 
     func testWorkoutsFallIntoTheDashboardWindow() throws {
@@ -266,6 +312,37 @@ final class MockWorkoutLoaderTests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    private static let utc: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+        return calendar
+    }()
+
+    private func utcMidnight(of date: Date) -> Date {
+        Self.utc.startOfDay(for: date)
+    }
+
+    /// The working sets of every bench press session, oldest first.
+    private func benchSessions(of profile: MockWorkoutProfile) throws -> [[ExerciseSet]] {
+        try loader.workouts(for: profile)
+            .sorted { $0.startTime < $1.startTime }
+            .flatMap(\.exercises)
+            .filter { $0.title == "Bench Press (Barbell)" }
+            .map { $0.sets.filter { $0.type.countsTowardsVolume } }
+    }
+
+    /// Distinct UTC days with a session in the seven days the recovery figures
+    /// count (`RecoveryMetrics.lastSevenDaysSessions`).
+    private func trainingDaysInLastSeven(of workouts: [Workout], endingAt reference: Date) -> Int {
+        let start = AnalysisWindow.weekStart(0, endingAt: reference, calendar: Self.utc)
+        let end = start.addingTimeInterval(7 * 86_400)
+        return Set(workouts
+            .map(\.startTime)
+            .filter { $0 >= start && $0 < end }
+            .map { Self.utc.startOfDay(for: $0) }
+        ).count
+    }
 
     /// Dashboard volume rule (#26): weight × reps, warm-ups excluded.
     private func totalVolume(of workouts: [Workout]) -> Double {

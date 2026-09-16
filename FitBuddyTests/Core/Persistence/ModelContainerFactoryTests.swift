@@ -103,7 +103,7 @@ final class ModelContainerFactoryTests: XCTestCase {
         XCTAssertEqual(migrated.map(\.report), [nil, nil])
         XCTAssertEqual(migrated.map(\.provider), [nil, nil])
 
-        let report = ValidatedAnalysisReportFixtures.everyCard
+        let report = AnalysisReportFactory.validatedEveryCard
         try await store.save(
             text: report.summary,
             report: report,

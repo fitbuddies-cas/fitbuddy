@@ -37,6 +37,11 @@ final class MockDataSeederTests: XCTestCase {
     func testReadsTheProfileAfterTheArgument() {
         XCTAssertEqual(MockDataSeeder.requestedProfile(in: ["-fbSeedMockData", "person-a"]), .personA)
         XCTAssertEqual(MockDataSeeder.requestedProfile(in: ["-fbSeedMockData", "person-b"]), .personB)
+        XCTAssertEqual(
+            MockDataSeeder.requestedProfile(in: ["-fbSeedMockData", "progression-ready"]),
+            .progressionReady
+        )
+        XCTAssertEqual(MockDataSeeder.requestedProfile(in: ["-fbSeedMockData", "overreached"]), .overreached)
     }
 
     func testNoArgumentMeansNoProfile() {
