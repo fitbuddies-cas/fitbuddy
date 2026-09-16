@@ -163,6 +163,7 @@ struct ExerciseProgressionView: View {
             )
         }
         .padding(.top, 28)
+        .accessibilityIdentifier(AccessibilityID.Progression.unavailable)
     }
 
     private var failureView: some View {

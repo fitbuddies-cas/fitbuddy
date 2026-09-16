@@ -55,6 +55,12 @@ struct SeededApp {
         app.descendants(matching: .any)[AccessibilityID.WorkoutDetail.root]
     }
 
+    /// The exercise cards inside a session — each opens that movement's
+    /// statistics (#162).
+    var exerciseCards: XCUIElementQuery {
+        app.descendants(matching: .any).matching(identifier: AccessibilityID.WorkoutDetail.exerciseCard)
+    }
+
     var exercisesLink: XCUIElement {
         app.buttons[AccessibilityID.Dashboard.exercisesLink]
     }
@@ -73,6 +79,10 @@ struct SeededApp {
 
     var progressionChart: XCUIElement {
         app.descendants(matching: .any)[AccessibilityID.Progression.chart]
+    }
+
+    var unavailableNotice: XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.Progression.unavailable]
     }
 
     var insufficientDataNotice: XCUIElement {

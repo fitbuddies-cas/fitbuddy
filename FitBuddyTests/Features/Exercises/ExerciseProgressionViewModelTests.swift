@@ -171,14 +171,10 @@ final class ExerciseProgressionViewModelTests: XCTestCase {
     private func makeSUT() -> ExerciseProgressionViewModel {
         ExerciseProgressionViewModel(
             cache: cache,
-            exercise: ExerciseSummary(
+            exercise: ExerciseIdentity(
                 id: "bench",
                 title: "Bench Press (Barbell)",
-                muscleGroup: .chest,
-                sessionCount: 4,
-                countedSetCount: 16,
-                volumeKg: 12_000,
-                lastPerformed: reference
+                muscleGroup: .chest
             ),
             now: { self.reference }
         )
