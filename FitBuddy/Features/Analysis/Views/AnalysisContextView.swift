@@ -54,6 +54,24 @@ struct AnalysisContextView: View {
         return Text("Based on ")
             + Text(counted).foregroundColor(.fbInk).fontWeight(.semibold)
             + Text(" · last \(context.window.weeks) weeks")
+            + profileSuffix
+    }
+
+    /// The profile, appended to the basis line when there is one (US-13 AC4):
+    /// "· goal: improve endurance · 1–3 years of strength training". It went
+    /// into the prompt, so a basis line without it would be incomplete — and
+    /// the user would have no way to see that a stale goal is still steering
+    /// the recommendation.
+    private var profileSuffix: Text {
+        var parts: [String] = []
+        if let goal = context.profile.goal {
+            parts.append("goal: \(goal.displayName.lowercased())")
+        }
+        if let experience = context.profile.experience {
+            parts.append("\(experience.displayName.lowercased()) of strength training")
+        }
+        guard !parts.isEmpty else { return Text("") }
+        return Text(" · " + parts.joined(separator: " · "))
     }
 
     /// Why the period is not the usual four weeks. Carried over from

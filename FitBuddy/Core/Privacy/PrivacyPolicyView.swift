@@ -37,6 +37,10 @@ struct PrivacyPolicyView: View {
                             application together with the OAuth access and refresh tokens Polar \
                             issues once you authorize FitBuddy.
                             • The time and version of your consent.
+                            • Your training goal and strength training experience, if you \
+                            choose to enter them — sent to the AI provider together with your \
+                            training data when you run an analysis, and stored only on this \
+                            device otherwise.
                             """
                         )
                         Divider().overlay(Color.fbDivider)
