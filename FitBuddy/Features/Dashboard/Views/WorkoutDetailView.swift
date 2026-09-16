@@ -50,7 +50,22 @@ struct WorkoutDetailView: View {
         case .loaded(let detail):
             header(detail)
             ForEach(detail.exercises) { exercise in
-                ExerciseDetailCard(exercise: exercise, sessionVolumeKg: detail.volumeKg)
+                NavigationLink(value: exercise.identity) {
+                    ExerciseDetailCard(exercise: exercise, sessionVolumeKg: detail.volumeKg)
+                }
+                // Keeps the card's own styling: the default link tint would
+                // repaint every set row in accent blue.
+                .buttonStyle(.plain)
+                // `.plain` also costs the announcement — without this VoiceOver
+                // reads the card as a button and gives no hint that it opens
+                // the movement's statistics.
+                .accessibilityAddTraits(.isLink)
+                // The trait says it navigates, the hint says where. Kept
+                // alongside `.isLink` rather than replacing it, so a card and
+                // the session rows on the dashboard announce themselves the
+                // same way.
+                .accessibilityHint("Shows the progression curve")
+                .accessibilityIdentifier(AccessibilityID.WorkoutDetail.exerciseCard)
             }
             if detail.exercises.isEmpty {
                 emptyExercisesView

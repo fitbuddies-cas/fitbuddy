@@ -68,7 +68,7 @@ extension PreviewProgressionCache {
             cache: PreviewProgressionCache(
                 progression: ExerciseProgression(id: bench.id, title: bench.title, points: points)
             ),
-            exercise: bench
+            exercise: bench.identity
         )
     }
 }

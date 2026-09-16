@@ -59,6 +59,9 @@ enum AccessibilityID {
 
     enum WorkoutDetail {
         static let root = "workoutDetail.root"
+        /// Every exercise card carries it — each one opens that movement's
+        /// statistics (#162).
+        static let exerciseCard = "workoutDetail.exerciseCard"
     }
 
     enum Exercises {
@@ -70,5 +73,6 @@ enum AccessibilityID {
         static let root = "progression.root"
         static let chart = "progression.chart"
         static let insufficientData = "progression.insufficientData"
+        static let unavailable = "progression.unavailable"
     }
 }

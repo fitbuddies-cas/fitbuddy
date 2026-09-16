@@ -11,7 +11,7 @@ import SwiftUI
 /// and combines with the search field (AC3); both hang off the same view model.
 struct ExerciseListView: View {
     @StateObject private var viewModel: ExerciseListViewModel
-    private let makeProgressionViewModel: (ExerciseSummary) -> ExerciseProgressionViewModel
+    private let makeProgressionViewModel: (ExerciseIdentity) -> ExerciseProgressionViewModel
 
     /// - Parameters:
     ///   - viewModel: Built lazily — the autoclosure is evaluated once, when
@@ -20,7 +20,7 @@ struct ExerciseListView: View {
     ///     per rendered row — see `.navigationDestination` below (#42).
     init(
         viewModel: @autoclosure @escaping () -> ExerciseListViewModel,
-        makeProgressionViewModel: @escaping (ExerciseSummary) -> ExerciseProgressionViewModel
+        makeProgressionViewModel: @escaping (ExerciseIdentity) -> ExerciseProgressionViewModel
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
         self.makeProgressionViewModel = makeProgressionViewModel
@@ -32,11 +32,6 @@ struct ExerciseListView: View {
             .navigationTitle("Exercises")
             .navigationBarTitleDisplayMode(.inline)
             .accessibilityIdentifier(AccessibilityID.Exercises.root)
-            // By value, so the destination is built when a row is tapped
-            // rather than once per row while the list renders (#42).
-            .navigationDestination(for: ExerciseSummary.self) { exercise in
-                ExerciseProgressionView(viewModel: makeProgressionViewModel(exercise))
-            }
             .task { await viewModel.load() }
     }
 
@@ -115,7 +110,10 @@ struct ExerciseListView: View {
                     if index > 0 {
                         Divider().overlay(Color.fbDivider)
                     }
-                    NavigationLink(value: exercise) {
+                    // The identity, not the summary: the same value a card in
+                    // a workout pushes, so both routes resolve through one
+                    // destination on the stack root (#162).
+                    NavigationLink(value: exercise.identity) {
                         ExerciseSummaryRow(exercise: exercise)
                     }
                     // The row paints itself; the link only makes it tappable.

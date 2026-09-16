@@ -55,6 +55,12 @@ struct SeededApp {
         app.descendants(matching: .any)[AccessibilityID.WorkoutDetail.root]
     }
 
+    /// The exercise cards inside a session — each opens that movement's
+    /// statistics (#162).
+    var exerciseCards: XCUIElementQuery {
+        app.descendants(matching: .any).matching(identifier: AccessibilityID.WorkoutDetail.exerciseCard)
+    }
+
     var exercisesLink: XCUIElement {
         app.buttons[AccessibilityID.Dashboard.exercisesLink]
     }
@@ -75,6 +81,10 @@ struct SeededApp {
         app.descendants(matching: .any)[AccessibilityID.Progression.chart]
     }
 
+    var unavailableNotice: XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.Progression.unavailable]
+    }
+
     var insufficientDataNotice: XCUIElement {
         app.descendants(matching: .any)[AccessibilityID.Progression.insufficientData]
     }
@@ -82,6 +92,22 @@ struct SeededApp {
     /// The system back button of the pushed screen.
     var backButton: XCUIElement {
         app.navigationBars.buttons.firstMatch
+    }
+
+    /// Blocks until the progression screen has finished its read — the chart
+    /// or the "not enough data" hint is on screen.
+    ///
+    /// `progression` alone is satisfied by the `.loading` state, so anything
+    /// asserted about the *outcome* before this has waited would be asserted
+    /// against a spinner.
+    func awaitSettledProgression(file: StaticString = #filePath, line: UInt = #line) {
+        let settled = app.descendants(matching: .any).matching(
+            NSPredicate(
+                format: "identifier IN %@",
+                [AccessibilityID.Progression.chart, AccessibilityID.Progression.insufficientData]
+            )
+        )
+        firstRow(of: settled, file: file, line: line)
     }
 
     // MARK: - Assertions

@@ -210,7 +210,7 @@ struct RootView: View {
     /// container the list just read, so the curve and the row it was opened
     /// from describe the same window.
     private func makeExerciseProgressionViewModel(
-        for exercise: ExerciseSummary
+        for exercise: ExerciseIdentity
     ) -> ExerciseProgressionViewModel {
         ExerciseProgressionViewModel(
             cache: WorkoutStore(modelContainer: modelContext.container),

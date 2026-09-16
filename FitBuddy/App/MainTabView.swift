@@ -27,7 +27,7 @@ struct MainTabView: View {
     private let makeStravaConnectionViewModel: @MainActor () -> StravaConnectionViewModel
     private let makeWorkoutDetailViewModel: (String) -> WorkoutDetailViewModel
     private let makeExerciseListViewModel: () -> ExerciseListViewModel
-    private let makeExerciseProgressionViewModel: (ExerciseSummary) -> ExerciseProgressionViewModel
+    private let makeExerciseProgressionViewModel: (ExerciseIdentity) -> ExerciseProgressionViewModel
     private let makeAnalysisHistoryViewModel: () -> AnalysisHistoryViewModel
 
     /// Changes whenever something outside the dashboard invalidated the cache —
@@ -67,7 +67,7 @@ struct MainTabView: View {
         makeStravaConnectionViewModel: @escaping @MainActor () -> StravaConnectionViewModel,
         makeWorkoutDetailViewModel: @escaping (String) -> WorkoutDetailViewModel,
         makeExerciseListViewModel: @escaping () -> ExerciseListViewModel,
-        makeExerciseProgressionViewModel: @escaping (ExerciseSummary) -> ExerciseProgressionViewModel,
+        makeExerciseProgressionViewModel: @escaping (ExerciseIdentity) -> ExerciseProgressionViewModel,
         makeAnalysisHistoryViewModel: @escaping () -> AnalysisHistoryViewModel,
         reloadToken: Int = 0,
         onRenewSource: @escaping (ConnectorSource) -> Void = { _ in }

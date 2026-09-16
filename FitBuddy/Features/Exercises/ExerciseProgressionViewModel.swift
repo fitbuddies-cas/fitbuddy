@@ -6,15 +6,16 @@ import Foundation
 /// for the same reason: the dashboard owns the sync, so opening this screen
 /// never costs a Hevy request.
 ///
-/// It holds the `ExerciseSummary` it was pushed with, so the title and the
+/// It holds the `ExerciseIdentity` it was pushed with, so the title and the
 /// muscle group are on screen from the first frame instead of appearing once
-/// the read lands. The row the user tapped already knew them.
+/// the read lands. Whatever the user tapped — a list row or a card inside a
+/// session — already knew them.
 @MainActor
 final class ExerciseProgressionViewModel: ObservableObject {
     @Published private(set) var state: ExerciseProgressionState = .loading
 
-    /// The row this screen was opened from.
-    let exercise: ExerciseSummary
+    /// The movement this screen was opened for.
+    let exercise: ExerciseIdentity
 
     private let cache: ExerciseProgressionReading
     private let calendar: Calendar
@@ -22,11 +23,11 @@ final class ExerciseProgressionViewModel: ObservableObject {
 
     /// - Parameters:
     ///   - cache: Read access to the cached window (`WorkoutStore` in the app).
-    ///   - exercise: The tapped row — its `id` identifies the movement.
+    ///   - exercise: What was tapped — its `id` identifies the movement.
     ///   - now: Injectable clock, so the window boundary is testable.
     init(
         cache: ExerciseProgressionReading,
-        exercise: ExerciseSummary,
+        exercise: ExerciseIdentity,
         calendar: Calendar = .current,
         now: @escaping () -> Date = Date.init
     ) {
