@@ -35,6 +35,13 @@ enum AnalysisReportValidator {
     /// (US-14 AC4).
     static let recoveryHeadline = "Recover this week."
 
+    /// The lead of a report the app turned into a recovery verdict (US-14 AC4,
+    /// #170). Replaces the model's, which was written for the verdict the app
+    /// overruled and would contradict the headline right above it.
+    static func recoveryLead(trainingDays: Int) -> String {
+        "You trained on \(trainingDays) of the last 7 days. Take the suggested rest before adding load."
+    }
+
     /// The reasoning of a recovery card the app inserts when the model left it
     /// out, or sent it without a reason (US-14 AC4).
     static let insertedRecoveryReasoning =
@@ -52,12 +59,13 @@ enum AnalysisReportValidator {
         var cards = report.cards.compactMap { validate($0, against: evidence) }
         var verdict = report.verdict
         var headline = report.headline
+        var lead = report.lead
 
         // US-3 AC6 / US-14 AC4: at 6 of 7 days no progression is shown without
         // the recovery hint, and the headline says so. A model recovery card
         // always survives at that count, so a missing one means the model left
-        // it out. The lead stays the model's: it is prose like the summary,
-        // and the recovery card right below it states the hint (#170).
+        // it out. An overruled verdict takes the model's lead with it: that
+        // lead argues for the verdict the app just replaced (#170).
         if evidence.recovery.needsRecovery {
             if !cards.contains(where: { $0.kind == .recovery }) {
                 cards.insert(
@@ -68,13 +76,14 @@ enum AnalysisReportValidator {
             if verdict != .recover {
                 verdict = .recover
                 headline = recoveryHeadline
+                lead = recoveryLead(trainingDays: evidence.recovery.trainingDays)
             }
         }
 
         return ValidatedAnalysisReport(
             headline: headline,
             verdict: verdict,
-            lead: report.lead,
+            lead: lead,
             cards: capped(cards),
             summary: report.summary
         )

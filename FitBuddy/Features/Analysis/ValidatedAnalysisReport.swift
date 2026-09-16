@@ -17,3 +17,27 @@ struct ValidatedAnalysisReport: Codable, Equatable, Sendable {
     let cards: [AnalysisReportCard]
     let summary: String
 }
+
+extension ValidatedAnalysisReport {
+    /// Whether the lead has text to show (#170).
+    var hasLead: Bool {
+        !Self.normalized(lead).isEmpty
+    }
+
+    /// Whether the "Show full analysis" disclosure has anything to add: the
+    /// summary has text, and it is more than the lead once more (#170). A
+    /// summary that equals the lead, or that the lead already contains, would
+    /// only repeat it.
+    var hasFullAnalysis: Bool {
+        let summary = Self.normalized(AnalysisTextFormatter.plainText(from: self.summary))
+        guard !summary.isEmpty else { return false }
+        let lead = Self.normalized(lead)
+        return lead.isEmpty || !lead.contains(summary)
+    }
+
+    /// `text` trimmed, with every run of whitespace collapsed to one space and
+    /// compared case-insensitively.
+    private static func normalized(_ text: String) -> String {
+        text.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
+    }
+}
