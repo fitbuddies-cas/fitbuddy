@@ -93,6 +93,25 @@ Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 | AC1 | User öffnet die Übungsübersicht mit ≥10 Einträgen | User tippt in das Suchfeld | Liste filtert in Echtzeit (case-insensitive). Keine Ergebnisse → Hinweis «Keine Übungen gefunden». |
 | AC2 | User öffnet den Muskelgruppen-Filter | User wählt «Beine» | Nur Übungen, die Hevy der Kategorie Beine zuordnet, werden angezeigt. Mehrfachauswahl möglich. |
 
+### 1.2.4 US-13 · Trainingsprofil für gezieltere AI-Empfehlungen
+**Als** Nutzer **möchte ich** beim Onboarding mein Trainingsziel und meine Erfahrung angeben, **damit** die AI-Analyse Empfehlungen gibt, die zu dem passen, worauf ich hintrainiere, statt zu einem Durchschnittsnutzer.
+
+| # | Given | When | Then |
+|---|---|---|---|
+| AC1 | Onboarding Schritt 1–3 abgeschlossen | Schritt 4 erscheint | Zwei Fragen: Ziel (Muskelaufbau / Kraft / Fettabbau / Ausdauer verbessern / Fitness halten) und Krafttrainings-Erfahrung (<1 Jahr / 1–3 Jahre / >3 Jahre) |
+| AC2 | User will die Angaben nicht machen | «Skip for now» wird getippt | Onboarding ist abgeschlossen, die App funktioniert unverändert, der Schritt erscheint nicht erneut |
+| AC3 | Ein Profil ist gespeichert | AI-Analyse wird gestartet | Ziel und Erfahrung stehen als «Profile»-Abschnitt im User-Prompt. Der Abschnitt hält fest, dass nur Kraftsessions vorliegen. Ohne Profil entfällt er ersatzlos. |
+| AC4 | Ein Profil ist gespeichert | Analyse-Screen zeigt die Datenbasis (US-6) | Ziel und Erfahrung sind dort mit aufgeführt |
+| AC5 | Profil wurde gesetzt oder übersprungen | Settings werden geöffnet | Bereich «Training profile» erlaubt Ändern und Entfernen |
+
+> **Fünf Ziele, darunter Ausdauer:** Strava und Polar werden in den Settings verbunden, nicht im Onboarding — Schritt 4 weiss also nicht, ob ein Kraft- oder ein Ausdauersportler davorsitzt, und die Frage muss quellenneutral sein. Ohne «Ausdauer verbessern» wählt eine Läuferin «Fitness halten» und bekommt einen Kraftblock empfohlen. Jetzt ist es ein Enum-Fall, später Migration plus Prompt- und Teständerungen. Dasselbe Ziel kann später den Standard für die Profil-Auswahl in US-15 AC1 setzen, statt dort ein zweites Mal zu fragen.
+>
+> **Erfahrung ist domänenspezifisch:** Gefragt wird nach **Krafttrainings**-Erfahrung, im UI und im Prompt-Abschnitt so benannt. Fünf Jahre Laufen und sechs Monate Krafttraining sind für die Empfehlung zwei verschiedene Werte, und solange nur Kraftsessions analysiert werden, ist die engere Frage die ehrlichere. Mit US-15 (quellenübergreifende Analyse) wäre sie pro Domäne zu stellen oder ausdrücklich als allgemeine Trainingserfahrung zu benennen.
+>
+> **Das Profil darf keinen Kontext erfinden lassen:** `AnalysisPromptBuilder` filtert heute alle Strava-Sessions aus dem Prompt. Wer dreimal läuft und einmal Kraft macht, bekommt sonst eine Analyse dieser einen Session unter einem Ziel, das nach Ausdauerkontext ruft. Der «Profile»-Abschnitt hält deshalb fest, dass die Datenbasis nur Kraftsessions umfasst — bis US-15 das auflöst.
+>
+> **Bewusst minimal:** nur Ziel und Erfahrungslevel. Equipment, Wunschfrequenz und Verletzungen sind ausgeklammert — Verletzungsdaten sind Gesundheitsdaten nach Art. 5 lit. c revDSG und zögen Consent-Text und Risikonotiz nach sich. Die Erfahrung wird in Jahren erhoben statt als Selbsteinschätzung, weil Jahre objektiv sind. Das Profil geht in den User-Prompt, nicht in den System-Prompt: Es ist ein Faktum über diese Person, kein Auftrag an das Modell — der System-Prompt bleibt für alle Nutzer identisch, was die Regel aus US-3 AC3 prüfbar hält.
+
 
 
 ## 1.3 Could Have — Nice-to-have, wenn Sprint Luft hat
@@ -145,6 +164,7 @@ Out of Scope — siehe Abschnitt 4.
 | US-6 | Analyse-Kontext transparent machen | **Should** | AC1 könnte als AC in US-3 wandern; eigenständige Story v. a. wegen AC2 (Warnung bei dünner Datenbasis). |
 | US-7 | Übungssuche & Filter | **Should** | Wird notwendig, sobald User-Historie >20 Übungen erreicht. Für PoC-Demos mit wenigen Sessions verzichtbar. |
 | US-8 | Datenquelle-Status sichtbar | **Could** | Bei nur einer Quelle (Hevy) trägt der Sync-Zeitstempel aus US-2 AC2 den Grossteil. AC1 und AC2 sind in v0 dennoch umgesetzt (Stale-Indikator ab >24 h mit Retry, aktive Benachrichtigung bei widerrufenem Key), weil der blosse Zeitstempel veraltete Daten nicht als solche kenntlich macht. Vollwertig — mehrere Quellen nebeneinander — relevant ab v1. |
+| US-13 | Trainingsprofil für gezieltere AI-Empfehlungen | **Should** | Hebt die Qualität von US-3 spürbar, ohne dass irgendetwas davon abhängt: Ohne Profil verhält sich die App exakt wie bisher. Zwei Felder, überspringbar — der Aufwand steht in keinem Verhältnis zum Gewinn an Treffsicherheit der Empfehlung. |
 | US-9 | Progressionskurven pro Übung | **Could** | US-3 deckt den Hauptnutzen ab. Epley-Formel + Plateau-Detection sind nicht-trivial. |
 | US-10 | Daten manuell neu laden | **Could** | iOS-Pattern, das User erwarten — kein Showstopper. 1–2 Tage Aufwand, ergänzt US-2 AC2. |
 | US-11 | Wochenübersicht als Push-Notification | **Won't** | iOS-Permission-Flow + Background-Scheduling + LLM-Call-Fallback ist eigenes Sub-System. Relevant ab v1.2. |
