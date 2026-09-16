@@ -7,14 +7,13 @@ import Foundation
 /// screen without a `ModelContainer` and a test can observe what was persisted.
 protocol AnalysisResultStoring: Sendable {
     /// Stores a finished recommendation and returns its identity, so the
-    /// caller can attach a verdict to exactly this row later.
+    /// caller can recognise exactly this row later.
     @discardableResult
     func save(text: String, generatedAt: Date, context: AnalysisContext) async throws -> UUID
     func latest() async throws -> AnalysisResultSnapshot?
     /// The newest `limit` recommendations, newest first.
     func recent(limit: Int) async throws -> [AnalysisResultSnapshot]
     func delete(id: UUID) async throws
-    func setFeedback(_ feedback: AnalysisFeedback?, for id: UUID) async throws
     func deleteAll() async throws
 }
 

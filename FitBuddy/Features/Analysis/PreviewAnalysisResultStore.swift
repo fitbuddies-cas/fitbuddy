@@ -19,8 +19,7 @@ actor PreviewAnalysisResultStore: AnalysisResultStoring {
             id: UUID(),
             text: text,
             generatedAt: generatedAt,
-            context: context,
-            feedback: nil
+            context: context
         )
         entries.insert(entry, at: 0)
         return entry.id
@@ -32,22 +31,10 @@ actor PreviewAnalysisResultStore: AnalysisResultStoring {
 
     func delete(id: UUID) throws { entries.removeAll { $0.id == id } }
 
-    func setFeedback(_ feedback: AnalysisFeedback?, for id: UUID) throws {
-        guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
-        let entry = entries[index]
-        entries[index] = AnalysisResultSnapshot(
-            id: entry.id,
-            text: entry.text,
-            generatedAt: entry.generatedAt,
-            context: entry.context,
-            feedback: feedback
-        )
-    }
-
     func deleteAll() throws { entries = [] }
 
-    /// Two analyses a week apart, one of them rated — enough for the list, the
-    /// preview of a formatted text, and the verdict symbol.
+    /// Two analyses a week apart — enough for the list and the preview of a
+    /// formatted text.
     static let sample: [AnalysisResultSnapshot] = [
         AnalysisResultSnapshot(
             id: UUID(),
@@ -59,15 +46,13 @@ actor PreviewAnalysisResultStore: AnalysisResultStoring {
             - Give legs a second slot before adding upper-body volume
             """,
             generatedAt: .now.addingTimeInterval(-2 * 3_600),
-            context: AnalysisContext(sessionCount: 12, window: .default),
-            feedback: .helpful
+            context: AnalysisContext(sessionCount: 12, window: .default)
         ),
         AnalysisResultSnapshot(
             id: UUID(),
             text: "Give legs a second slot in the week before you add upper-body volume.",
             generatedAt: .now.addingTimeInterval(-9 * 86_400),
-            context: AnalysisContext(sessionCount: 4, window: AnalysisWindow(weeks: 8)),
-            feedback: nil
+            context: AnalysisContext(sessionCount: 4, window: AnalysisWindow(weeks: 8))
         )
     ]
 }

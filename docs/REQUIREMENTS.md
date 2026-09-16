@@ -38,8 +38,8 @@ Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 | AC6 | User hat in den letzten 7 Tagen an ≥6 Tagen trainiert | Analyse wird ausgeführt | Empfehlung enthält expliziten Hinweis auf Recovery-Bedarf — keine Steigerungsempfehlung ohne diesen Hinweis |
 | AC7 | Analyse ist abgeschlossen | Empfehlung wird angezeigt | Nennt mindestens eine konkrete Übung mit konkretem Wert («Erhöhe Bankdrücken von 60 kg auf 62.5 kg») |
 | AC8 | User trainiert Brust 3×/Woche, Beine nur 1×/Woche | Empfehlung wird generiert | AI weist auf Muskelgruppen-Dysbalance hin |
-| AC9 | Empfehlung wurde angezeigt | — | Unter der Empfehlung erscheinen zwei Buttons: «Helpful» / «Not helpful» — Tap wird lokal gespeichert; kein Backend-Call |
-| AC10 | Eine Analyse wurde abgeschlossen | User öffnet die App später erneut | Die neueste Empfehlung wird wieder angezeigt, mit Zeitstempel oben links auf der Karte und dem bereits gegebenen Helpful-/Not-helpful-Verdikt |
+| ~~AC9~~ | — | — | *Entfernt:* «Helpful» / «Not helpful»-Buttons. Die Bewertung blieb nur lokal, wurde nicht ausgewertet und floss in keinen Prompt ein — kein Nutzen für User oder Team. Nummer bleibt frei, damit AC10/AC11 stabil referenzierbar bleiben. |
+| AC10 | Eine Analyse wurde abgeschlossen | User öffnet die App später erneut | Die neueste Empfehlung wird wieder angezeigt, mit Zeitstempel oben links auf der Karte |
 | AC11 | Mehrere Analysen wurden durchgeführt | User öffnet den History-Screen | Alle gespeicherten Analysen erscheinen chronologisch absteigend (max. 20); jede lässt sich per Swipe einzeln löschen |
 
 > **Hinweis:** US-3 ist als Epic geführt und vor Sprint-Planung in Child Stories aufzuteilen (Prompt-Design, UI, Error-Handling, Disclaimer).

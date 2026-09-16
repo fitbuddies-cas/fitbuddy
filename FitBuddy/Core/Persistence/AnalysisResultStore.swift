@@ -52,14 +52,6 @@ actor AnalysisResultStore {
         try saveOrRollback()
     }
 
-    /// Records the user's verdict on one recommendation (US-3 AC9), or clears
-    /// it with `nil`.
-    func setFeedback(_ feedback: AnalysisFeedback?, for id: UUID) throws {
-        guard let result = try result(with: id) else { return }
-        result.feedback = feedback?.rawValue
-        try saveOrRollback()
-    }
-
     /// Drops the whole history (hard logout, replaced Hevy key, "delete all
     /// data").
     func deleteAll() throws {
@@ -107,8 +99,7 @@ actor AnalysisResultStore {
             context: AnalysisContext(
                 sessionCount: result.sessionCount,
                 window: AnalysisWindow(weeks: result.windowWeeks)
-            ),
-            feedback: result.feedback.flatMap(AnalysisFeedback.init(rawValue:))
+            )
         )
     }
 

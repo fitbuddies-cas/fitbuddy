@@ -9,15 +9,13 @@ final class AnalysisHistoryViewModelTests: XCTestCase {
 
     private func entry(
         _ text: String,
-        hoursAgo: Double,
-        feedback: AnalysisFeedback? = nil
+        hoursAgo: Double
     ) -> AnalysisResultSnapshot {
         AnalysisResultSnapshot(
             id: UUID(),
             text: text,
             generatedAt: Self.reference.addingTimeInterval(-hoursAgo * 3_600),
-            context: AnalysisContext(sessionCount: 12, window: .default),
-            feedback: feedback
+            context: AnalysisContext(sessionCount: 12, window: .default)
         )
     }
 
@@ -127,20 +125,5 @@ final class AnalysisHistoryViewModelTests: XCTestCase {
 
         XCTAssertEqual(sut.entries.map(\.text), ["Kept"])
         XCTAssertNil(sut.failure)
-    }
-
-    /// The verdict travels with the row, so the list can show what was said
-    /// about each analysis without matching anything up by timestamp.
-    func testTheStoredVerdictTravelsWithTheEntry() async {
-        let store = StubAnalysisResultStore(entries: [
-            entry("Rated", hoursAgo: 1, feedback: .notHelpful),
-            entry("Unrated", hoursAgo: 24)
-        ])
-        let sut = AnalysisHistoryViewModel(store: store)
-
-        await sut.load()
-
-        XCTAssertEqual(sut.entries.first?.feedback, .notHelpful)
-        XCTAssertNil(sut.entries.last?.feedback)
     }
 }

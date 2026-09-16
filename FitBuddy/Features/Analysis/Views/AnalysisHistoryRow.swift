@@ -15,20 +15,9 @@ struct AnalysisHistoryRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(age)
-                    .font(.fbLabel)
-                    .foregroundStyle(Color.fbInkSecondary)
-                Spacer(minLength: 8)
-                if let feedback = entry.feedback {
-                    // The verdict, not a button: the history shows what was
-                    // said about a recommendation, and re-rating an old one
-                    // belongs to the analysis it was given on.
-                    Image(systemName: feedback.symbolName(isSelected: true))
-                        .font(.caption)
-                        .foregroundStyle(Color.fbMuted)
-                }
-            }
+            Text(age)
+                .font(.fbLabel)
+                .foregroundStyle(Color.fbInkSecondary)
             Text(preview)
                 .font(.subheadline)
                 .foregroundStyle(Color.fbInk)
@@ -64,12 +53,7 @@ struct AnalysisHistoryRow: View {
     }
 
     private var accessibilityLabel: String {
-        var parts = ["Analysis from \(age)"]
-        if let feedback = entry.feedback {
-            parts.append("rated \(feedback.label)")
-        }
-        parts.append(previewSnippet)
-        return parts.joined(separator: ", ")
+        "Analysis from \(age), \(previewSnippet)"
     }
 }
 
@@ -81,8 +65,7 @@ struct AnalysisHistoryRow: View {
                 id: UUID(),
                 text: "**Progressive overload**\nAdd 2.5 kg on bench next session and keep the reps.",
                 generatedAt: .now.addingTimeInterval(-2 * 3_600),
-                context: AnalysisContext(sessionCount: 12, window: .default),
-                feedback: .helpful
+                context: AnalysisContext(sessionCount: 12, window: .default)
             ),
             now: .now
         )
@@ -91,8 +74,7 @@ struct AnalysisHistoryRow: View {
                 id: UUID(),
                 text: "Give legs a second slot in the week before you add upper-body volume.",
                 generatedAt: .now.addingTimeInterval(-3 * 86_400),
-                context: AnalysisContext(sessionCount: 4, window: AnalysisWindow(weeks: 8)),
-                feedback: nil
+                context: AnalysisContext(sessionCount: 4, window: AnalysisWindow(weeks: 8))
             ),
             now: .now
         )

@@ -16,7 +16,7 @@ import SwiftData
 @Model
 final class AnalysisResult {
     /// Identifies the row across actor boundaries, so the history screen can
-    /// delete or rate exactly the analysis the user tapped.
+    /// delete exactly the analysis the user tapped.
     ///
     /// Defaults to a fresh value so an existing store migrates without a
     /// version plan; the single row such a store holds is the only one that
@@ -40,13 +40,9 @@ final class AnalysisResult {
     /// a row written before #36 then reads as thin data, which is the honest
     /// answer for a basis nobody recorded.
     var sessionCount: Int = 0
-    /// The user's "Helpful" / "Not helpful" verdict on *this* recommendation,
-    /// as `AnalysisFeedback.rawValue`, or `nil` while none was given.
-    ///
-    /// Here rather than in `UserDefaults` (#117): with a history, a single
-    /// stored verdict could no longer be matched to the text it was given for,
-    /// and guessing from timestamps put the user's opinion on recommendations
-    /// they never rated.
+    /// Unused: held the "Helpful" / "Not helpful" verdict until those buttons
+    /// were removed. Kept so installed stores open without a migration — drop
+    /// it with the next schema change.
     var feedback: String?
 
     init(
@@ -54,14 +50,12 @@ final class AnalysisResult {
         text: String,
         generatedAt: Date,
         windowWeeks: Int,
-        sessionCount: Int,
-        feedback: String? = nil
+        sessionCount: Int
     ) {
         self.id = id
         self.text = text
         self.generatedAt = generatedAt
         self.windowWeeks = windowWeeks
         self.sessionCount = sessionCount
-        self.feedback = feedback
     }
 }
