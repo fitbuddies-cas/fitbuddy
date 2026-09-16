@@ -249,11 +249,12 @@ struct RootView: View {
     /// The re-auth link behind the dashboard's renewal banner (US-5 AC2,
     /// #144): switches to the settings tab and pushes the source's connection
     /// screen. Only Strava has one; Hevy's key is renewed through onboarding.
+    /// Polar has no settings screen yet (#157) — falls through to no push.
     private func openConnectionScreen(for source: ConnectorSource) {
         selectedTab = .settings
         switch source {
         case .strava: settingsPath = [.strava]
-        case .hevy: settingsPath = []
+        case .hevy, .polar: settingsPath = []
         }
     }
 

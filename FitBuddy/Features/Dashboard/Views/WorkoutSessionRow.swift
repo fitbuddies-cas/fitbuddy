@@ -76,13 +76,14 @@ struct WorkoutSessionRow: View {
     private var badgeFill: Color {
         switch workout.source {
         case .strava: return .fbWarn
+        case .polar: return .fbAccent
         case .hevy: return .fbInk
         }
     }
 
     private var badgeText: Color {
         switch workout.source {
-        case .strava: return .white
+        case .strava, .polar: return .white
         case .hevy: return .fbBackground
         }
     }
