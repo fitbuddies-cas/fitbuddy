@@ -383,7 +383,10 @@ final class AnalysisViewModel: ObservableObject {
                         // be about to press. Only when a discarded answer had
                         // already stopped the timer does it start again —
                         // otherwise the cancel button of US-3 AC1 would never
-                        // come back while the new provider hangs.
+                        // come back while the new provider hangs. That branch
+                        // is only reachable with a test double: `InferenceService`
+                        // ends the run right after a provider's answer, so no
+                        // handover ever follows one.
                         if slowTask == nil {
                             startSlowTimer()
                         }
@@ -405,7 +408,7 @@ final class AnalysisViewModel: ObservableObject {
 
             let outcome: AnalysisOutcome
             if let report {
-                outcome = await self.outcome(for: report, reads: built.reads)
+                outcome = self.outcome(for: report, reads: built.reads)
             } else if !prose.isEmpty {
                 outcome = .prose(prose)
             } else {
@@ -415,9 +418,6 @@ final class AnalysisViewModel: ObservableObject {
                 state = .error(.unreadableResponse(attribution?.provider))
                 return await finish(id)
             }
-            // The detail reads above release the main actor.
-            guard !Task.isCancelled else { return await finish(id) }
-
             await persist(outcome)
             // Before `.result`, not after: `canStartAnalysis` reads
             // `lockMessage`, and a value still nil from before the run makes
@@ -446,57 +446,27 @@ final class AnalysisViewModel: ObservableObject {
     /// What a report becomes on screen: validated against the reads its prompt
     /// was built from (US-14 AC3/AC4, #175).
     ///
+    /// Synchronous on purpose: every read it needs was made with the prompt.
+    ///
     /// Without an exercise cache — the previews' case — the prompt carried no
     /// exercise data, so every progression card would be downgraded for lack
     /// of data rather than for being wrong. The report is then shown as its
     /// summary, which is what the model wrote for exactly that purpose, and
     /// never as cards nothing has checked.
-    private func outcome(for report: AnalysisReport, reads: AnalysisRunReads) async -> AnalysisOutcome {
+    private func outcome(for report: AnalysisReport, reads: AnalysisRunReads) -> AnalysisOutcome {
         guard exerciseCache != nil else { return .prose(report.summary) }
-        let details = await recentDetails(in: reads)
         let evidence = AnalysisReportEvidence(
             summaries: reads.summaries,
             exercises: reads.exercises,
             progressions: reads.progressions,
-            details: details,
+            // Unavailable details leave the recovery card without RPE, which
+            // `RecoveryMetrics` already shows as "none logged" (#175).
+            details: reads.details ?? [],
             window: reads.window,
             now: reads.now,
             calendar: calendar
         )
         return .report(AnalysisReportValidator.validate(report, against: evidence))
-    }
-
-    /// The full workouts of the last seven days, for the mean RPE of the
-    /// recovery figures (#175).
-    ///
-    /// A failing read does not fail the run: the answer is paid for and in
-    /// hand, and the RPE is the one recovery figure the card can do without —
-    /// `RecoveryMetrics` shows none whenever no set logged one. The failure is
-    /// logged and no details are used at all, rather than the part that
-    /// happened to be readable: a mean over an unknown subset of the week
-    /// would read as the week's.
-    private func recentDetails(in reads: AnalysisRunReads) async -> [WorkoutDetail] {
-        guard let detailCache else { return [] }
-        let sessions = RecoveryMetrics.lastSevenDaysSessions(
-            in: reads.summaries,
-            now: reads.now,
-            calendar: calendar
-        )
-        var details: [WorkoutDetail] = []
-        do {
-            for session in sessions {
-                guard !Task.isCancelled else { return [] }
-                // `nil` is a session a sync replaced since the prompt was
-                // built; it has no sets left to count.
-                if let detail = try await detailCache.workoutDetail(id: session.id) {
-                    details.append(detail)
-                }
-            }
-        } catch {
-            logger.error("Workout details for the recovery figures not readable: \(error, privacy: .public)")
-            return []
-        }
-        return details
     }
 
     /// Reads the window and builds the prompt, or publishes the reason it
@@ -541,6 +511,8 @@ final class AnalysisViewModel: ObservableObject {
             // screen.
             let exercises = try await readExercises(since: start)
             guard !Task.isCancelled else { return nil }
+            let details = await readRecentDetails(in: summaries, now: reference)
+            guard !Task.isCancelled else { return nil }
 
             // Counted over the resolved window, not over everything the read
             // returned: the cache was read wide enough for the widest rung and
@@ -554,6 +526,7 @@ final class AnalysisViewModel: ObservableObject {
                 summaries: summaries,
                 exercises: exercises.summaries,
                 progressions: exercises.progressions,
+                details: details,
                 window: window,
                 now: reference
             )
@@ -571,6 +544,40 @@ final class AnalysisViewModel: ObservableObject {
             state = .error(.cacheUnavailable)
             return nil
         }
+    }
+
+    /// The full workouts of the last seven days, for the mean RPE of the
+    /// recovery figures (#175), or `nil` when they are unavailable.
+    ///
+    /// Read with the prompt's other reads, so a report is validated against one
+    /// snapshot of the cache (#178). Unlike those reads, a failure here does
+    /// not fail the run: the RPE is the one recovery figure the card can do
+    /// without. It is logged, and the details count as unavailable as a whole —
+    /// as does a session a sync has removed since the summaries were read.
+    /// A mean over the part of the week that happened to be readable would
+    /// read as the week's.
+    private func readRecentDetails(
+        in summaries: [WorkoutSummary],
+        now reference: Date
+    ) async -> [WorkoutDetail]? {
+        guard let detailCache else { return nil }
+        let sessions = RecoveryMetrics.lastSevenDaysSessions(in: summaries, now: reference, calendar: calendar)
+        var details: [WorkoutDetail] = []
+        do {
+            for session in sessions {
+                guard !Task.isCancelled else { return nil }
+                guard let detail = try await detailCache.workoutDetail(id: session.id) else {
+                    logger.notice("Workout detail for the recovery figures missing; validating without RPE")
+                    return nil
+                }
+                details.append(detail)
+            }
+        } catch {
+            guard !Task.isCancelled, !error.isCancellation else { return nil }
+            logger.error("Workout details for the recovery figures not readable: \(error, privacy: .public)")
+            return nil
+        }
+        return details
     }
 
     /// The movements of the analysed window, and the progression of each one

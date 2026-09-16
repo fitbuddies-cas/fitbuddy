@@ -141,6 +141,10 @@ final class AnalysisViewModelTests: XCTestCase {
         ])
         let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache())
         var published: [AnalysisState] = []
+        // Combine in a test only: the `@Published` publisher is the one place
+        // that sees every state the run publishes, including the ones it
+        // passes straight through. CLAUDE.md's "async/await, not Combine"
+        // governs the app code.
         let subscription = sut.$state.sink { published.append($0) }
 
         await sut.start()
@@ -244,6 +248,72 @@ final class AnalysisViewModelTests: XCTestCase {
         ))
         let latest = try await results.latest()
         XCTAssertEqual(latest?.report, report)
+    }
+
+    /// A session removed by a sync since the summaries were read makes the
+    /// details unavailable as a whole — no mean over part of the week.
+    func testAMissingDetailValidatesWithoutRPE() async throws {
+        cache.summaries = (0...5).map { Self.workout(daysAgo: $0) }
+        let details = StubWorkoutDetailCache()
+        details.details = (1...5).map { Self.detail(daysAgo: $0, rpe: 8) }
+        await streamer.setReport(Self.noteOnlyReport)
+        let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache(), detailCache: details)
+
+        await sut.start()
+
+        let report = try XCTUnwrap(sut.state.outcome?.report)
+        XCTAssertEqual(report.cards.first, .recovery(
+            reasoning: AnalysisReportValidator.insertedRecoveryReasoning,
+            metrics: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: nil)
+        ))
+    }
+
+    /// #178: the details are read with the prompt, before the provider is
+    /// called — so the report is validated against one snapshot, and the
+    /// answer's own validation reads nothing.
+    func testTheDetailsAreReadBeforeTheProviderIsCalled() async {
+        cache.summaries = (0...5).map { Self.workout(daysAgo: $0) }
+        let details = StubWorkoutDetailCache()
+        details.details = (0...5).map { Self.detail(daysAgo: $0, rpe: 8) }
+        details.gatesCalls = true
+        await streamer.setReport(Self.noteOnlyReport)
+        let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache(), detailCache: details)
+
+        let run = Task { await sut.start() }
+        await details.waitForCall()
+        let calls = await streamer.callCount
+        XCTAssertEqual(calls, 0)
+
+        details.gatesCalls = false
+        details.release()
+        await run.value
+        XCTAssertEqual(details.callCount, 6)
+        XCTAssertNotNil(sut.state.outcome?.report)
+    }
+
+    /// A cancel while the details are read ends the run there: nothing is
+    /// shown, nothing is stored, and no provider is paid.
+    func testCancelDuringTheDetailReadShowsAndStoresNothing() async throws {
+        cache.summaries = (0...5).map { Self.workout(daysAgo: $0) }
+        let details = StubWorkoutDetailCache()
+        details.details = (0...5).map { Self.detail(daysAgo: $0, rpe: 8) }
+        details.gatesCalls = true
+        await streamer.setReport(Self.noteOnlyReport)
+        let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache(), detailCache: details)
+
+        let run = Task { await sut.start() }
+        await details.waitForCall()
+        sut.cancel()
+        details.release()
+        await run.value
+
+        XCTAssertEqual(sut.state, .idle)
+        XCTAssertNil(sut.generatedAt)
+        let latest = try await results.latest()
+        XCTAssertNil(latest)
+        let calls = await streamer.callCount
+        XCTAssertEqual(calls, 0)
+        XCTAssertEqual(details.callCount, 1)
     }
 
     /// US-14 AC5: prose stays prose, even where a report would be validated.
@@ -1002,6 +1072,27 @@ final class AnalysisViewModelTests: XCTestCase {
         let run = Task { await sut.start() }
         await waitUntil("the slow hint returns for the provider that took over") { sut.isTakingLong }
 
+        XCTAssertEqual(sut.state, .running)
+        sut.cancel()
+        await run.value
+    }
+
+    /// The production handover: the provider that gave way sent no answer, so
+    /// the hint has been counting since the tap and must stay up — the cancel
+    /// button the user may be reaching for does not disappear (US-3 AC1).
+    func testAHandoverKeepsTheSlowHintThatIsAlreadyShowing() async {
+        await streamer.setEvents([.attempting(.claude), .attempting(.gemini)])
+        await streamer.pauseAfterEvents(1)
+        await streamer.holdOpenAfterEvents()
+        let sut = makeSUT(slowThreshold: 0.05)
+
+        let run = Task { await sut.start() }
+        await waitUntil("the slow hint appears for the first provider") { sut.isTakingLong }
+
+        await streamer.resumeEvents()
+        await waitUntil("the handover reaches the screen") { sut.attribution?.attempted == [.claude, .gemini] }
+
+        XCTAssertTrue(sut.isTakingLong)
         XCTAssertEqual(sut.state, .running)
         sut.cancel()
         await run.value

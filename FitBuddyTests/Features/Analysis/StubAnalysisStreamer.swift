@@ -23,6 +23,12 @@ actor StubAnalysisStreamer: AnalysisStreaming {
     /// test can observe the screen mid-run rather than only its outcome. The
     /// consumer's cancellation is what ends it.
     private var holdsOpen = false
+    /// When set, the stream yields only this many events and holds the rest
+    /// until `resumeEvents()`, so a test can act between two events.
+    private var pauseAfter: Int?
+    /// The open stream and the events it still owes while paused.
+    private var pausedContinuation: AsyncThrowingStream<AnalysisEvent, Error>.Continuation?
+    private var pausedEvents: [AnalysisEvent] = []
 
     private(set) var callCount = 0
     private(set) var systemPrompt: String?
@@ -70,6 +76,25 @@ actor StubAnalysisStreamer: AnalysisStreaming {
         holdsOpen = true
     }
 
+    /// Makes the next stream stop after its first `count` events until
+    /// `resumeEvents()`.
+    func pauseAfterEvents(_ count: Int) {
+        pauseAfter = count
+    }
+
+    /// Yields the events held back by `pauseAfterEvents(_:)`, then ends the
+    /// stream as an unpaused one would.
+    func resumeEvents(file: StaticString = #filePath, line: UInt = #line) {
+        guard let continuation = pausedContinuation else {
+            return XCTFail("No paused analysis stream is waiting to be resumed", file: file, line: line)
+        }
+        pausedContinuation = nil
+        for event in pausedEvents { continuation.yield(event) }
+        pausedEvents = []
+        guard !holdsOpen else { return }
+        continuation.finish(throwing: streamError)
+    }
+
     func streamAnalysis(systemPrompt: String, userPrompt: String) async throws -> AsyncThrowingStream<AnalysisEvent, Error> {
         callCount += 1
         self.systemPrompt = systemPrompt
@@ -84,14 +109,17 @@ actor StubAnalysisStreamer: AnalysisStreaming {
 
         if let startError { throw startError }
 
-        let events = events
-        let streamError = streamError
-        let holdsOpen = holdsOpen
-        return AsyncThrowingStream { continuation in
-            for event in events { continuation.yield(event) }
-            guard !holdsOpen else { return }
-            continuation.finish(throwing: streamError)
+        let (stream, continuation) = AsyncThrowingStream<AnalysisEvent, Error>.makeStream()
+        if let pauseAfter {
+            for event in events.prefix(pauseAfter) { continuation.yield(event) }
+            pausedEvents = Array(events.dropFirst(pauseAfter))
+            pausedContinuation = continuation
+            return stream
         }
+        for event in events { continuation.yield(event) }
+        guard !holdsOpen else { return stream }
+        continuation.finish(throwing: streamError)
+        return stream
     }
 
     /// Suspends until the gated call has reached the gate.
