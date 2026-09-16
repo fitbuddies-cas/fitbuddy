@@ -11,8 +11,7 @@ import Foundation
 /// **Throwing before returning the stream means the provider never accepted
 /// the request** (bad key, offline, 4xx/5xx). An error delivered *through* the
 /// stream means it accepted and then failed mid-answer. The orchestrator falls
-/// back in both cases, but only the second one has cost the user tokens — which
-/// is what decides whether the lock between two runs is started.
+/// back in both cases, but only the second one has cost the user tokens.
 protocol LLMProviderClient: Sendable {
     /// Which provider this client speaks to, so the orchestrator can label a
     /// run without keeping a parallel mapping.

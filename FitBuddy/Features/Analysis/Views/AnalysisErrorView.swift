@@ -11,9 +11,9 @@ struct AnalysisErrorView: View {
     /// than one: `failure` already describes the last provider's problem, and
     /// on a single-provider run repeating that name adds nothing.
     let attribution: AnalysisAttribution?
-    /// `nil` for a failure a retry cannot fix (a missing or rejected key, an
-    /// active lock), where a "Try again" button would only produce the
-    /// same message again.
+    /// `nil` for a failure a retry cannot fix (a missing or rejected key, no
+    /// training data), where a "Try again" button would only produce the same
+    /// message again.
     let onRetry: (() -> Void)?
     /// Returns to the intro state — the button reads "Back", and that is what
     /// it does; it does not leave the analysis tab.

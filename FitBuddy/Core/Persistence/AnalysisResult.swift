@@ -8,8 +8,7 @@ extension FitBuddySchemaV3 {
     /// One AI recommendation, kept so it survives an app restart and stays
     /// readable next to the ones before it (US-3 AC10/AC11, #97/#117).
     ///
-    /// SwiftData rather than `UserDefaults`, unlike the rate-limit timestamp
-    /// next to it: the recommendation text is derived from the user's training
+    /// SwiftData rather than `UserDefaults`: the recommendation text is derived from the user's training
     /// data, and only the SwiftData container carries the ADR-001 hardening
     /// that health data needs (no CloudKit, no backup,
     /// `FileProtectionType.complete`).

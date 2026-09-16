@@ -7,20 +7,15 @@ import Foundation
 /// lives in `LLMProviderClient` implementations. This actor only decides *who*
 /// to ask, in what order, and when to stop.
 ///
-/// Rejects a call before any network request when one is already running or
-/// the 60s lock after the last run has not elapsed — `AnalysisViewModel` (#31)
-/// also disables the button, but the actor enforces both independently so no
-/// caller can race past them. The lock itself is recorded once per run, the
-/// moment the first provider accepts the request (HTTP 2xx): a run that never
-/// got that far (no key, offline, every provider rejecting) must not lock the
-/// user out at all, and a run that fell back twice must not lock them out
-/// three times over.
+/// Rejects a call before any network request while one is already running —
+/// `AnalysisViewModel` (#31) also disables the button, but the actor enforces
+/// it independently so no caller can race past it. There is no cooldown after
+/// a run: the 60s lock of #117 is gone, and the hard limit on spending is the
+/// spending limit in the user's own provider account (ADR-004).
 actor InferenceService {
     private let keychain: KeychainService
     private let priority: LLMPriorityStore
-    private let rateLimit: AnalysisRateLimitStore
     private let clients: [LLMProvider: any LLMProviderClient]
-    private let now: () -> Date
 
     /// Whether a stream is currently in flight. `private(set)` rather than
     /// `private`: tests poll it (same module) to wait out an async cleanup
@@ -36,20 +31,15 @@ actor InferenceService {
     ///     (US-4), which decides who is asked first and who takes over.
     ///   - clients: Injectable per-provider callers, so orchestrator tests can
     ///     drive fallback without three stubbed endpoints.
-    ///   - now: Injectable clock, so the lock is testable.
     init(
         session: URLSession = .fitBuddyStreaming,
         keychain: KeychainService = KeychainService(),
         priority: LLMPriorityStore = LLMPriorityStore(),
-        rateLimit: AnalysisRateLimitStore = AnalysisRateLimitStore(),
-        clients: [LLMProvider: any LLMProviderClient]? = nil,
-        now: @escaping () -> Date = Date.init
+        clients: [LLMProvider: any LLMProviderClient]? = nil
     ) {
         self.keychain = keychain
         self.priority = priority
-        self.rateLimit = rateLimit
         self.clients = clients ?? Self.defaultClients(session: session)
-        self.now = now
     }
 
     private static func defaultClients(session: URLSession) -> [LLMProvider: any LLMProviderClient] {
@@ -79,9 +69,6 @@ actor InferenceService {
         isRunning = true
         let candidates: [Candidate]
         do {
-            if let availableAt = await rateLimit.activeLock(now: now()) {
-                throw InferenceServiceError.lockActive(availableAt: availableAt)
-            }
             candidates = try await resolveCandidates()
         } catch {
             isRunning = false
@@ -123,7 +110,6 @@ actor InferenceService {
         userPrompt: String,
         continuation: AsyncThrowingStream<AnalysisEvent, Error>.Continuation
     ) async throws {
-        var didRecordCall = false
         var lastError: Error = InferenceServiceError.missingAPIKey
 
         for candidate in candidates {
@@ -138,14 +124,6 @@ actor InferenceService {
                     userPrompt: userPrompt,
                     apiKey: candidate.apiKey
                 )
-                // The provider accepted and is billing tokens from here on,
-                // regardless of whether the answer later fails or the user
-                // cancels — but only the first such acceptance in a run starts
-                // the lock.
-                if !didRecordCall {
-                    await rateLimit.recordCall(at: now())
-                    didRecordCall = true
-                }
                 // Collected rather than forwarded chunk by chunk: the answer is
                 // a JSON document (#174), and half of one is neither a report
                 // nor readable prose. It also means a provider that dies

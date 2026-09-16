@@ -5,8 +5,7 @@ import SwiftUI
 ///
 /// Pure layout. The ViewModels are wired up in `RootView`, which owns the
 /// SwiftData container; this view only holds the one that has to outlive a
-/// tab switch — `AnalysisViewModel`, whose running stream and countdown must
-/// not restart because the user glanced at the dashboard.
+/// tab switch — `AnalysisViewModel`, whose running stream must not restart because the user glanced at the dashboard.
 ///
 /// The bar itself is left to the system: no appearance override and no
 /// background of its own, so the Liquid Glass material shows the content
@@ -19,7 +18,7 @@ struct MainTabView: View {
     @Binding var settingsPath: [SettingsRoute]
 
     /// Owned here rather than by `AnalysisView`, so the analysis tab can be
-    /// left and re-entered without losing the run or the countdown.
+    /// left and re-entered without losing the run.
     @StateObject private var analysisViewModel: AnalysisViewModel
 
     private let makeDashboardViewModel: () -> WorkoutListViewModel

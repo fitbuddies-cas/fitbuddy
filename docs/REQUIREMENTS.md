@@ -185,7 +185,7 @@ Out of Scope — siehe Abschnitt 4.
 | Datenschutz (nDSG) | Trainingsdaten sind Gesundheitsdaten nach Art. 5 lit. c nDSG — explizite Einwilligung ist Pflicht. Die Übertragung an Anthropic (USA) stützt sich auf den DPA des Endusers (Anthropic Commercial Terms inkl. SCCs + Swiss Addendum, automatisch gültig ab Account-Erstellung). Das FitBuddy-Team schliesst keinen eigenen DPA ab — im BYO-Key-Modell ist der Enduser Anthropic-«Customer». |
 | Datenschutz (nDSG) | Die App enthält einen statischen Datenschutzerklärung-Screen (erreichbar aus Onboarding + Einstellungen) mit: Verantwortlichem, bearbeiteten Daten, Zweck, Drittempfängern (Hevy/Anthropic), Drittland USA, Rechten der betroffenen Person (Auskunft, Löschung). |
 | Datenschutz (nDSG) | User kann jederzeit alle lokal gespeicherten Daten löschen (Keychain-Einträge + Cache) über «Daten löschen / Account zurücksetzen» in den Einstellungen — App kehrt in den Onboarding-Zustand zurück. |
-| LLM-Kosten | Analyse jederzeit auf Knopfdruck; Button disabled während laufendem Call, danach 60 s Doppeltipp-Sperre. Hartes Kostenlimit ist das Spending Limit im Anthropic-Account des Users (BYO-Key, ADR-004) |
+| LLM-Kosten | Analyse jederzeit auf Knopfdruck; Button disabled während laufendem Call, danach kein Cooldown. Hartes Kostenlimit ist das Spending Limit im Anthropic-Account des Users (BYO-Key, ADR-004) |
 | LLM-Kosten | Analyse-Button disabled während laufendem Call — kein Doppel-Submit möglich |
 
 
@@ -249,7 +249,7 @@ Beide externen Abhängigkeiten sind instabil — dokumentiert: Hevy hat «no gua
 | `lastSyncTimestamp` persistent in UserDefaults | Überlebt App-Kills; immer als Banner im Dashboard sichtbar (US-2 AC2) |
 | HTTP 401 → harter Logout (US-1 AC3) | Kein stilles Weiterlaufen mit gecachten Daten die der User für aktuell hält → falsche AI-Empfehlung auf Basis veralteter Daten |
 | Claude-Timeout 30 s + Cancel-Button (US-3 AC1) | Ohne Cancel-Button: User sieht hängenden Spinner, kill-swipet die App, glaubt sie ist kaputt |
-| Doppeltipp-Sperre (60 s) in UserDefaults, **nicht in-memory** | Überlebt App-Kill; verhindert versehentliche Mehrfach-Calls nach Neustart. Bewusst kein Kostenlimit — das ist das Spending Limit im Account des Users |
+| Doppeltipp-Schutz: Button disabled, solange ein Call läuft — **keine Sperre danach** | Verhindert versehentliche Mehrfach-Calls, ohne den User nach einer Analyse warten zu lassen. Die frühere 60-s-Sperre ist entfernt. Bewusst kein Kostenlimit — das ist das Spending Limit im Account des Users |
 
 **Wenn ignoriert:**
 
