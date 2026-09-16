@@ -51,4 +51,18 @@ final class AnalysisFullAnalysisTests: XCTestCase {
         XCTAssertEqual(AnalysisFullAnalysis.accessibilityValue(isExpanded: false), "Collapsed")
         XCTAssertEqual(AnalysisFullAnalysis.accessibilityValue(isExpanded: true), "Expanded")
     }
+
+    /// The samples the previews and the UI tests use have a full analysis
+    /// that adds something to their lead (#170 review).
+    func testEverySampleHasAFullAnalysisBeyondItsLead() {
+        for report in [
+            AnalysisReportSamples.progress,
+            AnalysisReportSamples.recover,
+            AnalysisReportSamples.hold,
+            AnalysisReportSamples.thin,
+        ] {
+            XCTAssertTrue(report.hasLead, report.headline)
+            XCTAssertTrue(report.hasFullAnalysis, report.headline)
+        }
+    }
 }

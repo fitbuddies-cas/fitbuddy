@@ -180,7 +180,7 @@ final class AnalysisViewModelTests: XCTestCase {
         let expected = ValidatedAnalysisReport(
             headline: AnalysisReportValidator.holdHeadline,
             verdict: .hold,
-            lead: "Too little data for a change yet.",
+            lead: AnalysisReportValidator.holdLead,
             cards: [],
             summary: "Keep training as you do."
         )

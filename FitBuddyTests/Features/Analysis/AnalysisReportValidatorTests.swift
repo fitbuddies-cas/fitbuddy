@@ -389,12 +389,14 @@ final class AnalysisReportValidatorTests: XCTestCase {
         XCTAssertEqual(validated.cards.map(\.kind), [.note, .imbalance])
         XCTAssertEqual(validated.verdict, .hold)
         XCTAssertEqual(validated.headline, AnalysisReportValidator.holdHeadline)
+        XCTAssertEqual(validated.lead, AnalysisReportValidator.holdLead, "The model's progress lead goes with its verdict")
     }
 
     func testProgressWithASurvivingProgressionStaysProgress() {
         let validated = validate([benchPress(from: 99, to: 100), benchPress(from: 60, to: 62.5)])
 
         XCTAssertEqual(validated.verdict, .progress)
+        XCTAssertEqual(validated.lead, "Lead")
     }
 
     /// Recovery wins over the hold downgrade, even without any progression.
@@ -405,6 +407,11 @@ final class AnalysisReportValidatorTests: XCTestCase {
         )
 
         XCTAssertEqual(validated.verdict, .recover)
+        XCTAssertEqual(
+            validated.lead,
+            AnalysisReportValidator.recoveryLead(trainingDays: 6),
+            "The recovery lead, not the hold lead"
+        )
     }
 
     /// A model hold verdict passes through, cards or not.
@@ -414,6 +421,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
 
         XCTAssertEqual(validated.verdict, .hold)
         XCTAssertEqual(validated.headline, "Keep going.")
+        XCTAssertEqual(validated.lead, "Hold.")
     }
 
     // MARK: - Card count

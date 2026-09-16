@@ -35,7 +35,11 @@ enum AnalysisReportSamples {
         verdict: .hold,
         lead: "Keep your current loads for another week.",
         cards: [noteCard],
-        summary: "Keep your current loads for another week."
+        summary: """
+            Rows stalled at 8 reps for the last two sessions, and no other lift \
+            has a clean overload signal yet. Keep your current loads for another \
+            week and add a rep on rows before adding weight.
+            """
     )
 
     /// Design 3.4b: too little data for any card — the lead and the full

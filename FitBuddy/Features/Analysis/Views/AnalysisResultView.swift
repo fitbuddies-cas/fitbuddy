@@ -65,7 +65,7 @@ struct AnalysisResultView: View {
                 if let context {
                     AnalysisContextView(context: context)
                 }
-                if !isBlank(report.lead) {
+                if report.hasLead {
                     Text(report.lead)
                         .font(.body)
                         .foregroundStyle(Color.fbInk)
@@ -82,7 +82,7 @@ struct AnalysisResultView: View {
                     }
                 }
             }
-            if !isBlank(report.summary) {
+            if report.hasFullAnalysis {
                 AnalysisFullAnalysisView(
                     summary: report.summary,
                     startsExpanded: AnalysisFullAnalysis.startsExpanded(for: report.cards)
@@ -92,10 +92,6 @@ struct AnalysisResultView: View {
                 .id(report.summary)
             }
         }
-    }
-
-    private func isBlank(_ text: String) -> Bool {
-        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func proseBody(_ text: String) -> some View {
