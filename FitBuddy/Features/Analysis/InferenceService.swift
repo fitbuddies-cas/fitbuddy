@@ -21,6 +21,9 @@ actor InferenceService {
     /// `private`: tests poll it (same module) to wait out an async cleanup
     /// instead of guessing at a fixed delay; app code cannot write it.
     private(set) var isRunning = false
+    /// The task of the run holding the slot, so a new call can wait for a
+    /// cancelled one to unwind instead of being refused.
+    private var currentRun: Task<Void, Never>?
 
     /// - Parameters:
     ///   - session: Injectable for tests (stub `URLProtocol`); defaults to
@@ -60,7 +63,15 @@ actor InferenceService {
     /// Cancelling the consuming task stops the underlying request and ends the
     /// run — a cancellation is never treated as a provider failure, so it does
     /// not fall through to the next one.
+    ///
+    /// A run the consumer has cancelled keeps the slot until its task has
+    /// unwound. A call arriving in that moment — "Analyze" tapped right after
+    /// "Cancel" — waits for it rather than failing with `.alreadyInProgress`;
+    /// only a run that is still live refuses a second one.
     func streamAnalysis(systemPrompt: String, userPrompt: String) async throws -> AsyncThrowingStream<AnalysisEvent, Error> {
+        while isRunning, let previous = currentRun, previous.isCancelled {
+            await previous.value
+        }
         guard !isRunning else { throw InferenceServiceError.alreadyInProgress }
         // Claim the slot before the first `await` below: an actor releases its
         // isolation at every suspension point, so two truly concurrent callers
@@ -75,19 +86,20 @@ actor InferenceService {
             throw error
         }
 
-        return AsyncThrowingStream { continuation in
-            let task = Task {
-                do {
-                    try await self.run(candidates, systemPrompt: systemPrompt, userPrompt: userPrompt, continuation: continuation)
-                    await self.finish()
-                    continuation.finish()
-                } catch {
-                    await self.finish()
-                    continuation.finish(throwing: error)
-                }
+        let (stream, continuation) = AsyncThrowingStream<AnalysisEvent, Error>.makeStream()
+        let task = Task {
+            do {
+                try await self.run(candidates, systemPrompt: systemPrompt, userPrompt: userPrompt, continuation: continuation)
+                self.finish()
+                continuation.finish()
+            } catch {
+                self.finish()
+                continuation.finish(throwing: error)
             }
-            continuation.onTermination = { _ in task.cancel() }
         }
+        currentRun = task
+        continuation.onTermination = { _ in task.cancel() }
+        return stream
     }
 
     // MARK: - Fallback chain
@@ -198,5 +210,6 @@ actor InferenceService {
 
     private func finish() {
         isRunning = false
+        currentRun = nil
     }
 }
