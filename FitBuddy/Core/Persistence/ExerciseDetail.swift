@@ -74,14 +74,7 @@ extension ExerciseDetail {
     /// here rather than in the card so that numbering a set and marking it come
     /// from one rule — deriving them separately is what once gave a leading
     /// unknown set the number 0.
-    var numberedSets: [(set: SetDetail, number: Int?)] {
-        var number = 0
-        return sets.map { set in
-            guard set.countsTowardsVolume else { return (set, nil) }
-            number += 1
-            return (set, number)
-        }
-    }
+    var numberedSets: [(set: SetDetail, number: Int?)] { sets.numbered }
 
     /// Reduces a cached exercise, sorting its sets by `index`.
     ///

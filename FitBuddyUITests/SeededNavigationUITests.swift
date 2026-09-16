@@ -82,6 +82,28 @@ final class SeededNavigationUITests: XCTestCase {
         XCTAssertFalse(sut.app.navigationBars.element(boundBy: 0).identifier.isEmpty)
     }
 
+    /// The history under the curve opens to the sets of that session (#163).
+    @MainActor
+    func testASessionInTheHistoryOpensItsSets() {
+        let sut = SeededApp().launch()
+
+        sut.assertAppears(sut.dashboard)
+        sut.assertAppears(sut.exercisesLink)
+        sut.exercisesLink.tap()
+        sut.assertAppears(sut.exerciseList)
+        sut.firstRow(of: sut.exerciseRows).tap()
+        sut.assertAppears(sut.progression)
+
+        sut.assertAppears(sut.history)
+        // Collapsed to start with, or the assertion below would pass on a
+        // screen that never reacted to the tap.
+        XCTAssertEqual(sut.historySets.count, 0, "Sessions start collapsed")
+
+        sut.expand(sut.firstRow(of: sut.historyRows))
+
+        sut.assertAppears(sut.historySets.element(boundBy: 0))
+    }
+
     /// Back out of the curve and the list is still the list — the forward path
     /// is only half of what a user does with a navigation stack.
     @MainActor

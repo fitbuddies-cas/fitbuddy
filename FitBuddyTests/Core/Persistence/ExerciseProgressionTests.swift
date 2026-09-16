@@ -66,6 +66,59 @@ final class ExerciseProgressionTests: XCTestCase {
         XCTAssertFalse(makeProgression([100, 98, 97, 99, 105]).isPlateaued)
     }
 
+    // MARK: - Curve and history (#163)
+
+    /// Every point comes from a session, and the order survives.
+    func testThePointsAreDerivedFromTheSessions() {
+        let progression = makeProgression([100, 104, 102])
+
+        XCTAssertEqual(progression.points.count, progression.sessions.count)
+        XCTAssertEqual(
+            progression.points.map(\.sessionStart),
+            progression.sessions.map(\.sessionStart)
+        )
+    }
+
+    /// A session Epley cannot project from stays in the history and leaves no
+    /// point — the case a rowing machine or a plank produces, and the reason
+    /// the two counts are allowed to differ (#163).
+    func testASessionWithoutALoadIsInTheHistoryButNotOnTheCurve() {
+        let progression = ExerciseProgression(
+            id: "row",
+            title: "Rowing Machine",
+            sessions: [
+                ExerciseHistoryEntry(
+                    sessionStart: reference,
+                    sets: [SetDetail(index: 0, type: .normal, weightKg: nil, reps: nil,
+                                     distanceMeters: 2_000, durationSeconds: 480, rpe: nil)]
+                ),
+            ]
+        )
+
+        XCTAssertEqual(progression.sessions.count, 1)
+        XCTAssertTrue(progression.points.isEmpty)
+        XCTAssertFalse(progression.isPlottable)
+    }
+
+    /// Mixed: a movement trained with load and once without still plots only
+    /// what it can.
+    func testOnlySessionsWithALoadReachTheCurve() {
+        let withLoad = [session(100, daysAfterReference: 0), session(104, daysAfterReference: 2)]
+        let withoutLoad = ExerciseHistoryEntry(
+            sessionStart: reference.addingTimeInterval(86_400),
+            sets: [SetDetail(index: 0, type: .normal, weightKg: nil, reps: 15,
+                             distanceMeters: nil, durationSeconds: nil, rpe: nil)]
+        )
+        let progression = ExerciseProgression(
+            id: "bench",
+            title: "Bench Press (Barbell)",
+            sessions: [withLoad[0], withoutLoad, withLoad[1]]
+        )
+
+        XCTAssertEqual(progression.sessions.count, 3)
+        XCTAssertEqual(progression.points.count, 2)
+    }
+
     // MARK: - Summary values
 
     func testBestAndLatestReadFromTheSeries() {
@@ -82,19 +135,31 @@ final class ExerciseProgressionTests: XCTestCase {
 
     // MARK: - Helpers
 
-    /// A progression whose points are one day apart, oldest first.
+    /// A progression whose sessions are one day apart, oldest first.
     private func makeProgression(_ estimates: [Double]) -> ExerciseProgression {
         ExerciseProgression(
             id: "bench",
             title: "Bench Press (Barbell)",
-            points: estimates.enumerated().map { offset, estimate in
-                ProgressionPoint(
-                    sessionStart: reference.addingTimeInterval(Double(offset) * 86_400),
-                    estimatedOneRepMaxKg: estimate,
-                    weightKg: estimate * 0.8,
-                    reps: 8
-                )
+            sessions: estimates.enumerated().map { offset, estimate in
+                session(estimate, daysAfterReference: offset)
             }
         )
     }
+
+    /// A session whose Epley estimate is exactly `estimate`.
+    ///
+    /// 30 reps at half the weight: the formula's factor is then `1 + 30/30`,
+    /// so the round trip is a division and a multiplication by two — exact in
+    /// binary, which keeps these tests about the plateau rule instead of about
+    /// floating-point noise.
+    private func session(_ estimate: Double, daysAfterReference days: Int) -> ExerciseHistoryEntry {
+        ExerciseHistoryEntry(
+            sessionStart: reference.addingTimeInterval(Double(days) * 86_400),
+            sets: [
+                SetDetail(index: 0, type: .normal, weightKg: estimate / 2, reps: 30,
+                          distanceMeters: nil, durationSeconds: nil, rpe: nil),
+            ]
+        )
+    }
+
 }

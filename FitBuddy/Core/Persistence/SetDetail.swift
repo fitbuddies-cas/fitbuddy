@@ -25,6 +25,28 @@ struct SetDetail: Equatable, Identifiable, Sendable {
     var countsTowardsVolume: Bool { type.countsTowardsVolume }
 }
 
+extension Sequence where Element == SetDetail {
+    /// The sets paired with their number among the *counted* ones, 1-based —
+    /// `nil` for every set outside the volume.
+    ///
+    /// Outside the volume is more than the warm-ups: `SetType.countsTowardsVolume`
+    /// also excludes `.unknown`, where a missing type and every type a later
+    /// Hevy adds end up.
+    ///
+    /// Here rather than on one screen's model because two screens now show the
+    /// same sets — the card inside a session and the history on the statistics
+    /// screen (#163). Numbering them from separate implementations is how a
+    /// leading unknown set once ended up as number 0.
+    var numbered: [(set: SetDetail, number: Int?)] {
+        var number = 0
+        return map { set in
+            guard set.countsTowardsVolume else { return (set, nil) }
+            number += 1
+            return (set, number)
+        }
+    }
+}
+
 extension SetDetail {
     /// Reduces a cached set. Must be called on the actor owning `set`.
     init(set: ExerciseSet) {

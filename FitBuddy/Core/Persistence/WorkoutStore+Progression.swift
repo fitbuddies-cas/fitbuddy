@@ -16,7 +16,7 @@ extension WorkoutStore: ExerciseProgressionReading {
         )
         descriptor.relationshipKeyPathsForPrefetching = [\.exercises]
 
-        var points: [ProgressionPoint] = []
+        var sessions: [ExerciseHistoryEntry] = []
         var title: String?
 
         for workout in try modelContext.fetch(descriptor) {
@@ -31,27 +31,20 @@ extension WorkoutStore: ExerciseProgressionReading {
             title = occurrences.last?.title
 
             // Across every occurrence of the movement in this session, so a
-            // workout that lists it twice still yields one point.
-            let best = occurrences
+            // workout that lists it twice still yields one entry. Sorted by
+            // index, as the card inside a session does: SwiftData does not
+            // guarantee the order of a to-many relationship, and set numbers
+            // that disagree with the order the user lifted in are worse than
+            // no numbers.
+            let sets = occurrences
                 .flatMap(\.sets)
-                .filter { $0.type.countsTowardsVolume }
-                .compactMap { set -> ProgressionPoint? in
-                    guard let estimate = OneRepMax.epley(of: set),
-                          let weightKg = set.weightKg,
-                          let reps = set.reps else { return nil }
-                    return ProgressionPoint(
-                        sessionStart: workout.startTime,
-                        estimatedOneRepMaxKg: estimate,
-                        weightKg: weightKg,
-                        reps: reps
-                    )
-                }
-                .max { $0.estimatedOneRepMaxKg < $1.estimatedOneRepMaxKg }
+                .sorted { $0.index < $1.index }
+                .map(SetDetail.init(set:))
 
-            if let best { points.append(best) }
+            sessions.append(ExerciseHistoryEntry(sessionStart: workout.startTime, sets: sets))
         }
 
         guard let title else { return nil }
-        return ExerciseProgression(id: id, title: title, points: points)
+        return ExerciseProgression(id: id, title: title, sessions: sessions)
     }
 }
