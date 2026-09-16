@@ -58,7 +58,7 @@ Open `index.html` directly in a modern browser. No build step, no install. All d
 | US-3 AC4 (≥2 muscle groups) | 3.4 covers Chest + Legs |
 | US-3 AC6 (recovery if ≥6/7 days) | 3.5 recovery variant |
 | US-3 AC8 (imbalance) | 3.4 Chest 3×/wk vs Legs 1×/wk card |
-| US-3 AC9 (Helpful / Not helpful) | 3.4 / 3.5 bottom bar; 3.6 rate-limit countdown |
+| US-3 Rate-Limit-Countdown | 3.6 — Helpful-/Not-helpful-Buttons in 3.4 / 3.5 sind im Mock veraltet, in der App entfernt (#165) |
 | US-3 AC11 (History, Swipe-Delete) | noch kein Mock — Screen ist mit #117 dazugekommen |
 | US-9 AC1–AC3 (Progressionskurve, Plateau-Label, Session-Historie) | noch kein Mock — Screen ist mit #42/#163 dazugekommen |
 

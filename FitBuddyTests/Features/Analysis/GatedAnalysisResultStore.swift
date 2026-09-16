@@ -53,10 +53,6 @@ actor GatedAnalysisResultStore: AnalysisResultStoring {
         try await wrapped.delete(id: id)
     }
 
-    func setFeedback(_ feedback: AnalysisFeedback?, for id: UUID) async throws {
-        try await wrapped.setFeedback(feedback, for: id)
-    }
-
     func deleteAll() async throws {
         try await wrapped.deleteAll()
     }

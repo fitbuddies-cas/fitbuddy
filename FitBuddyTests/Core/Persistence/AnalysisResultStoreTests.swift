@@ -152,43 +152,6 @@ final class AnalysisResultStoreTests: XCTestCase {
         XCTAssertEqual(recent.count, 1)
     }
 
-    // MARK: - Feedback per analysis (US-3 AC9)
-
-    func testAnalysesStartWithoutAVerdict() async throws {
-        try await sut.save(text: "First", generatedAt: Self.reference, context: Self.context())
-
-        let stored = try await sut.latest()
-        XCTAssertNil(stored?.feedback)
-    }
-
-    func testFeedbackIsStoredOnTheAnalysisItWasGivenOn() async throws {
-        let first = try await sut.save(text: "First", generatedAt: Self.reference, context: Self.context())
-        try await sut.save(
-            text: "Second",
-            generatedAt: Self.reference.addingTimeInterval(3_600),
-            context: Self.context()
-        )
-
-        try await sut.setFeedback(.notHelpful, for: first)
-
-        let recent = try await sut.recent(limit: 10)
-        XCTAssertNil(recent.first?.feedback, "The newer analysis was not rated")
-        XCTAssertEqual(recent.last?.feedback, .notHelpful)
-    }
-
-    func testFeedbackCanBeChangedAndCleared() async throws {
-        let id = try await sut.save(text: "First", generatedAt: Self.reference, context: Self.context())
-
-        try await sut.setFeedback(.helpful, for: id)
-        try await sut.setFeedback(.notHelpful, for: id)
-        var stored = try await sut.latest()
-        XCTAssertEqual(stored?.feedback, .notHelpful)
-
-        try await sut.setFeedback(nil, for: id)
-        stored = try await sut.latest()
-        XCTAssertNil(stored?.feedback)
-    }
-
     func testDeleteAllRemovesTheWholeHistory() async throws {
         try await sut.save(text: "First", generatedAt: Self.reference, context: Self.context())
         try await sut.save(

@@ -8,10 +8,10 @@ import OSLog
 /// Wipes all Keychain items (every API key, the Strava credentials *and* the
 /// consent metadata, so consent is asked for again per US-4 AC5), the
 /// SwiftData workout cache, the whole analysis history, the sync timestamp,
-/// the analysis rate limit, the feedback tally, the LLM priority order and the
-/// step-3 skip marker. The connectors' in-memory copies of the keys are not
-/// reachable from here; `WorkoutSyncService` drops them on the next sync when
-/// it finds the stored ones gone.
+/// the analysis rate limit, the LLM priority order and the step-3 skip
+/// marker. The connectors' in-memory copies of the keys are not reachable
+/// from here; `WorkoutSyncService` drops them on the next sync when it finds
+/// the stored ones gone.
 ///
 /// The rate-limit timestamp is included on purpose (#97). It is the one thing
 /// here whose removal gives the user something back rather than taking it
@@ -32,7 +32,6 @@ actor DataResetService {
     private let results: AnalysisResultStore
     private let timestamps: SyncTimestampStore
     private let rateLimit: AnalysisRateLimitStore
-    private let feedback: AnalysisFeedbackStore
     private let priority: LLMPriorityStore
     private let skip: LLMKeysSkipStore
 
@@ -44,7 +43,6 @@ actor DataResetService {
         results: AnalysisResultStore,
         timestamps: SyncTimestampStore = SyncTimestampStore(),
         rateLimit: AnalysisRateLimitStore = AnalysisRateLimitStore(),
-        feedback: AnalysisFeedbackStore = AnalysisFeedbackStore(),
         priority: LLMPriorityStore = LLMPriorityStore(),
         skip: LLMKeysSkipStore = LLMKeysSkipStore()
     ) {
@@ -53,7 +51,6 @@ actor DataResetService {
         self.results = results
         self.timestamps = timestamps
         self.rateLimit = rateLimit
-        self.feedback = feedback
         self.priority = priority
         self.skip = skip
     }
@@ -79,7 +76,6 @@ actor DataResetService {
         }
         await timestamps.clear()
         await rateLimit.clear()
-        await feedback.clear()
         await priority.clear()
         await skip.clear()
     }

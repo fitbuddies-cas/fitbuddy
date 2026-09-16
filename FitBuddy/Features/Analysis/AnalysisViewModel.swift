@@ -40,10 +40,6 @@ final class AnalysisViewModel: ObservableObject {
     /// Cleared as soon as the first token arrives, and on every state change
     /// out of a running state.
     @Published private(set) var isTakingLong = false
-    /// The verdict the user gave on the recommendation currently on screen, or
-    /// `nil` while none was given (US-3 AC9). Reset with every new run: a
-    /// rating belongs to the recommendation it was given for.
-    @Published private(set) var feedback: AnalysisFeedback?
     /// What the analysis on screen rests on: how many sessions, over which
     /// period, from which sources (US-6, #36). `nil` until a run has resolved
     /// its window — before that there is no data basis to describe, and a
@@ -88,10 +84,10 @@ final class AnalysisViewModel: ObservableObject {
     /// restart — and "New analysis" is a request for a new run, not a request
     /// to throw the paid-for answer away.
     private var didDismissStoredResult = false
-    /// The stored row the recommendation on screen came from, so a verdict is
-    /// written to the analysis it was given for (#117). `nil` whenever nothing
-    /// persisted is showing — a preview without a store, or a run whose write
-    /// failed.
+    /// The stored row the recommendation on screen came from, so a deletion in
+    /// the history can tell whether it removed exactly this one (#117). `nil`
+    /// whenever nothing persisted is showing — a preview without a store, or a
+    /// run whose write failed.
     private var currentResultID: UUID?
     /// Guards `restore()` against overlapping itself: the view's `.task` and
     /// `dismissFailure()` can both ask for a restore, and the store read
@@ -101,7 +97,6 @@ final class AnalysisViewModel: ObservableObject {
     private let cache: WorkoutSummaryReading
     private let inference: AnalysisStreaming
     private let rateLimit: AnalysisRateLimitStore
-    private let feedbackStore: AnalysisFeedbackStore
     private let resultStore: (any AnalysisResultStoring)?
     private let calendar: Calendar
     private let now: () -> Date
@@ -116,8 +111,6 @@ final class AnalysisViewModel: ObservableObject {
     ///   - inference: The streaming call (`InferenceService` in the app).
     ///   - rateLimit: The shared lock store — the same one the service writes
     ///     to, so the label and the service's own guard never disagree.
-    ///   - feedbackStore: Where a "Helpful" / "Not helpful" tap is persisted —
-    ///     locally, with no call behind it (US-3 AC9).
     ///   - resultStore: Where a finished recommendation is persisted, so it
     ///     survives an app restart (US-3 AC10). `nil` — the default — turns
     ///     persistence off, which is what SwiftUI previews need: they have no
@@ -133,7 +126,6 @@ final class AnalysisViewModel: ObservableObject {
         cache: WorkoutSummaryReading,
         inference: AnalysisStreaming,
         rateLimit: AnalysisRateLimitStore = AnalysisRateLimitStore(),
-        feedbackStore: AnalysisFeedbackStore = AnalysisFeedbackStore(),
         resultStore: (any AnalysisResultStoring)? = nil,
         calendar: Calendar = .current,
         now: @escaping () -> Date = Date.init,
@@ -144,7 +136,6 @@ final class AnalysisViewModel: ObservableObject {
         self.cache = cache
         self.inference = inference
         self.rateLimit = rateLimit
-        self.feedbackStore = feedbackStore
         self.resultStore = resultStore
         self.calendar = calendar
         self.now = now
@@ -191,7 +182,6 @@ final class AnalysisViewModel: ObservableObject {
         // resting state; it wins over the run it stopped before it started.
         guard case .loading = state else { return }
 
-        feedback = nil
         currentResultID = nil
         context = nil
         // The stored recommendation stays on disk until this run replaces it:
@@ -235,7 +225,6 @@ final class AnalysisViewModel: ObservableObject {
             didDismissStoredResult = true
         }
         attribution = nil
-        feedback = nil
         currentResultID = nil
         context = nil
         clearResultAge()
@@ -301,10 +290,6 @@ final class AnalysisViewModel: ObservableObject {
         context = stored.context
         generatedAt = stored.generatedAt
         currentResultID = stored.id
-        // The verdict travels with the row, so it needs no matching by
-        // timestamp: what comes back is the rating given on exactly this
-        // recommendation, or nothing (#117).
-        feedback = stored.feedback
         refreshResultAge()
     }
 
@@ -335,34 +320,6 @@ final class AnalysisViewModel: ObservableObject {
         // is left of the history belongs back on screen.
         didDismissStoredResult = false
         await restore()
-    }
-
-    // MARK: - Feedback
-
-    /// Records the user's verdict on the recommendation on screen (US-3 AC9).
-    ///
-    /// Only meaningful while a finished recommendation is showing: rating a
-    /// spinner or an error message would attach the verdict to something the
-    /// user never read. Purely local — there is no request behind this tap.
-    ///
-    /// Written to the recommendation's own row, so the history shows each
-    /// verdict on the analysis it was given for (#117), and counted in the
-    /// tally, which is about the PoC rather than about one analysis.
-    func submitFeedback(_ feedback: AnalysisFeedback) async {
-        guard case .result = state else { return }
-        // Published first: the button has to look selected on the same run
-        // loop as the tap, not after the store's actor hop.
-        self.feedback = feedback
-        await feedbackStore.record(feedback)
-        guard let resultStore, let currentResultID else { return }
-        do {
-            try await resultStore.setFeedback(feedback, for: currentResultID)
-        } catch {
-            // The button is filled and the tally counted; a failed write costs
-            // the verdict on the next launch and nothing the user can act on
-            // now.
-            logger.error("Analysis feedback not persisted: \(error, privacy: .public)")
-        }
     }
 
     private func performAnalysis(_ id: UInt64) async {
@@ -509,9 +466,8 @@ final class AnalysisViewModel: ObservableObject {
         // written when the window resolves, well before the first token.
         guard let resultStore, let context else { return }
         do {
-            // The id is kept, so a "Helpful" tap on this screen lands on the
-            // row that was just written rather than on whatever is newest by
-            // the time it happens (#117).
+            // The id is kept, so deleting this row from the history clears it
+            // off this screen too, rather than whatever is newest by then (#117).
             currentResultID = try await resultStore.save(
                 text: text,
                 generatedAt: timestamp,

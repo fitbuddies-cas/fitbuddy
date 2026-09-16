@@ -129,9 +129,9 @@ struct AnalysisView: View {
         }
     }
 
-    /// The bar under the recommendation: the two feedback buttons while a
-    /// result is showing (US-3 AC9), otherwise the lock label — and
-    /// nothing at all while a run is in flight, where neither applies.
+    /// The bar under the recommendation or the error: the lock label while a
+    /// lock is running, and nothing at all while a run is in flight, where it
+    /// does not apply.
     ///
     /// `.idle` is deliberately not in the lock branch: `AnalysisIntroView`
     /// already prints the same label under its button, and repeating it in the
@@ -141,13 +141,7 @@ struct AnalysisView: View {
     @ViewBuilder
     private var footer: some View {
         switch viewModel.state {
-        case .result:
-            AnalysisFeedbackBar(
-                selected: viewModel.feedback,
-                lockMessage: viewModel.lockMessage,
-                onSelect: { verdict in Task { await viewModel.submitFeedback(verdict) } }
-            )
-        case .error:
+        case .result, .error:
             if let lockMessage = viewModel.lockMessage {
                 lockBar(lockMessage)
             }
