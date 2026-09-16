@@ -102,11 +102,11 @@ extension WorkoutSummary {
             volumeKg: countedSets.trainingVolumeKg,
             exerciseCount: workout.exercises.count,
             countedSetCount: countedSets.count,
-            // A Strava activity is one whole-body effort, not a set of
+            // A Strava or Polar activity is one whole-body effort, not a set of
             // movements with muscle groups (#144, US-5 AC1): listing a run as
             // "Other · 1 set" would misrepresent both the run and the chart,
             // which stays what it was — Hevy's strength split.
-            muscleLoads: workout.source == .strava ? [] : MuscleLoad.merged(loads),
+            muscleLoads: workout.source.isEnduranceSource ? [] : MuscleLoad.merged(loads),
             distanceMeters: distance > 0 ? distance : nil,
             durationSeconds: duration > 0 ? duration : nil
         )

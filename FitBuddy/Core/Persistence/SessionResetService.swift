@@ -13,11 +13,12 @@ import OSLog
 ///
 /// The LLM keys are deliberately kept. They are separate credentials that
 /// Hevy did not reject, and re-entering them is a needless detour through
-/// onboarding step 3. The Strava connection is *not* kept on a hard logout:
+/// onboarding step 3. The Strava and Polar connections are *not* kept on a
+/// hard logout:
 /// the session is over and the app is back in onboarding, and whoever walks
 /// through it next — possibly another person the device was handed to, the
-/// case US-1 AC3 exists for — must not find the previous user's Strava history
-/// and a live token pair for their account behind it.
+/// case US-1 AC3 exists for — must not find the previous user's Strava or
+/// Polar history and a live token pair for their account behind it.
 actor SessionResetService {
     private let keychain: KeychainService
     private let workouts: WorkoutStore
@@ -40,13 +41,14 @@ actor SessionResetService {
         self.timestamps = timestamps
     }
 
-    /// Ends the session: the Hevy key, the Strava credentials and tokens, and
-    /// every cached session of both go. Never throws: a logout that fails
+    /// Ends the session: the Hevy key, the Strava and Polar credentials and
+    /// tokens, and every cached session of all three go. Never throws: a logout that fails
     /// halfway is worse than one that reports its problems to the log, and
     /// the caller is already handling an auth error it must surface either
     /// way. Each step is independent, so one failure does not skip the others.
     func hardLogout() async {
-        for key in [KeychainKey.hevyAPIKey] + StravaCredentialStore.ownedKeys {
+        for key in [KeychainKey.hevyAPIKey] + StravaCredentialStore.ownedKeys
+            + PolarCredentialStore.ownedKeys {
             do {
                 try await keychain.delete(key)
             } catch {
@@ -55,6 +57,7 @@ actor SessionResetService {
         }
         await discardCachedWorkouts()
         await discardCachedWorkouts(from: .strava)
+        await discardCachedWorkouts(from: .polar)
     }
 
     /// Drops the cached Hevy workouts and the sync timestamp, keeping the

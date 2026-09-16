@@ -176,14 +176,28 @@ final class WorkoutStoreExercisesTests: XCTestCase {
         XCTAssertEqual(run.countedSetCount, 1)
     }
 
+    func testPolarSessionsStayOutOfTheList() async throws {
+        try insert([
+            makeWorkout(id: "hevy-1", start: reference, exercises: [
+                (title: "Run", templateID: nil, sets: [(type: .normal, weight: nil, reps: nil)]),
+            ]),
+            makeStravaRun(id: "polar:1", start: reference.addingTimeInterval(-86_400), source: .polar),
+        ])
+
+        let summaries = try await sut.exerciseSummaries(since: .distantPast)
+
+        XCTAssertEqual(summaries.count, 1)
+        XCTAssertEqual(summaries.first?.sessionCount, 1, "only the Hevy session counts")
+    }
+
     // MARK: - Helpers
 
-    private func makeStravaRun(id: String, start: Date) -> Workout {
+    private func makeStravaRun(id: String, start: Date, source: ConnectorSource = .strava) -> Workout {
         Workout(
             id: id,
             title: "Morning Run",
             startTime: start,
-            source: .strava,
+            source: source,
             exercises: [
                 Exercise(index: 0, title: "Run", sets: [
                     ExerciseSet(index: 0, type: .normal, distanceMeters: 5_000, durationSeconds: 1_800),

@@ -43,7 +43,8 @@ enum AnalysisPromptBuilder {
         )
     }
 
-    /// The sessions the analysis is about: Hevy's, not Strava's (US-5, #144).
+    /// The sessions the analysis is about: Hevy's, not Strava's or Polar's
+    /// (US-5, #144).
     ///
     /// The system prompt describes strength training, and rule 5 explains a
     /// 0 kg line as bodyweight or timed work. A run passed through as a
@@ -53,7 +54,7 @@ enum AnalysisPromptBuilder {
     /// material; for v0 the figures at least have to be right, so the same
     /// filter decides the session count `AnalysisContext` reports (US-6).
     static func strengthSessions(in summaries: [WorkoutSummary]) -> [WorkoutSummary] {
-        summaries.filter { $0.source != .strava }
+        summaries.filter { !$0.source.isEnduranceSource }
     }
 
     // MARK: - System

@@ -2,8 +2,9 @@ import Foundation
 
 /// A training session, normalized across fitness-data providers (ADR-6) so
 /// the dashboard and AI analysis read one shape regardless of source.
-/// `HevyConnector` (#34) maps Hevy's API responses into this shape and
-/// `StravaConnector` (#142) does the same for Strava.
+/// `HevyConnector` (#34) maps Hevy's API responses into this shape;
+/// `StravaConnector` (#142, ADR-10) and `PolarConnector` (ADR-11) do the same
+/// for Strava activities and Polar endurance sessions respectively.
 struct Activity: Identifiable, Equatable, Codable, Sendable {
     /// The source provider's own identifier (e.g. Hevy's workout id), so a
     /// re-sync can be matched against what is already cached.
@@ -22,6 +23,11 @@ struct Activity: Identifiable, Equatable, Codable, Sendable {
     /// dropping the other's, and the dashboard needs it to say which is which.
     var source: ConnectorSource
     var exercises: [ActivityExercise]
+    /// Session-level endurance metrics (heart rate, calories, load) when the
+    /// source provides them. `nil` for a strength source like Hevy; set for a
+    /// Polar exercise (ADR-11). Additive — the dashboard and AI prompt builder
+    /// stay valid without reading it.
+    var metrics: ActivityMetrics?
 
     /// - Parameter source: Defaults to Hevy, the only source before #141, so
     ///   the mapping and every fixture written against it stay valid. The
@@ -37,7 +43,8 @@ struct Activity: Identifiable, Equatable, Codable, Sendable {
         endTime: Date? = nil,
         updatedAt: Date? = nil,
         source: ConnectorSource = .hevy,
-        exercises: [ActivityExercise] = []
+        exercises: [ActivityExercise] = [],
+        metrics: ActivityMetrics? = nil
     ) {
         self.id = id
         self.title = title
@@ -47,5 +54,6 @@ struct Activity: Identifiable, Equatable, Codable, Sendable {
         self.updatedAt = updatedAt
         self.source = source
         self.exercises = exercises
+        self.metrics = metrics
     }
 }

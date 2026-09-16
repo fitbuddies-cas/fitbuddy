@@ -19,12 +19,15 @@ struct ConsentView: View {
                     VStack(alignment: .leading, spacing: 20) {
                         FBInfoRow(
                             icon: "arrow.down.circle",
-                            title: "Training data from Hevy and Strava",
+                            title: "Training data from Hevy, Strava and Polar",
                             text: """
-                            FitBuddy reads your workouts from Hevy and, if you connect it, your \
-                            activities from Strava — both with credentials that belong to you, \
-                            fetched directly from this device. Strava, Inc. processes data in the \
-                            USA; FitBuddy only ever reads from it and never writes back.
+                            FitBuddy reads your workouts from Hevy and, if you connect them, your \
+                            activities from Strava and your endurance sessions (heart rate, \
+                            calories, training load) from Polar AccessLink — all with credentials \
+                            that belong to you, fetched directly from this device. Strava, Inc. \
+                            processes data in the USA; Polar Electro Oy processes data in Finland \
+                            (EU). FitBuddy only ever reads from these providers and never writes \
+                            back.
                             """
                         )
                         Divider().overlay(Color.fbDivider)

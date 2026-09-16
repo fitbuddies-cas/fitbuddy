@@ -64,6 +64,13 @@ final class WorkoutSummaryMuscleLoadTests: XCTestCase {
         XCTAssertEqual(summary.countedSetCount, 1)
     }
 
+    func testPolarSessionsStayOutOfTheSplit() {
+        let summary = WorkoutSummary(workout: stravaRun(distance: 5_000, movingTime: 1_800, source: .polar))
+
+        XCTAssertEqual(summary.muscleLoads, [])
+        XCTAssertEqual(summary.source, .polar)
+    }
+
     /// The figures a cardio row shows instead of kg.
     func testCardioTotalsAreSummedOverTheCountedSets() {
         let summary = WorkoutSummary(workout: stravaRun(distance: 5_000, movingTime: 1_800))
@@ -94,12 +101,12 @@ final class WorkoutSummaryMuscleLoadTests: XCTestCase {
         XCTAssertFalse(summary.isCardio)
     }
 
-    private func stravaRun(distance: Double, movingTime: Int) -> Workout {
+    private func stravaRun(distance: Double, movingTime: Int, source: ConnectorSource = .strava) -> Workout {
         Workout(
-            id: "strava:1",
+            id: "\(source.rawValue):1",
             title: "Morning Run",
             startTime: Date(timeIntervalSince1970: 1_750_000_000),
-            source: .strava,
+            source: source,
             exercises: [
                 Exercise(index: 0, title: "Run", sets: [
                     ExerciseSet(index: 0, type: .normal, distanceMeters: distance, durationSeconds: movingTime),

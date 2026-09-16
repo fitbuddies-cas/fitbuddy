@@ -43,7 +43,8 @@ Native iOS-App (SwiftUI), die:
 | Quelle | Status |
 |---|---|
 | Hevy (Kraft) | PoC |
-| Strava (Cardio) | Geplant v1 |
+| Strava (Cardio) | PoC |
+| Polar AccessLink (Ausdauer) | PoC |
 | Apple Health | In Abklärung |
 
 ## Anforderungen

@@ -57,8 +57,8 @@ struct WorkoutSessionRow: View {
     }
 
     /// The source, as a small filled capsule after the date. Same pairings as
-    /// the design system's buttons: Strava on the warm orange with white text,
-    /// like `.accent`; Hevy as ink with the background colour as text, like
+    /// the design system's buttons: Strava on the warm orange and Polar on the
+    /// red, both with white text, echoing their logos; Hevy as ink with the background colour as text, like
     /// `.primary` — black with light text on the light theme, and the reverse
     /// on the dark one, where a white badge with white text would vanish.
     private var sourceBadge: some View {
@@ -76,13 +76,14 @@ struct WorkoutSessionRow: View {
     private var badgeFill: Color {
         switch workout.source {
         case .strava: return .fbWarn
+        case .polar: return .fbRed
         case .hevy: return .fbInk
         }
     }
 
     private var badgeText: Color {
         switch workout.source {
-        case .strava: return .white
+        case .strava, .polar: return .white
         case .hevy: return .fbBackground
         }
     }

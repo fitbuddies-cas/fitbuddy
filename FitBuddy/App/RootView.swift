@@ -48,6 +48,7 @@ struct RootView: View {
                     makeDashboardViewModel: makeDashboardViewModel,
                     makeSettingsViewModel: makeSettingsViewModel,
                     makeStravaConnectionViewModel: makeStravaConnectionViewModel,
+                    makePolarConnectionViewModel: makePolarConnectionViewModel,
                     makeWorkoutDetailViewModel: makeWorkoutDetailViewModel(for:),
                     makeExerciseListViewModel: makeExerciseListViewModel,
                     makeExerciseProgressionViewModel: makeExerciseProgressionViewModel(for:),
@@ -131,6 +132,7 @@ struct RootView: View {
         return WorkoutSyncService(
             registry: dataSources.registry,
             stravaCredentials: dataSources.stravaCredentialStore,
+            polarCredentials: dataSources.polarCredentialStore,
             workouts: workouts,
             timestamps: timestamps
         )
@@ -248,11 +250,13 @@ struct RootView: View {
 
     /// The re-auth link behind the dashboard's renewal banner (US-5 AC2,
     /// #144): switches to the settings tab and pushes the source's connection
-    /// screen. Only Strava has one; Hevy's key is renewed through onboarding.
+    /// screen. Hevy's key is renewed through onboarding instead, so it has
+    /// none.
     private func openConnectionScreen(for source: ConnectorSource) {
         selectedTab = .settings
         switch source {
         case .strava: settingsPath = [.strava]
+        case .polar: settingsPath = [.polar]
         case .hevy: settingsPath = []
         }
     }
@@ -274,6 +278,28 @@ struct RootView: View {
         )
         // Either way the dashboard has to re-read: after a connect the next
         // sync brings Strava sessions in, after a disconnect they are gone.
+        viewModel.onConnected = { dashboardReloadToken += 1 }
+        viewModel.onDisconnected = { dashboardReloadToken += 1 }
+        return viewModel
+    }
+
+    /// Wires the Polar connection screen to the shared registry, the OAuth
+    /// service and the credential store (ADR-11, #157), and to a
+    /// session reset over the same container the dashboard reads, so a
+    /// disconnect drops exactly the Polar sessions it shows.
+    private func makePolarConnectionViewModel() -> PolarConnectionViewModel {
+        let store = WorkoutStore(modelContainer: modelContext.container)
+        let viewModel = PolarConnectionViewModel(
+            oauth: dataSources.polarOAuth,
+            credentialStore: dataSources.polarCredentialStore,
+            registry: dataSources.registry,
+            sessionReset: SessionResetService(
+                workouts: store,
+                results: AnalysisResultStore(modelContainer: modelContext.container)
+            )
+        )
+        // Either way the dashboard has to re-read: after a connect the next
+        // sync brings Polar sessions in, after a disconnect they are gone.
         viewModel.onConnected = { dashboardReloadToken += 1 }
         viewModel.onDisconnected = { dashboardReloadToken += 1 }
         return viewModel

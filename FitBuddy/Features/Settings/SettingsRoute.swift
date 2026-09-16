@@ -8,4 +8,5 @@ import Foundation
 /// `NavigationStack` is through a path the root owns.
 enum SettingsRoute: Hashable {
     case strava
+    case polar
 }

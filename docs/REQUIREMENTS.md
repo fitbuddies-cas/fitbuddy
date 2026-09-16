@@ -69,7 +69,11 @@ Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 | AC3 | Nutzer hat noch keine Strava-Zugangsdaten hinterlegt | Er öffnet «Quelle hinzufügen» | Screen zur Eingabe von Client ID und Client Secret erscheint mit Anleitung zur eigenen Strava-API-App; beide Werte landen im Keychain |
 | AC4 | Access-Token ist abgelaufen, Refresh-Token ist gültig | Sync läuft | Token wird transparent erneuert, der Sync gelingt ohne Nutzerinteraktion |
 
-> **Hinweis:** Der Strava-Connector ist im PoC (v0) vollständig umgesetzt: OAuth-Flow im BYO-App-Modell nach ADR-010 (Zugangsdaten der eigenen Strava-API-App des Nutzers, kein Backend), transparenter Token-Refresh, quellenbezogener Cache und Fan-out-Sync über die `ConnectorRegistry`. Strava-Sessions erscheinen im Dashboard (AC1) und lösen den Erneuerungshinweis aus (AC2); in die Übungsliste, die Progressionskurve und den Analyse-Prompt fliessen sie nicht ein — die quellenübergreifende Auswertung bleibt v1 (siehe Kapitel 4).
+> **Hinweis:** Der Strava-Connector ist im PoC (v0) vollständig umgesetzt: OAuth-Flow im BYO-App-Modell nach ADR-010 (Zugangsdaten der eigenen Strava-API-App des Nutzers, kein Backend), transparenter Token-Refresh, quellenbezogener Cache und Fan-out-Sync über die `ConnectorRegistry`. Strava-Sessions erscheinen im Dashboard (AC1) und lösen den Erneuerungshinweis aus (AC2).
+>
+> Als dritte Quelle ist **Polar AccessLink** nach demselben BYO-App-Modell umgesetzt (ADR-011): eigene AccessLink-App des Nutzers, Verbindung über Settings, quellenbezogener Cache und Sync. AC1–AC3 gelten für Polar sinngemäss. AC4 entfällt, weil AccessLink v3 ein ca. 1 Jahr gültiges Access-Token ohne Refresh-Token ausgibt; nach Ablauf verbindet der Nutzer neu. Polar liefert nur Trainings, die nach dem Verbinden zu Polar Flow hochgeladen wurden.
+>
+> Strava- und Polar-Sessions fliessen weder in die Übungsliste noch in die Progressionskurve oder den Analyse-Prompt ein — die quellenübergreifende Auswertung bleibt v1 (siehe Kapitel 4).
 
 > **Zum Zeitfenster in AC1:** Die ursprünglichen «30 Tage» sind auf die 90 Tage des bestehenden Analyse- und Cache-Fensters (`TrainingWindow`) vereinheitlicht — zwei Fenster würden zwei Cache-Invalidierungsregeln bedeuten. Gleiche Korrektur wie bei der Doku-Synchronisation des Analysezeitraums.
 
@@ -137,7 +141,7 @@ Out of Scope — siehe Abschnitt 4.
 | US-2 | 90 Tage Trainingsdaten im Dashboard | **Must** | Datenbasis für AI-Analyse (US-3) und alle Visualisierungen. 90 Tage statt 30, da Progression erst über 8–12 Wochen messbar ist. |
 | US-3 | AI-Analyse auf Knopfdruck | **Must** | Die AI-Empfehlung *ist* das Produkt — ohne sie wird FitBuddy zum reinen Hevy-Viewer. |
 | US-4 | Onboarding in 3 Schritten | **Must** | Zwei API-Keys (Hevy + Claude) sind für nicht-technische User echtes Produktrisiko (R4). Onboarding muss ohne Doku machbar sein. |
-| US-5 | Zweite Datenquelle verbinden | **Should** | Differenzierung durch zweite Quelle ist Produktargument. Strava-Connector (OAuth im BYO-App-Modell, Token-Refresh, Normalisierung, quellenbezogener Cache) ist im PoC umgesetzt; die kombinierte Analyse über beide Quellen bleibt v1. |
+| US-5 | Zweite Datenquelle verbinden | **Should** | Differenzierung durch zweite Quelle ist Produktargument. Strava- und Polar-Connector (OAuth im BYO-App-Modell, Normalisierung, quellenbezogener Cache) sind im PoC umgesetzt; die kombinierte Analyse über alle Quellen bleibt v1. |
 | US-6 | Analyse-Kontext transparent machen | **Should** | AC1 könnte als AC in US-3 wandern; eigenständige Story v. a. wegen AC2 (Warnung bei dünner Datenbasis). |
 | US-7 | Übungssuche & Filter | **Should** | Wird notwendig, sobald User-Historie >20 Übungen erreicht. Für PoC-Demos mit wenigen Sessions verzichtbar. |
 | US-8 | Datenquelle-Status sichtbar | **Could** | Bei nur einer Quelle (Hevy) trägt der Sync-Zeitstempel aus US-2 AC2 den Grossteil. AC1 und AC2 sind in v0 dennoch umgesetzt (Stale-Indikator ab >24 h mit Retry, aktive Benachrichtigung bei widerrufenem Key), weil der blosse Zeitstempel veraltete Daten nicht als solche kenntlich macht. Vollwertig — mehrere Quellen nebeneinander — relevant ab v1. |
@@ -173,7 +177,7 @@ Bewusst ausgeschlossen für den PoC. Dokumentiert, damit später kein Scope-Cree
 |---|---|
 | **US-11** Push-Notifications (Wochenübersicht) | iOS-Permission-Flow, Background-Scheduling, LLM-Fallback bei Offline-Zustand — eigenes Sub-System. Frühestens v1.2 sinnvoll, wenn Retention-Daten zeigen, dass User die App nicht regelmässig öffnen. |
 | **US-12** Write-back nach Hevy | Erfordert Hevy PRO, ungeklärtes Write-Target (Routine vs. zukünftiges Workout) und Undo-UX. Falsch übernommene AI-Empfehlung ist ein realer Schaden für den User (R3). |
-| **Cross-Source-Analyse** | Der Strava-Connector samt OAuth-Flow, Token-Refresh und quellenbezogenem Cache ist mit US-5 im PoC umgesetzt (ADR-010). Ausserhalb des Scope bleibt die quellenübergreifende Auswertung: Cardio-Sessions fliessen in v0 weder in den Analyse-Prompt noch in die Übungsliste oder die Progressionskurve ein. |
+| **Cross-Source-Analyse** | Die Strava- und Polar-Connectoren samt OAuth-Flow und quellenbezogenem Cache sind mit US-5 im PoC umgesetzt (ADR-010, ADR-011). Ausserhalb des Scope bleibt die quellenübergreifende Auswertung: Cardio-Sessions fliessen in v0 weder in den Analyse-Prompt noch in die Übungsliste oder die Progressionskurve ein. |
 | **Apple Health Integration** | Siehe Risiko 1 — Vorschlag: OUT für PoC. |
 | **i18n / Lokalisierung** | English-only ist Definition of Done — kein Framework, keine zweite Sprache. Spart Übersetzungs-Roundtrips beim Prompt-Tuning. |
 | **App Store Release** | Distribution ausschliesslich via TestFlight / Sideload. Spart App-Store-Review, Marketing-Assets und Compliance-Roundtrips. |
