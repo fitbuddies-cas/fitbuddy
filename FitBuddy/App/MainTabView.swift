@@ -25,6 +25,7 @@ struct MainTabView: View {
     private let makeDashboardViewModel: () -> WorkoutListViewModel
     private let makeSettingsViewModel: () -> SettingsViewModel
     private let makeStravaConnectionViewModel: @MainActor () -> StravaConnectionViewModel
+    private let makePolarConnectionViewModel: (@MainActor () -> PolarConnectionViewModel)?
     private let makeWorkoutDetailViewModel: (String) -> WorkoutDetailViewModel
     private let makeExerciseListViewModel: () -> ExerciseListViewModel
     private let makeExerciseProgressionViewModel: (ExerciseIdentity) -> ExerciseProgressionViewModel
@@ -65,6 +66,7 @@ struct MainTabView: View {
         makeDashboardViewModel: @escaping () -> WorkoutListViewModel,
         makeSettingsViewModel: @escaping () -> SettingsViewModel,
         makeStravaConnectionViewModel: @escaping @MainActor () -> StravaConnectionViewModel,
+        makePolarConnectionViewModel: (@MainActor () -> PolarConnectionViewModel)? = nil,
         makeWorkoutDetailViewModel: @escaping (String) -> WorkoutDetailViewModel,
         makeExerciseListViewModel: @escaping () -> ExerciseListViewModel,
         makeExerciseProgressionViewModel: @escaping (ExerciseIdentity) -> ExerciseProgressionViewModel,
@@ -79,6 +81,7 @@ struct MainTabView: View {
         self.makeDashboardViewModel = makeDashboardViewModel
         self.makeSettingsViewModel = makeSettingsViewModel
         self.makeStravaConnectionViewModel = makeStravaConnectionViewModel
+        self.makePolarConnectionViewModel = makePolarConnectionViewModel
         self.makeWorkoutDetailViewModel = makeWorkoutDetailViewModel
         self.makeExerciseListViewModel = makeExerciseListViewModel
         self.makeExerciseProgressionViewModel = makeExerciseProgressionViewModel
@@ -108,7 +111,8 @@ struct MainTabView: View {
                 SettingsView(
                     viewModel: makeSettingsViewModel(),
                     path: $settingsPath,
-                    makeStravaConnectionViewModel: makeStravaConnectionViewModel
+                    makeStravaConnectionViewModel: makeStravaConnectionViewModel,
+                    makePolarConnectionViewModel: makePolarConnectionViewModel
                 )
             }
         }

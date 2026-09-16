@@ -20,6 +20,9 @@ struct SettingsView: View {
 
     private let makeStravaConnectionViewModel: @MainActor () -> StravaConnectionViewModel
     private let makeStravaCredentialsViewModel: @MainActor () -> StravaCredentialsViewModel
+    /// `nil` when the team has no Polar client configured on this build
+    /// (#159) — the row and the route are both left out of the list.
+    private let makePolarConnectionViewModel: (@MainActor () -> PolarConnectionViewModel)?
 
     /// - Parameters:
     ///   - viewModel: Built lazily — the autoclosure is evaluated once, when
@@ -31,16 +34,20 @@ struct SettingsView: View {
     ///     connection screen (#140).
     ///   - makeStravaCredentialsViewModel: Called once per push of the Strava
     ///     credentials screen (#139), from the connection screen.
+    ///   - makePolarConnectionViewModel: Called once per push of the Polar
+    ///     connection screen (#157); `nil` hides the Polar row entirely.
     init(
         viewModel: @autoclosure @escaping () -> SettingsViewModel,
         path: Binding<[SettingsRoute]> = .constant([]),
         makeStravaConnectionViewModel: @escaping @MainActor () -> StravaConnectionViewModel,
-        makeStravaCredentialsViewModel: @escaping @MainActor () -> StravaCredentialsViewModel = { StravaCredentialsViewModel() }
+        makeStravaCredentialsViewModel: @escaping @MainActor () -> StravaCredentialsViewModel = { StravaCredentialsViewModel() },
+        makePolarConnectionViewModel: (@MainActor () -> PolarConnectionViewModel)? = nil
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
         _path = path
         self.makeStravaConnectionViewModel = makeStravaConnectionViewModel
         self.makeStravaCredentialsViewModel = makeStravaCredentialsViewModel
+        self.makePolarConnectionViewModel = makePolarConnectionViewModel
     }
 
     var body: some View {
@@ -56,6 +63,10 @@ struct SettingsView: View {
                             viewModel: makeStravaConnectionViewModel(),
                             makeCredentialsViewModel: makeStravaCredentialsViewModel
                         )
+                    case .polar:
+                        if let makePolarConnectionViewModel {
+                            PolarConnectionView(viewModel: makePolarConnectionViewModel())
+                        }
                     }
                 }
         }
@@ -163,6 +174,9 @@ struct SettingsView: View {
                 canDelete: viewModel.hevyKeyMask != nil
             )
             stravaRow
+            if makePolarConnectionViewModel != nil {
+                polarRow
+            }
         } header: {
             Text("TRAINING DATA")
                 .font(.fbLabel)
@@ -302,6 +316,23 @@ struct SettingsView: View {
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(Color.fbInk)
                 Text("Connection and API application")
+                    .font(.footnote)
+                    .foregroundStyle(Color.fbInkSecondary)
+            }
+        }
+        .listRowBackground(Color.fbCard)
+    }
+
+    /// Entry point to the Polar connection (#157): connect, status,
+    /// disconnect. Shown only when a Polar client is configured for this
+    /// build (#159).
+    private var polarRow: some View {
+        NavigationLink(value: SettingsRoute.polar) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(ConnectorSource.polar.displayName)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color.fbInk)
+                Text("Connection")
                     .font(.footnote)
                     .foregroundStyle(Color.fbInkSecondary)
             }

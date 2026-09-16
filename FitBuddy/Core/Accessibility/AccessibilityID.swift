@@ -44,6 +44,13 @@ enum AccessibilityID {
         static let errorBanner = "stravaConnection.errorBanner"
     }
 
+    enum PolarConnection {
+        static let status = "polarConnection.status"
+        static let connectButton = "polarConnection.connectButton"
+        static let disconnectButton = "polarConnection.disconnectButton"
+        static let errorBanner = "polarConnection.errorBanner"
+    }
+
     enum Dashboard {
         static let root = "dashboard.root"
         /// Every session row carries it — the tests address them by position,
