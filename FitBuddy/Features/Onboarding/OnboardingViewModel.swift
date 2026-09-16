@@ -20,8 +20,10 @@ final class OnboardingViewModel: ObservableObject {
     let consentViewModel: ConsentViewModel
     let hevyKeyViewModel: HevyKeyEntryViewModel
     let llmKeysViewModel: LLMKeysViewModel
+    let trainingProfileViewModel: TrainingProfileViewModel
 
     private let keychain: KeychainService
+    private let trainingProfileStore: TrainingProfileStore
     private let launchArguments: [String]
 
     /// The child view models default to sharing this coordinator's Keychain
@@ -31,8 +33,11 @@ final class OnboardingViewModel: ObservableObject {
         consentViewModel: ConsentViewModel? = nil,
         hevyKeyViewModel: HevyKeyEntryViewModel? = nil,
         llmKeysViewModel: LLMKeysViewModel? = nil,
+        trainingProfileViewModel: TrainingProfileViewModel? = nil,
+        trainingProfileStore: TrainingProfileStore = TrainingProfileStore(),
         launchArguments: [String] = ProcessInfo.processInfo.arguments
     ) {
+        self.trainingProfileStore = trainingProfileStore
         self.keychain = keychain
         self.launchArguments = launchArguments
         self.consentViewModel = consentViewModel ?? ConsentViewModel(keychain: keychain)
@@ -42,10 +47,15 @@ final class OnboardingViewModel: ObservableObject {
                 keychain: keychain
             )
         self.llmKeysViewModel = llmKeysViewModel ?? LLMKeysViewModel(keychain: keychain)
+        self.trainingProfileViewModel = trainingProfileViewModel
+            ?? TrainingProfileViewModel(store: trainingProfileStore)
 
         self.consentViewModel.onGranted = { [weak self] in self?.step = self?.resolvedStep ?? .hevyKey }
         self.hevyKeyViewModel.onConnected = { [weak self] in self?.step = self?.resolvedStep ?? .llmKeys }
-        self.llmKeysViewModel.onFinished = { [weak self] in self?.step = .completed }
+        self.llmKeysViewModel.onFinished = { [weak self] in
+            self?.step = self?.resolvedStep ?? .trainingProfile
+        }
+        self.trainingProfileViewModel.onFinished = { [weak self] in self?.step = .completed }
     }
 
     /// Resolves `.loading` by bootstrapping all three children, then resuming
@@ -62,7 +72,42 @@ final class OnboardingViewModel: ObservableObject {
         await consentViewModel.bootstrap()
         await hevyKeyViewModel.bootstrap()
         await llmKeysViewModel.bootstrap()
+        await trainingProfileViewModel.bootstrap()
+        await excuseInstallsThatPredateTheProfileStep()
         step = resolvedStep
+    }
+
+    /// Marks step 4 as settled for an install that finished onboarding before
+    /// the step existed (US-13, #190).
+    ///
+    /// Without this, `resolvedStep` would send every existing user back into
+    /// onboarding for a question the app never asked them — the decision on
+    /// #189 is that they reach it through Settings instead.
+    ///
+    /// The discriminator is the *first* bootstrap after this version arrives.
+    /// A fresh install has nothing finished at that moment, so it is not
+    /// excused and walks all four steps; an install that is already complete
+    /// then was complete under the old three, and is. Checking "is complete"
+    /// alone would also excuse a new user who quit right after step 3 and came
+    /// back — they would silently never be asked.
+    private func excuseInstallsThatPredateTheProfileStep() async {
+        guard await !trainingProfileStore.hasSeenIntroduction else { return }
+        await trainingProfileStore.markIntroductionSeen()
+        guard completedTheFirstThreeSteps else { return }
+        await trainingProfileStore.setSkipped()
+        trainingProfileViewModel.reset()
+        await trainingProfileViewModel.bootstrap()
+    }
+
+    /// Whether consent, the Hevy key and the LLM decision are all settled —
+    /// onboarding as it stood before US-13.
+    private var completedTheFirstThreeSteps: Bool {
+        guard consentViewModel.state == .granted,
+              hevyKeyViewModel.state == .connected else { return false }
+        switch llmKeysViewModel.state {
+        case .saved, .skipped: return true
+        case .unknown, .idle, .saving, .failed: return false
+        }
     }
 
     /// Entry point for an HTTP 401 from Hevy anywhere in the app: the stored
@@ -101,6 +146,7 @@ final class OnboardingViewModel: ObservableObject {
         consentViewModel.reset()
         hevyKeyViewModel.reset()
         llmKeysViewModel.reset()
+        trainingProfileViewModel.reset()
         step = .consent
     }
 
@@ -123,10 +169,16 @@ final class OnboardingViewModel: ObservableObject {
         guard consentViewModel.state == .granted else { return .consent }
         guard hevyKeyViewModel.state == .connected else { return .hevyKey }
         switch llmKeysViewModel.state {
-        case .saved, .skipped:
-            return .completed
         case .unknown, .idle, .saving, .failed:
             return .llmKeys
+        case .saved, .skipped:
+            break
+        }
+        switch trainingProfileViewModel.state {
+        case .saved, .skipped:
+            return .completed
+        case .unknown, .idle:
+            return .trainingProfile
         }
     }
 }

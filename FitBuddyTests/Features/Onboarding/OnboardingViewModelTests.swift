@@ -45,13 +45,121 @@ final class OnboardingViewModelTests: XCTestCase {
         )
         let hevy = HevyKeyEntryViewModel(validator: validator, keychain: keychain)
         let llmKeys = LLMKeysViewModel(keychain: keychain, defaults: defaults)
+        let profileStore = TrainingProfileStore(defaults: defaults)
         return OnboardingViewModel(
             keychain: keychain,
             consentViewModel: consent,
             hevyKeyViewModel: hevy,
             llmKeysViewModel: llmKeys,
+            trainingProfileViewModel: TrainingProfileViewModel(store: profileStore),
+            trainingProfileStore: profileStore,
             launchArguments: launchArguments
         )
+    }
+
+    // MARK: - Step 4: training profile (US-13, #190)
+
+    /// A fresh install walks all four steps: the last one is the profile, not
+    /// the dashboard.
+    func testAFreshInstallReachesTheProfileStep() async {
+        let sut = makeSUT()
+        await sut.bootstrap()
+        await grantConsent(sut)
+        await connectHevyKey(sut)
+
+        await sut.llmKeysViewModel.skip()
+
+        XCTAssertEqual(sut.step, .trainingProfile)
+    }
+
+    func testAnsweringTheProfileCompletesOnboarding() async {
+        let sut = makeSUT()
+        await sut.bootstrap()
+        await grantConsent(sut)
+        await connectHevyKey(sut)
+        await sut.llmKeysViewModel.skip()
+
+        sut.trainingProfileViewModel.goal = .improveEndurance
+        await sut.trainingProfileViewModel.save()
+
+        XCTAssertEqual(sut.step, .completed)
+    }
+
+    func testSkippingTheProfileCompletesOnboarding() async {
+        let sut = makeSUT()
+        await sut.bootstrap()
+        await grantConsent(sut)
+        await connectHevyKey(sut)
+        await sut.llmKeysViewModel.skip()
+
+        await sut.trainingProfileViewModel.skip()
+
+        XCTAssertEqual(sut.step, .completed)
+    }
+
+    /// A user who quits mid-step-4 comes back to it, like every other step.
+    func testAnUndecidedProfileResumesAtStepFour() async {
+        let first = makeSUT()
+        await first.bootstrap()
+        await grantConsent(first)
+        await connectHevyKey(first)
+        await first.llmKeysViewModel.skip()
+        XCTAssertEqual(first.step, .trainingProfile)
+
+        let second = makeSUT()
+        await second.bootstrap()
+
+        XCTAssertEqual(second.step, .trainingProfile)
+    }
+
+    // MARK: - Installs that predate the step
+
+    /// The case the whole migration exists for: someone who finished the
+    /// three-step onboarding before step 4 existed must not be sent back into
+    /// it — they reach the profile through Settings (#189).
+    func testAnInstallThatWasAlreadyCompleteIsNotSentBack() async {
+        // Onboarding as it stood before US-13, on an install that never saw
+        // the new step.
+        try? await keychain.save(ConsentViewModel.currentVersion, for: .consentVersion)
+        try? await keychain.save("2026-01-01T00:00:00Z", for: .consentTimestamp)
+        try? await keychain.save("hv_live_abc", for: .hevyAPIKey)
+        defaults.set(true, forKey: LLMKeysSkipStore.skippedKey)
+
+        let sut = makeSUT()
+        await sut.bootstrap()
+
+        XCTAssertEqual(sut.step, .completed)
+        // Recorded as settled, so the next launch does not reconsider.
+        let decided = await TrainingProfileStore(defaults: defaults).isDecided
+        XCTAssertTrue(decided)
+    }
+
+    /// The trap the marker avoids: a *new* user who quits right after step 3
+    /// looks "already complete" on the next launch. Checking completeness
+    /// alone would excuse them and never ask — but their first bootstrap had
+    /// nothing finished, so the marker was already set without the excuse.
+    func testANewUserWhoQuitsAfterStepThreeIsStillAsked() async {
+        let first = makeSUT()
+        await first.bootstrap()
+        await grantConsent(first)
+        await connectHevyKey(first)
+        await first.llmKeysViewModel.skip()
+
+        let second = makeSUT()
+        await second.bootstrap()
+
+        XCTAssertEqual(second.step, .trainingProfile)
+    }
+
+    private func grantConsent(_ sut: OnboardingViewModel) async {
+        sut.consentViewModel.hasAcceptedCheckbox = true
+        await sut.consentViewModel.confirm()
+    }
+
+    private func connectHevyKey(_ sut: OnboardingViewModel) async {
+        await validator.setResult(.success(()))
+        sut.hevyKeyViewModel.apiKey = "hv_live_abc"
+        await sut.hevyKeyViewModel.connect()
     }
 
     private func seedConsent() async throws {
@@ -127,7 +235,8 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertEqual(sut.step, .llmKeys)
     }
 
-    func testSavingLLMKeyCompletesOnboarding() async throws {
+    /// Step 3 no longer ends the flow: the profile step follows it (US-13).
+    func testSavingLLMKeyAdvancesToTheProfileStep() async throws {
         try await seedConsent()
         try await keychain.save("hevy-key", for: .hevyAPIKey)
         let sut = makeSUT()
@@ -136,10 +245,10 @@ final class OnboardingViewModelTests: XCTestCase {
         sut.llmKeysViewModel.slots = [LLMKeySlot(provider: .claude, key: "sk-ant-abc")]
         await sut.llmKeysViewModel.save()
 
-        XCTAssertEqual(sut.step, .completed)
+        XCTAssertEqual(sut.step, .trainingProfile)
     }
 
-    func testSkippingLLMStepCompletesOnboarding() async throws {
+    func testSkippingLLMStepAdvancesToTheProfileStep() async throws {
         try await seedConsent()
         try await keychain.save("hevy-key", for: .hevyAPIKey)
         let sut = makeSUT()
@@ -147,13 +256,17 @@ final class OnboardingViewModelTests: XCTestCase {
 
         await sut.llmKeysViewModel.skip()
 
-        XCTAssertEqual(sut.step, .completed)
+        XCTAssertEqual(sut.step, .trainingProfile)
     }
 
     /// Regression: re-granting consent (e.g. after a `currentVersion` bump)
     /// must re-resolve the target step from state, not jump straight to
     /// `.hevyKey` as a hardcoded transition would, when Hevy and an LLM key
     /// are already connected/saved from before.
+    ///
+    /// The bootstrap here finds consent outstanding, so the install is not
+    /// excused from step 4 — which makes `.completed` the wrong expectation
+    /// now: the profile is still unanswered.
     func testReGrantingConsentWithDownstreamStepsAlreadyCompleteSkipsToCompleted() async throws {
         try await keychain.save("v-old", for: .consentVersion)
         try await keychain.save("2026-01-01T00:00:00Z", for: .consentTimestamp)
@@ -166,7 +279,7 @@ final class OnboardingViewModelTests: XCTestCase {
         sut.consentViewModel.hasAcceptedCheckbox = true
         await sut.consentViewModel.confirm()
 
-        XCTAssertEqual(sut.step, .completed)
+        XCTAssertEqual(sut.step, .trainingProfile)
     }
 
     /// Regression: reconnecting Hevy after a 401 must re-resolve the target
