@@ -74,7 +74,10 @@ struct MistralClient: LLMProviderClient {
                 messages: [
                     MistralChatRequest.Message(role: "system", content: systemPrompt),
                     MistralChatRequest.Message(role: "user", content: userPrompt)
-                ]
+                ],
+                responseFormat: MistralChatRequest.ResponseFormat(
+                    jsonSchema: .init(name: AnalysisReportSchema.name, schema: AnalysisReportSchema.schema, strict: true)
+                )
             )
         )
         return request

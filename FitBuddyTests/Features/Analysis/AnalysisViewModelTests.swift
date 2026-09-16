@@ -103,6 +103,20 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertNil(sut.lockMessage)
     }
 
+    /// #174: until the cards have a screen (#177) and a stored format (#176),
+    /// a structured answer is shown and kept as its prose summary.
+    func testAReportEndsInItsSummaryAndIsPersistedAsSuch() async throws {
+        await streamer.setEvents([.attempting(.claude), .report(AnalysisReportFixtures.progress)])
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.state, .result(AnalysisReportFixtures.progress.summary))
+        XCTAssertFalse(sut.isTakingLong)
+        let latest = try await results.latest()
+        XCTAssertEqual(latest?.text, AnalysisReportFixtures.progress.summary)
+    }
+
     func testStateCarriesTheTextInStreamingAndResult() {
         XCTAssertEqual(AnalysisState.streaming("half").text, "half")
         XCTAssertEqual(AnalysisState.result("whole").text, "whole")

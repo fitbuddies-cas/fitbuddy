@@ -21,7 +21,19 @@ struct GeminiGenerateContentRequest: Encodable {
         }
     }
 
+    /// Output limits and, since #174, the answer's shape.
+    ///
+    /// `responseJsonSchema` rather than `responseSchema`: the latter takes
+    /// Google's OpenAPI subset (`nullable`, no `additionalProperties`), the
+    /// former plain JSON Schema — `type`, `properties`, `required`, `enum`,
+    /// `anyOf`, `items`, `additionalProperties`, `description` and the
+    /// non-standard `propertyOrdering`, but no `const`. The two fields are
+    /// mutually exclusive, and both require `responseMimeType`
+    /// `application/json`. Works with `streamGenerateContent`: the chunks'
+    /// text concatenates to the JSON document.
     struct GenerationConfig: Encodable {
         let maxOutputTokens: Int
+        let responseMimeType: String
+        let responseJsonSchema: JSONValue
     }
 }

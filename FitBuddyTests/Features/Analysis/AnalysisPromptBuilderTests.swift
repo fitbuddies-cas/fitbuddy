@@ -753,6 +753,24 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertTrue(system.contains("at most the smallest step listed"))
     }
 
+    /// #174: the answer is a JSON report, and its prose summary keeps the
+    /// 200-word limit the plain answer had.
+    func testSystemPromptAsksForTheReportAsJSON() {
+        let system = AnalysisPromptBuilder.systemPrompt
+
+        XCTAssertTrue(system.contains("one JSON object that follows the response schema"))
+        for key in ["headline", "verdict", "cards", "summary", "fromKg", "toKg", "suggestedRestHours"] {
+            XCTAssertTrue(system.contains(key), key)
+        }
+        for kind in AnalysisCard.Kind.allCases {
+            XCTAssertTrue(system.contains("\"\(kind.rawValue)\""), kind.rawValue)
+        }
+        for verdict in AnalysisVerdict.allCases {
+            XCTAssertTrue(system.contains("\"\(verdict.rawValue)\""), verdict.rawValue)
+        }
+        XCTAssertTrue(system.contains("under 200 words"))
+    }
+
     // MARK: - Helpers
 
     private func make(

@@ -75,7 +75,11 @@ struct GeminiClient: LLMProviderClient {
             GeminiGenerateContentRequest(
                 systemInstruction: .init(role: nil, parts: [.init(text: systemPrompt)]),
                 contents: [.init(role: "user", parts: [.init(text: userPrompt)])],
-                generationConfig: .init(maxOutputTokens: Self.maxOutputTokens)
+                generationConfig: .init(
+                    maxOutputTokens: Self.maxOutputTokens,
+                    responseMimeType: "application/json",
+                    responseJsonSchema: AnalysisReportSchema.schema.addingPropertyOrdering()
+                )
             )
         )
         return request

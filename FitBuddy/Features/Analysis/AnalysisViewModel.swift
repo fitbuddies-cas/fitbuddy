@@ -367,6 +367,13 @@ final class AnalysisViewModel: ObservableObject {
                     stopSlowTimer()
                     text += chunk
                     state = .streaming(text)
+                case .report(let report):
+                    // Shown and stored as its prose summary until the cards
+                    // have a screen (#177) and a stored format (#176); #178
+                    // reworks this loop around the report.
+                    stopSlowTimer()
+                    text = report.summary
+                    state = .streaming(text)
                 }
             }
             guard !Task.isCancelled else { return await finish(id) }

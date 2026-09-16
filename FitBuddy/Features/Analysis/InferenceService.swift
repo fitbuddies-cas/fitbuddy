@@ -61,8 +61,11 @@ actor InferenceService {
         return Dictionary(uniqueKeysWithValues: all.map { ($0.provider, $0) })
     }
 
-    /// Streams one analysis for `userPrompt` under `systemPrompt` (the prompt
+    /// Runs one analysis for `userPrompt` under `systemPrompt` (the prompt
     /// built by #30), trying each configured provider in priority order.
+    ///
+    /// Each provider's answer is collected in full and yielded once, as a
+    /// decoded `AnalysisReport` or as prose (#174).
     ///
     /// Cancelling the consuming task stops the underlying request and ends the
     /// run — a cancellation is never treated as a provider failure, so it does
@@ -143,12 +146,14 @@ actor InferenceService {
                     await rateLimit.recordCall(at: now())
                     didRecordCall = true
                 }
-                var didYieldText = false
+                // Collected rather than forwarded chunk by chunk: the answer is
+                // a JSON document (#174), and half of one is neither a report
+                // nor readable prose. It also means a provider that dies
+                // mid-answer never puts anything on screen.
+                var answer = ""
                 for try await chunk in stream {
                     try Task.checkCancellation()
-                    guard !chunk.isEmpty else { continue }
-                    didYieldText = true
-                    continuation.yield(.text(chunk))
+                    answer += chunk
                 }
                 // A clean stream that never produced a token is not an answer:
                 // hand over to the next candidate rather than ending the run.
@@ -156,7 +161,12 @@ actor InferenceService {
                 // provider can also answer 200 and simply say nothing — that
                 // has to fall back too, or the chain stops at the first one
                 // whose response this version cannot read.
-                if didYieldText { return }
+                if !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    // A report, or prose when the answer does not match the
+                    // schema (US-14 AC5) — never a reason to fall back.
+                    continuation.yield(AnalysisReportParser.event(for: answer))
+                    return
+                }
                 lastError = InferenceServiceError.invalidResponse
             } catch {
                 // The user cancelled: not a provider problem, and asking the

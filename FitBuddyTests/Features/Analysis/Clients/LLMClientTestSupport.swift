@@ -60,6 +60,18 @@ class LLMClientTestCase: XCTestCase {
         return chunks
     }
 
+    /// `schema` as the JSON a request body carries it, for comparing against
+    /// the decoded body.
+    func jsonObject(of schema: JSONValue) throws -> NSDictionary {
+        let data = try JSONEncoder().encode(schema)
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? NSDictionary)
+    }
+
+    /// The streamed answer, joined and parsed the way `InferenceService` does.
+    func parsedAnswer(of stream: AsyncThrowingStream<String, Error>) async throws -> AnalysisEvent {
+        AnalysisReportParser.event(for: try await collect(stream).joined())
+    }
+
     /// The JSON body the client sent.
     ///
     /// `URLProtocol`-backed sessions sometimes hand the body over as a stream

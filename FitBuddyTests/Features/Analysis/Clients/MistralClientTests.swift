@@ -51,6 +51,31 @@ final class MistralClientTests: LLMClientTestCase {
         XCTAssertEqual(sut.provider, .mistral)
     }
 
+    // MARK: - Structured output (#174)
+
+    func testRequestAsksForTheReportSchemaInStrictMode() async throws {
+        stub(body: MistralSSEFactory.body(textChunks: ["Hi"]))
+
+        _ = try await collect(try await stream())
+
+        let json = try jsonBody(of: try capturedRequest())
+        let format = try XCTUnwrap(json["response_format"] as? [String: Any])
+        XCTAssertEqual(format["type"] as? String, "json_schema")
+        let jsonSchema = try XCTUnwrap(format["json_schema"] as? [String: Any])
+        XCTAssertEqual(jsonSchema["name"] as? String, AnalysisReportSchema.name)
+        XCTAssertEqual(jsonSchema["strict"] as? Bool, true)
+        let schema = try XCTUnwrap(jsonSchema["schema"] as? NSDictionary)
+        XCTAssertEqual(schema, try jsonObject(of: AnalysisReportSchema.schema))
+    }
+
+    func testAStreamedJSONAnswerDecodesAsAReport() async throws {
+        stub(body: MistralSSEFactory.body(textChunks: AnalysisReportFixtures.progressChunks()))
+
+        let event = try await parsedAnswer(of: try await stream())
+
+        XCTAssertEqual(event, .report(AnalysisReportFixtures.progress))
+    }
+
     // MARK: - Stream parsing
 
     func testStreamsIncrementalTextChunks() async throws {

@@ -151,8 +151,25 @@ enum AnalysisPromptBuilder {
     smallest step listed for it, and where none is listed, progress reps \
     rather than weight.
 
-    Answer in English and keep it under 200 words: first what stands out in \
-    the data, then a concrete recommendation for the next block.
+    Answer in English, as one JSON object that follows the response schema:
+
+    - headline: one short sentence stating the verdict.
+    - verdict: "progress" when the data supports adding load or reps, \
+    "recover" when rest has to come first, "hold" when neither is justified \
+    yet.
+    - cards: one to four cards, most important first. Use "progression" for \
+    a load increase on one exercise: fromKg is the weight listed for its most \
+    recent session, toKg the new weight, reasoning one sentence. Use \
+    "recovery" when rest comes before any progression, with the rest you \
+    recommend in suggestedRestHours. Use "imbalance" when two muscle groups \
+    are trained at clearly different frequencies, with each group's sessions \
+    per week. Use "note" for anything else worth saying, including a rep \
+    progression without a weight change. Every card follows the ground rules \
+    above; a recommendation you cannot ground in the data does not become a \
+    card.
+    - summary: the whole recommendation as plain prose under 200 words, \
+    readable without the cards: first what stands out in the data, then a \
+    concrete recommendation for the next block.
     """
 
     // MARK: - User

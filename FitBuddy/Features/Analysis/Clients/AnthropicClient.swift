@@ -123,7 +123,10 @@ struct AnthropicClient: LLMProviderClient {
                 system: systemPrompt,
                 stream: true,
                 messages: [ClaudeMessageRequest.Message(role: "user", content: userPrompt)],
-                outputConfig: ClaudeMessageRequest.OutputConfig(effort: Self.effort)
+                outputConfig: ClaudeMessageRequest.OutputConfig(
+                    effort: Self.effort,
+                    format: ClaudeMessageRequest.Format(schema: AnalysisReportSchema.schema)
+                )
             )
         )
         return request
