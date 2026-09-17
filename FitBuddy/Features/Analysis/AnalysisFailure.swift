@@ -23,6 +23,9 @@ enum AnalysisFailure: Equatable {
     case offline(LLMProvider?)
     /// HTTP 429, with the provider's `Retry-After` in seconds when it sent one.
     case rateLimited(provider: LLMProvider?, retryAfter: TimeInterval?)
+    /// The provider's plan for this key allows no requests to the model at
+    /// all (#211). Waiting does not help; the user has to change the plan.
+    case planExcludesModel(LLMProvider?)
     /// The provider answered 5xx, or aborted the stream after answering 200.
     case serviceUnavailable(LLMProvider?)
     /// The cached window holds no workouts at all — not even in the widest
@@ -62,6 +65,8 @@ enum AnalysisFailure: Equatable {
             self = .offline(provider)
         case .rateLimited(let retryAfter):
             self = .rateLimited(provider: provider, retryAfter: retryAfter)
+        case .planExcludesModel:
+            self = .planExcludesModel(provider)
         case .serviceUnavailable, .streamInterrupted:
             self = .serviceUnavailable(provider)
         case .invalidResponse, .unexpectedStatus, .alreadyInProgress:
@@ -82,6 +87,8 @@ enum AnalysisFailure: Equatable {
             return "No connection"
         case .rateLimited:
             return "Too many requests"
+        case .planExcludesModel(let provider):
+            return "\(Self.name(provider)) plan excludes this model"
         case .serviceUnavailable(let provider):
             return "\(Self.name(provider)) unavailable"
         case .noTrainingData:
@@ -110,6 +117,9 @@ enum AnalysisFailure: Equatable {
                 return "\(Self.name(provider)) is rate-limiting your key. Try again in a few minutes."
             }
             return "\(Self.name(provider)) is rate-limiting your key. Try again in \(wait)."
+        case .planExcludesModel(let provider):
+            return "\(Self.name(provider)) allows no requests to the model FitBuddy uses on your current plan. "
+                + "Enable pay-as-you-go there, then run the analysis again."
         case .serviceUnavailable(let provider):
             return "\(Self.name(provider)) could not complete the analysis. Try again in a few minutes."
         case .noTrainingData:
@@ -132,6 +142,8 @@ enum AnalysisFailure: Equatable {
             return "antenna.radiowaves.left.and.right.slash"
         case .rateLimited, .serviceUnavailable:
             return "exclamationmark.icloud"
+        case .planExcludesModel:
+            return "creditcard.trianglebadge.exclamationmark"
         case .noTrainingData:
             return "figure.strengthtraining.traditional"
         case .cacheUnavailable:
@@ -145,7 +157,7 @@ enum AnalysisFailure: Equatable {
     /// key cannot be retried into working — that one needs onboarding.
     var isRetryable: Bool {
         switch self {
-        case .missingAPIKey, .unauthorized, .noTrainingData:
+        case .missingAPIKey, .unauthorized, .noTrainingData, .planExcludesModel:
             return false
         case .keychainUnavailable, .offline, .rateLimited, .serviceUnavailable,
              .cacheUnavailable, .unreadableResponse:
@@ -164,6 +176,16 @@ enum AnalysisFailure: Equatable {
     var leadsToSettings: Bool {
         if case .missingAPIKey = self { return true }
         return false
+    }
+
+    /// Where the plan is changed, for the failure whose fix is a billing
+    /// setting in the provider's console (#211). `nil` for every other
+    /// failure, and for providers that never report a plan restriction.
+    var planURL: URL? {
+        guard case .planExcludesModel(.mistral) = self else { return nil }
+        // The Limits page shows the zero allowance and the current tier, and
+        // links on to Billing where pay-as-you-go is switched on.
+        return URL(staticString: "https://admin.mistral.ai/plateforme/limits")
     }
 
     /// The provider's name, or a neutral stand-in when the run failed before

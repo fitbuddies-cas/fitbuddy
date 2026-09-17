@@ -158,6 +158,32 @@ final class MistralClientTests: LLMClientTestCase {
         }
     }
 
+    /// The 429 a workspace without pay-as-you-go gets on every call: the
+    /// allowance header reads 0, and no amount of waiting changes that (#211).
+    func testZeroAllowanceIsAPlanRestrictionNotARateLimit() async throws {
+        stub(statusCode: 429, headers: ["x-ratelimit-limit-req-minute": "0"])
+
+        do {
+            _ = try await stream()
+            XCTFail("expected planExcludesModel")
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .planExcludesModel)
+        }
+    }
+
+    /// A real burst limit keeps the allowance header above zero and stays an
+    /// ordinary rate limit.
+    func testNonZeroAllowanceStaysARateLimit() async throws {
+        stub(statusCode: 429, headers: ["x-ratelimit-limit-req-minute": "750"])
+
+        do {
+            _ = try await stream()
+            XCTFail("expected rateLimited")
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .rateLimited(retryAfter: nil))
+        }
+    }
+
     func testNetworkUnavailableWhenTransportFails() async throws {
         stubTransportFailure()
 

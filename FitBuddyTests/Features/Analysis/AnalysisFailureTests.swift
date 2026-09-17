@@ -23,6 +23,12 @@ final class AnalysisFailureTests: XCTestCase {
         )
     }
 
+    /// A 429 that comes with a zero allowance is a plan problem, not a wait
+    /// (#211).
+    func testMapsPlanRestrictionApartFromRateLimit() {
+        XCTAssertEqual(failure(.planExcludesModel, provider: .mistral), .planExcludesModel(.mistral))
+    }
+
     /// A stream a provider aborts after answering 200 is a service problem to
     /// the user, not a new category of failure.
     func testMapsStreamInterruptionOntoServiceUnavailable() {
@@ -78,6 +84,7 @@ final class AnalysisFailureTests: XCTestCase {
         XCTAssertFalse(AnalysisFailure.missingAPIKey.isRetryable)
         XCTAssertFalse(AnalysisFailure.unauthorized(.claude).isRetryable)
         XCTAssertFalse(AnalysisFailure.noTrainingData.isRetryable)
+        XCTAssertFalse(AnalysisFailure.planExcludesModel(.mistral).isRetryable)
         XCTAssertTrue(AnalysisFailure.offline(.claude).isRetryable)
         XCTAssertTrue(AnalysisFailure.keychainUnavailable.isRetryable)
     }
@@ -92,6 +99,19 @@ final class AnalysisFailureTests: XCTestCase {
         XCTAssertFalse(AnalysisFailure.offline(.claude).leadsToSettings)
         XCTAssertFalse(AnalysisFailure.unreadableResponse(.gemini).leadsToSettings)
         XCTAssertFalse(AnalysisFailure.noTrainingData.leadsToSettings)
+        XCTAssertFalse(AnalysisFailure.planExcludesModel(.mistral).leadsToSettings)
+    }
+
+    /// Only the plan failure links out, and only for the provider that
+    /// reports one (#211); nothing else on the error screen opens a browser.
+    func testOnlyMistralsPlanFailureLinksToItsConsole() {
+        let mistral = AnalysisFailure.planExcludesModel(.mistral)
+        XCTAssertEqual(mistral.planURL?.host(), "admin.mistral.ai")
+        XCTAssertTrue(mistral.message.contains("pay-as-you-go"), mistral.message)
+        XCTAssertNil(AnalysisFailure.planExcludesModel(.claude).planURL)
+        XCTAssertNil(AnalysisFailure.planExcludesModel(nil).planURL)
+        XCTAssertNil(AnalysisFailure.rateLimited(provider: .mistral, retryAfter: nil).planURL)
+        XCTAssertNil(AnalysisFailure.unauthorized(.mistral).planURL)
     }
 
     func testRateLimitMessageNamesTheWaitWhenTheProviderSentOne() {
@@ -103,7 +123,8 @@ final class AnalysisFailureTests: XCTestCase {
     func testEveryFailureHasATitleMessageAndSymbol() {
         let failures: [AnalysisFailure] = [
             .missingAPIKey, .keychainUnavailable, .unauthorized(.claude), .offline(.gemini),
-            .rateLimited(provider: .mistral, retryAfter: nil), .serviceUnavailable(.claude),
+            .rateLimited(provider: .mistral, retryAfter: nil), .planExcludesModel(.mistral),
+            .planExcludesModel(nil), .serviceUnavailable(.claude),
             .noTrainingData,
             .cacheUnavailable, .unreadableResponse(.gemini), .unreadableResponse(nil),
         ]
