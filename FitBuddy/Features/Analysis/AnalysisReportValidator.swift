@@ -43,11 +43,12 @@ enum AnalysisReportValidator {
     }
 
     /// The headline of a progress report the app turned into a hold verdict,
-    /// because none of its progressions survived (#177).
+    /// because no progression card is left to back it (#177).
     static let holdHeadline = "Hold steady this week."
 
-    /// The lead of a progress report the app turned into a hold verdict
-    /// (#170). The model's lead argued for a load increase no card backs.
+    /// The lead of a progress report the app turned into a hold verdict after
+    /// taking away at least one of its progressions (#170). The model's lead
+    /// argued for a load increase no card backs.
     static let holdLead =
         "Your data doesn't back a specific load increase yet. Keep your current weights and read the full analysis below."
 
@@ -65,6 +66,11 @@ enum AnalysisReportValidator {
         _ report: AnalysisReport,
         against evidence: AnalysisReportEvidence
     ) -> ValidatedAnalysisReport {
+        // Model progressions that did not come out of their own validation as
+        // a progression — downgraded to a note, or dropped for a blank reason.
+        let rejectedProgressions = report.cards.filter { card in
+            card.kind == .progression && validate(card, against: evidence)?.kind != .progression
+        }.count
         var cards = report.cards.compactMap { validate($0, against: evidence) }
         var verdict = report.verdict
         var headline = report.headline
@@ -90,16 +96,22 @@ enum AnalysisReportValidator {
         }
 
         let kept = capped(cards)
+        let cutProgressions = cards.filter { $0.kind == .progression }.count
+            - kept.filter { $0.kind == .progression }.count
 
         // "You're ready to progress." over cards that name no progression
-        // would contradict the screen it heads (#177): every progression was
-        // downgraded to a note or cut, so the verdict the cards support is to
-        // hold. A recovery verdict forced above is never touched. The lead goes
-        // with the verdict it argued for (#170).
+        // would contradict the screen it heads (#177), so the verdict the cards
+        // support is to hold. A recovery verdict forced above is never touched.
+        // The lead is replaced only when the app took a progression away — a
+        // downgrade or the cap — because only then did the model's lead argue
+        // for a load increase no card backs (#170). A progress verdict over
+        // notes alone keeps the model's lead: the app overruled nothing in it.
         if verdict == .progress, !kept.contains(where: { $0.kind == .progression }) {
             verdict = .hold
             headline = holdHeadline
-            lead = holdLead
+            if rejectedProgressions + cutProgressions > 0 {
+                lead = holdLead
+            }
         }
 
         return ValidatedAnalysisReport(

@@ -188,31 +188,6 @@ struct SeededApp {
 
     // MARK: - Interactions
 
-    /// Selects a profile option and makes sure it took.
-    ///
-    /// Same verify-and-retry as `expand`: the first tap after a push can land
-    /// while the list is still settling, and a test that then waits on the
-    /// row summary fails 30 seconds later on the wrong screen.
-    func select(
-        _ option: XCUIElement,
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) {
-        assertAppears(option, file: file, line: line)
-        for _ in 0..<3 {
-            guard !option.isSelected else { return }
-            option.tap()
-            // A fresh expectation per attempt — one that was waited on and
-            // not fulfilled cannot be waited on again.
-            let selected = XCTNSPredicateExpectation(
-                predicate: NSPredicate(format: "isSelected == true"),
-                object: option
-            )
-            _ = XCTWaiter().wait(for: [selected], timeout: 2)
-        }
-        XCTAssertTrue(option.isSelected, "Option never became selected", file: file, line: line)
-    }
-
     /// Opens a collapsed session and makes sure it stayed open.
     ///
     /// A single tap is not enough right after the screen appears: the query
@@ -241,29 +216,41 @@ struct SeededApp {
         )
     }
 
-    /// Switches to a tab and makes sure the switch took.
+    /// Taps a selectable element — a tab bar button or a profile option — and
+    /// makes sure the selection took.
     ///
-    /// Same lesson as `expand(_:)`: on a cold simulator the first launch of a
-    /// run is still settling when the tab bar turns up, and a single tap can be
-    /// swallowed — the bar then still has the dashboard selected, and the test
-    /// fails 30 seconds later on the tab's content with nothing pointing at
-    /// the dropped tap (#179). Waits for the tab bar's own selection state, so
-    /// a retry never lands on a screen that already switched.
+    /// Same lesson as `expand(_:)`: a single tap can be swallowed while the
+    /// screen is still settling. On a cold simulator the tab bar turns up
+    /// before the first launch has settled, and the bar still has the
+    /// dashboard selected (#179); right after a push the list is still laying
+    /// out, and the option tap lands where the row no longer is (#197). Either
+    /// way the test would fail 30 seconds later on the wrong screen with
+    /// nothing pointing at the dropped tap. Waits for the element's own
+    /// `isSelected` state, so a retry never undoes a selection that took.
     func select(
-        _ tab: XCUIElement,
+        _ element: XCUIElement,
         attempts: Int = 3,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        assertAppears(tab, file: file, line: line)
-        let selected = NSPredicate(format: "isSelected == true")
+        assertAppears(element, file: file, line: line)
         for _ in 0..<attempts {
-            guard !tab.isSelected else { return }
-            tab.tap()
-            let expectation = XCTNSPredicateExpectation(predicate: selected, object: tab)
-            _ = XCTWaiter().wait(for: [expectation], timeout: 3)
+            guard !element.isSelected else { return }
+            element.tap()
+            // A fresh expectation per attempt — one that was waited on and
+            // not fulfilled cannot be waited on again.
+            let selected = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "isSelected == true"),
+                object: element
+            )
+            _ = XCTWaiter().wait(for: [selected], timeout: 3)
         }
-        XCTAssertTrue(tab.isSelected, "The tab did not switch", file: file, line: line)
+        XCTAssertTrue(
+            element.isSelected,
+            "The tab or option never became selected",
+            file: file,
+            line: line
+        )
     }
 
     // MARK: - Assertions

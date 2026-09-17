@@ -171,7 +171,8 @@ final class AnalysisViewModelTests: XCTestCase {
 
     /// Thin data: a report without cards is still a report — shown and
     /// stored with its lead and summary, not downgraded to prose (#170). A
-    /// progress verdict without a progression card holds (#177).
+    /// progress verdict without a progression card holds (#177), but keeps
+    /// the model's lead: the app rejected no progression it argued for.
     func testAReportWithoutCardsIsShownAndStoredAsAReport() async throws {
         await streamer.setReport(AnalysisReport(
             headline: "You're ready to progress.",
@@ -187,7 +188,7 @@ final class AnalysisViewModelTests: XCTestCase {
         let expected = ValidatedAnalysisReport(
             headline: AnalysisReportValidator.holdHeadline,
             verdict: .hold,
-            lead: AnalysisReportValidator.holdLead,
+            lead: "Too little data for a change yet.",
             cards: [],
             summary: "Keep training as you do."
         )
