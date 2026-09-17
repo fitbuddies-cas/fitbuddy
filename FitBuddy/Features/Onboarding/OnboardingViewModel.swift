@@ -1,9 +1,10 @@
 import Foundation
 
-/// Coordinates the 3-step onboarding flow (US-4): consent (step 1) → Hevy key
-/// (step 2) → LLM keys (step 3) → dashboard. Owns the three step view models,
-/// resumes at the first incomplete step on launch (app-kill safe), and advances
-/// `step` as each child reports completion.
+/// Coordinates the 4-step onboarding flow (US-4, US-13): consent (step 1) →
+/// Hevy key (step 2) → LLM keys (step 3) → training profile (step 4) →
+/// dashboard. Owns the four step view models, resumes at the first incomplete
+/// step on launch (app-kill safe), and advances `step` as each child reports
+/// completion.
 @MainActor
 final class OnboardingViewModel: ObservableObject {
     /// DEBUG-only launch argument that bypasses the whole flow, so simulator
@@ -58,7 +59,7 @@ final class OnboardingViewModel: ObservableObject {
         self.trainingProfileViewModel.onFinished = { [weak self] in self?.step = .completed }
     }
 
-    /// Resolves `.loading` by bootstrapping all three children, then resuming
+    /// Resolves `.loading` by bootstrapping all four children, then resuming
     /// at the first incomplete step — after an app kill the user returns to
     /// exactly where they left off. No-op once resolved.
     func bootstrap() async {
@@ -86,10 +87,10 @@ final class OnboardingViewModel: ObservableObject {
     ///
     /// The discriminator is the *first* bootstrap after this version arrives.
     /// A fresh install has nothing finished at that moment, so it is not
-    /// excused and walks all four steps; an install that is already complete
-    /// then was complete under the old three, and is. Checking "is complete"
-    /// alone would also excuse a new user who quit right after step 3 and came
-    /// back — they would silently never be asked.
+    /// excused and walks all four steps; an install that already holds a Hevy
+    /// key and an LLM decision then was complete under the old three, and is.
+    /// Checking "is complete" alone would also excuse a new user who quit
+    /// right after step 3 and came back — they would silently never be asked.
     private func excuseInstallsThatPredateTheProfileStep() async {
         guard await !trainingProfileStore.hasSeenIntroduction else { return }
         await trainingProfileStore.markIntroductionSeen()
@@ -99,11 +100,19 @@ final class OnboardingViewModel: ObservableObject {
         await trainingProfileViewModel.bootstrap()
     }
 
-    /// Whether consent, the Hevy key and the LLM decision are all settled —
-    /// onboarding as it stood before US-13.
+    /// Whether the Hevy key and the LLM decision are both settled — onboarding
+    /// as it stood before US-13.
+    ///
+    /// Consent is deliberately not part of it. A consent bump makes step 1
+    /// `.required` again on the very launch this check runs, and an install
+    /// that came through the old three steps would then not be excused — but
+    /// the marker is written regardless, so after the re-consent every
+    /// existing user would land in step 4 (#195 review). The key and the
+    /// decision alone prove the previous install: a fresh one has neither at
+    /// its first bootstrap, because `FirstLaunchResetService` purged the
+    /// Keychain and the defaults are empty.
     private var completedTheFirstThreeSteps: Bool {
-        guard consentViewModel.state == .granted,
-              hevyKeyViewModel.state == .connected else { return false }
+        guard hevyKeyViewModel.state == .connected else { return false }
         switch llmKeysViewModel.state {
         case .saved, .skipped: return true
         case .unknown, .idle, .saving, .failed: return false

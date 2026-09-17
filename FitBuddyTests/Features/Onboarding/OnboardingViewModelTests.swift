@@ -285,9 +285,10 @@ final class OnboardingViewModelTests: XCTestCase {
     /// `.hevyKey` as a hardcoded transition would, when Hevy and an LLM key
     /// are already connected/saved from before.
     ///
-    /// The bootstrap here finds consent outstanding, so the install is not
-    /// excused from step 4 — which makes `.completed` the wrong expectation
-    /// now: the profile is still unanswered.
+    /// Since US-13 this is also the consent-bump case of the migration: the
+    /// bootstrap finds consent outstanding, but a Hevy key and an LLM decision
+    /// prove a previous install, so step 4 is excused and the re-consent lands
+    /// on the dashboard — not in a question the app never asked before.
     func testReGrantingConsentWithDownstreamStepsAlreadyCompleteSkipsToCompleted() async throws {
         try await keychain.save("v-old", for: .consentVersion)
         try await keychain.save("2026-01-01T00:00:00Z", for: .consentTimestamp)
@@ -300,7 +301,7 @@ final class OnboardingViewModelTests: XCTestCase {
         sut.consentViewModel.hasAcceptedCheckbox = true
         await sut.consentViewModel.confirm()
 
-        XCTAssertEqual(sut.step, .trainingProfile)
+        XCTAssertEqual(sut.step, .completed)
     }
 
     /// Regression: reconnecting Hevy after a 401 must re-resolve the target
