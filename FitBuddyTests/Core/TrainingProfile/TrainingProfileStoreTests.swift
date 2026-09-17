@@ -108,6 +108,19 @@ final class TrainingProfileStoreTests: XCTestCase {
         XCTAssertTrue(skipped)
     }
 
+    /// The Settings removal (#191): answers gone, step settled — so a user who
+    /// answered in onboarding and removed later is not asked again.
+    func testRemovingTheProfileSettlesTheStep() async {
+        await sut.save(TrainingProfile(goal: .buildMuscle, experience: .oneToThreeYears))
+
+        await sut.removeProfile()
+
+        let profile = await sut.profile
+        XCTAssertTrue(profile.isEmpty)
+        let decided = await sut.isDecided
+        XCTAssertTrue(decided)
+    }
+
     // MARK: - Reset
 
     /// "Delete all data" asks again — but must not make the install look like
