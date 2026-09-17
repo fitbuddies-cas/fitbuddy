@@ -54,7 +54,8 @@ struct RootView: View {
                     makeExerciseProgressionViewModel: makeExerciseProgressionViewModel(for:),
                     makeAnalysisHistoryViewModel: makeAnalysisHistoryViewModel,
                     reloadToken: dashboardReloadToken,
-                    onRenewSource: openConnectionScreen(for:)
+                    onRenewSource: openConnectionScreen(for:),
+                    onOpenSettings: openSettingsTab
                 )
             }
         }
@@ -261,6 +262,15 @@ struct RootView: View {
         case .polar: settingsPath = [.polar]
         case .hevy: settingsPath = []
         }
+    }
+
+    /// The link behind «Open Settings» on the analysis tab's missing-key
+    /// screen (#207): switches to the settings tab, at its root, where the
+    /// LLM keys are. Clearing the path matters when a connection screen was
+    /// left pushed there earlier.
+    private func openSettingsTab() {
+        selectedTab = .settings
+        settingsPath = []
     }
 
     /// Wires the Strava connection screen to the shared registry, the OAuth
