@@ -17,7 +17,20 @@ struct GeminiClient: LLMProviderClient {
     /// completed. 3.6 is the model Google's own error text names as the
     /// replacement for retired ones, and it answers.
     static let model = "gemini-3.6-flash"
-    static let maxOutputTokens = 4096
+    /// Not the prose budget alone: thinking is on by default on this model and
+    /// its tokens are drawn from `maxOutputTokens` as well, so a cap sized for
+    /// the paragraph only can be spent entirely on reasoning. The response then
+    /// ends with `finishReason: MAX_TOKENS` and no text part at all — which
+    /// reads here like a clean but empty stream, and made every Gemini run hand
+    /// over to the next provider. Same reasoning, and same headroom, as
+    /// `AnthropicClient.maxTokens`.
+    static let maxOutputTokens = 8192
+    /// Thinking effort, sent explicitly rather than left at Google's default
+    /// (`medium`): the model is asked for a short recommendation from a handful
+    /// of workout summaries, and every thinking token is both billed to the
+    /// user's own key and taken out of the budget above. Gemini 3 models cannot
+    /// turn thinking off — `low` is the floor that still answers well here.
+    static let thinkingLevel = "low"
 
     /// How long to wait before the one retry of an overloaded call — see
     /// `streamAnalysis`.
@@ -106,7 +119,10 @@ struct GeminiClient: LLMProviderClient {
             GeminiGenerateContentRequest(
                 systemInstruction: .init(role: nil, parts: [.init(text: systemPrompt)]),
                 contents: [.init(role: "user", parts: [.init(text: userPrompt)])],
-                generationConfig: .init(maxOutputTokens: Self.maxOutputTokens)
+                generationConfig: .init(
+                    maxOutputTokens: Self.maxOutputTokens,
+                    thinkingConfig: .init(thinkingLevel: Self.thinkingLevel)
+                )
             )
         )
         return request

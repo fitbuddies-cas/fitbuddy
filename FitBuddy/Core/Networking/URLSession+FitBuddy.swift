@@ -27,8 +27,8 @@ extension URLSession {
     }()
 
     /// Same privacy guarantees as `.fitBuddy`, for calls that stream over a
-    /// longer idle window than a plain request/response — currently only
-    /// `InferenceService`'s Claude call (NFR: up to ~30s before a response).
+    /// longer idle window than a plain request/response — the three
+    /// `LLMProviderClient`s (NFR: up to ~30s before a response).
     ///
     /// A per-request `URLRequest.timeoutInterval` does not reliably override
     /// `timeoutIntervalForRequest` on the session's configuration (undocumented
@@ -41,7 +41,20 @@ extension URLSession {
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
         configuration.urlCredentialStorage = nil
-        configuration.timeoutIntervalForRequest = 30
+        // 60s, twice the NFR's expected answer time, because this is an *idle*
+        // timeout and every provider here reasons before it writes: nothing at
+        // all comes down the connection until the model's first token, so the
+        // gap this timeout measures is the whole thinking phase, not a stalled
+        // transfer. At 30s a provider that thought a little longer than usual
+        // was cut off as if the network had died — the analysis then silently
+        // fell through to the next provider, which is how a perfectly good key
+        // looked permanently "unavailable".
+        //
+        // Waiting longer costs the user nothing they cannot stop: the screen
+        // offers "Cancel analysis" after 30s without a token
+        // (`AnalysisViewModel.defaultSlowThreshold`, US-3 AC1), so the decision
+        // to keep waiting stays theirs rather than the transport's.
+        configuration.timeoutIntervalForRequest = 60
         return URLSession(configuration: configuration)
     }()
 }

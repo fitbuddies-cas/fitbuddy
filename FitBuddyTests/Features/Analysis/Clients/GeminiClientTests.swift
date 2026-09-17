@@ -72,6 +72,27 @@ final class GeminiClientTests: LLMClientTestCase {
         XCTAssertEqual(config["maxOutputTokens"] as? Int, GeminiClient.maxOutputTokens)
     }
 
+    /// Regression guard for the silent Gemini fallback: thinking is always on
+    /// for this model and its tokens come out of `maxOutputTokens`, so without
+    /// an explicit low level the reasoning could spend the whole budget and the
+    /// call would end at `MAX_TOKENS` with no text — an empty stream the
+    /// orchestrator hands over to the next provider.
+    func testBodyCapsThinkingSoTheBudgetIsNotSpentOnReasoning() async throws {
+        stub(body: GeminiSSEFactory.body(textChunks: ["Hi"]))
+
+        _ = try await collect(try await stream())
+
+        let json = try jsonBody(of: try capturedRequest())
+        let config = try XCTUnwrap(json["generationConfig"] as? [String: Any])
+        let thinking = try XCTUnwrap(config["thinkingConfig"] as? [String: Any])
+        XCTAssertEqual(thinking["thinkingLevel"] as? String, "low")
+        XCTAssertGreaterThanOrEqual(
+            GeminiClient.maxOutputTokens,
+            8192,
+            "the budget is shared with the thinking tokens and needs headroom above the paragraph itself"
+        )
+    }
+
     func testReportsItsProvider() {
         XCTAssertEqual(sut.provider, .gemini)
     }

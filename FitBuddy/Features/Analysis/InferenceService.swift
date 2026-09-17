@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Runs an on-demand training analysis against the user's LLM providers,
 /// falling back down their priority order until one answers (US-3, #29/#79).
@@ -21,6 +22,13 @@ actor InferenceService {
     private let rateLimit: AnalysisRateLimitStore
     private let clients: [LLMProvider: any LLMProviderClient]
     private let now: () -> Date
+
+    /// Why a provider handed over. A fallback is otherwise invisible from the
+    /// outside — the screen names who answered, never who failed first or what
+    /// went wrong — so a user reporting "it always skips my Gemini key" left
+    /// nothing behind to diagnose it with. Provider names and error cases
+    /// only; no key material ever reaches a log line.
+    private let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "Analysis")
 
     /// Whether a stream is currently in flight. `private(set)` rather than
     /// `private`: tests poll it (same module) to wait out an async cleanup
@@ -157,11 +165,17 @@ actor InferenceService {
                 // has to fall back too, or the chain stops at the first one
                 // whose response this version cannot read.
                 if didYieldText { return }
+                logger.error(
+                    "\(candidate.client.provider.rawValue, privacy: .public) answered without any text — falling back"
+                )
                 lastError = InferenceServiceError.invalidResponse
             } catch {
                 // The user cancelled: not a provider problem, and asking the
                 // next one would keep spending on a run nobody is waiting for.
                 if Task.isCancelled || error.isCancellation { throw error }
+                logger.error(
+                    "\(candidate.client.provider.rawValue, privacy: .public) failed: \(String(describing: error), privacy: .public)"
+                )
                 lastError = error
             }
         }

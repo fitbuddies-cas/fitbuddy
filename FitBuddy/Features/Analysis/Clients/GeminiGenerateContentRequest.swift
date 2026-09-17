@@ -23,5 +23,14 @@ struct GeminiGenerateContentRequest: Encodable {
 
     struct GenerationConfig: Encodable {
         let maxOutputTokens: Int
+        let thinkingConfig: ThinkingConfig
+
+        /// How much the model reasons before it answers. Sent explicitly
+        /// because the default is not "off": on a Gemini 3 flash model
+        /// thinking is always on, and its tokens are drawn from
+        /// `maxOutputTokens`.
+        struct ThinkingConfig: Encodable {
+            let thinkingLevel: String
+        }
     }
 }
