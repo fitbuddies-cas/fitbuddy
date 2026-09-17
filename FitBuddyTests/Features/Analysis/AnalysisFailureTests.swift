@@ -82,6 +82,18 @@ final class AnalysisFailureTests: XCTestCase {
         XCTAssertTrue(AnalysisFailure.keychainUnavailable.isRetryable)
     }
 
+    /// Only the missing key sends the user to settings (#207): every other
+    /// failure either retries or needs something settings cannot give.
+    func testOnlyTheMissingKeyLeadsToSettings() {
+        XCTAssertTrue(AnalysisFailure.missingAPIKey.leadsToSettings)
+        XCTAssertTrue(AnalysisFailure.missingAPIKey.message.contains("Settings"))
+        XCTAssertFalse(AnalysisFailure.unauthorized(.claude).leadsToSettings)
+        XCTAssertFalse(AnalysisFailure.keychainUnavailable.leadsToSettings)
+        XCTAssertFalse(AnalysisFailure.offline(.claude).leadsToSettings)
+        XCTAssertFalse(AnalysisFailure.unreadableResponse(.gemini).leadsToSettings)
+        XCTAssertFalse(AnalysisFailure.noTrainingData.leadsToSettings)
+    }
+
     func testRateLimitMessageNamesTheWaitWhenTheProviderSentOne() {
         XCTAssertTrue(AnalysisFailure.rateLimited(provider: .claude, retryAfter: 30).message.hasSuffix("Try again in 30 s."))
         XCTAssertTrue(AnalysisFailure.rateLimited(provider: .claude, retryAfter: 180).message.hasSuffix("Try again in 3 min."))

@@ -8,7 +8,8 @@ final class GeminiClientTests: LLMClientTestCase {
 
     override func setUp() async throws {
         try await super.setUp()
-        sut = GeminiClient(session: session)
+        // No real pause between the two attempts of an overloaded call.
+        sut = GeminiClient(session: session, retryDelay: .zero)
     }
 
     override func tearDown() async throws {
@@ -185,6 +186,43 @@ final class GeminiClientTests: LLMClientTestCase {
         } catch let error as InferenceServiceError {
             XCTAssertEqual(error, .unauthorized)
         }
+    }
+
+    /// The rule of #209: Gemini sheds load with a 503 on one call in four, and
+    /// the next call goes through — so a single 503 must not end the run.
+    func testAnOverloadedCallIsRetriedOnce() async throws {
+        let body = GeminiSSEFactory.body(textChunks: ["Hi"])
+        var attempts = 0
+        StubURLProtocol.handler = { request in
+            attempts += 1
+            let status = attempts == 1 ? 503 : 200
+            let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
+            return (response, attempts == 1 ? Data() : body)
+        }
+
+        let chunks = try await collect(try await stream())
+
+        XCTAssertEqual(chunks, ["Hi"])
+        XCTAssertEqual(attempts, 2)
+    }
+
+    /// And only once: a model that is down for good hands over to the next
+    /// provider after the second 503, not after a third.
+    func testAnOverloadedCallIsNotRetriedTwice() async throws {
+        var attempts = 0
+        StubURLProtocol.handler = { request in
+            attempts += 1
+            let response = HTTPURLResponse(url: request.url!, statusCode: 503, httpVersion: nil, headerFields: nil)!
+            return (response, Data())
+        }
+
+        do {
+            _ = try await stream()
+            XCTFail("expected serviceUnavailable")
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .serviceUnavailable)
+        }
+        XCTAssertEqual(attempts, 2)
     }
 
     func testServiceUnavailableOnServerError() async throws {

@@ -98,7 +98,7 @@ enum AnalysisFailure: Equatable {
     var message: String {
         switch self {
         case .missingAPIKey:
-            return "No API key is stored for any provider. Add a key to run an analysis."
+            return "No API key is stored for any provider. Add one in Settings to run an analysis."
         case .unauthorized(let provider):
             return "\(Self.name(provider)) rejected your API key. Check it and enter it again."
         case .keychainUnavailable:
@@ -151,6 +151,19 @@ enum AnalysisFailure: Equatable {
              .cacheUnavailable, .unreadableResponse:
             return true
         }
+    }
+
+    /// Whether the fix lives on the settings tab, so the error screen can
+    /// offer the way there instead of a retry that would fail the same way
+    /// (#207).
+    ///
+    /// Only the missing key: a rejected key (`unauthorized`) is also fixed in
+    /// settings, but the user first has to find out from the provider which
+    /// key is right, and sending them straight to the editor would suggest
+    /// that re-typing the same one helps.
+    var leadsToSettings: Bool {
+        if case .missingAPIKey = self { return true }
+        return false
     }
 
     /// The provider's name, or a neutral stand-in when the run failed before
