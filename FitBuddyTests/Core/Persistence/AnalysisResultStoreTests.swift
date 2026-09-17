@@ -189,6 +189,30 @@ final class AnalysisResultStoreTests: XCTestCase {
         XCTAssertNil(stored)
     }
 
+    // MARK: - Training profile (US-13 AC4, #192)
+
+    /// The basis line above a restored recommendation names the profile the
+    /// run saw — not the one in Settings today, which may have changed since.
+    func testTheProfileTheRunSawIsReadBackWithIt() async throws {
+        var context = Self.context()
+        context.profile = TrainingProfile(goal: .getStronger, experience: .underOneYear)
+        try await sut.save(text: "Add a set.", generatedAt: Self.reference, context: context)
+
+        let latest = try await sut.latest()
+        let stored = try XCTUnwrap(latest)
+
+        XCTAssertEqual(stored.context, context)
+    }
+
+    func testARunWithoutAProfileReadsBackWithoutOne() async throws {
+        try await sut.save(text: "Add a set.", generatedAt: Self.reference, context: Self.context())
+
+        let latest = try await sut.latest()
+        let stored = try XCTUnwrap(latest)
+
+        XCTAssertEqual(stored.context.profile, TrainingProfile())
+    }
+
     private static func context(sessions: Int = 12, weeks: Int = 4) -> AnalysisContext {
         AnalysisContext(sessionCount: sessions, window: AnalysisWindow(weeks: weeks))
     }

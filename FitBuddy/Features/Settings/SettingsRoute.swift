@@ -9,4 +9,6 @@ import Foundation
 enum SettingsRoute: Hashable {
     case strava
     case polar
+    /// The training goal and experience from onboarding step 4 (US-13, #191).
+    case trainingProfile
 }

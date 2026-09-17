@@ -29,6 +29,31 @@ final class OnboardingFlowUITests: XCTestCase {
         sut.submitKey("hv_live_uitest")
         sut.assertAppears(sut.skipLLMKeysButton)
         sut.skipLLMKeysButton.tap()
+        // Step 4 since US-13, and skippable like step 3.
+        sut.assertAppears(sut.skipTrainingProfileButton)
+        sut.skipTrainingProfileButton.tap()
+
+        sut.assertAppears(sut.dashboard)
+    }
+
+    /// Answering the profile is the other way out of step 4, and the one that
+    /// the whole story exists for.
+    @MainActor
+    func testAnsweringTheTrainingProfileReachesTheDashboard() {
+        let sut = OnboardingApp(keyVerdict: LaunchArgument.Verdict.accepts).launch()
+
+        sut.grantConsent()
+        sut.submitKey("hv_live_uitest")
+        sut.assertAppears(sut.skipLLMKeysButton)
+        sut.skipLLMKeysButton.tap()
+
+        sut.assertAppears(sut.trainingProfileSaveButton)
+        // Disabled until something is answered — with neither question
+        // answered, "Skip for now" is the honest way out.
+        XCTAssertFalse(sut.trainingProfileSaveButton.isEnabled)
+        sut.goalOption("improve_endurance").tap()
+        sut.assertEnabled(sut.trainingProfileSaveButton)
+        sut.trainingProfileSaveButton.tap()
 
         sut.assertAppears(sut.dashboard)
     }

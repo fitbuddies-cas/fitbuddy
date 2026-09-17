@@ -34,6 +34,7 @@ actor DataResetService {
     private let rateLimit: AnalysisRateLimitStore
     private let priority: LLMPriorityStore
     private let skip: LLMKeysSkipStore
+    private let trainingProfile: TrainingProfileStore
 
     private let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "DataReset")
 
@@ -44,7 +45,8 @@ actor DataResetService {
         timestamps: SyncTimestampStore = SyncTimestampStore(),
         rateLimit: AnalysisRateLimitStore = AnalysisRateLimitStore(),
         priority: LLMPriorityStore = LLMPriorityStore(),
-        skip: LLMKeysSkipStore = LLMKeysSkipStore()
+        skip: LLMKeysSkipStore = LLMKeysSkipStore(),
+        trainingProfile: TrainingProfileStore = TrainingProfileStore()
     ) {
         self.keychain = keychain
         self.workouts = workouts
@@ -53,6 +55,7 @@ actor DataResetService {
         self.rateLimit = rateLimit
         self.priority = priority
         self.skip = skip
+        self.trainingProfile = trainingProfile
     }
 
     /// Deletes all locally stored data. Never throws — see the type comment.
@@ -78,5 +81,10 @@ actor DataResetService {
         await rateLimit.clear()
         await priority.clear()
         await skip.clear()
+        // Profile and skip decision, not the introduction marker: that one
+        // records the installation, like `FirstLaunchResetService`'s. Clearing
+        // it would make the next launch mistake this install for one that
+        // predates step 4 and never ask again.
+        await trainingProfile.clear()
     }
 }

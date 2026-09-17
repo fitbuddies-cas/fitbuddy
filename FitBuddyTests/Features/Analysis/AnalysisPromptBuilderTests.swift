@@ -381,6 +381,37 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertTrue(prompt.user.contains("10 exercises with the most volume listed; 2 more in this window omitted"))
     }
 
+    /// The footer counts what the cap cut, not what is missing for any other
+    /// reason: a top exercise without a progression is skipped, not omitted.
+    func testOmittedCountsOnlyExercisesPastTheCap() throws {
+        let entries = (1...11).map { index -> (ExerciseSummary, ExerciseProgression) in
+            let summary = exercise("Lift \(index)", volume: Double(index) * 1_000, sessions: 1)
+            return (summary, progression(summary, sessions: [session(daysAgo: 2, sets: working(50, 8))]))
+        }
+        // The highest-volume lift has no progression: one row fewer, but the
+        // cap still cut exactly one exercise.
+        let withoutTop = entries.filter { $0.0.title != "Lift 11" }
+        let prompt = AnalysisPromptBuilder.make(
+            summaries: [workout(daysAgo: 2, volume: 5_000)],
+            exercises: entries.map { $0.0 },
+            progressions: Dictionary(uniqueKeysWithValues: withoutTop.map { ($0.0.id, $0.1) }),
+            now: reference,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(try exerciseRows(prompt).count, AnalysisPromptBuilder.maxListedExercises - 1)
+        XCTAssertTrue(prompt.user.contains("; 1 more in this window omitted)"))
+
+        let noneCut = AnalysisPromptBuilder.make(
+            summaries: [workout(daysAgo: 2, volume: 5_000)],
+            exercises: Array(entries.map { $0.0 }.suffix(3)),
+            progressions: [:],
+            now: reference,
+            calendar: calendar
+        )
+        XCTAssertFalse(noneCut.user.contains("omitted)"))
+    }
+
     func testFewerExercisesThanTheCapNameNoOmission() {
         let squat = exercise("Squat (Barbell)", volume: 5_000, sessions: 1)
         let prompt = makeWithExercises([
@@ -581,6 +612,34 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertFalse(prompt.user.contains("Smallest logged step: 30 kg"))
     }
 
+    /// Below the share, the floor keeps a light dumbbell's real step: 2 kg on
+    /// a 10 kg lateral raise is 20 %, but no more than one plate pair.
+    func testASmallStepOnALightWeightIsKeptByTheFloor() {
+        let raise = exercise("Lateral Raise (Dumbbell)", volume: 1_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (raise, progression(raise, sessions: [
+                session(daysAgo: 9, sets: working(8, 15)),
+                session(daysAgo: 2, sets: working(10, 12)),
+            ])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("Smallest logged step: 2 kg."))
+    }
+
+    /// The floor does not turn a change of dumbbells into a step: 8 → 12 kg
+    /// is 4 kg, past both the share and the floor.
+    func testTheFloorStillDropsAChangeOfEquipment() {
+        let raise = exercise("Lateral Raise (Dumbbell)", volume: 1_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (raise, progression(raise, sessions: [
+                session(daysAgo: 9, sets: working(8, 15)),
+                session(daysAgo: 2, sets: working(12, 10)),
+            ])),
+        ])
+
+        XCTAssertFalse(prompt.user.contains("Smallest logged step"))
+    }
+
     /// A step exactly at the share still counts: 2.5 kg on 25 kg is 10 %.
     func testAStepAtTheShareIsKept() {
         let curl = exercise("Bicep Curl (Cable)", volume: 1_000, sessions: 2)
@@ -751,6 +810,83 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertTrue(system.contains("exactly as it is listed"))
         XCTAssertTrue(system.contains("steps of 2.5 kg"))
         XCTAssertTrue(system.contains("at most the smallest step listed"))
+        // The starting weight must be listed; the target is one step above it,
+        // so the rule no longer forbids the weight it asks for.
+        XCTAssertTrue(system.contains("or a weight it does not list as a starting point"))
+        XCTAssertTrue(system.contains("a new target weight is always the listed weight of the most recent session plus one step"))
+        XCTAssertFalse(system.contains("a weight that section does not contain"))
+    }
+
+    // MARK: - Training profile (US-13 AC3, #192)
+
+    private let fullProfile = TrainingProfile(goal: .improveEndurance, experience: .oneToThreeYears)
+
+    func testASetProfileOpensItsOwnSectionBeforeTheData() throws {
+        let user = make([workout(daysAgo: 2, volume: 5_000)], profile: fullProfile).user
+
+        let profileAt = try XCTUnwrap(user.range(of: "## Profile")?.lowerBound)
+        let windowAt = try XCTUnwrap(user.range(of: "## Last 4 weeks")?.lowerBound)
+        XCTAssertTrue(user.contains("Goal: improve endurance"))
+        XCTAssertTrue(user.contains("Strength training experience: 1–3 years"))
+        XCTAssertLessThan(profileAt, windowAt)
+    }
+
+    /// The case of every install that never answered step 4, and of everyone
+    /// who skipped it: the prompt must not change by a single character. A
+    /// "Profile: —" heading would read to the model as a fact about the user.
+    func testWithoutAProfileThePromptIsIdenticalToTheOneBeforeTheFeature() {
+        let summaries = [workout(daysAgo: 2, volume: 5_000)]
+
+        let before = AnalysisPromptBuilder.make(summaries: summaries, now: reference, calendar: calendar)
+        let empty = make(summaries, profile: TrainingProfile())
+
+        XCTAssertEqual(before, empty)
+        XCTAssertFalse(empty.user.contains("Profile"))
+        XCTAssertNil(AnalysisPromptBuilder.profileSection(TrainingProfile()))
+    }
+
+    func testAHalfProfileStatesOnlyTheHalfThatWasAnswered() {
+        let goalOnly = make([workout(daysAgo: 2, volume: 5_000)], profile: TrainingProfile(goal: .loseFat)).user
+        let experienceOnly = make(
+            [workout(daysAgo: 2, volume: 5_000)],
+            profile: TrainingProfile(experience: .overThreeYears)
+        ).user
+
+        XCTAssertTrue(goalOnly.contains("Goal: lose fat"))
+        XCTAssertFalse(goalOnly.contains("experience"))
+        XCTAssertTrue(experienceOnly.contains("Strength training experience: more than 3 years"))
+        XCTAssertFalse(experienceOnly.contains("Goal:"))
+    }
+
+    /// The analysis reads strength sessions only. A goal like "improve
+    /// endurance" invites the model to reason about training the prompt does
+    /// not carry, so the section says so — every time it appears.
+    func testTheProfileSectionStatesThatOnlyStrengthSessionsFollow() throws {
+        let section = try XCTUnwrap(AnalysisPromptBuilder.profileSection(TrainingProfile(goal: .improveEndurance)))
+
+        XCTAssertTrue(section.contains("strength sessions only"))
+        XCTAssertTrue(section.contains("do not assume anything about other training"))
+    }
+
+    /// Context about the person is context whether or not there is data — an
+    /// empty window with a profile still gets the profile.
+    func testTheProfileRidesAlongWithAnEmptyWindow() {
+        let user = make([], profile: fullProfile).user
+
+        XCTAssertTrue(user.contains("## Profile"))
+        XCTAssertTrue(user.contains("No workouts are recorded in this window."))
+    }
+
+    /// Decision in #189: the profile goes into the user prompt as context and
+    /// leaves the rules alone. "Typical for an advanced lifter" would be the
+    /// population comparison rule 3 forbids, and a system prompt that changed
+    /// with the profile could soften it.
+    func testTheSystemPromptDoesNotChangeWithTheProfile() {
+        let without = make([workout(daysAgo: 2, volume: 5_000)]).system
+        let with = make([workout(daysAgo: 2, volume: 5_000)], profile: fullProfile).system
+
+        XCTAssertEqual(with, without)
+        XCTAssertEqual(with, AnalysisPromptBuilder.systemPrompt)
     }
 
     /// #174: the answer is a JSON report, and its prose summary keeps the
@@ -806,13 +942,15 @@ final class AnalysisPromptBuilderTests: XCTestCase {
 
     private func make(
         _ summaries: [WorkoutSummary],
-        window: AnalysisWindow = .default
+        window: AnalysisWindow = .default,
+        profile: TrainingProfile = TrainingProfile()
     ) -> AnalysisPrompt {
         AnalysisPromptBuilder.make(
             summaries: summaries,
             window: window,
             now: reference,
-            calendar: calendar
+            calendar: calendar,
+            profile: profile
         )
     }
 
