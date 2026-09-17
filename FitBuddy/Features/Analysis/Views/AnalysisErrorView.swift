@@ -15,6 +15,10 @@ struct AnalysisErrorView: View {
     /// training data), where a "Try again" button would only produce the same
     /// message again.
     let onRetry: (() -> Void)?
+    /// Opens the settings tab, for the failure whose fix is stored there — no
+    /// key at all (#207). `nil` everywhere else, where the button would lead
+    /// away from a problem settings cannot solve.
+    let onOpenSettings: (() -> Void)?
     /// Returns to the intro state — the button reads "Back", and that is what
     /// it does; it does not leave the analysis tab.
     let onBack: () -> Void
@@ -47,6 +51,10 @@ struct AnalysisErrorView: View {
                 Button("Try again", action: onRetry)
                     .buttonStyle(.fb(.accent))
             }
+            if let onOpenSettings {
+                Button("Open Settings", action: onOpenSettings)
+                    .buttonStyle(.fb(.accent))
+            }
             Button("Back", action: onBack)
                 .buttonStyle(.fb(.secondary))
         }
@@ -60,6 +68,7 @@ struct AnalysisErrorView: View {
         failure: .offline(.claude),
         attribution: AnalysisAttribution(first: .claude),
         onRetry: {},
+        onOpenSettings: nil,
         onBack: {}
     )
     .padding(16)
@@ -67,7 +76,13 @@ struct AnalysisErrorView: View {
 }
 
 #Preview("No key") {
-    AnalysisErrorView(failure: .missingAPIKey, attribution: nil, onRetry: nil, onBack: {})
+    AnalysisErrorView(
+        failure: .missingAPIKey,
+        attribution: nil,
+        onRetry: nil,
+        onOpenSettings: {},
+        onBack: {}
+    )
         .padding(16)
         .background(Color.fbBackground)
 }
@@ -82,6 +97,7 @@ struct AnalysisErrorView: View {
             return attribution
         }(),
         onRetry: {},
+        onOpenSettings: nil,
         onBack: {}
     )
     .padding(16)
