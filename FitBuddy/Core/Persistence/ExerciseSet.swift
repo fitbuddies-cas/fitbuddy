@@ -1,10 +1,10 @@
 import Foundation
 import SwiftData
 
-/// The current `ExerciseSet` model — see `FitBuddySchemaV2`.
-typealias ExerciseSet = FitBuddySchemaV2.ExerciseSet
+/// The current `ExerciseSet` model — see `FitBuddySchemaV3`.
+typealias ExerciseSet = FitBuddySchemaV3.ExerciseSet
 
-extension FitBuddySchemaV2 {
+extension FitBuddySchemaV3 {
     /// A single logged set, the leaf of the cached `Workout → Exercise →
     /// ExerciseSet` hierarchy.
     ///
