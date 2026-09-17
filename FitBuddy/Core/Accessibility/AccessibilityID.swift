@@ -25,6 +25,24 @@ enum AccessibilityID {
         static let noticeBanner = "hevyKey.noticeBanner"
     }
 
+    enum TrainingProfile {
+        static let root = "trainingProfile.root"
+        static let saveButton = "trainingProfile.saveButton"
+        static let skipButton = "trainingProfile.skipButton"
+        /// Settings only (#191): drops both answers.
+        static let removeButton = "trainingProfile.removeButton"
+        /// The row in Settings that opens the profile.
+        static let settingsRow = "trainingProfile.settingsRow"
+        /// One per option, so a test can pick a specific goal rather than a
+        /// position in a list that will grow.
+        static func goalOption(_ rawValue: String) -> String {
+            "trainingProfile.goal." + rawValue
+        }
+        static func experienceOption(_ rawValue: String) -> String {
+            "trainingProfile.experience." + rawValue
+        }
+    }
+
     enum LLMKeys {
         static let skipButton = "llmKeys.skipButton"
     }

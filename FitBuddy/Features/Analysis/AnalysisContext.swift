@@ -18,6 +18,11 @@ struct AnalysisContext: Equatable, Sendable {
     let sessionCount: Int
     /// The period actually analysed.
     let window: AnalysisWindow
+    /// What the user told the analysis about themselves (US-13 AC4, #192).
+    /// Part of the basis for the same reason the session count is: it went
+    /// into the prompt, so a line that listed everything else and not this
+    /// would be a basis with a hole in it.
+    var profile = TrainingProfile()
 
     /// Below this many sessions in the window, the data basis is called thin
     /// (US-6 AC2).

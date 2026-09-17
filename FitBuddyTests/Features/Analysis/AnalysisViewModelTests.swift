@@ -58,6 +58,7 @@ final class AnalysisViewModelTests: XCTestCase {
             inference: streamer,
             rateLimit: rateLimit,
             resultStore: resultStore ?? results,
+            trainingProfile: TrainingProfileStore(defaults: defaults),
             calendar: Self.calendar,
             now: { clock.date },
             slowThreshold: slowThreshold,
@@ -250,6 +251,36 @@ final class AnalysisViewModelTests: XCTestCase {
                 ),
             ]
         )
+    }
+
+    // MARK: - Training profile (US-13 AC3/AC4, #192)
+
+    /// The profile is read at the start of the run, not at init: the Settings
+    /// screen changes it while this view model lives on (#191), and the next
+    /// analysis has to see the change.
+    func testARunReadsTheProfileSavedSinceTheViewModelWasCreated() async {
+        await streamer.setChunks(["ok"])
+        let sut = makeSUT()
+        let profile = TrainingProfile(goal: .buildMuscle, experience: .overThreeYears)
+        await TrainingProfileStore(defaults: defaults).save(profile)
+
+        await sut.start()
+
+        let user = await streamer.userPrompt
+        XCTAssertEqual(user?.contains("## Profile"), true)
+        XCTAssertEqual(user?.contains("Goal: build muscle"), true)
+        XCTAssertEqual(sut.context?.profile, profile)
+    }
+
+    func testARunWithoutAProfileSendsNoneAndShowsNone() async {
+        await streamer.setChunks(["ok"])
+        let sut = makeSUT()
+
+        await sut.start()
+
+        let user = await streamer.userPrompt
+        XCTAssertEqual(user?.contains("Profile"), false)
+        XCTAssertEqual(sut.context?.profile, TrainingProfile())
     }
 
     // MARK: - Context (US-6, #36)

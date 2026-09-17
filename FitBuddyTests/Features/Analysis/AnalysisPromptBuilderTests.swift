@@ -753,17 +753,91 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertTrue(system.contains("at most the smallest step listed"))
     }
 
+    // MARK: - Training profile (US-13 AC3, #192)
+
+    private let fullProfile = TrainingProfile(goal: .improveEndurance, experience: .oneToThreeYears)
+
+    func testASetProfileOpensItsOwnSectionBeforeTheData() throws {
+        let user = make([workout(daysAgo: 2, volume: 5_000)], profile: fullProfile).user
+
+        let profileAt = try XCTUnwrap(user.range(of: "## Profile")?.lowerBound)
+        let windowAt = try XCTUnwrap(user.range(of: "## Last 4 weeks")?.lowerBound)
+        XCTAssertTrue(user.contains("Goal: improve endurance"))
+        XCTAssertTrue(user.contains("Strength training experience: 1–3 years"))
+        XCTAssertLessThan(profileAt, windowAt)
+    }
+
+    /// The case of every install that never answered step 4, and of everyone
+    /// who skipped it: the prompt must not change by a single character. A
+    /// "Profile: —" heading would read to the model as a fact about the user.
+    func testWithoutAProfileThePromptIsIdenticalToTheOneBeforeTheFeature() {
+        let summaries = [workout(daysAgo: 2, volume: 5_000)]
+
+        let before = AnalysisPromptBuilder.make(summaries: summaries, now: reference, calendar: calendar)
+        let empty = make(summaries, profile: TrainingProfile())
+
+        XCTAssertEqual(before, empty)
+        XCTAssertFalse(empty.user.contains("Profile"))
+        XCTAssertNil(AnalysisPromptBuilder.profileSection(TrainingProfile()))
+    }
+
+    func testAHalfProfileStatesOnlyTheHalfThatWasAnswered() {
+        let goalOnly = make([workout(daysAgo: 2, volume: 5_000)], profile: TrainingProfile(goal: .loseFat)).user
+        let experienceOnly = make(
+            [workout(daysAgo: 2, volume: 5_000)],
+            profile: TrainingProfile(experience: .overThreeYears)
+        ).user
+
+        XCTAssertTrue(goalOnly.contains("Goal: lose fat"))
+        XCTAssertFalse(goalOnly.contains("experience"))
+        XCTAssertTrue(experienceOnly.contains("Strength training experience: more than 3 years"))
+        XCTAssertFalse(experienceOnly.contains("Goal:"))
+    }
+
+    /// The analysis reads strength sessions only. A goal like "improve
+    /// endurance" invites the model to reason about training the prompt does
+    /// not carry, so the section says so — every time it appears.
+    func testTheProfileSectionStatesThatOnlyStrengthSessionsFollow() throws {
+        let section = try XCTUnwrap(AnalysisPromptBuilder.profileSection(TrainingProfile(goal: .improveEndurance)))
+
+        XCTAssertTrue(section.contains("strength sessions only"))
+        XCTAssertTrue(section.contains("do not assume anything about other training"))
+    }
+
+    /// Context about the person is context whether or not there is data — an
+    /// empty window with a profile still gets the profile.
+    func testTheProfileRidesAlongWithAnEmptyWindow() {
+        let user = make([], profile: fullProfile).user
+
+        XCTAssertTrue(user.contains("## Profile"))
+        XCTAssertTrue(user.contains("No workouts are recorded in this window."))
+    }
+
+    /// Decision in #189: the profile goes into the user prompt as context and
+    /// leaves the rules alone. "Typical for an advanced lifter" would be the
+    /// population comparison rule 3 forbids, and a system prompt that changed
+    /// with the profile could soften it.
+    func testTheSystemPromptDoesNotChangeWithTheProfile() {
+        let without = make([workout(daysAgo: 2, volume: 5_000)]).system
+        let with = make([workout(daysAgo: 2, volume: 5_000)], profile: fullProfile).system
+
+        XCTAssertEqual(with, without)
+        XCTAssertEqual(with, AnalysisPromptBuilder.systemPrompt)
+    }
+
     // MARK: - Helpers
 
     private func make(
         _ summaries: [WorkoutSummary],
-        window: AnalysisWindow = .default
+        window: AnalysisWindow = .default,
+        profile: TrainingProfile = TrainingProfile()
     ) -> AnalysisPrompt {
         AnalysisPromptBuilder.make(
             summaries: summaries,
             window: window,
             now: reference,
-            calendar: calendar
+            calendar: calendar,
+            profile: profile
         )
     }
 

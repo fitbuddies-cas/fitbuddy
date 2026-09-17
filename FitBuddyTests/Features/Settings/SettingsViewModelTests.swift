@@ -54,6 +54,47 @@ final class SettingsViewModelTests: XCTestCase {
         )
     }
 
+    // MARK: - Training profile (US-13, #191)
+
+    func testLoadReadsTheTrainingProfile() async {
+        await TrainingProfileStore(defaults: defaults).save(
+            TrainingProfile(goal: .improveEndurance, experience: .oneToThreeYears)
+        )
+
+        await sut.load()
+
+        XCTAssertEqual(sut.trainingProfile.goal, .improveEndurance)
+        XCTAssertEqual(sut.trainingProfileSummary, "Improve endurance · 1–3 years")
+    }
+
+    func testAnEmptyProfileReadsAsNotSet() async {
+        await sut.load()
+
+        XCTAssertTrue(sut.trainingProfile.isEmpty)
+        XCTAssertEqual(sut.trainingProfileSummary, "Not set")
+    }
+
+    /// Half a profile shows the half that is there, not a dash for the rest.
+    func testAHalfProfileSummarisesWhatIsSet() async {
+        await TrainingProfileStore(defaults: defaults).save(TrainingProfile(experience: .overThreeYears))
+
+        await sut.load()
+
+        XCTAssertEqual(sut.trainingProfileSummary, "More than 3 years")
+    }
+
+    /// The edit screen writes the profile; coming back, the row has to show
+    /// it without a full reload of every key.
+    func testRefreshPicksUpAChangeMadeElsewhere() async {
+        await sut.load()
+        XCTAssertEqual(sut.trainingProfileSummary, "Not set")
+
+        await TrainingProfileStore(defaults: defaults).save(TrainingProfile(goal: .getStronger))
+        await sut.refreshTrainingProfile()
+
+        XCTAssertEqual(sut.trainingProfileSummary, "Get stronger")
+    }
+
     private func clearKeys() async throws {
         for key in KeychainKey.allCases {
             try await keychain.delete(key)
