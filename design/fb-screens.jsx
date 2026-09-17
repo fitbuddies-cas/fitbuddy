@@ -671,14 +671,6 @@ function FBAnalyzeLoadingScreen({ longWait = false, onCancel }) {
         {longWait && (
           <FBButton kind="secondary" onClick={onCancel}>Cancel analysis</FBButton>
         )}
-
-        <div style={{
-          marginTop: longWait ? 12 : 0, textAlign: 'center', fontSize: 12, color: FB.muted,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-        }}>
-          <FBLockIcon size={11} />
-          Only your data is sent to Claude · no benchmarks
-        </div>
       </div>
     </FBScreen>
   );
