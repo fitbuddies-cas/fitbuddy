@@ -49,9 +49,9 @@ final class MistralClientTests: LLMClientTestCase {
         XCTAssertEqual(messages.last?["content"] as? String, "Analyze my week.")
     }
 
-    /// The id this client first shipped with, `mistral-medium-2604`, was never
-    /// published by Mistral and made every run fail with 400 (#211).
-    func testPinsAModelIdMistralPublishes() {
+    /// The id Mistral documents and bills Medium 3.5 under, not one of its
+    /// undocumented aliases (#211).
+    func testPinsTheDocumentedModelId() {
         XCTAssertEqual(MistralClient.model, "mistral-medium-3-5")
     }
 

@@ -6,12 +6,12 @@ import Foundation
 /// Paris), so a run answered here involves no third-country transfer — see
 /// ADR-007.
 struct MistralClient: LLMProviderClient {
-    /// Mistral Medium 3.5, under the versioned id Mistral publishes for it
-    /// (#211). Pinned rather than `mistral-medium-latest`: the alias can move
-    /// to a new version mid-deploy, changing both behaviour and the price
-    /// charged to the user's own key. The dated form `mistral-medium-2604`
-    /// this client first shipped with was never a real id — Mistral answered
-    /// it with 400, so no Mistral run ever completed.
+    /// Mistral Medium 3.5, under the id Mistral bills it as and documents it
+    /// under (#211). Pinned rather than `mistral-medium-latest`: the alias can
+    /// move to a new version mid-deploy, changing both behaviour and the price
+    /// charged to the user's own key. The dated `mistral-medium-2604` this
+    /// client first shipped with resolves to the same model, but only as one
+    /// of its aliases; the docs and the pricing page never mention it.
     static let model = "mistral-medium-3-5"
     /// Same budget as the other two: the report is a summary plus up to four
     /// cards, and a JSON answer cut off before its summary is no answer (#174).
