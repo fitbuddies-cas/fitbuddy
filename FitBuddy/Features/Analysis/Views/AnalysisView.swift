@@ -19,6 +19,10 @@ struct AnalysisView: View {
     /// rather than a ready-made instance: the screen exists only while the user
     /// is in it, and it must read the store fresh when they open it.
     let makeHistoryViewModel: () -> AnalysisHistoryViewModel
+    /// Where «Open Settings» on the missing-key screen leads (#207). Handed
+    /// down from the root, which owns the tab selection; defaults to nothing
+    /// so previews render without one.
+    var onOpenSettings: () -> Void = {}
 
     var body: some View {
         NavigationStack {
@@ -121,6 +125,7 @@ struct AnalysisView: View {
                 failure: failure,
                 attribution: viewModel.attribution,
                 onRetry: failure.isRetryable ? start : nil,
+                onOpenSettings: failure.leadsToSettings ? openSettings : nil,
                 // Not a bare `reset()`: leaving the error screen must be
                 // able to put the last stored recommendation back, so the
                 // user is not left with a countdown and an empty screen (#97).
@@ -162,6 +167,14 @@ struct AnalysisView: View {
 
     private func start() {
         Task { await viewModel.start() }
+    }
+
+    /// Leaves the error screen on the way out, so that coming back after
+    /// storing a key lands on the intro (or the last recommendation) and not
+    /// on a message that is no longer true (#207).
+    private func openSettings() {
+        Task { await viewModel.dismissFailure() }
+        onOpenSettings()
     }
 }
 
