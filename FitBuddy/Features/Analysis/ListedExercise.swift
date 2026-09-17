@@ -14,4 +14,15 @@ struct ListedExercise: Equatable, Sendable {
     /// — `nil` when that session carried no set with both weight and reps, so
     /// there is no weight a load change could start from.
     let workingSet: WorkingSet?
+    /// The "Smallest logged step" the line names, from
+    /// `AnalysisPromptBuilder.smallestStep(in:latest:)` — `nil` when the line
+    /// names none, and rule 6 then allows a barbell step at most.
+    let smallestStepKg: Double?
+
+    init(title: String, muscleGroup: MuscleGroup, workingSet: WorkingSet?, smallestStepKg: Double? = nil) {
+        self.title = title
+        self.muscleGroup = muscleGroup
+        self.workingSet = workingSet
+        self.smallestStepKg = smallestStepKg
+    }
 }

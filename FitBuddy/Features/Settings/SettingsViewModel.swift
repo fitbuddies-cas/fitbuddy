@@ -15,6 +15,9 @@ final class SettingsViewModel: ObservableObject {
     @Published private(set) var hevyKeyMask: String?
     /// Stored LLM keys in fallback priority order — first is tried first.
     @Published private(set) var llmKeys: [LLMProviderKey] = []
+    /// The training profile from onboarding step 4, or an empty one (US-13).
+    /// For existing installs this screen is the only way to it (#191).
+    @Published private(set) var trainingProfile = TrainingProfile()
 
     /// Credential the open editor sheet is editing; `nil` while it is closed.
     @Published var editorTarget: SettingsKeyTarget?
@@ -52,6 +55,7 @@ final class SettingsViewModel: ObservableObject {
     private let keychain: any KeychainStoring
     private let validator: any HevyKeyValidating
     private let priorityStore: LLMPriorityStore
+    private let trainingProfileStore: TrainingProfileStore
     private let sessionReset: any SessionResetting
     private let dataReset: any DataResetting
 
@@ -72,6 +76,7 @@ final class SettingsViewModel: ObservableObject {
         self.keychain = keychain
         self.validator = validator
         self.priorityStore = LLMPriorityStore(defaults: defaults)
+        self.trainingProfileStore = TrainingProfileStore(defaults: defaults)
     }
 
     // MARK: - Loading
@@ -82,10 +87,25 @@ final class SettingsViewModel: ObservableObject {
         do {
             hevyKeyMask = try await keychain.read(.hevyAPIKey).map(KeyMask.masked)
             llmKeys = try await storedLLMKeys()
+            await refreshTrainingProfile()
             state = .ready
         } catch {
             state = .failed
         }
+    }
+
+    /// Re-reads the profile — on its own, because the edit screen writes it
+    /// and the list has to show the new answers when the user comes back,
+    /// without re-reading every key for that (#191).
+    func refreshTrainingProfile() async {
+        trainingProfile = await trainingProfileStore.profile
+    }
+
+    /// The row's subtitle: what is set, or that nothing is.
+    var trainingProfileSummary: String {
+        let parts = [trainingProfile.goal?.displayName, trainingProfile.experience?.displayName]
+            .compactMap { $0 }
+        return parts.isEmpty ? "Not set" : parts.joined(separator: " · ")
     }
 
     /// Providers the user can still add — one slot per provider (#78).

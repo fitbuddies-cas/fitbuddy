@@ -116,21 +116,48 @@ final class AnalysisReportValidatorTests: XCTestCase {
         ])
     }
 
-    /// The step is capped like prompt rule 6: at most
-    /// `max(2.5 kg, 10 % of the working weight)`.
+    /// The step is capped like prompt rule 6: a barbell step of 2.5 kg where
+    /// the line lists no smaller step — no share of the working weight on top.
     func testLoadIncreaseIsCappedAtTheAllowedStep() {
         XCTAssertEqual(validate([benchPress(from: 60, to: 62.5)]).cards.first?.kind, .progression)
-        XCTAssertEqual(validate([benchPress(from: 60, to: 66)]).cards.first?.kind, .progression)
-        XCTAssertEqual(validate([benchPress(from: 60, to: 67)]).cards.first?.kind, .note)
+        XCTAssertEqual(validate([benchPress(from: 60, to: 66)]).cards, [.note(title: "Bench Press", text: "Clean overload.")])
         XCTAssertEqual(validate([benchPress(from: 60, to: 100)]).cards, [.note(title: "Bench Press", text: "Clean overload.")])
     }
 
-    /// 10 % of 8 kg is less than one step; the 2.5 kg floor keeps it open.
-    func testLightDumbbellMayIncreaseByTheMinimumStep() {
+    /// A dumbbell line listing a 2 kg step allows that step, and no more than
+    /// the 2.5 kg floor beyond it: 10 → 12 kg is kept, 10 → 14 kg is not.
+    func testListedStepCapsADumbbellIncrease() {
+        let evidence = evidence(exercises: [
+            ListedExercise(
+                title: "Lateral Raise",
+                muscleGroup: .shoulders,
+                workingSet: WorkingSet(weightKg: 10, reps: 12),
+                smallestStepKg: 2
+            ),
+        ])
+
+        XCTAssertEqual(
+            validate([
+                .progression(exercise: "Lateral Raise", muscleGroup: "Shoulders", fromKg: 10, toKg: 12, reasoning: "Reps held."),
+            ], evidence: evidence).cards.first?.kind,
+            .progression
+        )
+        XCTAssertEqual(
+            validate([
+                .progression(exercise: "Lateral Raise", muscleGroup: "Shoulders", fromKg: 10, toKg: 14, reasoning: "Reps held."),
+            ], evidence: evidence).cards,
+            [.note(title: "Lateral Raise", text: "Reps held.")]
+        )
+    }
+
+    /// A line without a listed step still allows one barbell step; the floor
+    /// is shared with the prompt.
+    func testWithoutAListedStepTheFloorIsTheBarbellStep() {
         let evidence = evidence(exercises: [
             ListedExercise(title: "Lateral Raise", muscleGroup: .shoulders, workingSet: WorkingSet(weightKg: 8, reps: 12)),
         ])
 
+        XCTAssertEqual(AnalysisReportValidator.minimumStepKg, AnalysisPromptBuilder.minimumStepKg)
         XCTAssertEqual(
             validate([
                 .progression(exercise: "Lateral Raise", muscleGroup: "Shoulders", fromKg: 8, toKg: 10.5, reasoning: "Reps held."),

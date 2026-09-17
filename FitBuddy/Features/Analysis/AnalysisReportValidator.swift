@@ -17,10 +17,10 @@ enum AnalysisReportValidator {
     /// weight: rounding by the model, e.g. `61.25` written as `61`.
     static let weightToleranceKg = 0.5
 
-    /// The smallest load increase always allowed, whatever the working
-    /// weight: one barbell step (prompt rule 6, #173). Keeps a light dumbbell,
-    /// where `maxStepShare` would allow less than one plate pair, progressable.
-    static let minimumStepKg = 2.5
+    /// The load increase always allowed, whatever was logged: one barbell
+    /// step (prompt rule 6, #173). The prompt's own floor, so the two cannot
+    /// drift apart.
+    static let minimumStepKg = AnalysisPromptBuilder.minimumStepKg
 
     /// Cards the result screen shows at most (design 3.4/3.4b/3.5: zero to four).
     static let maxCards = 4
@@ -171,9 +171,11 @@ enum AnalysisReportValidator {
     /// - the exercise is listed in the prompt (trimmed, case-insensitive),
     /// - its listed working weight exists and `fromKg` is within
     ///   `weightToleranceKg` of it,
-    /// - `toKg` is above that working weight, by at most
-    ///   `max(minimumStepKg, working × AnalysisPromptBuilder.maxStepShare)` —
-    ///   the step prompt rule 6 allows (#173).
+    /// - `toKg` is above that working weight, by at most the step prompt
+    ///   rule 6 allows (#173): the smallest step the line lists, never less
+    ///   than `minimumStepKg` — the barbell step, and all a line without a
+    ///   listed step allows. No share of the working weight on top: 60 → 66 kg
+    ///   is no step the prompt offered.
     ///
     /// Title, muscle group and `fromKg` are replaced by the listed values, so
     /// the struck-through figure on the card is the cache's, not the model's
@@ -197,7 +199,7 @@ enum AnalysisReportValidator {
             }
             .first
         guard let match else { return nil }
-        let maxStep = max(minimumStepKg, match.workingKg * AnalysisPromptBuilder.maxStepShare)
+        let maxStep = max(match.exercise.smallestStepKg ?? minimumStepKg, minimumStepKg)
         guard toKg > match.workingKg, toKg - match.workingKg <= maxStep + epsilon else { return nil }
         return .progression(
             exercise: match.exercise.title,

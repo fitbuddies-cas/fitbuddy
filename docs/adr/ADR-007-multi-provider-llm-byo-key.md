@@ -49,7 +49,7 @@ FitBuddy erlaubt im PoC bis zu drei LLM-Provider (Claude, Gemini, Mistral) im st
 
 - **Drei Vertragswerke statt einem:** Änderungen an Google- oder Mistral-Terms muss das Team künftig genauso beobachten wie die Anthropic Commercial Terms; die Prüftiefe von ADR-005 ist für Google/Mistral noch nicht vollständig erreicht (offene Punkte unten).
 - **Mistral-Experiment-Tier trainiert per Default:** Ein User, der den kostenlosen Tier ohne Opt-out nutzt, gibt Gesundheitsdaten in ein Trainingsprogramm. Das lässt sich app-seitig nicht technisch verhindern — nur durch klare Hinweise (Entscheidung Punkt 3).
-- **Keine Sperre pro Analyse-Durchlauf mehr:** Ursprünglich schrieb der `InferenceService` einen Sperr-Zeitstempel genau einmal pro Durchlauf, sobald der erste Provider die Anfrage annahm (seit #117 60 s statt 6 h). *Aktualisiert 2026-09: 60-s-Sperre entfernt* — die Fallback-Kette schreibt keinen Zeitstempel mehr, und ein neuer Durchlauf ist direkt nach dem vorherigen möglich. Parallel laufen kann weiterhin nur einer.
+- **Die Sperre wird pro Analyse-Durchlauf gesetzt, nicht pro Provider:** Der `InferenceService` schreibt den Zeitstempel genau einmal — sobald der erste Provider die Anfrage annimmt (HTTP 2xx), weil ab diesem Moment Tokens auf Kosten des Users anfallen. Scheitern danach alle Provider mitten in der Antwort, ist die Sperre trotzdem gesetzt. Seit #117 sind das 60 s statt 6 h, womit ein erfolgloser Durchlauf den User nicht mehr nennenswert aussperrt.
 - **Der Fallback verschiebt die Datenübermittlung stillschweigend zum nächsten Empfänger:** Fällt Claude aus, gehen dieselben Trainingsdaten an Google oder Mistral, ohne dass der User pro Lauf erneut zustimmt. Rechtlich getragen wird das durch den Consent-Text, der alle hinterlegten Provider als mögliche Empfänger nennt (Entscheidung Punkt 2), und durch die Provider-Anzeige im UI (Punkt 6) — technisch bleibt es eine Übermittlung, die der User nicht einzeln bestätigt hat.
 - **Consent-Text wird länger und komplexer**; die Verständlichkeit für nicht-technische User (US-4-Ziel) leidet tendenziell.
 - **Gemini-Standortabhängigkeit:** Das Trainings-Verbot im Free Tier hängt am Standort Schweiz/EWR/UK des Users. Für den geschlossenen CAS-PoC (Schweizer Tester) ist das gegeben; bei Ausweitung des Testerkreises wäre es neu zu bewerten.
@@ -70,3 +70,13 @@ FitBuddy erlaubt im PoC bis zu drei LLM-Provider (Claude, Gemini, Mistral) im st
 ---
 
 *Quellen: Gemini API Additional Terms of Service (ai.google.dev/gemini-api/terms), Gemini API Logs Policy (ai.google.dev/gemini-api/docs/logs-policy), Mistral Privacy & Data Controls (docs.mistral.ai), Mistral Help Center (Training-Opt-out), Mistral DPA (legal.mistral.ai) — alle geprüft 2026-08-21.*
+
+---
+
+## Nachtrag 2026-09: 60-s-Sperre entfernt
+
+**Kontext:** Die Konsequenzen oben beschreiben die Sperre pro Analyse-Durchlauf: Der `InferenceService` schrieb den Zeitstempel einmal, sobald der erste Provider die Anfrage annahm (seit #117 60 s). Sie sollte nur versehentliche Mehrfach-Calls verhindern, liess den User aber nach jedem Durchlauf warten.
+
+**Entscheidung:** Mit #178 ist die Sperre entfernt. Die Fallback-Kette schreibt keinen Zeitstempel mehr. Ein neuer Durchlauf ist direkt nach dem vorherigen möglich; parallel laufen kann weiterhin nur einer, weil der Button während eines laufenden Durchlaufs gesperrt ist.
+
+**Konsequenzen:** Die Frage, ob ein Durchlauf mit Fallback die Sperre pro Provider oder pro Durchlauf setzt, entfällt. Die Kosten jedes Durchlaufs trägt der Account des Users beim jeweils antwortenden Provider; **ein Spending Limit im Provider-Account bleibt Pflicht** ([[ADR-004]]), denn eine client-seitige Sperre war nie ein Kostenlimit.

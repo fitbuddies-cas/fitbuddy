@@ -49,7 +49,7 @@ final class DashboardRenderingTests: XCTestCase {
         // Rendered without a `NavigationStack` around it: `ImageRenderer`
         // returns nil for one, and the rows' `NavigationLink`s (#98) lay out
         // the same either way.
-        let image = try render(RecentSessionsCard(workouts: workouts, limit: 5))
+        let image = try render(RecentSessionsCard(workouts: workouts))
         XCTAssertGreaterThan(image.size.height, 0)
     }
 

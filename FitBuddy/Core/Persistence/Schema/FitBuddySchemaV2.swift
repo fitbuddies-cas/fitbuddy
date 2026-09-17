@@ -1,17 +1,16 @@
 import Foundation
 import SwiftData
 
-/// The store schema `develop` builds have written since `Activity.source`
-/// (#141), up to the persisted analysis report (#176): V1 plus
-/// `Workout.sourceRawValue`.
+/// The store schema as shipped between `Activity.source` (#141) and the
+/// training profile (#192): V1 plus `Workout.sourceRawValue`.
 ///
 /// A frozen snapshot, like `FitBuddySchemaV1`: it exists so
-/// `FitBuddyMigrationPlan` can recognise a store written by an earlier
-/// `develop` build — on the team's devices, not yet `main` — and migrate it
-/// forward. **Never edit the models in here.** A change
+/// `FitBuddyMigrationPlan` can recognise a store written by the previous
+/// build and migrate it forward. **Never edit the models in here.** A change
 /// to what the app stores is a new schema version, not a change to an old
-/// one — editing this file would make every installed store come back as
-/// "unknown model version" and fall back to an empty in-memory container.
+/// one — the first attempt at #192 added two columns to this version in
+/// place, and every installed store came back as "unknown model version"
+/// and fell back to an empty in-memory container.
 ///
 /// Four `@Model` classes in one file, against the one-type-per-file rule on
 /// purpose: `VersionedSchema` requires them nested, and a historic schema is

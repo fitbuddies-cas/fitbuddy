@@ -31,6 +31,8 @@ actor AnalysisResultStore {
             generatedAt: generatedAt,
             windowWeeks: context.window.weeks,
             sessionCount: context.sessionCount,
+            goal: context.profile.goal?.rawValue,
+            experience: context.profile.experience?.rawValue,
             reportJSON: encoded.json,
             reportVersion: encoded.version,
             providerRawValue: provider?.rawValue
@@ -117,7 +119,14 @@ actor AnalysisResultStore {
             generatedAt: result.generatedAt,
             context: AnalysisContext(
                 sessionCount: result.sessionCount,
-                window: AnalysisWindow(weeks: result.windowWeeks)
+                window: AnalysisWindow(weeks: result.windowWeeks),
+                // `flatMap` rather than a crash on a value this build no
+                // longer knows: a goal renamed in a later version leaves the
+                // row readable, minus that one line.
+                profile: TrainingProfile(
+                    goal: result.goal.flatMap(TrainingGoal.init(rawValue:)),
+                    experience: result.experience.flatMap(TrainingExperience.init(rawValue:))
+                )
             ),
             report: AnalysisReportFormat.decode(result.reportJSON, version: result.reportVersion),
             provider: result.provider

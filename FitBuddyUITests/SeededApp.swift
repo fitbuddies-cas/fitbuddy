@@ -135,6 +135,41 @@ struct SeededApp {
         app.navigationBars.buttons.firstMatch
     }
 
+    // MARK: - Settings (#191)
+
+    var settingsTab: XCUIElement {
+        app.tabBars.buttons["Settings"]
+    }
+
+    /// The row that opens the training profile. Its label carries the
+    /// summary under the title ("Training profile, Not set"), which is what
+    /// the roundtrip test reads back.
+    var trainingProfileRow: XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.TrainingProfile.settingsRow]
+    }
+
+    /// One goal option on the profile screen, by `TrainingGoal.rawValue`.
+    func goalOption(_ goal: String) -> XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.TrainingProfile.goalOption(goal)]
+    }
+
+    /// Blocks until the element's label contains `text`.
+    ///
+    /// For state that arrives after the screen is already there — the row's
+    /// summary is refreshed by an `onAppear` on the way back, so reading it
+    /// right after the pop would read the old one.
+    func assertLabel(
+        of element: XCUIElement,
+        contains text: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let predicate = NSPredicate(format: "label CONTAINS %@", text)
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        let result = XCTWaiter().wait(for: [expectation], timeout: Self.timeout)
+        XCTAssertEqual(result, .completed, "Label never contained \"\(text)\": \(element.label)", file: file, line: line)
+    }
+
     /// Blocks until the progression screen has finished its read — the chart
     /// or the "not enough data" hint is on screen.
     ///
@@ -152,6 +187,31 @@ struct SeededApp {
     }
 
     // MARK: - Interactions
+
+    /// Selects a profile option and makes sure it took.
+    ///
+    /// Same verify-and-retry as `expand`: the first tap after a push can land
+    /// while the list is still settling, and a test that then waits on the
+    /// row summary fails 30 seconds later on the wrong screen.
+    func select(
+        _ option: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        assertAppears(option, file: file, line: line)
+        for _ in 0..<3 {
+            guard !option.isSelected else { return }
+            option.tap()
+            // A fresh expectation per attempt — one that was waited on and
+            // not fulfilled cannot be waited on again.
+            let selected = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "isSelected == true"),
+                object: option
+            )
+            _ = XCTWaiter().wait(for: [selected], timeout: 2)
+        }
+        XCTAssertTrue(option.isSelected, "Option never became selected", file: file, line: line)
+    }
 
     /// Opens a collapsed session and makes sure it stayed open.
     ///

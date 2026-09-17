@@ -17,7 +17,7 @@ struct AnalysisResultSnapshot: Equatable, Sendable, Identifiable {
     /// live run did (#87, #36).
     let context: AnalysisContext
     /// The cards the user saw (US-14 AC6, #176), decoded when the snapshot is
-    /// built. `nil` for a prose answer, for a row written before V3, and for a
+    /// built. `nil` for a prose answer, for a row written before V4, and for a
     /// report this build cannot read — in each case `text` renders instead.
     let report: ValidatedAnalysisReport?
     /// The provider that wrote the answer (#176), or `nil` when the row did
