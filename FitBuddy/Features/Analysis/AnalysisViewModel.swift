@@ -98,6 +98,7 @@ final class AnalysisViewModel: ObservableObject {
     private let inference: AnalysisStreaming
     private let rateLimit: AnalysisRateLimitStore
     private let resultStore: (any AnalysisResultStoring)?
+    private let trainingProfile: TrainingProfileStore
     private let calendar: Calendar
     private let now: () -> Date
     private let slowThreshold: TimeInterval
@@ -115,6 +116,9 @@ final class AnalysisViewModel: ObservableObject {
     ///     survives an app restart (US-3 AC10). `nil` — the default — turns
     ///     persistence off, which is what SwiftUI previews need: they have no
     ///     `ModelContainer` to build a store over.
+    ///   - trainingProfile: Where the user's goal and experience live
+    ///     (US-13). Read at the start of every run, not once at init: the
+    ///     Settings screen changes it while this view model lives on (#191).
     ///   - now: Injectable clock, so windows and lock math are testable.
     ///   - slowThreshold: Injectable, so tests do not wait 30 real seconds.
     ///   - tickInterval: How often `trackLock()` refreshes the label while
@@ -127,6 +131,7 @@ final class AnalysisViewModel: ObservableObject {
         inference: AnalysisStreaming,
         rateLimit: AnalysisRateLimitStore = AnalysisRateLimitStore(),
         resultStore: (any AnalysisResultStoring)? = nil,
+        trainingProfile: TrainingProfileStore = TrainingProfileStore(),
         calendar: Calendar = .current,
         now: @escaping () -> Date = Date.init,
         slowThreshold: TimeInterval = AnalysisViewModel.defaultSlowThreshold,
@@ -137,6 +142,7 @@ final class AnalysisViewModel: ObservableObject {
         self.inference = inference
         self.rateLimit = rateLimit
         self.resultStore = resultStore
+        self.trainingProfile = trainingProfile
         self.calendar = calendar
         self.now = now
         self.slowThreshold = slowThreshold
@@ -430,15 +436,20 @@ final class AnalysisViewModel: ObservableObject {
             // its comparison window, and reporting those sessions as the data
             // basis would overstate it by a factor of six.
             let start = window.start(endingAt: reference, calendar: calendar)
+            // Read here, per run: what the user changed in Settings a minute
+            // ago has to be what this analysis sees (US-13 AC3/AC4).
+            let profile = await trainingProfile.profile
             context = AnalysisContext(
                 sessionCount: summaries.filter { $0.startTime >= start }.count,
-                window: window
+                window: window,
+                profile: profile
             )
             return AnalysisPromptBuilder.make(
                 summaries: summaries,
                 window: window,
                 now: reference,
-                calendar: calendar
+                calendar: calendar,
+                profile: profile
             )
         } catch {
             guard !Task.isCancelled, !error.isCancellation else { return nil }
