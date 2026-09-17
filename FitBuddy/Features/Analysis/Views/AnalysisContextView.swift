@@ -20,6 +20,13 @@ struct AnalysisContextView: View {
                 basis
                     .font(.caption)
             }
+            if let profileLine {
+                Text(profileLine)
+                    .font(.caption)
+                    // Indented under the sentence, past the dot, as in the
+                    // mock (`FBAnalysisContextLine`, #196).
+                    .padding(.leading, 14)
+            }
             if !context.window.isDefault {
                 Text(widenedNote)
                     .font(.caption)
@@ -54,24 +61,29 @@ struct AnalysisContextView: View {
         return Text("Based on ")
             + Text(counted).foregroundColor(.fbInk).fontWeight(.semibold)
             + Text(" · last \(context.window.weeks) weeks")
-            + profileSuffix
     }
 
-    /// The profile, appended to the basis line when there is one (US-13 AC4):
-    /// "· goal: improve endurance · 1–3 years of strength training". It went
-    /// into the prompt, so a basis line without it would be incomplete — and
-    /// the user would have no way to see that a stale goal is still steering
-    /// the recommendation.
-    private var profileSuffix: Text {
+    /// The profile, as a second line under the basis when there is one
+    /// (US-13 AC4): "Goal: Build muscle · 1–3 years training", the form of
+    /// `FBAnalysisContextLine` in `design/fb-screens.jsx` (#196). It went into
+    /// the prompt, so a basis without it would be incomplete — and the user
+    /// would have no way to see that a stale goal is still steering the
+    /// recommendation.
+    ///
+    /// Its own line rather than more dots on the first: appended, the caption
+    /// runs to three lines on an iPhone SE, and "less than a year of strength
+    /// training" reads badly mid-sentence. No profile → no line; half a
+    /// profile → the half that is set.
+    private var profileLine: String? {
         var parts: [String] = []
         if let goal = context.profile.goal {
-            parts.append("goal: \(goal.displayName.lowercased())")
+            parts.append("Goal: \(goal.displayName)")
         }
         if let experience = context.profile.experience {
-            parts.append("\(experience.displayName.lowercased()) of strength training")
+            parts.append("\(experience.displayName) training")
         }
-        guard !parts.isEmpty else { return Text("") }
-        return Text(" · " + parts.joined(separator: " · "))
+        guard !parts.isEmpty else { return nil }
+        return parts.joined(separator: " · ")
     }
 
     /// Why the period is not the usual four weeks. Carried over from
@@ -117,6 +129,20 @@ struct AnalysisContextView: View {
         AnalysisContextView(context: AnalysisContext(sessionCount: 3, window: .default))
         AnalysisContextView(context: AnalysisContext(sessionCount: 7, window: AnalysisWindow(weeks: 8)))
         AnalysisContextView(context: AnalysisContext(sessionCount: 1, window: AnalysisWindow(weeks: 13)))
+        AnalysisContextView(
+            context: AnalysisContext(
+                sessionCount: 14,
+                window: .default,
+                profile: TrainingProfile(goal: .buildMuscle, experience: .oneToThreeYears)
+            )
+        )
+        AnalysisContextView(
+            context: AnalysisContext(
+                sessionCount: 3,
+                window: AnalysisWindow(weeks: 8),
+                profile: TrainingProfile(goal: .improveEndurance)
+            )
+        )
     }
     .padding(16)
     .background(Color.fbBackground)

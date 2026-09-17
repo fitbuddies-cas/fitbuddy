@@ -39,8 +39,9 @@ struct ConsentView: View {
                             analysis it is transferred to the AI providers you connect a key \
                             for — Anthropic (Claude), Google (Gemini), and/or Mistral AI — and \
                             only to those. If you tell FitBuddy your training goal and \
-                            experience, those are sent along with it. Anthropic (contracting party: Anthropic Ireland, \
-                            Limited; technical processing by Anthropic PBC) and Google process \
+                            experience, those are sent along with it. Anthropic \
+                            (contracting party: Anthropic Ireland, Limited; technical processing \
+                            by Anthropic PBC) and Google process \
                             data in the USA, which does not provide a level of data protection \
                             equivalent to Swiss law; Mistral AI processes data in the EU. Each \
                             transfer is based on the API terms of your own account with that \

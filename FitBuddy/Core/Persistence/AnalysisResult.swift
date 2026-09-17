@@ -59,7 +59,9 @@ extension FitBuddySchemaV3 {
         var experience: String?
         /// Unused: held the "Helpful" / "Not helpful" verdict until those
         /// buttons were removed. Kept so installed stores open without a
-        /// migration — drop it with the V3 schema.
+        /// migration — nothing writes it since, and V3 kept it rather than
+        /// spending a migration stage on a column nobody reads (#202 makes
+        /// the same call, so the two V3s stay mergeable).
         var feedback: String?
 
         init(

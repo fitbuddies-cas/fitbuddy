@@ -338,16 +338,14 @@ final class AnalysisPromptBuilderTests: XCTestCase {
 
     private let fullProfile = TrainingProfile(goal: .improveEndurance, experience: .oneToThreeYears)
 
-    func testASetProfileOpensItsOwnSectionBeforeTheData() {
+    func testASetProfileOpensItsOwnSectionBeforeTheData() throws {
         let user = make([workout(daysAgo: 2, volume: 5_000)], profile: fullProfile).user
 
-        let profileAt = try? XCTUnwrap(user.range(of: "## Profile")?.lowerBound)
-        let windowAt = try? XCTUnwrap(user.range(of: "## Last 4 weeks")?.lowerBound)
+        let profileAt = try XCTUnwrap(user.range(of: "## Profile")?.lowerBound)
+        let windowAt = try XCTUnwrap(user.range(of: "## Last 4 weeks")?.lowerBound)
         XCTAssertTrue(user.contains("Goal: improve endurance"))
         XCTAssertTrue(user.contains("Strength training experience: 1–3 years"))
-        if let profileAt, let windowAt {
-            XCTAssertLessThan(profileAt, windowAt)
-        }
+        XCTAssertLessThan(profileAt, windowAt)
     }
 
     /// The case of every install that never answered step 4, and of everyone
@@ -380,11 +378,11 @@ final class AnalysisPromptBuilderTests: XCTestCase {
     /// The analysis reads strength sessions only. A goal like "improve
     /// endurance" invites the model to reason about training the prompt does
     /// not carry, so the section says so — every time it appears.
-    func testTheProfileSectionStatesThatOnlyStrengthSessionsFollow() {
-        let section = try? XCTUnwrap(AnalysisPromptBuilder.profileSection(TrainingProfile(goal: .improveEndurance)))
+    func testTheProfileSectionStatesThatOnlyStrengthSessionsFollow() throws {
+        let section = try XCTUnwrap(AnalysisPromptBuilder.profileSection(TrainingProfile(goal: .improveEndurance)))
 
-        XCTAssertEqual(section?.contains("strength sessions only"), true)
-        XCTAssertEqual(section?.contains("do not assume anything about other training"), true)
+        XCTAssertTrue(section.contains("strength sessions only"))
+        XCTAssertTrue(section.contains("do not assume anything about other training"))
     }
 
     /// Context about the person is context whether or not there is data — an
