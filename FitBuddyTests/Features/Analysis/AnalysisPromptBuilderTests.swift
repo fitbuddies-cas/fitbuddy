@@ -381,6 +381,37 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertTrue(prompt.user.contains("10 exercises with the most volume listed; 2 more in this window omitted"))
     }
 
+    /// The footer counts what the cap cut, not what is missing for any other
+    /// reason: a top exercise without a progression is skipped, not omitted.
+    func testOmittedCountsOnlyExercisesPastTheCap() throws {
+        let entries = (1...11).map { index -> (ExerciseSummary, ExerciseProgression) in
+            let summary = exercise("Lift \(index)", volume: Double(index) * 1_000, sessions: 1)
+            return (summary, progression(summary, sessions: [session(daysAgo: 2, sets: working(50, 8))]))
+        }
+        // The highest-volume lift has no progression: one row fewer, but the
+        // cap still cut exactly one exercise.
+        let withoutTop = entries.filter { $0.0.title != "Lift 11" }
+        let prompt = AnalysisPromptBuilder.make(
+            summaries: [workout(daysAgo: 2, volume: 5_000)],
+            exercises: entries.map { $0.0 },
+            progressions: Dictionary(uniqueKeysWithValues: withoutTop.map { ($0.0.id, $0.1) }),
+            now: reference,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(try exerciseRows(prompt).count, AnalysisPromptBuilder.maxListedExercises - 1)
+        XCTAssertTrue(prompt.user.contains("; 1 more in this window omitted)"))
+
+        let noneCut = AnalysisPromptBuilder.make(
+            summaries: [workout(daysAgo: 2, volume: 5_000)],
+            exercises: Array(entries.map { $0.0 }.suffix(3)),
+            progressions: [:],
+            now: reference,
+            calendar: calendar
+        )
+        XCTAssertFalse(noneCut.user.contains("omitted)"))
+    }
+
     func testFewerExercisesThanTheCapNameNoOmission() {
         let squat = exercise("Squat (Barbell)", volume: 5_000, sessions: 1)
         let prompt = makeWithExercises([
@@ -581,6 +612,34 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertFalse(prompt.user.contains("Smallest logged step: 30 kg"))
     }
 
+    /// Below the share, the floor keeps a light dumbbell's real step: 2 kg on
+    /// a 10 kg lateral raise is 20 %, but no more than one plate pair.
+    func testASmallStepOnALightWeightIsKeptByTheFloor() {
+        let raise = exercise("Lateral Raise (Dumbbell)", volume: 1_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (raise, progression(raise, sessions: [
+                session(daysAgo: 9, sets: working(8, 15)),
+                session(daysAgo: 2, sets: working(10, 12)),
+            ])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("Smallest logged step: 2 kg."))
+    }
+
+    /// The floor does not turn a change of dumbbells into a step: 8 → 12 kg
+    /// is 4 kg, past both the share and the floor.
+    func testTheFloorStillDropsAChangeOfEquipment() {
+        let raise = exercise("Lateral Raise (Dumbbell)", volume: 1_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (raise, progression(raise, sessions: [
+                session(daysAgo: 9, sets: working(8, 15)),
+                session(daysAgo: 2, sets: working(12, 10)),
+            ])),
+        ])
+
+        XCTAssertFalse(prompt.user.contains("Smallest logged step"))
+    }
+
     /// A step exactly at the share still counts: 2.5 kg on 25 kg is 10 %.
     func testAStepAtTheShareIsKept() {
         let curl = exercise("Bicep Curl (Cable)", volume: 1_000, sessions: 2)
@@ -751,6 +810,11 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertTrue(system.contains("exactly as it is listed"))
         XCTAssertTrue(system.contains("steps of 2.5 kg"))
         XCTAssertTrue(system.contains("at most the smallest step listed"))
+        // The starting weight must be listed; the target is one step above it,
+        // so the rule no longer forbids the weight it asks for.
+        XCTAssertTrue(system.contains("or a weight it does not list as a starting point"))
+        XCTAssertTrue(system.contains("a new target weight is always the listed weight of the most recent session plus one step"))
+        XCTAssertFalse(system.contains("a weight that section does not contain"))
     }
 
     // MARK: - Training profile (US-13 AC3, #192)

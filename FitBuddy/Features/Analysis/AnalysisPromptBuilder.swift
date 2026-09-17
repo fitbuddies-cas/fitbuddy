@@ -30,8 +30,18 @@ enum AnalysisPromptBuilder {
     /// The gap between two logged weights is only an increment when it is a
     /// small one: 8 and 12 kg dumbbells are two different exercises' worth of
     /// load, not a 4 kg step — that would be +33 % in one session. Past this
-    /// share the step is left out, and rule 6 falls back to reps.
+    /// share, and past `minimumStepKg`, the step is left out, and rule 6
+    /// falls back to reps.
     static let maxStepShare = 0.10
+
+    /// The step that is always an increment, whatever the share (#173).
+    ///
+    /// `maxStepShare` alone was chosen with barbell weights in mind: on a
+    /// 10 kg lateral raise it would drop the 2 kg step the rack actually
+    /// offers and push rule 6 to reps. Up to one plate pair a logged step is
+    /// kept — the same floor the report validation allows (#175) — while
+    /// 8 → 12 kg dumbbells stay a change of equipment.
+    static let minimumStepKg = 2.5
 
     /// Builds the prompt pair from the cached window.
     ///
@@ -181,11 +191,13 @@ enum AnalysisPromptBuilder {
 
     6. Name only exercises and weights from the Exercises section. Spell an \
     exercise exactly as it is listed there, and start any load change from \
-    the weight listed for its most recent session. Never name an exercise or \
-    a weight that section does not contain. Increase barbell exercises in \
-    steps of 2.5 kg; for every other exercise increase by at most the \
-    smallest step listed for it, and where none is listed, progress reps \
-    rather than weight.
+    the weight listed for its most recent session. Never name an exercise \
+    that section does not contain, or a weight it does not list as a \
+    starting point. A new target weight is always the listed weight of the \
+    most recent session plus one step. Increase barbell exercises in steps \
+    of 2.5 kg; for every other exercise increase by at most the smallest \
+    step listed for it, and where none is listed, progress reps rather than \
+    weight.
 
     Answer in English and keep it under 200 words: first what stands out in \
     the data, then a concrete recommendation for the next block.
@@ -396,7 +408,10 @@ enum AnalysisPromptBuilder {
             + "heaviest working set (weight × reps) of its most recent session with working "
             + "sets. e1RM is the Epley estimate from a session's best set, at the first and at "
             + "the most recent session in this window that has one."
-        let omitted = exercises.count - rows.count
+        // Counted against the cap, not against the rows: a listed exercise
+        // skipped for want of a progression was not cut by the cap, and
+        // calling it "omitted" would misstate why it is missing.
+        let omitted = max(0, exercises.count - maxListedExercises)
         let footer = omitted > 0
             ? ["(\(rows.count) exercises with the most volume listed; \(omitted) more in this window omitted)"]
             : []
@@ -497,14 +512,15 @@ enum AnalysisPromptBuilder {
     /// Only working sets count, the sets the working weight itself is taken
     /// from: a carry's weight next to a press's would be a step between two
     /// different kinds of set. `nil` when fewer than two distinct weights were
-    /// logged, and when the step is larger than `maxStepShare` of `latest` —
-    /// a gap that size is a change of equipment, not an increment.
+    /// logged, and when the step is larger than both `maxStepShare` of
+    /// `latest` and `minimumStepKg` — a gap that size is a change of
+    /// equipment, not an increment.
     private static func smallestStep(in sessions: [ExerciseHistoryEntry], latest: WorkingSet) -> Double? {
         // Rounded first, so two floating-point spellings of 62.5 cannot turn
         // into a step of 0.0000001 kg.
         let weights = Set(sessions.flatMap(\.workingSets).map(\.roundedWeightKg)).sorted()
         guard let step = zip(weights, weights.dropFirst()).map({ $1 - $0 }).min(),
-              step <= latest.weightKg * maxStepShare
+              step <= max(latest.weightKg * maxStepShare, minimumStepKg)
         else { return nil }
         return step
     }
