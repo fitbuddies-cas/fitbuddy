@@ -25,17 +25,19 @@ import Foundation
 ///
 /// `lead` and `summary` are declared before `cards`: an answer cut off at the
 /// token limit then usually still carries a complete summary, or at least a
-/// complete lead, which `AnalysisReportParser` salvages as prose. Only Gemini is guaranteed to see
-/// that order (`propertyOrdering`); `JSONEncoder` writes object keys in hash
-/// order, so for Claude and Mistral the order the system prompt lists the
-/// fields in is what asks for it.
+/// complete lead, which `AnalysisReportParser` salvages as prose. No provider
+/// is guaranteed to see that order: `JSONEncoder` does not promise key order,
+/// and Gemini's `propertyOrdering` is not a documented `responseJsonSchema`
+/// keyword. The order the system prompt lists the fields in is what asks for
+/// it, for all three; an answer that still runs out of tokens before the
+/// summary falls through to the next provider.
 ///
 /// Per provider (see the request types for the wire shape):
 ///
 /// - Claude: `output_config.format` = `{type: "json_schema", schema}`
 /// - Gemini: `generationConfig.responseJsonSchema` with `responseMimeType`
 ///   `application/json` — the JSON Schema field, not the OpenAPI-subset
-///   `responseSchema`. Gets `propertyOrdering` added, its own keyword.
+///   `responseSchema`. The same schema as the others, no `propertyOrdering`.
 /// - Mistral: `response_format` = `{type: "json_schema", json_schema: {name,
 ///   schema, strict: true}}`
 enum AnalysisReportSchema {

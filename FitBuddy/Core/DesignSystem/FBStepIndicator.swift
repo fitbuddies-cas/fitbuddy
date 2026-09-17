@@ -5,7 +5,7 @@ import SwiftUI
 struct FBStepIndicator: View {
     /// 1-based step this screen represents.
     let current: Int
-    var total: Int = 3
+    var total: Int = 4
 
     var body: some View {
         HStack(spacing: 6) {

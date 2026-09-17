@@ -64,8 +64,9 @@ enum AnalysisReportParser {
     /// one line per card, and a blank `lead` derived from the summary — or
     /// `nil` when that leaves nothing to read either.
     ///
-    /// A lead derived from a rebuilt summary skips the headline, which the
-    /// screen already shows right above it.
+    /// A lead derived from a rebuilt summary never includes the headline, which
+    /// the screen already shows right above it: when the headline is all the
+    /// report has, the lead stays empty rather than repeating it.
     private static func withProse(_ report: AnalysisReport) -> AnalysisReport? {
         var summary = report.summary
         var leadSource = summary
@@ -74,7 +75,7 @@ enum AnalysisReportParser {
             let lines = ([report.headline] + body).filter { !isBlank($0) }
             guard !lines.isEmpty else { return nil }
             summary = lines.joined(separator: "\n")
-            leadSource = body.isEmpty ? summary : body.joined(separator: "\n")
+            leadSource = body.joined(separator: "\n")
         }
         return AnalysisReport(
             headline: report.headline,

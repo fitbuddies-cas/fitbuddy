@@ -8,9 +8,9 @@ import OSLog
 /// Wipes all Keychain items (every API key, the Strava credentials *and* the
 /// consent metadata, so consent is asked for again per US-4 AC5), the
 /// SwiftData workout cache, the whole analysis history, the sync timestamp,
-/// the LLM priority order, the step-3 skip marker and the legacy timestamp of
-/// the removed analysis lock. The connectors' in-memory copies of the keys are
-/// not reachable from here; `WorkoutSyncService` drops them on the next sync
+/// the LLM priority order, the step-3 skip marker, the training profile and
+/// the legacy timestamp of the removed analysis lock. The connectors' in-memory
+/// copies of the keys are not reachable from here; `WorkoutSyncService` drops them on the next sync
 /// when it finds the stored ones gone.
 ///
 /// Deliberately kept: `FirstLaunchResetService`'s marker. It records the
@@ -27,6 +27,7 @@ actor DataResetService {
     private let timestamps: SyncTimestampStore
     private let priority: LLMPriorityStore
     private let skip: LLMKeysSkipStore
+    private let trainingProfile: TrainingProfileStore
     private let defaults: UserDefaults
 
     private let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "DataReset")
@@ -38,6 +39,7 @@ actor DataResetService {
         timestamps: SyncTimestampStore = SyncTimestampStore(),
         priority: LLMPriorityStore = LLMPriorityStore(),
         skip: LLMKeysSkipStore = LLMKeysSkipStore(),
+        trainingProfile: TrainingProfileStore = TrainingProfileStore(),
         defaults: UserDefaults = .standard
     ) {
         self.keychain = keychain
@@ -46,6 +48,7 @@ actor DataResetService {
         self.timestamps = timestamps
         self.priority = priority
         self.skip = skip
+        self.trainingProfile = trainingProfile
         self.defaults = defaults
     }
 
@@ -78,5 +81,10 @@ actor DataResetService {
         defaults.removeObject(forKey: Self.legacyAnalysisLockKey)
         await priority.clear()
         await skip.clear()
+        // Profile and skip decision, not the introduction marker: that one
+        // records the installation, like `FirstLaunchResetService`'s. Clearing
+        // it would make the next launch mistake this install for one that
+        // predates step 4 and never ask again.
+        await trainingProfile.clear()
     }
 }
