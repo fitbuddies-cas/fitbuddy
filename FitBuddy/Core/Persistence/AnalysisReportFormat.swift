@@ -10,7 +10,7 @@ import OSLog
 /// reads as prose: `text` is always stored alongside, and a history entry
 /// without cards is better than a history that crashes or loses the row.
 enum AnalysisReportFormat {
-    /// No report — the row holds prose only. The V2 → V3 default.
+    /// No report — the row holds prose only. The V3 → V4 default.
     static let prose = 0
     /// `ValidatedAnalysisReport` as `JSONEncoder` writes it (#175, #176).
     static let validatedReportV1 = 1

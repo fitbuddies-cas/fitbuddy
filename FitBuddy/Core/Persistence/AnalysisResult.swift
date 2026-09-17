@@ -1,10 +1,10 @@
 import Foundation
 import SwiftData
 
-/// The current `AnalysisResult` model — see `FitBuddySchemaV3`.
-typealias AnalysisResult = FitBuddySchemaV3.AnalysisResult
+/// The current `AnalysisResult` model — see `FitBuddySchemaV4`.
+typealias AnalysisResult = FitBuddySchemaV4.AnalysisResult
 
-extension FitBuddySchemaV3 {
+extension FitBuddySchemaV4 {
     /// One AI recommendation, kept so it survives an app restart and stays
     /// readable next to the ones before it (US-3 AC10/AC11, #97/#117).
     ///
@@ -48,9 +48,20 @@ extension FitBuddySchemaV3 {
         /// plan; a row written before #36 then reads as thin data, which is
         /// the honest answer for a basis nobody recorded.
         var sessionCount: Int = 0
+        /// The training goal the run was steered by, as `TrainingGoal.rawValue`
+        /// (US-13 AC4, #192) — `nil` when the user had not set one. Stored for
+        /// the same reason as `sessionCount`: the basis line above a restored
+        /// recommendation has to name what that run saw, and a goal changed in
+        /// Settings since would describe a different one. Optional, filled
+        /// with `nil` by the V2 → V3 stage: rows written before #192 read as
+        /// "no profile", which is what those runs had.
+        var goal: String?
+        /// The strength training experience the run was steered by, as
+        /// `TrainingExperience.rawValue` — see `goal`.
+        var experience: String?
         /// The `ValidatedAnalysisReport` the user saw, JSON-encoded (US-14
         /// AC6, #176) — `nil` for a prose answer and for every row written
-        /// before V3. The validated report rather than the model's raw one, so
+        /// before V4. The validated report rather than the model's raw one, so
         /// the history shows the same cards, with the app's recovery figures
         /// as of that run, and not a re-validation against today's cache.
         ///
@@ -58,16 +69,17 @@ extension FitBuddySchemaV3 {
         /// what the bytes mean depends on `reportVersion`.
         var reportJSON: Data?
         /// The format of `reportJSON` — see `AnalysisReportFormat`. 0 means
-        /// prose (no report), which is what the V2 → V3 stage fills existing
+        /// prose (no report), which is what the V3 → V4 stage fills existing
         /// rows with.
         var reportVersion: Int = 0
         /// `LLMProvider.rawValue` of the provider that wrote this answer — the
         /// last one of the fallback chain (#176), read it through `provider`.
-        /// `nil` on rows written before V3, which did not record it.
+        /// `nil` on rows written before V4, which did not record it.
         var providerRawValue: String?
         /// Unused: held the "Helpful" / "Not helpful" verdict until those
-        /// buttons were removed. Dropping it would be a lightweight change of
-        /// its own; #176 left it out to keep V3 purely additive.
+        /// buttons were removed. Kept so installed stores open without a
+        /// migration — nothing writes it since, and neither V3 nor V4 spent a
+        /// migration stage on a column nobody reads; both stay purely additive.
         var feedback: String?
 
         /// Typed view of `providerRawValue`. An unknown raw value — a store
@@ -83,6 +95,8 @@ extension FitBuddySchemaV3 {
             generatedAt: Date,
             windowWeeks: Int,
             sessionCount: Int,
+            goal: String? = nil,
+            experience: String? = nil,
             reportJSON: Data? = nil,
             reportVersion: Int = AnalysisReportFormat.prose,
             providerRawValue: String? = nil
@@ -92,6 +106,8 @@ extension FitBuddySchemaV3 {
             self.generatedAt = generatedAt
             self.windowWeeks = windowWeeks
             self.sessionCount = sessionCount
+            self.goal = goal
+            self.experience = experience
             self.reportJSON = reportJSON
             self.reportVersion = reportVersion
             self.providerRawValue = providerRawValue
