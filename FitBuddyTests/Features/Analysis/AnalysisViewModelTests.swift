@@ -199,9 +199,10 @@ final class AnalysisViewModelTests: XCTestCase {
     }
 
     /// US-14 AC3: a progression on an exercise the prompt did not list is a
-    /// note, one on a listed exercise with the cached working weight stays.
+    /// note, one on a listed exercise with the cached working weight and a
+    /// barbell step (rule 6) stays.
     func testAReportIsValidatedAgainstTheReadsOfTheRun() async throws {
-        let bench = Self.exercise("Bench Press", volume: 1_000)
+        let bench = Self.exercise("Bench Press (Barbell)", volume: 1_000)
         let exercises = StubAnalysisExerciseCache()
         exercises.exercises = [bench]
         exercises.progressions = [bench.id: Self.progression(bench, weightKg: 60, reps: 5, daysAgo: 2)]
@@ -211,7 +212,7 @@ final class AnalysisViewModelTests: XCTestCase {
             verdict: .progress,
             lead: "Bench press can go up.",
             cards: [
-                .progression(exercise: "Bench Press", muscleGroup: "Chest", fromKg: 60, toKg: 62.5, reasoning: reasoning),
+                .progression(exercise: "Bench Press (Barbell)", muscleGroup: "Chest", fromKg: 60, toKg: 62.5, reasoning: reasoning),
                 .progression(exercise: "Squat", muscleGroup: "Legs", fromKg: 100, toKg: 102.5, reasoning: "Squat is ready."),
             ],
             summary: "Add 2.5 kg on bench."
@@ -223,8 +224,8 @@ final class AnalysisViewModelTests: XCTestCase {
         let report = try XCTUnwrap(sut.state.outcome?.report)
         XCTAssertEqual(report.cards, [
             .progression(
-                exercise: "Bench Press",
-                muscleGroup: MuscleGroup.from(exerciseTitle: "Bench Press"),
+                exercise: "Bench Press (Barbell)",
+                muscleGroup: MuscleGroup.from(exerciseTitle: "Bench Press (Barbell)"),
                 fromKg: 60,
                 toKg: 62.5,
                 reasoning: reasoning

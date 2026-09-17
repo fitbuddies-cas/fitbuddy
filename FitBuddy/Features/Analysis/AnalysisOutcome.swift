@@ -10,7 +10,7 @@ enum AnalysisOutcome: Equatable, Sendable {
     /// A structured answer, checked against the cache (#175).
     case report(ValidatedAnalysisReport)
     /// A prose answer: a provider without JSON output, a non-conforming answer
-    /// (US-14 AC5), a stored row from before V3, or a report that could not be
+    /// (US-14 AC5), a stored row from before V4, or a report that could not be
     /// validated.
     case prose(String)
 
@@ -26,7 +26,7 @@ enum AnalysisOutcome: Equatable, Sendable {
     }
 
     /// The outcome a stored row renders as: its cards when it stored a report
-    /// (#176), its text otherwise — every row from before V3 included (US-14
+    /// (#176), its text otherwise — every row from before V4 included (US-14
     /// AC6). Shared by the restored result and the history detail, so the two
     /// never show the same row differently.
     init(stored snapshot: AnalysisResultSnapshot) {

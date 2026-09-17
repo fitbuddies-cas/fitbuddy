@@ -15,7 +15,7 @@ struct AnalysisHistoryDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 // The same cards the user saw when the row stores a report
-                // (#176); prose for every row from before V3 (US-14 AC6).
+                // (#176); prose for every row from before V4 (US-14 AC6).
                 AnalysisResultView(
                     outcome: AnalysisOutcome(stored: entry),
                     context: entry.context,
@@ -71,7 +71,7 @@ struct AnalysisHistoryDetailView: View {
     }
 }
 
-/// A row stored before V3: prose, and a bare "AI" badge (US-14 AC6).
+/// A row stored before V4: prose, and a bare "AI" badge (US-14 AC6).
 #Preview("Prose") {
     NavigationStack {
         AnalysisHistoryDetailView(

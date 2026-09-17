@@ -76,7 +76,8 @@ final class ModelContainerFactoryTests: XCTestCase {
     /// one. The first attempt at #192 changed V2 in place, and the store this
     /// test writes came back as "unknown model version" and fell back to an
     /// empty in-memory container; this is the test that would have caught it.
-    /// Since #176 the store continues through V3 → V4.
+    /// Since #176 the store continues through V3 → V4, and the migrated row
+    /// has to carry the V4 defaults as well.
     func testV2StoreMigratesToV3WithEveryAnalysisReadingAsNoProfile() throws {
         let storeURL = try makeTemporaryStoreURL()
         try writeV2Store(at: storeURL)
@@ -90,6 +91,11 @@ final class ModelContainerFactoryTests: XCTestCase {
         XCTAssertEqual(analyses.map(\.sessionCount), [12])
         XCTAssertEqual(analyses.map(\.goal), [nil])
         XCTAssertEqual(analyses.map(\.experience), [nil])
+        // Through V3 → V4 (#176) the row also takes the V4 defaults: prose,
+        // no stored report, no provider.
+        XCTAssertEqual(analyses.map(\.reportVersion), [0])
+        XCTAssertEqual(analyses.map(\.reportJSON), [nil])
+        XCTAssertEqual(analyses.map(\.provider), [nil])
 
         // And the migrated store accepts what only V3 can write.
         let store = AnalysisResultStore(modelContainer: container)
