@@ -492,7 +492,10 @@ enum AnalysisPromptBuilder {
             return ListedExercise(
                 title: exercise.title,
                 muscleGroup: exercise.muscleGroup,
-                workingSet: listing.last.heaviestWorkingSet
+                workingSet: listing.last.heaviestWorkingSet,
+                smallestStepKg: listing.last.heaviestWorkingSet.flatMap {
+                    smallestStep(in: listing.inWindow.sessions, latest: $0)
+                }
             )
         }
     }
@@ -603,7 +606,11 @@ enum AnalysisPromptBuilder {
     /// logged, and when the step is larger than both `maxStepShare` of
     /// `latest` and `minimumStepKg` — a gap that size is a change of
     /// equipment, not an increment.
-    private static func smallestStep(in sessions: [ExerciseHistoryEntry], latest: WorkingSet) -> Double? {
+    ///
+    /// Not private: `listedExercises` hands the same figure to the report
+    /// validation (#175), so the step the prompt names and the step a card is
+    /// checked against come from this one function.
+    static func smallestStep(in sessions: [ExerciseHistoryEntry], latest: WorkingSet) -> Double? {
         // Rounded first, so two floating-point spellings of 62.5 cannot turn
         // into a step of 0.0000001 kg.
         let weights = Set(sessions.flatMap(\.workingSets).map(\.roundedWeightKg)).sorted()
