@@ -90,7 +90,7 @@ final class AnalysisFailureTests: XCTestCase {
         XCTAssertFalse(AnalysisFailure.unauthorized(.claude).leadsToSettings)
         XCTAssertFalse(AnalysisFailure.keychainUnavailable.leadsToSettings)
         XCTAssertFalse(AnalysisFailure.offline(.claude).leadsToSettings)
-        XCTAssertFalse(AnalysisFailure.lockActive(availableAt: Date()).leadsToSettings)
+        XCTAssertFalse(AnalysisFailure.unreadableResponse(.gemini).leadsToSettings)
         XCTAssertFalse(AnalysisFailure.noTrainingData.leadsToSettings)
     }
 
