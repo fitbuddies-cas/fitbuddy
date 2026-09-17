@@ -1,10 +1,10 @@
 import Foundation
 import SwiftData
 
-/// The current `AnalysisResult` model — see `FitBuddySchemaV2`.
-typealias AnalysisResult = FitBuddySchemaV2.AnalysisResult
+/// The current `AnalysisResult` model — see `FitBuddySchemaV3`.
+typealias AnalysisResult = FitBuddySchemaV3.AnalysisResult
 
-extension FitBuddySchemaV2 {
+extension FitBuddySchemaV3 {
     /// One AI recommendation, kept so it survives an app restart and stays
     /// readable next to the ones before it (US-3 AC10/AC11, #97/#117).
     ///
@@ -46,9 +46,22 @@ extension FitBuddySchemaV2 {
         /// plan; a row written before #36 then reads as thin data, which is
         /// the honest answer for a basis nobody recorded.
         var sessionCount: Int = 0
+        /// The training goal the run was steered by, as `TrainingGoal.rawValue`
+        /// (US-13 AC4, #192) — `nil` when the user had not set one. Stored for
+        /// the same reason as `sessionCount`: the basis line above a restored
+        /// recommendation has to name what that run saw, and a goal changed in
+        /// Settings since would describe a different one. Optional, filled
+        /// with `nil` by the V2 → V3 stage: rows written before #192 read as
+        /// "no profile", which is what those runs had.
+        var goal: String?
+        /// The strength training experience the run was steered by, as
+        /// `TrainingExperience.rawValue` — see `goal`.
+        var experience: String?
         /// Unused: held the "Helpful" / "Not helpful" verdict until those
         /// buttons were removed. Kept so installed stores open without a
-        /// migration — drop it with the V3 schema.
+        /// migration — nothing writes it since, and V3 kept it rather than
+        /// spending a migration stage on a column nobody reads (#202 makes
+        /// the same call, so the two V3s stay mergeable).
         var feedback: String?
 
         init(
@@ -56,13 +69,17 @@ extension FitBuddySchemaV2 {
             text: String,
             generatedAt: Date,
             windowWeeks: Int,
-            sessionCount: Int
+            sessionCount: Int,
+            goal: String? = nil,
+            experience: String? = nil
         ) {
             self.id = id
             self.text = text
             self.generatedAt = generatedAt
             self.windowWeeks = windowWeeks
             self.sessionCount = sessionCount
+            self.goal = goal
+            self.experience = experience
         }
     }
 }

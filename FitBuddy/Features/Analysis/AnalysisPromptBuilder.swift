@@ -26,11 +26,15 @@ enum AnalysisPromptBuilder {
     ///   - now: Injectable clock, so the windows are testable.
     ///   - calendar: Decides where a day starts, so training days follow the
     ///     user's time zone.
+    ///   - profile: What the user said they train for (US-13). An empty
+    ///     profile — the default, and every install that never answered —
+    ///     leaves the prompt byte-for-byte as it was without one.
     static func make(
         summaries: [WorkoutSummary],
         window: AnalysisWindow = .default,
         now: Date = Date(),
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        profile: TrainingProfile = TrainingProfile()
     ) -> AnalysisPrompt {
         AnalysisPrompt(
             system: systemPrompt,
@@ -38,9 +42,41 @@ enum AnalysisPromptBuilder {
                 summaries: strengthSessions(in: summaries),
                 window: window,
                 now: now,
-                calendar: calendar
+                calendar: calendar,
+                profile: profile
             )
         )
+    }
+
+    // MARK: - Profile
+
+    /// The user's own answers, as facts about them (US-13 AC3, #192) — or
+    /// nothing at all.
+    ///
+    /// `nil` rather than a heading with nothing under it: "Profile: —" reads
+    /// to the model as a statement about the person, and a half profile
+    /// states only the half that was answered.
+    ///
+    /// The closing line is the one that matters most. The analysis reads
+    /// strength sessions only, so a runner with the goal "improve endurance"
+    /// would otherwise hand the model a goal that asks for context the prompt
+    /// does not carry — and rule 3 of the system prompt is the only thing
+    /// standing between that gap and an invented one. Saying it here keeps
+    /// the profile inside the rules instead of leaning against them.
+    static func profileSection(_ profile: TrainingProfile) -> String? {
+        var lines: [String] = []
+        if let goal = profile.goal {
+            lines.append("Goal: \(goal.displayName.lowercased())")
+        }
+        if let experience = profile.experience {
+            lines.append("Strength training experience: \(experience.displayName.lowercased())")
+        }
+        guard !lines.isEmpty else { return nil }
+        lines.append(
+            "The data below covers my strength sessions only; do not assume anything "
+                + "about other training I may do."
+        )
+        return (["## Profile"] + lines).joined(separator: "\n")
     }
 
     /// The sessions the analysis is about: Hevy's, not Strava's or Polar's
@@ -106,7 +142,8 @@ enum AnalysisPromptBuilder {
         summaries: [WorkoutSummary],
         window: AnalysisWindow,
         now: Date,
-        calendar: Calendar
+        calendar: Calendar,
+        profile: TrainingProfile
     ) -> String {
         let recentStart = window.start(endingAt: now, calendar: calendar)
         let previousStart = window.previousStart(endingAt: now, calendar: calendar)
@@ -128,17 +165,19 @@ enum AnalysisPromptBuilder {
         // An empty window turns every figure into a zero, which reads as
         // "trained nothing" rather than "nothing recorded" — including the
         // window header itself. Saying it once, plainly, is shorter and truer.
+        // Facts about the person come before facts about the data, and only
+        // when there are any: `compactMap` drops the section, not its heading.
+        let opening = [intro, profileSection(profile)].compactMap { $0 }
+
         guard !recent.isEmpty else {
-            return [
-                intro,
+            return (opening + [
                 "## Last \(window.weeks) weeks (\(days.string(recentStart)) to \(days.string(now)))",
                 "No workouts are recorded in this window. Say so plainly and do not "
                     + "infer a training history from the absence of data.",
-            ].joined(separator: "\n\n")
+            ]).joined(separator: "\n\n")
         }
 
-        var sections: [String] = [
-            intro,
+        var sections: [String] = opening + [
             windowSection(recent, window: window, from: recentStart, to: now, calendar: calendar, days: days),
         ]
         sections.append(weeklySection(recent, window: window, now: now, calendar: calendar, days: days))
