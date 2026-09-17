@@ -67,6 +67,13 @@ struct SettingsView: View {
                 .background(Color.fbBackground)
                 .navigationTitle("Settings")
                 .navigationBarTitleDisplayMode(.inline)
+                // On the list, not on the stack: the stack stays on screen
+                // while the profile screen is pushed, so its `onAppear`
+                // would fire once and never on the way back. The list does
+                // disappear behind the push and reappears on the pop, which
+                // is the moment the row has to show what was just changed
+                // (#191 review). `.task` does not fire again on a pop.
+                .onAppear { Task { await viewModel.refreshTrainingProfile() } }
                 .navigationDestination(for: SettingsRoute.self) { route in
                     switch route {
                     case .strava:
@@ -85,9 +92,6 @@ struct SettingsView: View {
                 }
         }
         .task { await viewModel.load() }
-        // Fires on the way back from the profile screen too (`.task` does
-        // not), and the row has to show what was just changed there (#191).
-        .onAppear { Task { await viewModel.refreshTrainingProfile() } }
         .sheet(item: $viewModel.editorTarget) { target in
             KeyEditorSheet(viewModel: viewModel, target: target)
         }
