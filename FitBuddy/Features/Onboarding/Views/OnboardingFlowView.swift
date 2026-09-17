@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// Hosts the 4-step onboarding flow (US-4, US-13) in a single `NavigationStack`:
-/// consent at the root, the two key screens pushed on top as the coordinator
-/// advances. Navigation is forward-only — completed steps are gates the user
+/// consent at the root, the two key screens and the profile screen pushed on
+/// top as the coordinator advances. Navigation is forward-only — completed steps are gates the user
 /// cannot revisit, so the back button is hidden and the path is derived from
 /// `OnboardingViewModel.step` instead of being user-driven.
 struct OnboardingFlowView: View {
