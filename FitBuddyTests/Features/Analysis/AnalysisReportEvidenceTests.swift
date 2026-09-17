@@ -35,9 +35,38 @@ final class AnalysisReportEvidenceTests: XCTestCase {
         let evidence = makeEvidence(summaries: [summary(daysAgo: 2)], exercises: [bench], progressions: progressions)
 
         XCTAssertTrue(prompt.user.contains("- Bench Press: 60 kg × 6"))
+        // The step as well: the validator caps a card at the step the line names.
+        XCTAssertTrue(prompt.user.contains("Smallest logged step: 2.5 kg."))
         XCTAssertEqual(evidence.exercises, [
-            ListedExercise(title: "Bench Press", muscleGroup: .chest, workingSet: WorkingSet(weightKg: 60, reps: 6)),
+            ListedExercise(
+                title: "Bench Press",
+                muscleGroup: .chest,
+                workingSet: WorkingSet(weightKg: 60, reps: 6),
+                smallestStepKg: 2.5
+            ),
         ])
+    }
+
+    /// A dumbbell step below the barbell step reaches the evidence as the
+    /// prompt line names it: 2 kg, not the 2.5 kg floor.
+    func testListedStepEqualsThePromptLine() {
+        let raise = exercise("Lateral Raise (Dumbbell)", volume: 1_000)
+        let progressions = [raise.id: ExerciseProgression(id: raise.id, title: raise.title, sessions: [
+            session(daysAgo: 9, sets: [set(0, .normal, 8, 12)]),
+            session(daysAgo: 2, sets: [set(0, .normal, 10, 12)]),
+        ])]
+
+        let prompt = AnalysisPromptBuilder.make(
+            summaries: [summary(daysAgo: 2)],
+            exercises: [raise],
+            progressions: progressions,
+            now: reference,
+            calendar: calendar
+        )
+        let evidence = makeEvidence(summaries: [summary(daysAgo: 2)], exercises: [raise], progressions: progressions)
+
+        XCTAssertTrue(prompt.user.contains("Smallest logged step: 2 kg."))
+        XCTAssertEqual(evidence.exercises.map(\.smallestStepKg), [2])
     }
 
     /// Only what the prompt lists: past the cap, without a progression, or
@@ -62,6 +91,27 @@ final class AnalysisReportEvidenceTests: XCTestCase {
         )
 
         XCTAssertEqual(evidence.exercises.map(\.title), ["Squat"])
+    }
+
+    /// No step in the line, no step in the evidence: a single logged weight,
+    /// and a gap past the share and the floor (8 → 12 kg), both leave it `nil`.
+    func testAnExerciseWithoutAListedStepCarriesNone() {
+        let raise = exercise("Lateral Raise (Dumbbell)", volume: 1_000)
+        let row = exercise("Row", volume: 900)
+        let progressions = [
+            raise.id: ExerciseProgression(id: raise.id, title: raise.title, sessions: [
+                session(daysAgo: 9, sets: [set(0, .normal, 8, 15)]),
+                session(daysAgo: 2, sets: [set(0, .normal, 12, 10)]),
+            ]),
+            row.id: ExerciseProgression(id: row.id, title: row.title, sessions: [
+                session(daysAgo: 3, sets: [set(0, .normal, 50, 10)]),
+            ]),
+        ]
+
+        let evidence = makeEvidence(summaries: [summary(daysAgo: 2)], exercises: [raise, row], progressions: progressions)
+
+        XCTAssertEqual(evidence.exercises.map(\.title), ["Lateral Raise (Dumbbell)", "Row"])
+        XCTAssertEqual(evidence.exercises.map(\.smallestStepKg), [nil, nil])
     }
 
     /// The per-week figure equals the one the prompt's Muscle groups section

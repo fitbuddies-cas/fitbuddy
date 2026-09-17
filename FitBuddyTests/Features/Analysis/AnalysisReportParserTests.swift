@@ -122,6 +122,21 @@ final class AnalysisReportParserTests: XCTestCase {
         XCTAssertEqual(report.lead, "Too little data yet.")
     }
 
+    /// A report holding nothing but its headline stays valid, with the
+    /// headline as summary — but its lead stays empty instead of repeating
+    /// the headline the screen already shows right above it.
+    func testAHeadlineOnlyReportGetsNoLead() {
+        let answer = #"{"headline": "Hold steady.", "verdict": "hold", "lead": " ", "summary": "", "cards": []}"#
+
+        guard case .report(let report)? = AnalysisReportParser.event(for: answer) else {
+            return XCTFail("expected a report")
+        }
+        XCTAssertEqual(AnalysisLead.resolved("", summary: ""), "")
+        XCTAssertEqual(report.summary, "Hold steady.")
+        XCTAssertEqual(report.lead, "")
+        XCTAssertNotEqual(report.lead, report.headline)
+    }
+
     // MARK: - Summary fallback
 
     /// A card the schema does not know makes the report unusable, but its

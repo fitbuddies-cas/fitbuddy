@@ -41,7 +41,7 @@ Wir verzichten im PoC auf einen Backend-Proxy. Sowohl Hevy- als auch Claude-API-
 ### - Negativ
 
 - **Claude-API-Key liegt auf dem Endgerät:** Bei Jailbreak / forensischer Geräteanalyse exponiert; es gibt keinen serverseitigen Kill-Switch ([[ADR-3]]-Konsequenz). Realistische Bedrohung im TestFlight-Demo-Kontext gering, aber in v1.0 nicht tolerierbar.
-- **Kosten-Exposure ohne Spending-Limit:** Eine client-seitige Sperre ist grundsätzlich bypassbar via Jailbreak oder Proxy und taugt deshalb nicht als Kostenlimit. Der ursprünglich vorgesehene 6h-Cooldown ist mit #117 durch eine 60-s-Doppeltipp-Sperre ersetzt worden. *Aktualisiert 2026-09: 60-s-Sperre entfernt* — es gibt keinen Cooldown mehr; doppelte Calls verhindert allein der während eines laufenden Calls gesperrte Button. **Pflicht-Massnahme (unverändert):** Anthropic Spending Limit im Console-Account konfigurieren, bevor die ersten TestFlight-Tester Zugang erhalten. Ohne Spending Limit kann ein einzelner missbrauchter Key unkontrollierte Kosten auslösen — im BYO-Key-Modell auf Rechnung des Users, der ihn beschafft hat.
+- **Kosten-Exposure ohne Spending-Limit:** Eine client-seitige Sperre ist grundsätzlich bypassbar via Jailbreak oder Proxy und taugt deshalb nicht als Kostenlimit. Der ursprünglich vorgesehene 6h-Cooldown ist mit #117 durch eine 60-s-Doppeltipp-Sperre ersetzt: Sie verhindert versehentliche Mehrfach-Calls, mehr soll sie nicht. **Pflicht-Massnahme (unverändert):** Anthropic Spending Limit im Console-Account konfigurieren, bevor die ersten TestFlight-Tester Zugang erhalten. Ohne Spending Limit kann ein einzelner missbrauchter Key unkontrollierte Kosten auslösen — im BYO-Key-Modell auf Rechnung des Users, der ihn beschafft hat.
 - **Rate-Limit-Sharing bei Multi-User-TestFlight:** Wenn mehrere Tester denselben Demo-Anthropic-Account nutzen (z. B. für CAS-Präsentation), teilen sich alle Tester das Account-Level-Rate-Limit. Ein Tester, der 5 Calls in Folge macht, blockiert alle anderen bis zum Ablauf des Account-Rate-Limits. **Mitigation:** Für Demo-Phase jeden Tester mit eigenem Anthropic-Key ausstatten oder Cloudflare AI Gateway mit per-User-Rate-Limiting.
 - **Certificate Pinning nicht optional:** Ohne Certificate Pinning genügt ein MITM-Proxy (Charles, mitmproxy) im CAS-Kursraum-WLAN, um API-Keys im Klartext abzugreifen. **Implementierungs-Pflicht in Sprint 2:** Public-Key-Pinning für `api.anthropic.com` und `api.hevyapp.com` via `URLAuthenticationChallenge`. Bei Zertifikats-Rotation Backup-Pin vorsehen.
 - **Keine Betriebsübersicht:** Ohne Proxy gibt es keine zentrale Log-Übersicht. Fehler (API-Down, Rate-Limit, 401) sind nur im Xcode-Debugger oder via On-Device-Logging sichtbar.
@@ -64,3 +64,13 @@ Wir verzichten im PoC auf einen Backend-Proxy. Sowohl Hevy- als auch Claude-API-
 ---
 
 *Korrektur 2026-06-03: AUP-Offener-Punkt als geschlossen markiert (im Kontext dokumentiert); «Kein Team-Key für externe Tester» als Architekturpflicht ergänzt (BYO-Key-Konsistenz mit ADR-5).*
+
+---
+
+## Nachtrag 2026-09: 60-s-Sperre entfernt
+
+**Kontext:** Die mit #117 eingeführte 60-s-Doppeltipp-Sperre (siehe Konsequenzen oben) liess den User nach jeder Analyse warten, auch wenn er bewusst sofort eine neue starten wollte. Als Kostenlimit taugte sie nie: Sie ist client-seitig und damit bypassbar.
+
+**Entscheidung:** Mit #178 ist die Sperre entfernt. Es gibt keinen Cooldown mehr; doppelte Calls verhindert allein der Button, der gesperrt ist, solange ein Call läuft. «Alle Daten löschen» entfernt den alten Sperr-Zeitstempel weiterhin von Geräten, auf denen ein Build mit Sperre lief.
+
+**Konsequenzen:** Ein neuer Durchlauf ist direkt nach dem vorherigen möglich, und jeder Durchlauf verursacht Kosten auf dem Account des Users. Die Kostenkontrolle liegt damit vollständig beim Spending Limit: **Das Anthropic Spending Limit im Console-Account bleibt Pflicht-Massnahme**, bevor TestFlight-Tester Zugang erhalten (Offene Punkte oben).

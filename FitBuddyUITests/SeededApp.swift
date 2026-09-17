@@ -154,6 +154,41 @@ struct SeededApp {
         app.navigationBars.buttons.firstMatch
     }
 
+    // MARK: - Settings (#191)
+
+    var settingsTab: XCUIElement {
+        app.tabBars.buttons["Settings"]
+    }
+
+    /// The row that opens the training profile. Its label carries the
+    /// summary under the title ("Training profile, Not set"), which is what
+    /// the roundtrip test reads back.
+    var trainingProfileRow: XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.TrainingProfile.settingsRow]
+    }
+
+    /// One goal option on the profile screen, by `TrainingGoal.rawValue`.
+    func goalOption(_ goal: String) -> XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.TrainingProfile.goalOption(goal)]
+    }
+
+    /// Blocks until the element's label contains `text`.
+    ///
+    /// For state that arrives after the screen is already there — the row's
+    /// summary is refreshed by an `onAppear` on the way back, so reading it
+    /// right after the pop would read the old one.
+    func assertLabel(
+        of element: XCUIElement,
+        contains text: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let predicate = NSPredicate(format: "label CONTAINS %@", text)
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        let result = XCTWaiter().wait(for: [expectation], timeout: Self.timeout)
+        XCTAssertEqual(result, .completed, "Label never contained \"\(text)\": \(element.label)", file: file, line: line)
+    }
+
     /// Blocks until the progression screen has finished its read — the chart
     /// or the "not enough data" hint is on screen.
     ///
@@ -200,29 +235,41 @@ struct SeededApp {
         )
     }
 
-    /// Switches to a tab and makes sure the switch took.
+    /// Taps a selectable element — a tab bar button or a profile option — and
+    /// makes sure the selection took.
     ///
-    /// Same lesson as `expand(_:)`: on a cold simulator the first launch of a
-    /// run is still settling when the tab bar turns up, and a single tap can be
-    /// swallowed — the bar then still has the dashboard selected, and the test
-    /// fails 30 seconds later on the tab's content with nothing pointing at
-    /// the dropped tap (#179). Waits for the tab bar's own selection state, so
-    /// a retry never lands on a screen that already switched.
+    /// Same lesson as `expand(_:)`: a single tap can be swallowed while the
+    /// screen is still settling. On a cold simulator the tab bar turns up
+    /// before the first launch has settled, and the bar still has the
+    /// dashboard selected (#179); right after a push the list is still laying
+    /// out, and the option tap lands where the row no longer is (#197). Either
+    /// way the test would fail 30 seconds later on the wrong screen with
+    /// nothing pointing at the dropped tap. Waits for the element's own
+    /// `isSelected` state, so a retry never undoes a selection that took.
     func select(
-        _ tab: XCUIElement,
+        _ element: XCUIElement,
         attempts: Int = 3,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        assertAppears(tab, file: file, line: line)
-        let selected = NSPredicate(format: "isSelected == true")
+        assertAppears(element, file: file, line: line)
         for _ in 0..<attempts {
-            guard !tab.isSelected else { return }
-            tab.tap()
-            let expectation = XCTNSPredicateExpectation(predicate: selected, object: tab)
-            _ = XCTWaiter().wait(for: [expectation], timeout: 3)
+            guard !element.isSelected else { return }
+            element.tap()
+            // A fresh expectation per attempt — one that was waited on and
+            // not fulfilled cannot be waited on again.
+            let selected = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "isSelected == true"),
+                object: element
+            )
+            _ = XCTWaiter().wait(for: [selected], timeout: 3)
         }
-        XCTAssertTrue(tab.isSelected, "The tab did not switch", file: file, line: line)
+        XCTAssertTrue(
+            element.isSelected,
+            "The tab or option never became selected",
+            file: file,
+            line: line
+        )
     }
 
     // MARK: - Assertions

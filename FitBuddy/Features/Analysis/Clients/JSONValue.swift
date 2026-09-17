@@ -7,8 +7,8 @@ import Foundation
 /// schema without numeric bounds has no numbers in it.
 ///
 /// Objects keep their members in declaration order. `JSONEncoder` does not
-/// preserve that order on the wire, which is why Gemini gets the order spelled
-/// out through `addingPropertyOrdering()`.
+/// promise that order on the wire, so no provider is guaranteed to see it; the
+/// order of the answer's fields is asked for by the system prompt.
 indirect enum JSONValue: Equatable, Sendable {
     case string(String)
     case bool(Bool)
@@ -27,27 +27,6 @@ indirect enum JSONValue: Equatable, Sendable {
         return members.first { $0.key == key }?.value
     }
 
-    /// A copy in which every object with `properties` also lists those keys, in
-    /// declaration order, under `propertyOrdering`.
-    ///
-    /// Gemini's non-standard keyword: its JSON Schema dialect generates object
-    /// keys in this order, and without it the order is whatever `JSONEncoder`
-    /// happened to write. Claude and Mistral do not accept the keyword, so it is
-    /// added for Gemini only.
-    func addingPropertyOrdering() -> JSONValue {
-        switch self {
-        case .string, .bool:
-            return self
-        case .array(let values):
-            return .array(values.map { $0.addingPropertyOrdering() })
-        case .object(let members):
-            var ordered = members.map { Member(key: $0.key, value: $0.value.addingPropertyOrdering()) }
-            if case .object(let properties)? = self["properties"] {
-                ordered.append(Member(key: "propertyOrdering", value: .array(properties.map { .string($0.key) })))
-            }
-            return .object(ordered)
-        }
-    }
 }
 
 extension JSONValue: Encodable {

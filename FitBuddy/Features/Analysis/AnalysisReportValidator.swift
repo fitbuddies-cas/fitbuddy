@@ -17,10 +17,10 @@ enum AnalysisReportValidator {
     /// weight: rounding by the model, e.g. `61.25` written as `61`.
     static let weightToleranceKg = 0.5
 
-    /// The smallest load increase always allowed, whatever the working
-    /// weight: one barbell step (prompt rule 6, #173). Keeps a light dumbbell,
-    /// where `maxStepShare` would allow less than one plate pair, progressable.
-    static let minimumStepKg = 2.5
+    /// The load increase always allowed, whatever was logged: one barbell
+    /// step (prompt rule 6, #173). The prompt's own floor, so the two cannot
+    /// drift apart.
+    static let minimumStepKg = AnalysisPromptBuilder.minimumStepKg
 
     /// Cards the result screen shows at most (design 3.4/3.4b/3.5: zero to four).
     static let maxCards = 4
@@ -43,11 +43,12 @@ enum AnalysisReportValidator {
     }
 
     /// The headline of a progress report the app turned into a hold verdict,
-    /// because none of its progressions survived (#177).
+    /// because no progression card is left to back it (#177).
     static let holdHeadline = "Hold steady this week."
 
-    /// The lead of a progress report the app turned into a hold verdict
-    /// (#170). The model's lead argued for a load increase no card backs.
+    /// The lead of a progress report the app turned into a hold verdict after
+    /// taking away at least one of its progressions (#170). The model's lead
+    /// argued for a load increase no card backs.
     static let holdLead =
         "Your data doesn't back a specific load increase yet. Keep your current weights and read the full analysis below."
 
@@ -65,6 +66,11 @@ enum AnalysisReportValidator {
         _ report: AnalysisReport,
         against evidence: AnalysisReportEvidence
     ) -> ValidatedAnalysisReport {
+        // Model progressions that did not come out of their own validation as
+        // a progression — downgraded to a note, or dropped for a blank reason.
+        let rejectedProgressions = report.cards.filter { card in
+            card.kind == .progression && validate(card, against: evidence)?.kind != .progression
+        }.count
         var cards = report.cards.compactMap { validate($0, against: evidence) }
         var verdict = report.verdict
         var headline = report.headline
@@ -90,16 +96,22 @@ enum AnalysisReportValidator {
         }
 
         let kept = capped(cards)
+        let cutProgressions = cards.filter { $0.kind == .progression }.count
+            - kept.filter { $0.kind == .progression }.count
 
         // "You're ready to progress." over cards that name no progression
-        // would contradict the screen it heads (#177): every progression was
-        // downgraded to a note or cut, so the verdict the cards support is to
-        // hold. A recovery verdict forced above is never touched. The lead goes
-        // with the verdict it argued for (#170).
+        // would contradict the screen it heads (#177), so the verdict the cards
+        // support is to hold. A recovery verdict forced above is never touched.
+        // The lead is replaced only when the app took a progression away — a
+        // downgrade or the cap — because only then did the model's lead argue
+        // for a load increase no card backs (#170). A progress verdict over
+        // notes alone keeps the model's lead: the app overruled nothing in it.
         if verdict == .progress, !kept.contains(where: { $0.kind == .progression }) {
             verdict = .hold
             headline = holdHeadline
-            lead = holdLead
+            if rejectedProgressions + cutProgressions > 0 {
+                lead = holdLead
+            }
         }
 
         return ValidatedAnalysisReport(
@@ -171,9 +183,11 @@ enum AnalysisReportValidator {
     /// - the exercise is listed in the prompt (trimmed, case-insensitive),
     /// - its listed working weight exists and `fromKg` is within
     ///   `weightToleranceKg` of it,
-    /// - `toKg` is above that working weight, by at most
-    ///   `max(minimumStepKg, working × AnalysisPromptBuilder.maxStepShare)` —
-    ///   the step prompt rule 6 allows (#173).
+    /// - `toKg` is above that working weight, by at most the step prompt
+    ///   rule 6 allows (#173): the smallest step the line lists, never less
+    ///   than `minimumStepKg` — the barbell step, and all a line without a
+    ///   listed step allows. No share of the working weight on top: 60 → 66 kg
+    ///   is no step the prompt offered.
     ///
     /// Title, muscle group and `fromKg` are replaced by the listed values, so
     /// the struck-through figure on the card is the cache's, not the model's
@@ -197,7 +211,7 @@ enum AnalysisReportValidator {
             }
             .first
         guard let match else { return nil }
-        let maxStep = max(minimumStepKg, match.workingKg * AnalysisPromptBuilder.maxStepShare)
+        let maxStep = max(match.exercise.smallestStepKg ?? minimumStepKg, minimumStepKg)
         guard toKg > match.workingKg, toKg - match.workingKg <= maxStep + epsilon else { return nil }
         return .progression(
             exercise: match.exercise.title,

@@ -13,6 +13,8 @@ final class AnalysisViewModelTests: XCTestCase {
 
     private var cache: StubWorkoutCache!
     private var streamer: StubAnalysisStreamer!
+    private var defaults: UserDefaults!
+    private var suiteName: String!
     private var container: ModelContainer!
     private var results: AnalysisResultStore!
 
@@ -21,13 +23,17 @@ final class AnalysisViewModelTests: XCTestCase {
         cache = StubWorkoutCache()
         cache.summaries = [Self.workout(daysAgo: 2), Self.workout(daysAgo: 5)]
         streamer = StubAnalysisStreamer()
+        suiteName = "fitbuddy.tests.\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
         container = try ModelContainerFactory.makeInMemory()
         results = AnalysisResultStore(modelContainer: container)
     }
 
     override func tearDown() async throws {
+        defaults.removePersistentDomain(forName: suiteName)
         results = nil
         container = nil
+        defaults = nil
         streamer = nil
         cache = nil
         try await super.tearDown()
@@ -49,6 +55,7 @@ final class AnalysisViewModelTests: XCTestCase {
             detailCache: detailCache,
             inference: streamer,
             resultStore: resultStore ?? results,
+            trainingProfile: TrainingProfileStore(defaults: defaults),
             calendar: Self.calendar,
             now: { clock.date },
             slowThreshold: slowThreshold,
@@ -164,7 +171,8 @@ final class AnalysisViewModelTests: XCTestCase {
 
     /// Thin data: a report without cards is still a report — shown and
     /// stored with its lead and summary, not downgraded to prose (#170). A
-    /// progress verdict without a progression card holds (#177).
+    /// progress verdict without a progression card holds (#177), but keeps
+    /// the model's lead: the app rejected no progression it argued for.
     func testAReportWithoutCardsIsShownAndStoredAsAReport() async throws {
         await streamer.setReport(AnalysisReport(
             headline: "You're ready to progress.",
@@ -180,7 +188,7 @@ final class AnalysisViewModelTests: XCTestCase {
         let expected = ValidatedAnalysisReport(
             headline: AnalysisReportValidator.holdHeadline,
             verdict: .hold,
-            lead: AnalysisReportValidator.holdLead,
+            lead: "Too little data for a change yet.",
             cards: [],
             summary: "Keep training as you do."
         )
@@ -538,6 +546,36 @@ final class AnalysisViewModelTests: XCTestCase {
                 ),
             ]
         )
+    }
+
+    // MARK: - Training profile (US-13 AC3/AC4, #192)
+
+    /// The profile is read at the start of the run, not at init: the Settings
+    /// screen changes it while this view model lives on (#191), and the next
+    /// analysis has to see the change.
+    func testARunReadsTheProfileSavedSinceTheViewModelWasCreated() async {
+        await streamer.setText("ok")
+        let sut = makeSUT()
+        let profile = TrainingProfile(goal: .buildMuscle, experience: .overThreeYears)
+        await TrainingProfileStore(defaults: defaults).save(profile)
+
+        await sut.start()
+
+        let user = await streamer.userPrompt
+        XCTAssertEqual(user?.contains("## Profile"), true)
+        XCTAssertEqual(user?.contains("Goal: build muscle"), true)
+        XCTAssertEqual(sut.context?.profile, profile)
+    }
+
+    func testARunWithoutAProfileSendsNoneAndShowsNone() async {
+        await streamer.setText("ok")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        let user = await streamer.userPrompt
+        XCTAssertEqual(user?.contains("Profile"), false)
+        XCTAssertEqual(sut.context?.profile, TrainingProfile())
     }
 
     // MARK: - Context (US-6, #36)

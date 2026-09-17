@@ -129,19 +129,16 @@ final class AnalysisReportSchemaTests: XCTestCase {
         XCTAssertEqual(objects, 1 + AnalysisCard.Kind.allCases.count)
     }
 
-    /// Gemini gets the declaration order spelled out, because `JSONEncoder`
-    /// does not keep it.
-    func testGeminiVariantListsThePropertyOrderOfEveryObject() throws {
-        let schema = try encoded(AnalysisReportSchema.schema.addingPropertyOrdering())
+    /// The field order is asked for by the system prompt, for every provider:
+    /// `propertyOrdering` is not in Gemini's documented `responseJsonSchema`
+    /// keywords, so the one schema all three receive must not carry it.
+    func testTheSystemPromptListsTheReportFieldsInSchemaOrder() throws {
+        let system = AnalysisPromptBuilder.systemPrompt
+        let positions = try ["- headline:", "- verdict:", "- lead:", "- summary:", "- cards:"].map {
+            try XCTUnwrap(system.range(of: $0)?.lowerBound, $0)
+        }
 
-        XCTAssertEqual(schema["propertyOrdering"] as? [String], ["headline", "verdict", "lead", "summary", "cards"])
-        let properties = try XCTUnwrap(schema["properties"] as? [String: Any])
-        let items = try XCTUnwrap((properties["cards"] as? [String: Any])?["items"] as? [String: Any])
-        let progression = try XCTUnwrap((items["anyOf"] as? [[String: Any]])?.first)
-        XCTAssertEqual(
-            progression["propertyOrdering"] as? [String],
-            ["kind", "exercise", "muscleGroup", "fromKg", "toKg", "reasoning"]
-        )
+        XCTAssertEqual(positions, positions.sorted())
     }
 
     // MARK: - JSONValue

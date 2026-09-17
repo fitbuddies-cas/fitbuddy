@@ -89,7 +89,11 @@ final class GeminiClientTests: LLMClientTestCase {
         XCTAssertEqual(config["responseMimeType"] as? String, "application/json")
         XCTAssertNil(config["responseSchema"])
         let schema = try XCTUnwrap(config["responseJsonSchema"] as? NSDictionary)
-        XCTAssertEqual(schema, try jsonObject(of: AnalysisReportSchema.schema.addingPropertyOrdering()))
+        XCTAssertEqual(schema, try jsonObject(of: AnalysisReportSchema.schema))
+        // Not a documented `responseJsonSchema` keyword; a 400 here would fail
+        // every Gemini analysis.
+        let sent = try JSONSerialization.data(withJSONObject: schema)
+        XCTAssertFalse(String(decoding: sent, as: UTF8.self).contains("propertyOrdering"))
     }
 
     func testAStreamedJSONAnswerDecodesAsAReport() async throws {

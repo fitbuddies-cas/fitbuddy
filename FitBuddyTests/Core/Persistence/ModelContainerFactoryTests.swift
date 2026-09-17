@@ -30,7 +30,7 @@ final class ModelContainerFactoryTests: XCTestCase {
     /// written by the build before #141 (schema V1, no `sourceRawValue`) has to
     /// open under the current schema with every workout and analysis intact,
     /// and every migrated workout has to read as Hevy — the only source that
-    /// build knew. Since #176 this runs two stages in turn, V1 → V2 → V3.
+    /// build knew. Since #176 this runs three stages in turn, V1 → V2 → V3 → V4.
     /// A fresh store would prove nothing; it never had a version to come from.
     func testV1StoreMigratesToTheCurrentSchemaWithEveryWorkoutReadingAsHevy() throws {
         let storeURL = try makeTemporaryStoreURL()
@@ -69,13 +69,15 @@ final class ModelContainerFactoryTests: XCTestCase {
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<Workout>()), 3)
     }
 
-    /// The V2 → V3 stage of #176: a store written by the previous build
-    /// (schema V2, no report or provider columns on `AnalysisResult`) has to
-    /// open under V3 with its workouts and analyses intact, and every migrated
-    /// analysis has to come back as prose without a provider (US-14 AC6).
-    /// Editing V2 in place instead would make this store fail as "unknown
-    /// model version" and fall back to an empty in-memory container.
-    func testV2StoreMigratesToV3WithEveryAnalysisReadingAsProse() async throws {
+    /// The V2 → V3 stage of #192: a store written by the previous build
+    /// (schema V2, no profile columns on `AnalysisResult`) has to open under
+    /// V3 with the analysis and its source-tagged workouts intact, and every
+    /// migrated analysis has to read as "no profile" — none of those runs had
+    /// one. The first attempt at #192 changed V2 in place, and the store this
+    /// test writes came back as "unknown model version" and fell back to an
+    /// empty in-memory container; this is the test that would have caught it.
+    /// Since #176 the store continues through V3 → V4.
+    func testV2StoreMigratesToV3WithEveryAnalysisReadingAsNoProfile() throws {
         let storeURL = try makeTemporaryStoreURL()
         try writeV2Store(at: storeURL)
 
@@ -83,43 +85,30 @@ final class ModelContainerFactoryTests: XCTestCase {
         let context = ModelContext(container)
 
         let workouts = try context.fetch(FetchDescriptor<Workout>(sortBy: [SortDescriptor(\.id)]))
-        XCTAssertEqual(workouts.map(\.id), ["strava:1", "w-1"])
         XCTAssertEqual(workouts.map(\.source), [.strava, .hevy])
-        XCTAssertEqual(try context.fetchCount(FetchDescriptor<Exercise>()), 1)
-        XCTAssertEqual(try context.fetchCount(FetchDescriptor<ExerciseSet>()), 1)
+        let analyses = try context.fetch(FetchDescriptor<AnalysisResult>())
+        XCTAssertEqual(analyses.map(\.sessionCount), [12])
+        XCTAssertEqual(analyses.map(\.goal), [nil])
+        XCTAssertEqual(analyses.map(\.experience), [nil])
 
-        let analyses = try context.fetch(FetchDescriptor<AnalysisResult>(sortBy: [SortDescriptor(\.generatedAt)]))
-        XCTAssertEqual(analyses.map(\.text), ["Add 2.5 kg on bench next session.", "Give legs a second slot."])
-        XCTAssertEqual(analyses.map(\.sessionCount), [12, 4])
-        XCTAssertEqual(analyses.map(\.reportVersion), [AnalysisReportFormat.prose, AnalysisReportFormat.prose])
-        XCTAssertEqual(analyses.map(\.reportJSON), [nil, nil])
-        XCTAssertEqual(analyses.map(\.providerRawValue), [nil, nil])
-
-        // Read the way the history reads them, and then write what only V3
-        // can hold into the migrated store.
+        // And the migrated store accepts what only V3 can write.
         let store = AnalysisResultStore(modelContainer: container)
-        let migrated = try await store.recent(limit: AnalysisHistoryLimit.rows)
-        XCTAssertEqual(migrated.map(\.text), ["Give legs a second slot.", "Add 2.5 kg on bench next session."])
-        XCTAssertEqual(migrated.map(\.report), [nil, nil])
-        XCTAssertEqual(migrated.map(\.provider), [nil, nil])
-
-        let report = AnalysisReportFactory.validatedEveryCard
-        try await store.save(
-            text: report.summary,
-            report: report,
-            provider: .claude,
-            generatedAt: Date(timeIntervalSince1970: 1_790_000_000),
-            context: AnalysisContext(sessionCount: 3, window: .default)
-        )
-        let latest = try await store.latest()
-        XCTAssertEqual(latest?.report, report)
-        XCTAssertEqual(latest?.provider, .claude)
-        XCTAssertEqual(try context.fetchCount(FetchDescriptor<AnalysisResult>()), 3)
+        let expectation = expectation(description: "profiled analysis saved")
+        Task {
+            var analysed = AnalysisContext(sessionCount: 3, window: .default)
+            analysed.profile = TrainingProfile(goal: .stayFit, experience: .oneToThreeYears)
+            try await store.save(text: "Keep the routine.", generatedAt: Date(timeIntervalSince1970: 1_790_000_000), context: analysed)
+            let latest = try await store.latest()
+            XCTAssertEqual(latest?.context.profile, analysed.profile)
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 5)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<AnalysisResult>()), 2)
     }
 
-    /// Writes a Strava workout, a Hevy workout with a full tree and two
-    /// analyses under `FitBuddySchemaV2`, exactly as the previous build would
-    /// have, and lets the container go out of scope again.
+    /// Writes a Strava and a Hevy workout and one analysis under
+    /// `FitBuddySchemaV2`, exactly as the previous build would have, and lets
+    /// the container go out of scope again.
     private func writeV2Store(at storeURL: URL) throws {
         let schema = Schema(versionedSchema: FitBuddySchemaV2.self)
         let container = try ModelContainer(
@@ -136,16 +125,7 @@ final class ModelContainerFactoryTests: XCTestCase {
             )
         )
         context.insert(
-            FitBuddySchemaV2.Workout(
-                id: "w-1",
-                title: "Morning Workout",
-                startTime: Date(timeIntervalSince1970: 1_750_000_000),
-                exercises: [
-                    FitBuddySchemaV2.Exercise(index: 0, title: "Squat (Barbell)", sets: [
-                        FitBuddySchemaV2.ExerciseSet(index: 0, typeRawValue: "normal", weightKg: 100, reps: 5),
-                    ]),
-                ]
-            )
+            FitBuddySchemaV2.Workout(id: "w-1", title: "Morning Workout", startTime: Date(timeIntervalSince1970: 1_750_000_000))
         )
         context.insert(
             FitBuddySchemaV2.AnalysisResult(
@@ -155,12 +135,86 @@ final class ModelContainerFactoryTests: XCTestCase {
                 sessionCount: 12
             )
         )
+        try context.save()
+    }
+
+    /// The V3 → V4 stage of #176: a store written by a `develop` build with
+    /// the training profile (schema V3, no report or provider columns on
+    /// `AnalysisResult`) has to open under V4 with its workouts and profiled
+    /// analysis intact. The profile survives, and the analysis comes back as
+    /// prose without a provider (US-14 AC6). Growing V3 in place instead would
+    /// make this store fail as "unknown model version" and fall back to an
+    /// empty in-memory container.
+    func testV3StoreMigratesToV4KeepingTheProfileAndReadingAsProse() async throws {
+        let storeURL = try makeTemporaryStoreURL()
+        try writeV3Store(at: storeURL)
+
+        let container = try ModelContainerFactory.makePersistent(storeURL: storeURL)
+        let context = ModelContext(container)
+
+        let workouts = try context.fetch(FetchDescriptor<Workout>(sortBy: [SortDescriptor(\.id)]))
+        XCTAssertEqual(workouts.map(\.id), ["w-1"])
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<Exercise>()), 1)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<ExerciseSet>()), 1)
+
+        let analyses = try context.fetch(FetchDescriptor<AnalysisResult>())
+        XCTAssertEqual(analyses.map(\.goal), [TrainingGoal.getStronger.rawValue])
+        XCTAssertEqual(analyses.map(\.experience), [TrainingExperience.underOneYear.rawValue])
+        XCTAssertEqual(analyses.map(\.reportVersion), [0])
+        XCTAssertEqual(analyses.map(\.reportJSON), [nil])
+        XCTAssertEqual(analyses.map(\.provider), [nil])
+
+        // Read the way the history reads it, then write what only V4 can hold.
+        let store = AnalysisResultStore(modelContainer: container)
+        let migrated = try await store.latest()
+        XCTAssertEqual(migrated?.context.profile, TrainingProfile(goal: .getStronger, experience: .underOneYear))
+        XCTAssertNil(migrated?.report)
+        XCTAssertNil(migrated?.provider)
+
+        let report = AnalysisReportFactory.validatedEveryCard
+        try await store.save(
+            text: report.summary,
+            report: report,
+            provider: .claude,
+            generatedAt: Date(timeIntervalSince1970: 1_790_000_000),
+            context: AnalysisContext(sessionCount: 3, window: .default)
+        )
+        let latest = try await store.latest()
+        XCTAssertEqual(latest?.report, report)
+        XCTAssertEqual(latest?.provider, .claude)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<AnalysisResult>()), 2)
+    }
+
+    /// Writes a Hevy workout with a full tree and one profiled analysis under
+    /// `FitBuddySchemaV3`, exactly as a `develop` build would have, and lets
+    /// the container go out of scope again.
+    private func writeV3Store(at storeURL: URL) throws {
+        let schema = Schema(versionedSchema: FitBuddySchemaV3.self)
+        let container = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, url: storeURL, cloudKitDatabase: .none)
+        )
+        let context = ModelContext(container)
         context.insert(
-            FitBuddySchemaV2.AnalysisResult(
-                text: "Give legs a second slot.",
-                generatedAt: Date(timeIntervalSince1970: 1_788_100_000),
-                windowWeeks: 8,
-                sessionCount: 4
+            FitBuddySchemaV3.Workout(
+                id: "w-1",
+                title: "Morning Workout",
+                startTime: Date(timeIntervalSince1970: 1_750_000_000),
+                exercises: [
+                    FitBuddySchemaV3.Exercise(index: 0, title: "Squat (Barbell)", sets: [
+                        FitBuddySchemaV3.ExerciseSet(index: 0, typeRawValue: "normal", weightKg: 100, reps: 5),
+                    ]),
+                ]
+            )
+        )
+        context.insert(
+            FitBuddySchemaV3.AnalysisResult(
+                text: "Add 2.5 kg on bench next session.",
+                generatedAt: Date(timeIntervalSince1970: 1_788_000_000),
+                windowWeeks: 4,
+                sessionCount: 12,
+                goal: TrainingGoal.getStronger.rawValue,
+                experience: TrainingExperience.underOneYear.rawValue
             )
         )
         try context.save()

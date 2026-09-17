@@ -36,7 +36,7 @@ struct RootView: View {
             switch onboardingViewModel.step {
             case .loading:
                 loadingView
-            case .consent, .hevyKey, .llmKeys:
+            case .consent, .hevyKey, .llmKeys, .trainingProfile:
                 OnboardingFlowView(viewModel: onboardingViewModel)
             case .completed:
                 // The factories defer building the stores, the services and
