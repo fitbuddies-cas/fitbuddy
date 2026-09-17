@@ -10,17 +10,32 @@ import Foundation
 struct GeminiClient: LLMProviderClient {
     /// Flash tier: the analysis is a sub-200-word paragraph, and this is billed
     /// to the user's own key.
-    static let model = "gemini-3.7-flash"
+    ///
+    /// `gemini-3.6-flash`, not `gemini-3.7-flash` (#209): for a current AI
+    /// Studio key the newer model answered every single call with 503 «high
+    /// demand» — ten out of ten over twenty minutes — so no Gemini run ever
+    /// completed. 3.6 is the model Google's own error text names as the
+    /// replacement for retired ones, and it answers.
+    static let model = "gemini-3.6-flash"
     static let maxOutputTokens = 4096
+
+    /// How long to wait before the one retry of an overloaded call — see
+    /// `streamAnalysis`.
+    static let defaultRetryDelay: Duration = .seconds(2)
 
     private static let host = "https://generativelanguage.googleapis.com/v1beta/models/"
 
     let provider = LLMProvider.gemini
 
     private let session: URLSession
+    private let retryDelay: Duration
 
-    init(session: URLSession = .fitBuddyStreaming) {
+    /// - Parameters:
+    ///   - session: Injectable for tests (stub `URLProtocol`).
+    ///   - retryDelay: Injectable so tests do not wait out the real pause.
+    init(session: URLSession = .fitBuddyStreaming, retryDelay: Duration = GeminiClient.defaultRetryDelay) {
         self.session = session
+        self.retryDelay = retryDelay
     }
 
     func streamAnalysis(
@@ -28,10 +43,8 @@ struct GeminiClient: LLMProviderClient {
         userPrompt: String,
         apiKey: String
     ) async throws -> AsyncThrowingStream<String, Error> {
-        let bytes = try await LLMStreamTransport.send(
-            try makeRequest(systemPrompt: systemPrompt, userPrompt: userPrompt, apiKey: apiKey),
-            on: session
-        )
+        let request = try makeRequest(systemPrompt: systemPrompt, userPrompt: userPrompt, apiKey: apiKey)
+        let bytes = try await sendWithOneRetry(request)
         let payloads = LLMStreamTransport.dataPayloads(of: bytes)
         return AsyncThrowingStream { continuation in
             let task = Task {
@@ -57,6 +70,24 @@ struct GeminiClient: LLMProviderClient {
                 }
             }
             continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// Sends the request, and once more after `retryDelay` when Gemini answers
+    /// 503 (#209).
+    ///
+    /// Gemini's flash models shed load with a 503 «high demand» on roughly one
+    /// call in four, measured against the same key minutes apart — and the
+    /// next call goes through. Nothing has been billed at that point (the 503
+    /// arrives before any token), so a second attempt costs the user only the
+    /// pause. One retry, not a loop: a model that is down for good still has
+    /// to hand over to the next provider within seconds, not minutes.
+    private func sendWithOneRetry(_ request: URLRequest) async throws -> URLSession.AsyncBytes {
+        do {
+            return try await LLMStreamTransport.send(request, on: session)
+        } catch InferenceServiceError.serviceUnavailable {
+            try await Task.sleep(for: retryDelay)
+            return try await LLMStreamTransport.send(request, on: session)
         }
     }
 
