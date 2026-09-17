@@ -6,13 +6,21 @@ import Foundation
 /// Paris), so a run answered here involves no third-country transfer — see
 /// ADR-007.
 struct MistralClient: LLMProviderClient {
-    /// Mistral Medium 3.5. Pinned rather than `mistral-medium-latest`: the
-    /// alias can move to a new version mid-deploy, changing both behaviour and
-    /// the price charged to the user's own key.
-    static let model = "mistral-medium-2604"
+    /// Mistral Medium 3.5, under the versioned id Mistral publishes for it
+    /// (#211). Pinned rather than `mistral-medium-latest`: the alias can move
+    /// to a new version mid-deploy, changing both behaviour and the price
+    /// charged to the user's own key. The dated form `mistral-medium-2604`
+    /// this client first shipped with was never a real id — Mistral answered
+    /// it with 400, so no Mistral run ever completed.
+    static let model = "mistral-medium-3-5"
     /// Same budget as the other two: the report is a summary plus up to four
     /// cards, and a JSON answer cut off before its summary is no answer (#174).
     static let maxTokens = 8192
+    /// Medium 3.5 is a reasoning model. FitBuddy wants prose, not thinking
+    /// chunks, and with reasoning on the stream's `delta.content` switches
+    /// between a string and a chunk array. Off keeps the answer plain and
+    /// spares the user's key the reasoning tokens.
+    static let reasoningEffort = "none"
 
     /// Terminator of an OpenAI-shaped SSE stream. Not JSON, so it has to be
     /// recognised before the decoder sees it.
@@ -72,6 +80,7 @@ struct MistralClient: LLMProviderClient {
             MistralChatRequest(
                 model: Self.model,
                 maxTokens: Self.maxTokens,
+                reasoningEffort: Self.reasoningEffort,
                 stream: true,
                 messages: [
                     MistralChatRequest.Message(role: "system", content: systemPrompt),

@@ -37,6 +37,8 @@ final class MistralClientTests: LLMClientTestCase {
         XCTAssertEqual(json["model"] as? String, MistralClient.model)
         XCTAssertEqual(json["max_tokens"] as? Int, MistralClient.maxTokens)
         XCTAssertEqual(json["stream"] as? Bool, true)
+        // Medium 3.5 is a reasoning model; the analysis wants prose only (#211).
+        XCTAssertEqual(json["reasoning_effort"] as? String, "none")
 
         // OpenAI-shaped: the system prompt is the first message, not a field.
         let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])
@@ -45,6 +47,12 @@ final class MistralClientTests: LLMClientTestCase {
         XCTAssertEqual(messages.first?["content"] as? String, "You are FitBuddy.")
         XCTAssertEqual(messages.last?["role"] as? String, "user")
         XCTAssertEqual(messages.last?["content"] as? String, "Analyze my week.")
+    }
+
+    /// The id this client first shipped with, `mistral-medium-2604`, was never
+    /// published by Mistral and made every run fail with 400 (#211).
+    func testPinsAModelIdMistralPublishes() {
+        XCTAssertEqual(MistralClient.model, "mistral-medium-3-5")
     }
 
     func testReportsItsProvider() {
@@ -80,6 +88,21 @@ final class MistralClientTests: LLMClientTestCase {
 
     func testStreamsIncrementalTextChunks() async throws {
         stub(body: MistralSSEFactory.body(textChunks: ["Increase ", "squat ", "by 2.5 kg."]))
+
+        let chunks = try await collect(try await stream())
+
+        XCTAssertEqual(chunks, ["Increase ", "squat ", "by 2.5 kg."])
+    }
+
+    /// With reasoning on, `delta.content` is a chunk array while the model
+    /// thinks. Thinking must not leak into the answer, and the text chunk in
+    /// the same delta must not be dropped (#211).
+    func testThinkingChunksAreDroppedAndTextChunksKept() async throws {
+        stub(body: MistralSSEFactory.bodyWithThinkingChunks(
+            thinking: "The user squats three times a week.",
+            leadingText: "Increase ",
+            textChunks: ["squat ", "by 2.5 kg."]
+        ))
 
         let chunks = try await collect(try await stream())
 
