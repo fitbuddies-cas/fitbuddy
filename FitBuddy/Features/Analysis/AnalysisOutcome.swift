@@ -10,7 +10,7 @@ enum AnalysisOutcome: Equatable, Sendable {
     /// A structured answer, checked against the cache (#175).
     case report(ValidatedAnalysisReport)
     /// A prose answer: a provider without JSON output, a non-conforming answer
-    /// (US-14 AC5), a stored row from before V3, or a report that could not be
+    /// (US-14 AC5), a stored row from before V4, or a report that could not be
     /// validated.
     case prose(String)
 

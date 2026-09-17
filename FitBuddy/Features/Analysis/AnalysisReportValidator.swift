@@ -17,9 +17,9 @@ enum AnalysisReportValidator {
     /// weight: rounding by the model, e.g. `61.25` written as `61`.
     static let weightToleranceKg = 0.5
 
-    /// The load increase always allowed, whatever was logged: one barbell
-    /// step (prompt rule 6, #173). The prompt's own floor, so the two cannot
-    /// drift apart.
+    /// The barbell step prompt rule 6 names (#173): the load increase a
+    /// barbell exercise is allowed, whatever step is listed for it. The
+    /// prompt's own constant, so the two cannot drift apart.
     static let minimumStepKg = AnalysisPromptBuilder.minimumStepKg
 
     /// Cards the result screen shows at most (design 3.4/3.4b/3.5: zero to four).
@@ -184,10 +184,8 @@ enum AnalysisReportValidator {
     /// - its listed working weight exists and `fromKg` is within
     ///   `weightToleranceKg` of it,
     /// - `toKg` is above that working weight, by at most the step prompt
-    ///   rule 6 allows (#173): the smallest step the line lists, never less
-    ///   than `minimumStepKg` — the barbell step, and all a line without a
-    ///   listed step allows. No share of the working weight on top: 60 → 66 kg
-    ///   is no step the prompt offered.
+    ///   rule 6 allows (#173), see `maxStepKg(for:)`. No share of the working
+    ///   weight on top: 60 → 66 kg is no step the prompt offered.
     ///
     /// Title, muscle group and `fromKg` are replaced by the listed values, so
     /// the struck-through figure on the card is the cache's, not the model's
@@ -211,8 +209,10 @@ enum AnalysisReportValidator {
             }
             .first
         guard let match else { return nil }
-        let maxStep = max(match.exercise.smallestStepKg ?? minimumStepKg, minimumStepKg)
-        guard toKg > match.workingKg, toKg - match.workingKg <= maxStep + epsilon else { return nil }
+        guard toKg > match.workingKg,
+              let maxStep = maxStepKg(for: match.exercise),
+              toKg - match.workingKg <= maxStep + epsilon
+        else { return nil }
         return .progression(
             exercise: match.exercise.title,
             muscleGroup: match.exercise.muscleGroup,
@@ -220,6 +220,21 @@ enum AnalysisReportValidator {
             toKg: toKg,
             reasoning: reasoning
         )
+    }
+
+    /// The largest load increase prompt rule 6 allows for a listed exercise,
+    /// or `nil` when it allows none:
+    ///
+    /// - a barbell exercise (`AnalysisPromptBuilder.isBarbell(title:)`):
+    ///   `minimumStepKg`, even when a larger step is listed,
+    /// - any other exercise: the smallest step its line lists,
+    /// - any other exercise without a listed step: none — rule 6 progresses
+    ///   reps there, so a heavier target is not backed.
+    static func maxStepKg(for exercise: ListedExercise) -> Double? {
+        if AnalysisPromptBuilder.isBarbell(title: exercise.title) {
+            return minimumStepKg
+        }
+        return exercise.smallestStepKg
     }
 
     // MARK: - Imbalance
