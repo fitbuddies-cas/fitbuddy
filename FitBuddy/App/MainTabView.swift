@@ -38,6 +38,8 @@ struct MainTabView: View {
 
     /// Where the dashboard's renewal banner leads (#144).
     private let onRenewSource: (ConnectorSource) -> Void
+    /// Where the analysis tab's «Open Settings» leads (#207).
+    private let onOpenSettings: () -> Void
 
     /// - Parameters:
     ///   - selection: The visible tab, owned by the parent.
@@ -58,6 +60,7 @@ struct MainTabView: View {
     ///   - reloadToken: Defaults to a constant, so a preview never re-syncs.
     ///   - settingsPath: Defaults to a constant empty path, for previews.
     ///   - onRenewSource: Defaults to nothing, for previews.
+    ///   - onOpenSettings: Defaults to nothing, for previews.
     init(
         selection: Binding<MainTab>,
         settingsPath: Binding<[SettingsRoute]> = .constant([]),
@@ -71,12 +74,14 @@ struct MainTabView: View {
         makeExerciseProgressionViewModel: @escaping (ExerciseIdentity) -> ExerciseProgressionViewModel,
         makeAnalysisHistoryViewModel: @escaping () -> AnalysisHistoryViewModel,
         reloadToken: Int = 0,
-        onRenewSource: @escaping (ConnectorSource) -> Void = { _ in }
+        onRenewSource: @escaping (ConnectorSource) -> Void = { _ in },
+        onOpenSettings: @escaping () -> Void = {}
     ) {
         _selection = selection
         _settingsPath = settingsPath
         _analysisViewModel = StateObject(wrappedValue: analysisViewModel())
         self.onRenewSource = onRenewSource
+        self.onOpenSettings = onOpenSettings
         self.makeDashboardViewModel = makeDashboardViewModel
         self.makeSettingsViewModel = makeSettingsViewModel
         self.makeStravaConnectionViewModel = makeStravaConnectionViewModel
@@ -103,7 +108,8 @@ struct MainTabView: View {
             Tab("Analysis", systemImage: "sparkles", value: MainTab.analysis) {
                 AnalysisView(
                     viewModel: analysisViewModel,
-                    makeHistoryViewModel: makeAnalysisHistoryViewModel
+                    makeHistoryViewModel: makeAnalysisHistoryViewModel,
+                    onOpenSettings: onOpenSettings
                 )
             }
             Tab("Settings", systemImage: "gearshape", value: MainTab.settings) {
