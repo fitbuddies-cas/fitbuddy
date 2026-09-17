@@ -16,7 +16,9 @@ struct ListedExercise: Equatable, Sendable {
     let workingSet: WorkingSet?
     /// The "Smallest logged step" the line names, from
     /// `AnalysisPromptBuilder.smallestStep(in:latest:)` — `nil` when the line
-    /// names none, and rule 6 then allows a barbell step at most.
+    /// names none. Rule 6 then allows no load increase for a non-barbell
+    /// exercise (reps instead); a barbell exercise always gets 2.5 kg,
+    /// whatever is listed here.
     let smallestStepKg: Double?
 
     init(title: String, muscleGroup: MuscleGroup, workingSet: WorkingSet?, smallestStepKg: Double? = nil) {
