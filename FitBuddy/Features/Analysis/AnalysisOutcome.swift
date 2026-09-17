@@ -26,7 +26,7 @@ enum AnalysisOutcome: Equatable, Sendable {
     }
 
     /// The outcome a stored row renders as: its cards when it stored a report
-    /// (#176), its text otherwise — every row from before V3 included (US-14
+    /// (#176), its text otherwise — every row from before V4 included (US-14
     /// AC6). Shared by the restored result and the history detail, so the two
     /// never show the same row differently.
     init(stored snapshot: AnalysisResultSnapshot) {

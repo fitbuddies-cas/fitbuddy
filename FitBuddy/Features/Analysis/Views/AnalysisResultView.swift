@@ -10,7 +10,7 @@ import SwiftUI
 /// (`AnalysisFullAnalysis`), so thin data still shows its whole answer.
 ///
 /// A prose answer — a provider without JSON output, a non-conforming answer
-/// (US-14 AC5), a row stored before V3 (AC6) — keeps the look it had before
+/// (US-14 AC5), a row stored before V4 (AC6) — keeps the look it had before
 /// the cards: the model's own outline, parsed into heading, paragraph and
 /// bullet (#117), in one card under the context line.
 struct AnalysisResultView: View {
