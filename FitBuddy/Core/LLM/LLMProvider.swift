@@ -21,10 +21,12 @@ enum LLMProvider: String, CaseIterable, Identifiable, Codable {
 
     /// Text-field placeholder hinting at the provider's key format. Mistral
     /// keys have no recognizable prefix, so a generic hint is shown instead.
+    /// AI Studio issues `AQ.…` keys since 2026; older ones start with `AIza`
+    /// and still work (#209).
     var keyPlaceholder: String {
         switch self {
         case .claude: return "sk-ant-…"
-        case .gemini: return "AIza…"
+        case .gemini: return "AQ.…"
         case .mistral: return "Your Mistral API key"
         }
     }
