@@ -39,7 +39,8 @@ enum AnalysisPromptBuilder {
     /// `maxStepShare` alone was chosen with barbell weights in mind: on a
     /// 10 kg lateral raise it would drop the 2 kg step the rack actually
     /// offers and push rule 6 to reps. Up to one plate pair a logged step is
-    /// kept — the same floor the report validation allows (#175) — while
+    /// kept — the same 2.5 kg the report validation allows a barbell
+    /// exercise (#175) — while
     /// 8 → 12 kg dumbbells stay a change of equipment.
     static let minimumStepKg = 2.5
 
@@ -618,6 +619,17 @@ enum AnalysisPromptBuilder {
               step <= max(latest.weightKg * maxStepShare, minimumStepKg)
         else { return nil }
         return step
+    }
+
+    /// Whether rule 6 treats the exercise as a barbell exercise, which it
+    /// increases in steps of 2.5 kg whatever step is listed for it.
+    ///
+    /// Relies on Hevy's exercise titles: every barbell variant in Hevy's
+    /// library carries the equipment suffix "(Barbell)", e.g.
+    /// "Bench Press (Barbell)". A custom exercise without that suffix is not
+    /// a barbell exercise here and falls under the listed-step rule.
+    static func isBarbell(title: String) -> Bool {
+        title.range(of: "(Barbell)", options: .caseInsensitive) != nil
     }
 
     // MARK: - Aggregation
