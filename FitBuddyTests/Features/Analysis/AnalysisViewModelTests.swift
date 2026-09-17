@@ -13,6 +13,8 @@ final class AnalysisViewModelTests: XCTestCase {
 
     private var cache: StubWorkoutCache!
     private var streamer: StubAnalysisStreamer!
+    private var defaults: UserDefaults!
+    private var suiteName: String!
     private var container: ModelContainer!
     private var results: AnalysisResultStore!
 
@@ -21,13 +23,17 @@ final class AnalysisViewModelTests: XCTestCase {
         cache = StubWorkoutCache()
         cache.summaries = [Self.workout(daysAgo: 2), Self.workout(daysAgo: 5)]
         streamer = StubAnalysisStreamer()
+        suiteName = "fitbuddy.tests.\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
         container = try ModelContainerFactory.makeInMemory()
         results = AnalysisResultStore(modelContainer: container)
     }
 
     override func tearDown() async throws {
+        defaults.removePersistentDomain(forName: suiteName)
         results = nil
         container = nil
+        defaults = nil
         streamer = nil
         cache = nil
         try await super.tearDown()
@@ -519,7 +525,7 @@ final class AnalysisViewModelTests: XCTestCase {
     /// screen changes it while this view model lives on (#191), and the next
     /// analysis has to see the change.
     func testARunReadsTheProfileSavedSinceTheViewModelWasCreated() async {
-        await streamer.setChunks(["ok"])
+        await streamer.setText("ok")
         let sut = makeSUT()
         let profile = TrainingProfile(goal: .buildMuscle, experience: .overThreeYears)
         await TrainingProfileStore(defaults: defaults).save(profile)
@@ -533,7 +539,7 @@ final class AnalysisViewModelTests: XCTestCase {
     }
 
     func testARunWithoutAProfileSendsNoneAndShowsNone() async {
-        await streamer.setChunks(["ok"])
+        await streamer.setText("ok")
         let sut = makeSUT()
 
         await sut.start()
