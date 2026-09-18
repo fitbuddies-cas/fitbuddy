@@ -661,11 +661,11 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(sut.context?.sessionCounts, [.hevy: 1, .strava: 1])
     }
 
-    /// The regression the review of #182 caught, end to end: three Hevy and
-    /// three Strava strength sessions are six on the line, but
-    /// `strengthSessions(in:)` hands the model three — and US-6 AC2 is about
-    /// what the model saw.
-    func testTheThinWarningJudgesWhatReachedThePromptAndNotTheWholeWindow() async {
+    /// The case #182 could only half-answer: three Hevy and three Strava
+    /// strength sessions were six on the line and three in the model's hands,
+    /// because the prompt filtered by source. Since #183 the sport decides, so
+    /// all six reach the prompt and all six are what US-6 AC2 judges.
+    func testStravaStrengthSessionsReachThePromptAndTheStrengthCount() async {
         cache.summaries = (1...3).map { Self.workout(daysAgo: $0) }
             + (4...6).map { Self.workout(daysAgo: $0, title: "Gym", source: .strava, kind: .strength) }
         await streamer.setText("ok")
@@ -675,46 +675,66 @@ final class AnalysisViewModelTests: XCTestCase {
 
         XCTAssertEqual(sut.context?.basisDescription, "3 Hevy · 3 Strava sessions")
         XCTAssertEqual(sut.context?.domainCounts, [.strength: 6])
-        XCTAssertEqual(sut.context?.analysedCounts, [.strength: 3])
-        XCTAssertEqual(
-            sut.context?.thinDataWarning,
-            "Thin strength data — 3 sessions. Treat the recommendation as a starting point."
-        )
+        XCTAssertEqual(sut.context?.analysedCounts, [.strength: 6])
+        XCTAssertNil(sut.context?.thinDataWarning)
     }
 
-    /// The other half of the rule: one run next to fourteen lifts leaves the
-    /// analysis covering strength alone, so there is no endurance verdict to
-    /// put on a recommendation with no endurance content.
-    func testASingleRunDoesNotWarnAboutThinEnduranceData() async {
+    /// The other side of the flip. #182 made a lone run *not* warn, because
+    /// the prompt never saw it; now it does see it, the analysis carries an
+    /// endurance section built on one session, and saying so is the honest
+    /// reading of US-6 AC2.
+    ///
+    /// #185 is what narrows this again: under the "Strength" profile the
+    /// endurance half is counted on the line and deliberately not analysed.
+    func testASingleRunIsAnalysedAndReportedAsThinEnduranceData() async {
         cache.summaries = (1...14).map { Self.workout(daysAgo: $0) }
-            + [Self.workout(daysAgo: 15, title: "Morning Run", source: .strava)]
+            + [Self.workout(daysAgo: 15, title: "Morning Run", source: .strava, kind: .run)]
         await streamer.setText("ok")
         let sut = makeSUT()
 
         await sut.start()
 
         XCTAssertEqual(sut.context?.basisDescription, "14 Hevy · 1 Strava sessions")
-        XCTAssertEqual(sut.context?.analysedDomains, [.strength])
-        XCTAssertEqual(sut.context?.isThin, false)
-        XCTAssertNil(sut.context?.thinDataWarning)
+        XCTAssertEqual(sut.context?.analysedDomains, [.strength, .endurance])
+        XCTAssertEqual(
+            sut.context?.thinDataWarning,
+            "Thin endurance data — 1 session. Treat the recommendation as a starting point."
+        )
     }
 
-    /// The widened-window note has to stay true next to a line that counts
-    /// every source: the ladder moved because the recent weeks held no
-    /// *strength* sessions, and twelve runs sit in them (#87, #182).
-    func testTheWidenedWindowNoteNamesStrengthWhenRunsFillTheRecentWeeks() async {
+    /// The ladder runs over every session now, because every session reaches
+    /// the prompt: twelve recent runs are training, so the window stays at
+    /// four weeks instead of widening past them to find a lift (#87, #183).
+    func testRunsInTheRecentWeeksKeepTheWindowAtItsDefault() async {
         cache.summaries = [Self.workout(daysAgo: 40)]
-            + (1...12).map { Self.workout(daysAgo: $0, title: "Morning Run", source: .strava) }
+            + (1...12).map { Self.workout(daysAgo: $0, title: "Morning Run", source: .strava, kind: .run) }
+        await streamer.setText("ok")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.window, .default)
+        XCTAssertEqual(sut.context?.basisDescription, "12 Strava sessions")
+        XCTAssertNil(sut.context?.widenedWindowNote)
+    }
+
+    /// And when the window really does widen, the note no longer names a
+    /// domain: the ladder and the basis line describe the same sessions again
+    /// (#182 needed the qualifier only while they did not).
+    func testTheWidenedWindowNoteNamesNoDomain() async {
+        cache.summaries = [
+            Self.workout(daysAgo: 40),
+            Self.workout(daysAgo: 45, title: "Long Run", source: .strava, kind: .run),
+        ]
         await streamer.setText("ok")
         let sut = makeSUT()
 
         await sut.start()
 
         XCTAssertEqual(sut.context?.window.weeks, 8)
-        XCTAssertEqual(sut.context?.basisDescription, "1 Hevy · 12 Strava sessions")
         XCTAssertEqual(
             sut.context?.widenedWindowNote,
-            "This analysis covered 8 weeks — its most recent 4 held no strength sessions."
+            "This analysis covered 8 weeks — its most recent 4 held no sessions."
         )
     }
 
@@ -736,16 +756,21 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(sut.context?.domainCounts, [.strength: 2, .endurance: 1])
     }
 
-    /// A cache holding nothing but runs has no strength history to analyse —
-    /// not a window to widen, and not a provider call worth paying for.
-    func testACacheOfOnlyStravaSessionsIsNoTrainingData() async {
-        cache.summaries = [Self.workout(daysAgo: 2, title: "Morning Run", source: .strava)]
+    /// A cache holding nothing but runs used to be "no training data",
+    /// because the prompt could not describe a run. #183 gives it an endurance
+    /// section, so it is an analysis like any other.
+    func testACacheOfOnlyStravaSessionsIsAnalysed() async {
+        cache.summaries = [Self.workout(daysAgo: 2, title: "Morning Run", source: .strava, kind: .run)]
+        await streamer.setText("ok")
         let sut = makeSUT()
 
         await sut.start()
 
-        XCTAssertEqual(sut.state, .error(.noTrainingData))
-        XCTAssertNil(sut.context)
+        XCTAssertNotEqual(sut.state, .error(.noTrainingData))
+        XCTAssertEqual(sut.context?.analysedCounts, [.endurance: 1])
+        let user = await streamer.userPrompt
+        XCTAssertEqual(user?.contains("## Endurance, last 4 weeks"), true)
+        XCTAssertEqual(user?.contains("## Last 4 weeks"), false)
     }
 
     /// After a widened window the count has to follow it: the sessions the
