@@ -340,13 +340,77 @@ final class AnalysisResultStoreTests: XCTestCase {
         XCTAssertEqual(stored.context.profile, TrainingProfile())
     }
 
+    // MARK: - Per-source session counts (US-15 AC4, #182)
+
+    /// The history row has to name the same basis the live run did: which
+    /// sources fed it, with how many sessions each.
+    func testThePerSourceCountsAreReadBackWithTheRecommendation() async throws {
+        let context = AnalysisContext(
+            sessionCounts: [.hevy: 14, .strava: 9, .polar: 2],
+            // Not the source split: two Strava sessions were weight training
+            // (ADR-012), so the domains have to travel on their own.
+            domainCounts: [.strength: 16, .endurance: 9],
+            window: .default
+        )
+        try await sut.save(text: "Keep the volume.", generatedAt: Self.reference, context: context)
+
+        let latest = try await sut.latest()
+        let stored = try XCTUnwrap(latest)
+
+        XCTAssertEqual(stored.context, context)
+        XCTAssertEqual(stored.context.basisDescription, "14 Hevy · 9 Strava · 2 Polar sessions")
+        XCTAssertEqual(stored.context.sessionCount(in: .strength), 16)
+    }
+
+    /// The total stays written next to the map — it is the fallback of every
+    /// row whose map cannot be read, and what everything before #182 read.
+    func testTheTotalIsStoredAlongsideThePerSourceCounts() async throws {
+        try await sut.save(
+            text: "Keep the volume.",
+            generatedAt: Self.reference,
+            context: AnalysisContext(sessionCounts: [.hevy: 14, .strava: 9], window: .default)
+        )
+
+        let context = ModelContext(container)
+        let rows = try context.fetch(FetchDescriptor<AnalysisResult>())
+
+        XCTAssertEqual(rows.map(\.sessionCount), [23])
+    }
+
+    /// A row written before #182 has no map. Every analysis back then was
+    /// built from Hevy sessions alone, so it keeps rendering the line it was
+    /// shown with rather than losing its basis.
+    func testARowStoredBeforeTheSplitReadsAsHevyOnly() async throws {
+        try insertRow(text: "Older recommendation.")
+
+        let latest = try await sut.latest()
+        let stored = try XCTUnwrap(latest)
+
+        XCTAssertEqual(stored.context.sessionCounts, [.hevy: 12])
+        XCTAssertEqual(stored.context.basisDescription, "12 Hevy sessions")
+        // No domains were recorded, so they are read off the source.
+        XCTAssertEqual(stored.context.domainCounts, [.strength: 12])
+    }
+
+    /// A map this build cannot read falls back the same way, so the history
+    /// stays open on a row whose bytes went bad.
+    func testARowWithUnreadableCountsFallsBackToItsTotal() async throws {
+        try insertRow(text: "Older recommendation.", sessionCountsJSON: Data("nonsense".utf8))
+
+        let latest = try await sut.latest()
+        let stored = try XCTUnwrap(latest)
+
+        XCTAssertEqual(stored.context.sessionCounts, [.hevy: 12])
+    }
+
     // MARK: - Helpers
 
     /// Writes a row directly, bypassing `save`, to store what `save` itself
     /// never writes — bytes that do not decode, a format or provider from a
-    /// newer build.
+    /// newer build, or the missing count map of a row from before #182.
     private func insertRow(
         text: String,
+        sessionCountsJSON: Data? = nil,
         reportJSON: Data? = nil,
         reportVersion: Int = AnalysisReportFormat.prose,
         providerRawValue: String? = nil
@@ -358,6 +422,7 @@ final class AnalysisResultStoreTests: XCTestCase {
                 generatedAt: Self.reference,
                 windowWeeks: 4,
                 sessionCount: 12,
+                sessionCountsJSON: sessionCountsJSON,
                 reportJSON: reportJSON,
                 reportVersion: reportVersion,
                 providerRawValue: providerRawValue

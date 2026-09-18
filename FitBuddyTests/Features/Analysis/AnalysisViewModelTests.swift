@@ -74,16 +74,22 @@ final class AnalysisViewModelTests: XCTestCase {
     private static func workout(
         daysAgo: Int,
         title: String = "Push Day",
-        source: ConnectorSource = .hevy
+        source: ConnectorSource = .hevy,
+        kind: ActivityKind? = nil
     ) -> WorkoutSummary {
         WorkoutSummary(
             id: "w-\(daysAgo)",
             title: title,
             startTime: reference.addingTimeInterval(-Double(daysAgo) * 86_400),
             source: source,
-            volumeKg: source == .strava ? 0 : 4_200,
+            // Without an explicit sport, an endurance source reads as it does
+            // for a row cached before V5: unclassified, and told apart by the
+            // old heuristic (ADR-012).
+            kind: kind ?? (source.isEnduranceSource ? .other : .strength),
+            volumeKg: source == .hevy ? 4_200 : 0,
             exerciseCount: 5,
-            countedSetCount: 18
+            countedSetCount: 18,
+            distanceMeters: source.isEnduranceSource ? 8_400 : nil
         )
     }
 
@@ -601,20 +607,97 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(sut.context?.sessionCount, 2)
     }
 
-    /// The context line describes the strength history the prompt was built
-    /// from (US-6 AC1): Strava sessions count neither here nor in the prompt.
-    func testContextDoesNotCountStravaSessions() async {
+    /// Only Hevy in the cache: the line reads exactly as it did before #182.
+    func testContextOfASingleSourceReadsAsBeforeTheSplit() async {
+        cache.summaries = [Self.workout(daysAgo: 2), Self.workout(daysAgo: 5)]
+        await streamer.setText("ok")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.sessionCounts, [.hevy: 2])
+        XCTAssertEqual(sut.context?.basisDescription, "2 Hevy sessions")
+    }
+
+    /// US-15 AC4: every source that fed the window is counted on its own, and
+    /// the line names them in a stable order. Before #182 the endurance
+    /// sessions were dropped from the count along with the prompt — an honest
+    /// line for a strength-only analysis, and a lie once #183 sections the
+    /// prompt by domain.
+    func testContextCountsEachSourceSeparately() async {
         cache.summaries = [
             Self.workout(daysAgo: 2),
             Self.workout(daysAgo: 3, title: "Morning Run", source: .strava),
+            Self.workout(daysAgo: 4, title: "Evening Ride", source: .strava),
             Self.workout(daysAgo: 5),
+            Self.workout(daysAgo: 6, title: "Pool", source: .polar),
         ]
         await streamer.setText("ok")
         let sut = makeSUT()
 
         await sut.start()
 
-        XCTAssertEqual(sut.context?.sessionCount, 2)
+        XCTAssertEqual(sut.context?.sessionCounts, [.hevy: 2, .strava: 2, .polar: 1])
+        XCTAssertEqual(sut.context?.sessionCount, 5)
+        XCTAssertEqual(sut.context?.basisDescription, "2 Hevy · 2 Strava · 1 Polar sessions")
+    }
+
+    /// The endurance sessions counted are the ones inside the resolved window,
+    /// not the ones the wide read returned — the rule the Hevy count has
+    /// followed since #36.
+    func testContextCountsEnduranceSessionsOnlyInsideTheResolvedWindow() async {
+        cache.summaries = [
+            Self.workout(daysAgo: 2),
+            Self.workout(daysAgo: 3, title: "Morning Run", source: .strava),
+            // Outside the 4-week window, inside the read.
+            Self.workout(daysAgo: 40, title: "Long Run", source: .strava),
+        ]
+        await streamer.setText("ok")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.window, .default)
+        XCTAssertEqual(sut.context?.sessionCounts, [.hevy: 1, .strava: 1])
+    }
+
+    /// AC4's warning, end to end: fourteen lifts next to two runs is a solid
+    /// total over a thin endurance base, and the line has to say which half.
+    func testContextWarnsAboutTheThinDomainOnly() async {
+        cache.summaries = (1...14).map { Self.workout(daysAgo: $0) }
+            + [
+                // Days of their own: the fixture keys its id off `daysAgo`.
+                Self.workout(daysAgo: 15, title: "Morning Run", source: .strava),
+                Self.workout(daysAgo: 16, title: "Evening Ride", source: .strava),
+            ]
+        await streamer.setText("ok")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.thinDomains, [.endurance])
+        XCTAssertEqual(
+            sut.context?.thinDataWarning,
+            "Thin endurance data — 2 sessions. Treat the recommendation as a starting point."
+        )
+    }
+
+    /// The domain follows the normalized sport, not the connector (ADR-012):
+    /// a Strava `WeightTraining` session is named under Strava on the line and
+    /// counted as strength in the warning.
+    func testTheDomainSplitFollowsTheSportAndNotTheSource() async {
+        cache.summaries = [
+            Self.workout(daysAgo: 2),
+            Self.workout(daysAgo: 3, title: "Gym", source: .strava, kind: .strength),
+            Self.workout(daysAgo: 4, title: "Morning Run", source: .strava, kind: .run),
+        ]
+        await streamer.setText("ok")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.sessionCounts, [.hevy: 1, .strava: 2])
+        XCTAssertEqual(sut.context?.domainCounts, [.strength: 2, .endurance: 1])
     }
 
     /// A cache holding nothing but runs has no strength history to analyse —

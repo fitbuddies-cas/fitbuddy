@@ -225,6 +225,11 @@ final class ModelContainerFactoryTests: XCTestCase {
         XCTAssertEqual(analyses.map(\.provider), [.claude])
         let restored = try await AnalysisResultStore(modelContainer: container).latest()
         XCTAssertEqual(restored?.report, AnalysisReportFactory.validatedEveryCard)
+        // The row carries no per-source counts (#182) — before V5 there was no
+        // column for them — and still renders its basis, as Hevy's alone.
+        XCTAssertEqual(analyses.map(\.sessionCountsJSON), [nil])
+        XCTAssertEqual(restored?.context.sessionCounts, [.hevy: 12])
+        XCTAssertEqual(restored?.context.basisDescription, "12 Hevy sessions")
 
         // And the migrated store accepts what only V5 can write.
         let store = WorkoutStore(modelContainer: container)
