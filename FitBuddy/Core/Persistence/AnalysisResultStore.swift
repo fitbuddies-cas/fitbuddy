@@ -31,6 +31,7 @@ actor AnalysisResultStore {
             generatedAt: generatedAt,
             windowWeeks: context.window.weeks,
             sessionCount: context.sessionCount,
+            sessionCountsJSON: SessionCountFormat.encode(context),
             goal: context.profile.goal?.rawValue,
             experience: context.profile.experience?.rawValue,
             reportJSON: encoded.json,
@@ -117,19 +118,38 @@ actor AnalysisResultStore {
             id: result.id,
             text: result.text,
             generatedAt: result.generatedAt,
-            context: AnalysisContext(
-                sessionCount: result.sessionCount,
-                window: AnalysisWindow(weeks: result.windowWeeks),
-                // `flatMap` rather than a crash on a value this build no
-                // longer knows: a goal renamed in a later version leaves the
-                // row readable, minus that one line.
-                profile: TrainingProfile(
-                    goal: result.goal.flatMap(TrainingGoal.init(rawValue:)),
-                    experience: result.experience.flatMap(TrainingExperience.init(rawValue:))
-                )
-            ),
+            context: context(of: result),
             report: AnalysisReportFormat.decode(result.reportJSON, version: result.reportVersion),
             provider: result.provider
+        )
+    }
+
+    /// The data basis of a stored row (#36, #87, #182).
+    ///
+    /// A row without a domain breakdown takes the initializer that derives one
+    /// from the sources — that is what a run counted before #182 meant, and
+    /// making the fallback explicit here keeps the two readings apart.
+    private static func context(of result: AnalysisResult) -> AnalysisContext {
+        let counts = SessionCountFormat.decode(
+            result.sessionCountsJSON,
+            fallbackSessionCount: result.sessionCount
+        )
+        // `flatMap` rather than a crash on a value this build no longer knows:
+        // a goal renamed in a later version leaves the row readable, minus that
+        // one line.
+        let profile = TrainingProfile(
+            goal: result.goal.flatMap(TrainingGoal.init(rawValue:)),
+            experience: result.experience.flatMap(TrainingExperience.init(rawValue:))
+        )
+        let window = AnalysisWindow(weeks: result.windowWeeks)
+        guard let domains = counts.domains else {
+            return AnalysisContext(sessionCounts: counts.sources, window: window, profile: profile)
+        }
+        return AnalysisContext(
+            sessionCounts: counts.sources,
+            domainCounts: domains,
+            window: window,
+            profile: profile
         )
     }
 

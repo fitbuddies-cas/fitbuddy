@@ -13,8 +13,10 @@ struct AnalysisResultSnapshot: Equatable, Sendable, Identifiable {
     let text: String
     let generatedAt: Date
     /// What the recommendation rests on, rebuilt from the stored week count
-    /// and session count so the restored screen names the basis exactly as the
-    /// live run did (#87, #36).
+    /// and the per-source session counts so the restored screen names the
+    /// basis exactly as the live run did (#87, #36, #182) — a history row from
+    /// a week with two sources keeps saying so, however the connectors stand
+    /// today.
     let context: AnalysisContext
     /// The cards the user saw (US-14 AC6, #176), decoded when the snapshot is
     /// built. `nil` for a prose answer, for a row written before V4, and for a
