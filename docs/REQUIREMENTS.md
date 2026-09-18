@@ -112,6 +112,25 @@ Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 >
 > **Bewusst minimal:** nur Ziel und Erfahrungslevel. Equipment, Wunschfrequenz und Verletzungen sind ausgeklammert — Verletzungsdaten sind Gesundheitsdaten nach Art. 5 lit. c revDSG und zögen Consent-Text und Risikonotiz nach sich. Die Erfahrung wird in Jahren erhoben statt als Selbsteinschätzung, weil Jahre objektiv sind. Das Profil geht in den User-Prompt, nicht in den System-Prompt: Es ist ein Faktum über diese Person, kein Auftrag an das Modell — der System-Prompt bleibt für alle Nutzer identisch, was die Regel aus US-3 AC3 prüfbar hält.
 
+### 1.2.5 US-14 · AI-Empfehlung als strukturierte Karten
+**Als** Krafttraining-Einsteigerin **möchte ich** die AI-Empfehlung als konkrete Karten sehen (Übung, Wert von → nach, Begründung; Recovery mit Kennzahlen; Dysbalance mit Balken), **damit** ich sie ohne Lesen von Fliesstext direkt umsetzen kann.
+
+| # | Given | When | Then |
+|---|---|---|---|
+| AC1 | Analyse abgeschlossen | Ergebnis wird angezeigt | Oben eine Headline mit Verdikt, darunter die Kontextzeile aus US-6, ein Kurzfazit (1–3 Sätze), dann 0–4 Karten, dann «Show full analysis» mit der ausführlichen Analyse (aufgeklappt, wenn keine umsetzbare Karte vorliegt), dann der Disclaimer |
+| AC2 | Modell empfiehlt eine Steigerung | Karte wird angezeigt | Karte nennt Übung, Muskelgruppe, Ausgangswert (durchgestrichen), Zielwert, Delta und eine Begründung in einem Satz |
+| AC3 | Modell nennt eine Übung oder einen Ausgangswert | Karte wird gebaut | Übung kommt im Analysefenster vor und der Ausgangswert entspricht dem letzten Arbeitsgewicht im Cache; sonst wird die Karte verworfen und die Begründung als Prosa gezeigt |
+| AC4 | User hat an ≥6 der letzten 7 Tage trainiert (US-3 AC6) | Ergebnis wird angezeigt | Recovery-Karte mit Kennzahlen aus der App (Sessions/7 Tage, Ø RPE falls vorhanden, empfohlene Pause) — keine Steigerungs-Karte ohne diesen Hinweis |
+| AC5 | Modell antwortet nicht schema-konform oder ein Provider kann kein JSON-Schema | Ergebnis wird verarbeitet | Fallback auf die heutige Prosa-Darstellung, kein Fehler für den User |
+| AC6 | Frühere Analysen (Prosa) sind gespeichert | User öffnet die History | Alte Einträge bleiben lesbar, neue Einträge zeigen Karten |
+| AC7 | Prompt wird gebaut | LLM-Aufruf | Prompt enthält pro relevanter Übung das letzte Arbeitsgewicht, Wiederholungen, RPE und den 1RM-Trend aus dem Cache — nur eigene Daten (US-3 AC3) |
+
+> **Hinweis:** Entspricht den Design-Screens 3.4 «Result · progression», 3.4b «Result · thin data», 3.5 «Result · recovery» und 3.7b «Saved analysis · detail» in `design/fb-screens.jsx`. Die Karten brauchen einen strukturierten Output (JSON-Schema bei Claude, Gemini und Mistral) und Übungsdaten im Prompt. Nur Kraftdaten (Hevy) — die Ausdauer-Karten folgen mit US-15 «Quellenübergreifende AI-Analyse» (#171). Umsetzung und Tasks: Issue #170.
+>
+> **Kurzfazit statt Füllkarten:** Bei wenig Daten stützt nichts eine Karte. Das Modell liefert dann keine Karten statt erfundener Platzhalter; das Kurzfazit und die aufgeklappte ausführliche Analyse tragen die Antwort. Liegt eine umsetzbare Karte (Steigerung, Recovery, Dysbalance) vor, stehen die Karten vorne und die ausführliche Analyse ist zugeklappt. Qualitative Empfehlungen, wie sie mit Strava und Polar (US-15) häufig sind, passen so in dieselbe Darstellung.
+>
+> **Nummerierung:** US-13 ist an #189 «Trainingsprofil für gezieltere AI-Empfehlungen» vergeben (PR #193), deshalb US-14.
+
 
 
 ## 1.3 Could Have — Nice-to-have, wenn Sprint Luft hat
@@ -165,6 +184,7 @@ Out of Scope — siehe Abschnitt 4.
 | US-7 | Übungssuche & Filter | **Should** | Wird notwendig, sobald User-Historie >20 Übungen erreicht. Für PoC-Demos mit wenigen Sessions verzichtbar. |
 | US-8 | Datenquelle-Status sichtbar | **Could** | Bei nur einer Quelle (Hevy) trägt der Sync-Zeitstempel aus US-2 AC2 den Grossteil. AC1 und AC2 sind in v0 dennoch umgesetzt (Stale-Indikator ab >24 h mit Retry, aktive Benachrichtigung bei widerrufenem Key), weil der blosse Zeitstempel veraltete Daten nicht als solche kenntlich macht. Vollwertig — mehrere Quellen nebeneinander — relevant ab v1. |
 | US-13 | Trainingsprofil für gezieltere AI-Empfehlungen | **Should** | Hebt die Qualität von US-3 spürbar, ohne dass irgendetwas davon abhängt: Ohne Profil verhält sich die App exakt wie bisher. Zwei Felder, überspringbar — der Aufwand steht in keinem Verhältnis zum Gewinn an Treffsicherheit der Empfehlung. |
+| US-14 | AI-Empfehlung als strukturierte Karten | **Should** | Macht die Empfehlung aus US-3 direkt umsetzbar, statt sie als Fliesstext lesen zu lassen. Die App prüft Übung und Ausgangswert jeder Karte gegen den Cache; antwortet ein Modell nicht schema-konform, bleibt die Prosa-Darstellung. Der PoC funktioniert auch ohne. |
 | US-9 | Progressionskurven pro Übung | **Could** | US-3 deckt den Hauptnutzen ab. Epley-Formel + Plateau-Detection sind nicht-trivial. |
 | US-10 | Daten manuell neu laden | **Could** | iOS-Pattern, das User erwarten — kein Showstopper. 1–2 Tage Aufwand, ergänzt US-2 AC2. |
 | US-11 | Wochenübersicht als Push-Notification | **Won't** | iOS-Permission-Flow + Background-Scheduling + LLM-Call-Fallback ist eigenes Sub-System. Relevant ab v1.2. |
