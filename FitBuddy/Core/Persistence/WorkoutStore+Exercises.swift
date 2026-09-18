@@ -14,22 +14,37 @@ extension WorkoutStore: ExerciseSummaryReading {
     /// relationship, and a list that reshuffles between two reads of the same
     /// cache would look like the data changed.
     ///
-    /// Strava and Polar sessions stay out (US-5 AC1, US-9): a run is mapped to one
+    /// Endurance sessions stay out (US-5 AC1, US-9): a run is mapped to one
     /// "exercise" named after the sport with a single cardio set, and listed
     /// it would read as a movement with 0 kg over n sessions, carry a guessed
     /// muscle group, and merge with a Hevy exercise of the same title. The
     /// exercise list is the strength picture, like the muscle split in
     /// `WorkoutSummary`.
+    ///
+    /// Which sessions those are is decided by `WorkoutSummary.isCardio` since
+    /// #183 — the same rule `AnalysisDomain` and the prompt's sections read —
+    /// and no longer by the source. The two disagree in both directions, and
+    /// each disagreement put the Exercises section out of step with the
+    /// strength sections it is supposed to describe: a Hevy treadmill session
+    /// was listed as a movement although its session sits in the endurance
+    /// section, and a Strava `WeightTraining` session never appeared here
+    /// although the strength figures count it. Rule 6 of the system prompt
+    /// tells the model to recommend only on this section, so a mismatch is a
+    /// recommendation grounded in something the prompt did not state.
+    ///
+    /// The filter therefore runs in memory rather than in the predicate:
+    /// `isCardio` reads the sets of a workout, which `#Predicate` cannot. The
+    /// rows are walked anyway to fold the movements, and `WorkoutSummary`
+    /// gives the one verdict the whole feature shares.
     func exerciseSummaries(since date: Date) throws -> [ExerciseSummary] {
-        let enduranceSources = ConnectorSource.allCases.filter(\.isEnduranceSource).map(\.rawValue)
         var descriptor = FetchDescriptor<Workout>(
-            predicate: #Predicate { $0.startTime >= date && !enduranceSources.contains($0.sourceRawValue) },
+            predicate: #Predicate { $0.startTime >= date },
             sortBy: [SortDescriptor(\.startTime, order: .reverse)]
         )
         descriptor.relationshipKeyPathsForPrefetching = [\.exercises]
 
         var summaries: [String: ExerciseSummary] = [:]
-        for workout in try modelContext.fetch(descriptor) {
+        for workout in try modelContext.fetch(descriptor) where !WorkoutSummary(workout: workout).isCardio {
             // Per session, so a movement performed twice in one workout still
             // counts as one session for it.
             var keysInWorkout: Set<String> = []

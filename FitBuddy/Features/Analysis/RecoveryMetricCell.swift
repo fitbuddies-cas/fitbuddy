@@ -17,7 +17,8 @@ struct RecoveryMetricCell: Equatable, Sendable {
     var unit: String?
 
     /// The row for `metrics`: sessions, average RPE, average heart rate,
-    /// suggested rest.
+    /// suggested rest — the last labelled "Rest" where all four are shown and
+    /// "Suggested rest" otherwise.
     ///
     /// Only two cells are fixed — the session count, which since #184 covers
     /// strength and endurance together, and the suggested rest. A mean nobody
@@ -37,9 +38,14 @@ struct RecoveryMetricCell: Equatable, Sendable {
         if let averageHeartRate = metrics.averageHeartRate {
             cells.append(RecoveryMetricCell(label: "Avg HR", value: "\(averageHeartRate)", unit: "bpm"))
         }
+        // "SUGGESTED REST" needs about 106 pt and scales to 84.8 pt at most,
+        // while a four-column row gives each cell about 69.5 pt on a 390 pt
+        // screen — so at four cells the label truncates rather than shrinks,
+        // and truncation is invisible to a height assertion. The short form is
+        // used only where the long one does not fit.
         cells.append(
             RecoveryMetricCell(
-                label: "Suggested rest",
+                label: cells.count == 3 ? "Rest" : "Suggested rest",
                 value: AnalysisCardFormatter.rest(hours: metrics.suggestedRestHours)
             )
         )

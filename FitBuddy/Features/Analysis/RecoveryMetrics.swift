@@ -43,7 +43,13 @@ struct RecoveryMetrics: Codable, Equatable, Sendable {
     /// Polar strength session carries a heart rate too, and the card says
     /// "Avg HR", not "average endurance heart rate". One session contributes
     /// one value; the mean is not weighted by duration, because duration is
-    /// itself a figure a session may not have recorded.
+    /// itself a figure a session may not have recorded. A recorded `0` is not
+    /// a measurement — see `meanHeartRate(in:)`.
+    ///
+    /// Not the same figure as the prompt's "Mean heart rate", which is the
+    /// endurance mean over the whole analysed window. The prompt's "Last 7
+    /// days" line carries *this* one as well, so a card reason and the label
+    /// under it always quote the same number.
     ///
     /// Decoded with `decodeIfPresent`, as Swift synthesises it for an optional,
     /// so a report persisted before #184 reads back without a heart rate
@@ -155,15 +161,28 @@ extension RecoveryMetrics {
             .flatMap(\.sets)
             .filter(\.countsTowardsVolume)
             .compactMap(\.rpe)
-        let heartRates = sessions.compactMap { $0.cardio?.averageHeartRate }
-
         self.init(
             sessions: sessions.count,
             trainingDays: Set(sessions.map { calendar.startOfDay(for: $0.startTime) }).count,
             averageRPE: rpes.isEmpty ? nil : rpes.reduce(0, +) / Double(rpes.count),
-            averageHeartRate: heartRates.isEmpty
-                ? nil
-                : Int((Double(heartRates.reduce(0, +)) / Double(heartRates.count)).rounded())
+            averageHeartRate: Self.meanHeartRate(in: sessions)
         )
+    }
+
+    /// The mean of the average heart rates `summaries` recorded, or `nil` when
+    /// none did.
+    ///
+    /// The rule the card's "Avg HR" and the prompt's "Last 7 days" line both
+    /// read, so the figure a recovery reason cites and the figure printed under
+    /// the label cannot be two different numbers (#184).
+    ///
+    /// A zero is discarded rather than averaged in: a provider that writes `0`
+    /// for a session recorded without a strap is saying "not measured", and one
+    /// run at 150 bpm next to such a row would otherwise read as 75 bpm. Same
+    /// guard as `EndurancePromptSection`.
+    static func meanHeartRate(in summaries: [WorkoutSummary]) -> Int? {
+        let recorded = summaries.compactMap { $0.cardio?.averageHeartRate }.filter { $0 > 0 }
+        guard !recorded.isEmpty else { return nil }
+        return Int((Double(recorded.reduce(0, +)) / Double(recorded.count)).rounded())
     }
 }

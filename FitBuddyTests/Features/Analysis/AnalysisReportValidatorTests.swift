@@ -429,7 +429,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
             metrics: metrics
         ))
         XCTAssertEqual(validated.verdict, .recover)
-        XCTAssertEqual(validated.lead, "You trained on 6 of the last 7 days. Take the suggested rest before adding load.")
+        XCTAssertEqual(validated.lead, "You trained on 6 of the last 7 days. Take the suggested rest before your next hard session.")
     }
 
     /// A week of runs alone: before #184 it counted zero training days and no
@@ -455,7 +455,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
         XCTAssertEqual(validated.headline, "Recover this week.")
         XCTAssertEqual(
             validated.lead,
-            "You trained on 6 of the last 7 days. Take the suggested rest before adding load.",
+            "You trained on 6 of the last 7 days. Take the suggested rest before your next hard session.",
             "An overruled verdict gets the app's lead, not the model's"
         )
         XCTAssertEqual(validated.summary, "Summary")

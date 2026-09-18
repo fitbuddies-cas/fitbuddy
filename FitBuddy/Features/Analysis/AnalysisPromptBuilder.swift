@@ -258,7 +258,11 @@ enum AnalysisPromptBuilder {
     working sets; warm-up sets are excluded. Bodyweight and time-based work \
     contributes sets but no kilograms, so a group can carry real training \
     load while showing little or no volume. Never read a low kg figure as \
-    "untrained" on its own.
+    "untrained" on its own. A session listed as "no sets logged" recorded no \
+    set data at all, because its source reports whole sessions rather than \
+    sets: it is training that happened, its load is not in the volume figures, \
+    and it is not bodyweight work — do not explain it as such and do not read \
+    its absence from the volume as a light session.
 
     6. Name only exercises and weights from the Exercises section. Spell an \
     exercise exactly as it is listed there, and start any load change from \
@@ -276,7 +280,12 @@ enum AnalysisPromptBuilder {
     never judge an endurance session by the strength figures, and never name \
     a kilogram value in a recommendation about endurance training. A figure \
     that is missing — an indoor ride without distance, a session recorded \
-    without a heart-rate strap — is unrecorded, not zero.
+    without a heart-rate strap — is unrecorded, not zero. Heart rate is a \
+    number this person recorded, never a target: never name a heart-rate \
+    zone, a target heart rate, or a percentage of maximum heart rate. Those \
+    are derived from population norms, which rule 2 forbids, and you were \
+    given neither their maximum heart rate nor the model any zone scheme \
+    rests on. Say "easier" or "harder" where you would have named a zone.
 
     8. The Week structure section is about both domains at once: strength and \
     endurance draw on the same recovery, so training days, days carrying \

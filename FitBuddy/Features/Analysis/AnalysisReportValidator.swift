@@ -40,9 +40,12 @@ enum AnalysisReportValidator {
     /// overruled and would contradict the headline right above it.
     ///
     /// `trainingDays` counts strength and endurance together since #184, and
-    /// the sentence names no domain, so it stays true of a running week.
+    /// so does the sentence: "before adding load" was strength wording that
+    /// said nothing to a week of six runs, and the app now points this lead at
+    /// exactly such weeks.
     static func recoveryLead(trainingDays: Int) -> String {
-        "You trained on \(trainingDays) of the last 7 days. Take the suggested rest before adding load."
+        "You trained on \(trainingDays) of the last 7 days. "
+            + "Take the suggested rest before your next hard session."
     }
 
     /// The headline of a progress report the app turned into a hold verdict,
@@ -57,8 +60,12 @@ enum AnalysisReportValidator {
 
     /// The reasoning of a recovery card the app inserts when the model left it
     /// out, or sent it without a reason (US-14 AC4).
+    ///
+    /// Domain-neutral since #184: the card is now inserted for a week of runs
+    /// as readily as for a week of lifts, and "before adding load to any
+    /// exercise" named neither the training nor the advice of such a week.
     static let insertedRecoveryReasoning =
-        "Recovery comes before progression: take the suggested rest before adding load to any exercise."
+        "Recovery comes before progression: take the suggested rest before your next hard session."
 
     /// Validates every card and enforces the recovery hint.
     ///
