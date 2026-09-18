@@ -74,6 +74,9 @@ enum AnalysisCardFormatter {
 
     /// `"You trained 6 of the last 7 days."` — the recovery card's headline,
     /// from the app's own count (US-3 AC6).
+    ///
+    /// Since #184 the count spans strength and endurance, and the sentence
+    /// needed no rewording for it: "trained" was never a claim about barbells.
     static func recoveryHeadline(_ metrics: RecoveryMetrics) -> String {
         "You trained \(metrics.trainingDays) of the last 7 days."
     }

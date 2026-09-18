@@ -47,6 +47,22 @@ struct FBStat: View {
         var valueFont: Font {
             self == .regular ? .fbStatValue : .title3.weight(.bold)
         }
+
+        /// A compact value stays on one line too, for the same reason as the
+        /// label: it sits in a column of a fixed width. A recovery card that
+        /// shows four figures — sessions, RPE, heart rate, rest (#184) — gives
+        /// each about 70 pt at phone width, where "148 bpm" would otherwise
+        /// wrap and make the whole card a line taller than the same card
+        /// without a heart rate.
+        var valueLineLimit: Int? {
+            self == .regular ? nil : 1
+        }
+
+        /// Only for the compact size, and only down to a figure that is still
+        /// comfortably legible next to its neighbours.
+        var valueMinimumScaleFactor: CGFloat {
+            self == .regular ? 1 : 0.75
+        }
     }
 
     let label: String
@@ -75,6 +91,8 @@ struct FBStat: View {
                         .foregroundStyle(Color.fbMuted)
                 }
             }
+            .lineLimit(size.valueLineLimit)
+            .minimumScaleFactor(size.valueMinimumScaleFactor)
             if let delta {
                 Text(delta)
                     .font(.system(size: 13, weight: .semibold))
