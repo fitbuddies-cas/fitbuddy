@@ -49,6 +49,10 @@ struct AnalysisContextView: View {
         .background(Color.fbCardSubtle)
         .clipShape(RoundedRectangle(cornerRadius: FBRadius.card))
         .accessibilityElement(children: .combine)
+        // One element, one identifier: a UI test reads the whole basis off
+        // this label — which sources were counted, and whether the run warned
+        // about a thin domain (US-15 AC4, #188).
+        .accessibilityIdentifier(AccessibilityID.Analysis.context)
     }
 
     /// `"Based on 14 Hevy · 9 Strava sessions · last 4 weeks"`, with the

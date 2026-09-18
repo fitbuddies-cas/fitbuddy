@@ -86,12 +86,15 @@ final class AnalysisResultUITests: XCTestCase {
     /// Design 3.4c (US-15 AC5, #186): an endurance report renders as metric
     /// cards and shows no progression card, i.e. no weight on the screen.
     ///
-    /// Rendering only, like the tests above: the report is stored directly.
+    /// Behind it the `runner` profile — 32 Strava runs through the real
+    /// connector mapping (#188) — so the basis line the seeder builds is the
+    /// one this cache justifies, and the screen is an endurance analysis from
+    /// the cache up rather than a report dropped onto an unrelated history.
     /// **Not run locally** — CI runs the UI suite (#120, #148).
     @MainActor
-    func testASeededEnduranceReportShowsMetricCards() {
+    func testAnEnduranceReportOverTheRunnerProfileShowsMetricCards() {
         let sut = SeededApp(
-            profile: LaunchArgument.Profile.personB,
+            profile: LaunchArgument.Profile.runner,
             analysisReport: LaunchArgument.Report.endurance
         ).launch()
 
@@ -101,14 +104,23 @@ final class AnalysisResultUITests: XCTestCase {
         sut.firstRow(of: sut.metricCards)
         XCTAssertEqual(sut.progressionCards.count, 0)
         XCTAssertFalse(sut.analysisProse.exists)
+        // One endurance source, named as such, and the profile it was run
+        // under (US-15 AC1/AC4).
+        sut.assertLabel(of: sut.analysisContext, contains: "Strava sessions")
+        sut.assertLabel(of: sut.analysisContext, contains: "Endurance")
     }
 
-    /// Design 3.4d: the overall-load report is led by the interference card,
-    /// with a metric card under it.
+    /// Design 3.4d over the `mixed` profile: the interference card leads, a
+    /// metric card sits under it, and the basis line names both sources
+    /// (US-15 AC4, #188).
+    ///
+    /// The cache-to-card path the #186 version could not walk: the counts come
+    /// out of the seeded window through `AnalysisViewModel.sessionCounts`, not
+    /// out of a fixture.
     @MainActor
-    func testASeededOverallLoadReportShowsTheInterferenceCard() {
+    func testAnOverallLoadReportOverTheMixedProfileNamesBothSources() {
         let sut = SeededApp(
-            profile: LaunchArgument.Profile.personB,
+            profile: LaunchArgument.Profile.mixed,
             analysisReport: LaunchArgument.Report.overallLoad
         ).launch()
 
@@ -118,6 +130,9 @@ final class AnalysisResultUITests: XCTestCase {
         sut.firstRow(of: sut.interferenceCards)
         sut.firstRow(of: sut.metricCards)
         XCTAssertFalse(sut.analysisProse.exists)
+        sut.assertLabel(of: sut.analysisContext, contains: "Hevy")
+        sut.assertLabel(of: sut.analysisContext, contains: "Strava")
+        sut.assertLabel(of: sut.analysisContext, contains: "Overall load")
     }
 
     // MARK: - Helpers

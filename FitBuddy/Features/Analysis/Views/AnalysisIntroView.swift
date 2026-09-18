@@ -78,6 +78,7 @@ struct AnalysisIntroView: View {
             }
             .pickerStyle(.segmented)
             .disabled(!canStart)
+            .accessibilityIdentifier(AccessibilityID.Analysis.profilePicker)
         }
     }
 
