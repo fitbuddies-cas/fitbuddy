@@ -127,9 +127,13 @@ enum AnalysisPromptBuilder {
     /// 0 kg line as bodyweight or timed work. A run passed through as a
     /// session would be read exactly that way — "1 exercise, 1 working set,
     /// 0 kg" — and someone running four times a week would be told about a
-    /// volume collapse that never happened (US-3 AC3). Cardio context is v1
-    /// material; for v0 the figures at least have to be right, so the same
-    /// filter decides the session count `AnalysisContext` reports (US-6).
+    /// volume collapse that never happened (US-3 AC3). #183 gives those
+    /// sessions a prompt section of their own; until then they stay out of it.
+    ///
+    /// The context line no longer follows this filter (#182): what the basis
+    /// names is which sources the analysed window held, and that is a
+    /// statement about the data rather than about the prompt's strength
+    /// figures (US-6 AC1, US-15 AC4).
     static func strengthSessions(in summaries: [WorkoutSummary]) -> [WorkoutSummary] {
         summaries.filter { !$0.source.isEnduranceSource }
     }
