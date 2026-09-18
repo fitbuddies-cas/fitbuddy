@@ -26,12 +26,20 @@ actor StubAnalysisResultStore: AnalysisResultStoring {
     func setDeleteFails(_ value: Bool) { deleteFails = value }
 
     @discardableResult
-    func save(text: String, generatedAt: Date, context: AnalysisContext) throws -> UUID {
+    func save(
+        text: String,
+        report: ValidatedAnalysisReport?,
+        provider: LLMProvider?,
+        generatedAt: Date,
+        context: AnalysisContext
+    ) throws -> UUID {
         let entry = AnalysisResultSnapshot(
             id: UUID(),
             text: text,
             generatedAt: generatedAt,
-            context: context
+            context: context,
+            report: report,
+            provider: provider
         )
         entries.append(entry)
         entries.sort { $0.generatedAt > $1.generatedAt }

@@ -197,11 +197,15 @@ private actor FailingDeleteKeychainStub: KeychainStoring {
 extension DataResetServiceTests {
     /// The deletion right covers everything the analysis leaves behind, not
     /// just the workouts: the whole history, the tally and the rate limit.
+    ///
+    /// Rows with a stored report (#176) go the same way as prose rows.
     func testDeleteAllDataRemovesTheWholeAnalysisHistory() async throws {
         let reference = Date(timeIntervalSince1970: 1_788_000_000)
         for index in 0..<3 {
             try await results.save(
                 text: "Analysis \(index)",
+                report: index == 0 ? ValidatedAnalysisReportFixtures.everyCard : nil,
+                provider: .claude,
                 generatedAt: reference.addingTimeInterval(Double(index) * 3_600),
                 context: AnalysisContext(sessionCount: 12, window: .default)
             )
@@ -211,6 +215,7 @@ extension DataResetServiceTests {
 
         let stored = try await results.recent(limit: 20)
         XCTAssertTrue(stored.isEmpty)
+        XCTAssertEqual(try ModelContext(container).fetchCount(FetchDescriptor<AnalysisResult>()), 0)
     }
 
     /// Losing the 60s lock is accepted collateral: the same call wipes both

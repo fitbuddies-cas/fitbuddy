@@ -14,12 +14,20 @@ actor PreviewAnalysisResultStore: AnalysisResultStoring {
     }
 
     @discardableResult
-    func save(text: String, generatedAt: Date, context: AnalysisContext) throws -> UUID {
+    func save(
+        text: String,
+        report: ValidatedAnalysisReport?,
+        provider: LLMProvider?,
+        generatedAt: Date,
+        context: AnalysisContext
+    ) throws -> UUID {
         let entry = AnalysisResultSnapshot(
             id: UUID(),
             text: text,
             generatedAt: generatedAt,
-            context: context
+            context: context,
+            report: report,
+            provider: provider
         )
         entries.insert(entry, at: 0)
         return entry.id

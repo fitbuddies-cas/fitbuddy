@@ -116,6 +116,9 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertFalse(sut.isTakingLong)
         let latest = try await results.latest()
         XCTAssertEqual(latest?.text, AnalysisReportFixtures.progress.summary)
+        // No stored cards until #178 hands the validated report through.
+        XCTAssertNil(latest?.report)
+        XCTAssertEqual(latest?.provider, .claude)
     }
 
     func testStateCarriesTheTextInStreamingAndResult() {
@@ -628,6 +631,23 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(sut.attribution?.fallbackNotice, "Claude unavailable — answered by Gemini")
     }
 
+    /// #176: the history badge names the provider that wrote the answer, not
+    /// the one the user ranked first.
+    func testAFallbackPersistsTheProviderThatAnswered() async throws {
+        await streamer.setEvents([
+            .attempting(.claude),
+            .attempting(.gemini),
+            .text("Recommendation"),
+        ])
+        let sut = makeSUT()
+
+        await sut.start()
+
+        let latest = try await results.latest()
+        XCTAssertEqual(latest?.text, "Recommendation")
+        XCTAssertEqual(latest?.provider, .gemini)
+    }
+
     /// DoD: the user never sees two answers merged. Whatever the failed
     /// provider already streamed is dropped when the next one takes over.
     func testDiscardsThePartialTextOfAProviderThatGaveWay() async {
@@ -1090,6 +1110,28 @@ extension AnalysisViewModelTests {
         XCTAssertEqual(sut.resultAge, "2 h ago")
         // No provider is stored, so the badge falls back to the bare "AI".
         XCTAssertNil(sut.attribution)
+    }
+
+    /// #176: a row that recorded its provider is restored with it, so the
+    /// badge reads "AI · Gemini" — and without the fallback notice, since the
+    /// chain that led there is not stored.
+    func testRestoreBringsBackTheStoredProvider() async throws {
+        try await results.save(
+            text: "Give legs a second slot.",
+            report: nil,
+            provider: .gemini,
+            generatedAt: Self.reference.addingTimeInterval(-2 * 3_600),
+            context: AnalysisContext(sessionCount: 6, window: .default)
+        )
+        let sut = makeSUT()
+
+        await sut.restore()
+
+        XCTAssertEqual(sut.state, .result("Give legs a second slot."))
+        XCTAssertEqual(sut.attribution, AnalysisAttribution(first: .gemini))
+        XCTAssertEqual(sut.attribution?.provider.displayName, "Gemini")
+        XCTAssertEqual(sut.attribution?.didFallBack, false)
+        XCTAssertNil(sut.attribution?.fallbackNotice)
     }
 
     func testRestoreWithoutAStoredRecommendationLeavesTheIntroScreen() async {

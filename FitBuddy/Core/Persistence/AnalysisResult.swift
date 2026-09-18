@@ -1,10 +1,10 @@
 import Foundation
 import SwiftData
 
-/// The current `AnalysisResult` model — see `FitBuddySchemaV3`.
-typealias AnalysisResult = FitBuddySchemaV3.AnalysisResult
+/// The current `AnalysisResult` model — see `FitBuddySchemaV4`.
+typealias AnalysisResult = FitBuddySchemaV4.AnalysisResult
 
-extension FitBuddySchemaV3 {
+extension FitBuddySchemaV4 {
     /// One AI recommendation, kept so it survives an app restart and stays
     /// readable next to the ones before it (US-3 AC10/AC11, #97/#117).
     ///
@@ -27,7 +27,9 @@ extension FitBuddySchemaV3 {
         /// version plan; the single row such a store holds is the only one
         /// that takes the default, and there is nothing for it to collide with.
         var id: UUID = UUID()
-        /// The complete recommendation, as the answering provider wrote it.
+        /// The complete recommendation as prose — the answering provider's text,
+        /// or a report's `summary`. Always set: it is what an old row renders,
+        /// and the fallback whenever `reportJSON` cannot be read.
         var text: String
         /// When the run that produced `text` finished — the basis for the
         /// "2 h ago" line above the recommendation.
@@ -57,12 +59,35 @@ extension FitBuddySchemaV3 {
         /// The strength training experience the run was steered by, as
         /// `TrainingExperience.rawValue` — see `goal`.
         var experience: String?
+        /// The `ValidatedAnalysisReport` the user saw, JSON-encoded (US-14
+        /// AC6, #176) — `nil` for a prose answer and for every row written
+        /// before V4. The validated report rather than the model's raw one, so
+        /// the history shows the same cards, with the app's recovery figures
+        /// as of that run, and not a re-validation against today's cache.
+        ///
+        /// Read it through `AnalysisResultSnapshot.report`, never directly:
+        /// what the bytes mean depends on `reportVersion`.
+        var reportJSON: Data?
+        /// The format of `reportJSON` — see `AnalysisReportFormat`. 0 means
+        /// prose (no report), which is what the V3 → V4 stage fills existing
+        /// rows with.
+        var reportVersion: Int = 0
+        /// `LLMProvider.rawValue` of the provider that wrote this answer — the
+        /// last one of the fallback chain (#176), read it through `provider`.
+        /// `nil` on rows written before V4, which did not record it.
+        var providerRawValue: String?
         /// Unused: held the "Helpful" / "Not helpful" verdict until those
         /// buttons were removed. Kept so installed stores open without a
-        /// migration — nothing writes it since, and V3 kept it rather than
-        /// spending a migration stage on a column nobody reads (#202 makes
-        /// the same call, so the two V3s stay mergeable).
+        /// migration — nothing writes it since, and neither V3 nor V4 spent a
+        /// migration stage on a column nobody reads; both stay purely additive.
         var feedback: String?
+
+        /// Typed view of `providerRawValue`. An unknown raw value — a store
+        /// written by a newer build — reads as `nil`, so the badge falls back
+        /// to a bare "AI" rather than naming a provider on a guess.
+        var provider: LLMProvider? {
+            providerRawValue.flatMap(LLMProvider.init(rawValue:))
+        }
 
         init(
             id: UUID = UUID(),
@@ -71,7 +96,10 @@ extension FitBuddySchemaV3 {
             windowWeeks: Int,
             sessionCount: Int,
             goal: String? = nil,
-            experience: String? = nil
+            experience: String? = nil,
+            reportJSON: Data? = nil,
+            reportVersion: Int = AnalysisReportFormat.prose,
+            providerRawValue: String? = nil
         ) {
             self.id = id
             self.text = text
@@ -80,6 +108,9 @@ extension FitBuddySchemaV3 {
             self.sessionCount = sessionCount
             self.goal = goal
             self.experience = experience
+            self.reportJSON = reportJSON
+            self.reportVersion = reportVersion
+            self.providerRawValue = providerRawValue
         }
     }
 }
