@@ -134,7 +134,7 @@ final class AnalysisPromptBudgetTests: XCTestCase {
 
     /// Rung 3 — this ladder's own step, for the long list the issue's four
     /// could not reach: a widened window renders thirteen per-week rows in
-    /// each domain. Both halves are cut at the same week, and both say so.
+    /// each domain.
     func testTheTightestBudgetAlsoCapsThePerWeekRowsOfBothDomains() throws {
         let cache = WorstCase(calendar: calendar, reference: reference)
 
@@ -144,11 +144,56 @@ final class AnalysisPromptBudgetTests: XCTestCase {
         for header in ["## Volume per week", "## Endurance per week"] {
             let weeks = try section(prompt, header)
             XCTAssertEqual(weeks.components(separatedBy: "\n- Week starting ").count - 1, 4, header)
-            XCTAssertTrue(
-                weeks.contains("(9 earlier weeks in this window omitted; the totals above cover all 13 weeks)"),
-                header
-            )
+            XCTAssertTrue(weeks.contains("Weeks without sessions are not listed"), header)
+            XCTAssertTrue(weeks.contains("9 earlier ones omitted"), header)
+            XCTAssertTrue(weeks.contains("the totals above cover all 13 weeks"), header)
         }
+    }
+
+    /// The trap rung 3 walked into on its first version: a window is only
+    /// widened *because* the last four weeks hold nothing (#87), so "the four
+    /// most recent weeks" is precisely the four empty ones. The rows follow
+    /// the training, not the calendar.
+    func testTheWeekRowsFollowTheTrainingAndNotTheCalendar() throws {
+        // Nothing in the last four weeks, nine weeks of training before them —
+        // the shape `AnalysisWindow.resolve` actually produces.
+        let cache = WorstCase(calendar: calendar, reference: reference, firstTrainingDaysAgo: 57)
+        let window = try XCTUnwrap(
+            AnalysisWindow.resolve(for: cache.summaries, endingAt: reference, calendar: calendar)
+        )
+        XCTAssertEqual(window.weeks, 13, "the fixture has to widen the window or it tests nothing")
+
+        let prompt = make(cache, window: window, budgetTokens: rungBudget(cache, window: window, rung: 3))
+
+        XCTAssertEqual(prompt.detail.listedWeeks, 4)
+        for header in ["## Volume per week", "## Endurance per week"] {
+            let weeks = try section(prompt, header)
+            XCTAssertEqual(weeks.components(separatedBy: "\n- Week starting ").count - 1, 4, header)
+            // Weeks 0-3 recorded nothing and are gone; the newest week that
+            // did — index 4, "5 weeks back" — leads the list.
+            XCTAssertFalse(weeks.contains("(most recent)"), header)
+            XCTAssertTrue(weeks.contains("(9 weeks back)"), header)
+            XCTAssertTrue(weeks.contains("(12 weeks back)"), header)
+            XCTAssertFalse(weeks.contains(": 0 sessions"), header)
+            XCTAssertTrue(weeks.contains("Weeks without sessions are not listed"), header)
+        }
+    }
+
+    /// The ladder at the **real** budget, not an injected one: a cache whose
+    /// sessions and movements carry pathologically long titles is what a
+    /// 13-week window of both domains needs before 8 000 tokens bind. The
+    /// prompt that goes out is smaller than full and inside the budget.
+    func testAWindowOfVeryLongTitlesDegradesAtTheRealBudget() {
+        let cache = WorstCase(calendar: calendar, reference: reference, titlePadding: 600)
+
+        let prompt = make(cache)
+
+        XCTAssertFalse(prompt.detail.isFull, "the real budget has to bind here")
+        XCTAssertTrue(
+            AnalysisPromptBudget.fits(prompt),
+            "\(AnalysisPromptBudget.estimatedTokens(of: prompt)) estimated tokens"
+        )
+        XCTAssertTrue(prompt.user.contains("in this window omitted"), "the cut has to name itself")
     }
 
     /// A rung only ever gives up list rows. Every aggregate the recommendation
@@ -295,6 +340,7 @@ final class AnalysisPromptBudgetTests: XCTestCase {
 
     private func make(
         _ cache: WorstCase,
+        window: AnalysisWindow = .widest,
         analysisProfile: AnalysisProfile = .overallLoad,
         budgetTokens: Int = AnalysisPromptBudget.maxPromptTokens
     ) -> AnalysisPrompt {
@@ -302,7 +348,7 @@ final class AnalysisPromptBudgetTests: XCTestCase {
             summaries: cache.summaries,
             exercises: cache.exercises,
             progressions: cache.progressions,
-            window: .widest,
+            window: window,
             now: reference,
             calendar: calendar,
             analysisProfile: analysisProfile,
@@ -316,29 +362,14 @@ final class AnalysisPromptBudgetTests: XCTestCase {
     /// Derived from the prompt rather than hard-coded, so a reworded section
     /// moves the threshold with it instead of failing a test about the ladder
     /// for a reason that has nothing to do with it.
-    private func rungBudget(_ cache: WorstCase, rung: Int) -> Int {
-        let previous = AnalysisPromptBuilder.make(
-            summaries: cache.summaries,
-            exercises: cache.exercises,
-            progressions: cache.progressions,
-            window: .widest,
-            now: reference,
-            calendar: calendar,
-            budgetTokens: .max
-        )
+    private func rungBudget(_ cache: WorstCase, window: AnalysisWindow = .widest, rung: Int) -> Int {
         // `.max` always returns the first rung, so walk down from it by
         // rebuilding with a budget one token below what each rung produced.
-        var budget = AnalysisPromptBudget.estimatedTokens(of: previous) - 1
+        var budget = AnalysisPromptBudget.estimatedTokens(
+            of: make(cache, window: window, budgetTokens: .max)
+        ) - 1
         for _ in 0..<max(0, rung - 1) {
-            let step = AnalysisPromptBuilder.make(
-                summaries: cache.summaries,
-                exercises: cache.exercises,
-                progressions: cache.progressions,
-                window: .widest,
-                now: reference,
-                calendar: calendar,
-                budgetTokens: budget
-            )
+            let step = make(cache, window: window, budgetTokens: budget)
             budget = AnalysisPromptBudget.estimatedTokens(of: step) - 1
         }
         return budget
@@ -373,28 +404,46 @@ final class AnalysisPromptBudgetTests: XCTestCase {
     /// comparison window, four strength sessions and four endurance sessions a
     /// week, every muscle group loaded, forty movements with a full
     /// progression each. Titles are the length a real Hevy or Strava session
-    /// carries.
+    /// carries unless `titlePadding` says otherwise.
+    ///
+    /// By default it trains in the last four weeks too, which
+    /// `AnalysisWindow.resolve` would answer with the 4-week rung — the
+    /// fixture is passed `.widest` on purpose, because what it is for is the
+    /// *largest prompt the builder can be made to produce*, not a window the
+    /// ladder would pick. `firstTrainingDaysAgo` is how a test asks for the
+    /// shape `resolve` really produces: a gap at the recent end.
     private struct WorstCase {
         let summaries: [WorkoutSummary]
         let exercises: [ExerciseSummary]
         let progressions: [String: ExerciseProgression]
 
-        init(calendar: Calendar, reference: Date) {
+        /// - Parameters:
+        ///   - firstTrainingDaysAgo: The most recent day that carries a
+        ///     session. 0 — the default — trains right up to the reference day.
+        ///   - titlePadding: Extra characters on every session and exercise
+        ///     title, for the one test that has to make the real budget bind.
+        init(
+            calendar: Calendar,
+            reference: Date,
+            firstTrainingDaysAgo: Int = 0,
+            titlePadding: Int = 0
+        ) {
             let midnight = calendar.startOfDay(for: reference)
             func day(_ daysAgo: Int) -> Date {
                 midnight.addingTimeInterval(Double(-daysAgo) * 86_400 + 43_200)
             }
+            let padding = titlePadding > 0 ? " " + String(repeating: "x", count: titlePadding) : ""
             let groups = MuscleGroup.allCases
             let sports: [ActivityKind] = [.run, .ride, .swim, .hike]
             var summaries: [WorkoutSummary] = []
             // 26 weeks: the widest window of the ladder and its comparison
             // window, so every section of the prompt is filled.
-            for dayIndex in 0..<(26 * 7) {
+            for dayIndex in firstTrainingDaysAgo..<(26 * 7) {
                 if dayIndex % 7 < 4 {
                     summaries.append(
                         WorkoutSummary(
                             id: "hevy:\(dayIndex)",
-                            title: "Upper Body Strength — Push Focus",
+                            title: "Upper Body Strength — Push Focus\(padding)",
                             startTime: day(dayIndex),
                             source: .hevy,
                             kind: .strength,
@@ -412,7 +461,7 @@ final class AnalysisPromptBudgetTests: XCTestCase {
                     summaries.append(
                         WorkoutSummary(
                             id: "strava:\(dayIndex)",
-                            title: "Evening Trail Run in the Jura",
+                            title: "Evening Trail Run in the Jura\(padding)",
                             startTime: day(dayIndex).addingTimeInterval(7_200),
                             source: .strava,
                             kind: sports[dayIndex % sports.count],
@@ -439,26 +488,33 @@ final class AnalysisPromptBudgetTests: XCTestCase {
                 let id = "ex-\(index)"
                 let summary = ExerciseSummary(
                     id: id,
-                    title: "Incline Bench Press (Barbell) \(index)",
+                    title: "Incline Bench Press (Barbell) \(index)\(padding)",
                     muscleGroup: groups[index % groups.count],
                     sessionCount: 12,
                     countedSetCount: 36,
                     volumeKg: Double(9_000 - index * 100),
-                    lastPerformed: day(index % 7)
+                    lastPerformed: day(firstTrainingDaysAgo + index % 7)
                 )
                 exercises.append(summary)
                 progressions[id] = ExerciseProgression(
                     id: id,
                     title: summary.title,
-                    sessions: (0..<12).map { session in
+                    // The same gap the sessions have, so the fixture does
+                    // not claim a movement on a day it recorded no workout.
+                    sessions: (0..<12).map { 89 - $0 * 7 }
+                        .filter { $0 >= firstTrainingDaysAgo }
+                        .enumerated()
+                        .map { position, daysAgo in
                         ExerciseHistoryEntry(
-                            workoutID: "hevy:\(session)",
-                            sessionStart: day(89 - session * 7),
+                            workoutID: "hevy:\(daysAgo)",
+                            sessionStart: day(daysAgo),
                             sets: (0..<3).map {
                                 SetDetail(
                                     index: $0,
                                     type: .normal,
-                                    weightKg: 60 + Double(session) * 2.5,
+                                    // Oldest first, so the newest session is
+                                    // the heaviest and the trend rises.
+                                    weightKg: 60 + Double(position) * 2.5,
                                     reps: 8,
                                     distanceMeters: nil,
                                     durationSeconds: nil,

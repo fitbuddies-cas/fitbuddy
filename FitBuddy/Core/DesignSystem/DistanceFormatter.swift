@@ -52,6 +52,19 @@ enum DistanceFormatter {
         return "\(PlainWeightFormatter.string(parts.value, decimals: parts.decimals)) \(parts.unit)"
     }
 
+    /// The distance `display` and `plain` actually print, back in metres:
+    /// `32_449` → `32_400`, because both print `"32.4 km"` (#186).
+    ///
+    /// For a caller that has to compare or subtract two printed distances
+    /// rather than print one. A delta taken from the unrounded values can
+    /// disagree with the two figures beside it — `32.44 → 35.55` prints
+    /// `"32.4 km"` and `"35.6 km"` but differs by `3.11` — and three numbers
+    /// on one row that do not add up read as a bug whichever of them is right.
+    static func displayedMeters(_ meters: Double) -> Double {
+        let parts = parts(meters)
+        return parts.unit == "km" ? parts.value * 1_000 : parts.value
+    }
+
     /// The value, its precision and its unit — the one place the ranges are
     /// decided, so the display and the prompt can never pick different ones.
     ///

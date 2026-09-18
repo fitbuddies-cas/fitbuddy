@@ -225,11 +225,12 @@ enum EndurancePromptSection {
         days: PromptDayFormatter,
         detail: AnalysisPromptDetail = .full
     ) -> String {
-        let rows = detail.weekRows(in: window)
+        // Bucketed once, like the strength half: the rung asks which weeks
+        // recorded anything before it decides which of them to print (#187).
+        let buckets = PromptFigures.weeks(summaries, window: window, now: now, calendar: calendar)
+        let rows = detail.weekRows(in: window) { buckets[$0].sessions.isEmpty }
         let weeks = rows.indices.map { index -> String in
-            let start = AnalysisWindow.weekStart(index, endingAt: now, calendar: calendar)
-            let end = calendar.date(byAdding: .day, value: 7, to: start) ?? start
-            let inWeek = summaries.filter { $0.startTime >= start && $0.startTime < end }
+            let inWeek = buckets[index].sessions
             let label = index == 0 ? "most recent" : "\(index + 1) weeks back"
             var parts = ["\(inWeek.count) sessions"]
             if let distance = PromptFigures.distance(PromptFigures.distance(of: inWeek)) {
@@ -238,7 +239,8 @@ enum EndurancePromptSection {
             if let time = PromptFigures.duration(PromptFigures.duration(of: inWeek)) {
                 parts.append(time)
             }
-            return "- Week starting \(days.string(start)) (\(label)): \(parts.joined(separator: ", "))"
+            return "- Week starting \(days.string(buckets[index].start)) (\(label)): "
+                + parts.joined(separator: ", ")
         }
         return (["## Endurance per week"] + weeks + [rows.footer].compactMap { $0 })
             .joined(separator: "\n")

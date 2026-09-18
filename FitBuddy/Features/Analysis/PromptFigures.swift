@@ -126,4 +126,25 @@ enum PromptFigures {
         let perWeek = Double(trainingDays) / Double(window.weeks)
         return String(format: "%.1f days", perWeek)
     }
+
+    /// The window's sessions bucketed into its weeks, newest first — index 0
+    /// is the seven days ending on the reference day.
+    ///
+    /// Both per-week sections walked this loop inline; it moved here in #187
+    /// because the token budget's third rung asks which weeks recorded
+    /// anything *before* deciding which of them to print, and computing the
+    /// buckets twice for one section would be the easy way to have the
+    /// question and the rows disagree.
+    static func weeks(
+        _ summaries: [WorkoutSummary],
+        window: AnalysisWindow,
+        now: Date,
+        calendar: Calendar
+    ) -> [(start: Date, sessions: [WorkoutSummary])] {
+        (0..<window.weeks).map { index in
+            let start = AnalysisWindow.weekStart(index, endingAt: now, calendar: calendar)
+            let end = calendar.date(byAdding: .day, value: 7, to: start) ?? start
+            return (start, summaries.filter { $0.startTime >= start && $0.startTime < end })
+        }
+    }
 }

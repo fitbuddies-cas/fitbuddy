@@ -29,7 +29,9 @@ import Foundation
 /// Rung 3 is this type's own addition, for the case the issue's steps cannot
 /// reach: a widened 13-week window renders thirteen per-week rows in each
 /// domain, and those are the last long list left once the two session lists
-/// are capped.
+/// are capped. It keeps the most recent weeks **that recorded training**, not
+/// the most recent weeks — on a widened window those are two very different
+/// sets, and `weekRows(in:isEmpty:)` explains why.
 ///
 /// ## Why the exercise cap travels with the prompt
 ///
@@ -48,8 +50,11 @@ struct AnalysisPromptDetail: Equatable, Sendable {
     /// progression card may be validated against.
     let listedExercises: Int
 
-    /// Weeks the per-week rows of both domains cover, newest first, or `nil`
-    /// for every week of the window.
+    /// How many per-week rows a domain renders, or `nil` for every week of the
+    /// window.
+    ///
+    /// Counted in weeks **that recorded a session**, not in calendar weeks
+    /// from the reference day — see `weekRows(in:isEmpty:)`.
     let listedWeeks: Int?
 
     /// The prompt as #173 to #186 built it: nothing is given up.
@@ -63,11 +68,28 @@ struct AnalysisPromptDetail: Equatable, Sendable {
     /// that is sent; when none does, the last one is — the ladder is what the
     /// app gives up, not a reason to refuse an analysis, and at a sixteenth of
     /// the smallest context window there is room to spare either way.
+    ///
+    /// Every cap is clamped against the rung above it, so lowering
+    /// `maxListedSessions` or `maxListedExercises` can never make a later rung
+    /// *wider* than an earlier one and turn the ladder into a loop that never
+    /// shrinks the prompt.
     static let ladder: [AnalysisPromptDetail] = [
         .full,
-        AnalysisPromptDetail(listedSessions: 20, listedExercises: full.listedExercises, listedWeeks: nil),
-        AnalysisPromptDetail(listedSessions: 20, listedExercises: 6, listedWeeks: nil),
-        AnalysisPromptDetail(listedSessions: 20, listedExercises: 6, listedWeeks: 4),
+        AnalysisPromptDetail(
+            listedSessions: min(20, full.listedSessions),
+            listedExercises: full.listedExercises,
+            listedWeeks: nil
+        ),
+        AnalysisPromptDetail(
+            listedSessions: min(20, full.listedSessions),
+            listedExercises: min(6, full.listedExercises),
+            listedWeeks: nil
+        ),
+        AnalysisPromptDetail(
+            listedSessions: min(20, full.listedSessions),
+            listedExercises: min(6, full.listedExercises),
+            listedWeeks: 4
+        ),
     ]
 
     /// Whether this rung is the untouched prompt — what a test asserting "a
@@ -75,23 +97,65 @@ struct AnalysisPromptDetail: Equatable, Sendable {
     var isFull: Bool { self == .full }
 
     /// Which per-week rows a domain renders, newest first, and the line that
-    /// names the weeks it left out.
+    /// says what was left out.
     ///
-    /// One helper for both domains rather than the same arithmetic twice: the
-    /// strength and the endurance half have to cut at the same week, or the
-    /// two breakdowns of one window would describe different spans and the
-    /// model would have no way to tell.
+    /// **The cut is made at the weeks that recorded training, not at the most
+    /// recent calendar weeks**, and that is the whole difficulty of this rung.
+    /// It only fires on a widened window, and a widened window exists *because
+    /// the last four weeks held nothing* (`AnalysisWindow.resolve`, #87) — so
+    /// "the four most recent weeks" is precisely the four empty ones, and a
+    /// first version of this method would have printed four rows of zeros and
+    /// dropped the nine weeks the person actually trained in. Weeks without a
+    /// session are therefore skipped first, and the cap then applies to what
+    /// is left.
     ///
-    /// - Returns: The week indices to render — 0 is the week ending on the
-    ///   reference day — and a footer, or `nil` when every week is rendered
-    ///   and there is nothing to announce.
-    func weekRows(in window: AnalysisWindow) -> (indices: Range<Int>, footer: String?) {
-        guard let listedWeeks, listedWeeks < window.weeks else { return (0..<window.weeks, nil) }
-        let omitted = window.weeks - listedWeeks
-        return (
-            0..<listedWeeks,
-            "(\(CountFormatter.labelled(omitted, singular: "earlier week")) in this window "
-                + "omitted; the totals above cover all \(window.weeks) weeks)"
-        )
+    /// Dropping an empty row loses nothing: each row carries its own absolute
+    /// position ("5 weeks back"), so a week that is not printed is a week with
+    /// no sessions, which is exactly what its row would have said. The footer
+    /// states both facts, and the totals above the section cover the whole
+    /// window either way.
+    ///
+    /// **Each domain cuts at its own weeks.** An earlier version insisted the
+    /// two halves cut identically; once the rows are chosen by "did this
+    /// domain train that week", identical cuts would mean printing a zero row
+    /// in one half to match a real one in the other. The absolute labels make
+    /// a missing week unambiguous in either section.
+    ///
+    /// - Parameters:
+    ///   - window: The analysed window, whose `weeks` is the full row count.
+    ///   - isEmpty: Whether week `index` holds no session of this domain — 0
+    ///     is the week ending on the reference day. Asked rather than computed
+    ///     here, because the section buckets the sessions anyway and this type
+    ///     has no business knowing about dates.
+    /// - Returns: The week indices to render, newest first, and a footer, or
+    ///   `nil` when every week is rendered and there is nothing to announce.
+    func weekRows(
+        in window: AnalysisWindow,
+        isEmpty: (Int) -> Bool = { _ in false }
+    ) -> (indices: [Int], footer: String?) {
+        let all = Array(0..<window.weeks)
+        guard let listedWeeks, listedWeeks < window.weeks else { return (all, nil) }
+        let recorded = all.filter { !isEmpty($0) }
+        // Nothing recorded anywhere: the section is not rendered at all in
+        // that case, but a caller that does render it gets the plain cut
+        // rather than an empty list.
+        guard !recorded.isEmpty else {
+            return (Array(all.prefix(listedWeeks)), footer(omittedRecordedWeeks: 0, window: window))
+        }
+        let listed = Array(recorded.prefix(listedWeeks))
+        guard listed.count < all.count else { return (listed, nil) }
+        return (listed, footer(omittedRecordedWeeks: recorded.count - listed.count, window: window))
+    }
+
+    /// The one line that announces the cut: which rows are missing and why,
+    /// and that the figures above the section are unaffected.
+    private func footer(omittedRecordedWeeks omitted: Int, window: AnalysisWindow) -> String {
+        let spread = "the totals above cover all \(window.weeks) weeks"
+        guard omitted > 0 else {
+            return "(Weeks without sessions are not listed; \(spread).)"
+        }
+        return "(Weeks without sessions are not listed. Of the weeks with sessions, the most "
+            + "recent are shown and \(CountFormatter.labelled(omitted, singular: "earlier one")) "
+            + "omitted; \(spread).)"
     }
 }

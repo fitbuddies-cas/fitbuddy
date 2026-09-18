@@ -122,14 +122,16 @@ enum StrengthPromptSection {
         days: PromptDayFormatter,
         detail: AnalysisPromptDetail = .full
     ) -> String {
-        let rows = detail.weekRows(in: window)
+        // Bucketed once: the rung asks which weeks recorded anything before it
+        // decides which of them to print (#187).
+        let buckets = PromptFigures.weeks(summaries, window: window, now: now, calendar: calendar)
+        let rows = detail.weekRows(in: window) { buckets[$0].sessions.isEmpty }
         let weeks = rows.indices.map { index -> String in
-            let start = AnalysisWindow.weekStart(index, endingAt: now, calendar: calendar)
-            let end = calendar.date(byAdding: .day, value: 7, to: start) ?? start
-            let inWeek = summaries.filter { $0.startTime >= start && $0.startTime < end }
+            let bucket = buckets[index]
             let label = index == 0 ? "most recent" : "\(index + 1) weeks back"
-            return "- Week starting \(days.string(start)) (\(label)): "
-                + "\(inWeek.count) sessions, \(PromptFigures.kg(PromptFigures.volume(of: inWeek)))"
+            return "- Week starting \(days.string(bucket.start)) (\(label)): "
+                + "\(bucket.sessions.count) sessions, "
+                + "\(PromptFigures.kg(PromptFigures.volume(of: bucket.sessions)))"
         }
         return (["## Volume per week"] + weeks + [rows.footer].compactMap { $0 }).joined(separator: "\n")
     }
@@ -199,7 +201,13 @@ enum StrengthPromptSection {
         let listed = sorted.prefix(max(0, detail.listedSessions))
         let rows = listed.map { sessionRow($0, days: days) }
         let omitted = sorted.count - listed.count
-        let footer = omitted > 0 ? ["(\(omitted) older sessions in this window omitted)"] : []
+        // Through `CountFormatter` like every other counted noun in the
+        // prompt: with the budget's 20-session rung the boundary case is
+        // reachable, and "1 older sessions" is the kind of sentence that makes
+        // a model distrust the figures around it.
+        let footer = omitted > 0
+            ? ["(\(CountFormatter.labelled(omitted, singular: "older session")) in this window omitted)"]
+            : []
         return (["## Sessions (newest first)"] + rows + footer).joined(separator: "\n")
     }
 
