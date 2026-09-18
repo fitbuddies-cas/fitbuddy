@@ -78,10 +78,25 @@ struct WorkoutSummary: Hashable, Identifiable, Sendable {
     }
 
     /// Whether the session is better described by distance and time than by
-    /// kg: it moved no load but logged either. A Strava run, or a Hevy
-    /// session made of treadmill sets.
+    /// kg. Since #180 `kind` decides this wherever it was actually mapped,
+    /// and the old heuristic — moved no load, but logged distance or time —
+    /// is only the fallback where it was not.
+    ///
+    /// Two kinds are authoritative. An endurance discipline is cardio
+    /// whatever it logged, so a Strava `WeightTraining` session no longer
+    /// reads as a run just because it moved no barbell. `.strength` rules the
+    /// session out only when an endurance source mapped it from its own
+    /// vocabulary (`WeightTraining`, `STRENGTH_TRAINING`) — Hevy's
+    /// `.strength` is the model's default rather than a classification, so it
+    /// says nothing, and a Hevy session of treadmill sets still falls through
+    /// to the heuristic.
+    ///
+    /// `.other` falls through as well. That is what a row cached before V5
+    /// reads as, where the sport was never recorded (see `Workout.kind`).
     var isCardio: Bool {
-        volumeKg == 0 && (distanceMeters != nil || durationSeconds != nil)
+        if kind.isEndurance { return true }
+        if kind == .strength, source.isEnduranceSource { return false }
+        return volumeKg == 0 && (distanceMeters != nil || durationSeconds != nil)
     }
 }
 

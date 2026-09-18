@@ -101,12 +101,69 @@ final class WorkoutSummaryMuscleLoadTests: XCTestCase {
         XCTAssertFalse(summary.isCardio)
     }
 
+    // MARK: - kind decides what is cardio (#180)
+
+    /// A `WeightTraining` session from Strava logs a duration and no load, so
+    /// the old heuristic called it cardio. The mapped sport says otherwise,
+    /// and it wins.
+    func testAStrengthSessionFromAnEnduranceSourceIsNotCardio() {
+        let summary = WorkoutSummary(workout: Workout(
+            id: "strava:2",
+            title: "Gym",
+            startTime: Date(timeIntervalSince1970: 1_750_000_000),
+            source: .strava,
+            kind: .strength,
+            exercises: [
+                Exercise(index: 0, title: "WeightTraining", sets: [
+                    ExerciseSet(index: 0, type: .normal, durationSeconds: 3_600),
+                ]),
+            ]
+        ))
+
+        XCTAssertEqual(summary.kind, .strength)
+        XCTAssertFalse(summary.isCardio)
+    }
+
+    /// A row cached before V5 has no sport recorded and reads as `.other`
+    /// (see `Workout.kind`), so the heuristic still has to answer for it —
+    /// otherwise a migrated run would stop showing its distance.
+    func testASessionCachedWithoutAKindFallsBackToTheHeuristic() {
+        let workout = stravaRun(distance: 5_000, movingTime: 1_800)
+        workout.kindRawValue = nil
+
+        let summary = WorkoutSummary(workout: workout)
+
+        XCTAssertEqual(summary.kind, .other)
+        XCTAssertTrue(summary.isCardio)
+    }
+
+    /// Hevy has no sport vocabulary, so every Hevy session is `.strength` by
+    /// default rather than by classification. A treadmill session logged
+    /// there has to keep reading as cardio.
+    func testAHevySessionWithOnlyADurationIsStillCardio() {
+        let summary = WorkoutSummary(workout: Workout(
+            id: "w-1",
+            title: "Conditioning",
+            startTime: Date(timeIntervalSince1970: 1_750_000_000),
+            exercises: [
+                Exercise(index: 0, title: "Treadmill", sets: [
+                    ExerciseSet(index: 0, type: .normal, durationSeconds: 1_200),
+                ]),
+            ]
+        ))
+
+        XCTAssertEqual(summary.kind, .strength)
+        XCTAssertEqual(summary.source, .hevy)
+        XCTAssertTrue(summary.isCardio)
+    }
+
     private func stravaRun(distance: Double, movingTime: Int, source: ConnectorSource = .strava) -> Workout {
         Workout(
             id: "\(source.rawValue):1",
             title: "Morning Run",
             startTime: Date(timeIntervalSince1970: 1_750_000_000),
             source: source,
+            kind: .run,
             exercises: [
                 Exercise(index: 0, title: "Run", sets: [
                     ExerciseSet(index: 0, type: .normal, distanceMeters: distance, durationSeconds: movingTime),
