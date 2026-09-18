@@ -104,7 +104,9 @@ struct StravaActivityDTO: Decodable, Equatable, Sendable {
             elevationGainMeters: totalElevationGain.flatMap { $0 > 0 ? $0 : nil },
             averageSpeedMetersPerSecond: averageSpeed.flatMap { $0 > 0 ? $0 : nil },
             energyKilojoules: kilojoules.flatMap { $0 > 0 ? $0 : nil },
-            perceivedEffort: sufferScore
+            // Zero for the same reason: a block whose only content is
+            // "effort 0" is not cardio data.
+            perceivedEffort: sufferScore.flatMap { $0 > 0 ? $0 : nil }
         ).nonEmpty
     }
 
@@ -126,7 +128,9 @@ struct StravaActivityDTO: Decodable, Equatable, Sendable {
         case _ where raw.hasSuffix("swim"): return .swim
         case _ where raw.hasSuffix("hike"): return .hike
         case _ where raw.hasSuffix("walk"): return .walk
-        case "weighttraining", "workout", "crossfit": return .strength
+        // `Workout` is deliberately absent: it is Strava's catch-all for
+        // mobility, stretching or a class, not a gym session.
+        case "weighttraining", "crossfit": return .strength
         default: return .other
         }
     }

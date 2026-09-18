@@ -107,13 +107,26 @@ struct PolarExerciseDTO: Decodable, Equatable, Sendable {
     /// Maps Polar's sport vocabulary onto `ActivityKind` — the only place it
     /// happens (#180).
     ///
+    /// Both labels are consulted, the finer one first: `detailed_sport_info`
+    /// is more specific than `sport`, but it is also the one Polar keeps
+    /// extending, and an unrecognised `FUNCTIONAL_TRAINING` must not drop a
+    /// session whose `sport` plainly says `STRENGTH_TRAINING` out of the
+    /// strength domain. So `.other` from the detailed label means "ask the
+    /// coarse one", not "unclassified".
+    static func kind(sport: String?, detailed: String?) -> ActivityKind {
+        let fromDetailed = kind(label: detailed)
+        return fromDetailed == .other ? kind(label: sport) : fromDetailed
+    }
+
+    /// One Polar sport label.
+    ///
     /// Matched on a substring of the upper-case label, because Polar composes
     /// its sports the other way round from Strava: the discipline sits at the
     /// end (`TREADMILL_RUNNING`, `OPEN_WATER_SWIMMING`) or the start
-    /// (`RUNNING_INDOOR`), and `detailed_sport_info` is the finer of the two
-    /// labels. Anything else — `OTHER_INDOOR`, `YOGA` — is `.other`.
-    static func kind(sport: String?, detailed: String?) -> ActivityKind {
-        let raw = (detailed ?? sport ?? "").uppercased()
+    /// (`RUNNING_INDOOR`). Anything else — `OTHER_INDOOR`, `YOGA` — is
+    /// `.other`.
+    private static func kind(label: String?) -> ActivityKind {
+        let raw = (label ?? "").uppercased()
         if raw.contains("STRENGTH") { return .strength }
         if raw.contains("RUNNING") || raw.contains("JOGGING") { return .run }
         if raw.contains("CYCLING") || raw.contains("BIKING") { return .ride }

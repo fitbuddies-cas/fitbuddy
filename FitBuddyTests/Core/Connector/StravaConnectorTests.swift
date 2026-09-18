@@ -221,7 +221,7 @@ final class StravaConnectorTests: XCTestCase {
 
     /// Zero is what Strava sends for what it never measured, so it must not
     /// turn into "0 m of ascent" or "0 m/s".
-    func testZeroElevationSpeedAndEnergyDecodeAsNotLogged() async throws {
+    func testZeroElevationSpeedEnergyAndEffortDecodeAsNotLogged() async throws {
         stub(pages: [StravaPayloadFactory.page([
             StravaPayloadFactory.activity(
                 id: 1,
@@ -229,7 +229,8 @@ final class StravaConnectorTests: XCTestCase {
                 sportType: "Swim",
                 totalElevationGain: 0,
                 averageSpeed: 0,
-                kilojoules: 0
+                kilojoules: 0,
+                sufferScore: 0
             ),
         ])])
 
@@ -254,6 +255,9 @@ final class StravaConnectorTests: XCTestCase {
             ("Crossfit", .strength),
             ("Yoga", .other),
             ("Kitesurf", .other),
+            // Strava's catch-all for mobility, stretching or a class — not a
+            // gym session, so it stays unclassified.
+            ("Workout", .other),
         ]
 
         for (sportType, expected) in cases {
