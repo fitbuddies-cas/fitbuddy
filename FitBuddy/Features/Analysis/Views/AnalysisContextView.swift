@@ -27,7 +27,7 @@ struct AnalysisContextView: View {
                     // mock (`FBAnalysisContextLine`, #196).
                     .padding(.leading, 14)
             }
-            if !context.window.isDefault {
+            if let widenedNote = context.widenedWindowNote {
                 Text(widenedNote)
                     .font(.caption)
             }
@@ -80,23 +80,6 @@ struct AnalysisContextView: View {
         }
         guard !parts.isEmpty else { return nil }
         return parts.joined(separator: " · ")
-    }
-
-    /// Why the period is not the usual four weeks. Carried over from
-    /// `AnalysisWindowNote`: what the user cannot work out on their own is
-    /// that this recommendation reaches further back than the app normally
-    /// looks, and that an empty recent window is the reason.
-    ///
-    /// Past tense and phrased around the covered window, because a restored
-    /// recommendation (#97) is read hours or days after its run: "the last
-    /// four weeks" would then mean a period the analysis never saw, and the
-    /// empty weeks are the *most recent* ones inside the widened window, not
-    /// the ones before it.
-    private var widenedNote: String {
-        """
-        This analysis covered \(context.window.weeks) weeks — its most recent \
-        \(AnalysisWindow.default.weeks) held no sessions.
-        """
     }
 
     /// US-6 AC2, naming the thin domain since US-15 AC4 — the wording comes

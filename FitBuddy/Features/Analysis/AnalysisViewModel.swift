@@ -499,9 +499,16 @@ final class AnalysisViewModel: ObservableObject {
             // its comparison window, and reporting those sessions as the data
             // basis would overstate it by a factor of six.
             let counts = Self.sessionCounts(in: cached, from: start)
+            // The thin-data verdict is about what the model was shown, so the
+            // analysed breakdown is counted over `summaries` — the very array
+            // handed to the prompt builder below — and not over the window
+            // (US-6 AC2, #182). While `strengthSessions(in:)` filters by
+            // source the two genuinely differ, and the difference is the whole
+            // point: a basis half of which never reached the prompt is thin.
             context = AnalysisContext(
                 sessionCounts: counts.sources,
                 domainCounts: counts.domains,
+                analysedCounts: Self.sessionCounts(in: summaries, from: start).domains,
                 window: window,
                 profile: profile
             )
