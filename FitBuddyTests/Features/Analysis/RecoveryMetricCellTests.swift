@@ -37,7 +37,8 @@ final class RecoveryMetricCellTests: XCTestCase {
             RecoveryMetricCell(label: "Sessions / 7d", value: "6"),
             RecoveryMetricCell(label: "Avg RPE", value: "8.2"),
             RecoveryMetricCell(label: "Avg HR", value: "148", unit: "bpm"),
-            RecoveryMetricCell(label: "Suggested rest", value: "48 h"),
+            // Short form: "SUGGESTED REST" truncates in a four-column row.
+            RecoveryMetricCell(label: "Rest", value: "48 h"),
         ])
     }
 
@@ -55,12 +56,30 @@ final class RecoveryMetricCellTests: XCTestCase {
     }
 
     /// A Hevy-only week is what it was before #184: no heart rate anywhere,
-    /// so no cell for one.
+    /// so no cell for one, and the rest label keeps its long form.
     func testAStrengthOnlyWeekKeepsItsThreeCells() {
         let cells = RecoveryMetricCell.cells(
             for: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: 8.2)
         )
 
         XCTAssertEqual(cells.map(\.label), ["Sessions / 7d", "Avg RPE", "Suggested rest"])
+    }
+
+    /// Only the four-cell row shortens the rest label — three cells have the
+    /// width for "Suggested rest", and shortening them would be a change to a
+    /// screen nobody asked to change.
+    func testOnlyTheFourCellRowShortensTheRestLabel() {
+        let byCount = [
+            RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: nil),
+            RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: 8.2),
+            RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: nil, averageHeartRate: 148),
+            RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: 8.2, averageHeartRate: 148),
+        ].map { RecoveryMetricCell.cells(for: $0) }
+
+        XCTAssertEqual(byCount.map(\.count), [2, 3, 3, 4])
+        XCTAssertEqual(
+            byCount.map { $0.last?.label },
+            ["Suggested rest", "Suggested rest", "Suggested rest", "Rest"]
+        )
     }
 }

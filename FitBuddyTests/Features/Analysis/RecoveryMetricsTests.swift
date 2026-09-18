@@ -177,6 +177,29 @@ final class RecoveryMetricsTests: XCTestCase {
         XCTAssertEqual(metrics.averageHeartRate, 120)
     }
 
+    /// A provider that writes `0` for a session recorded without a strap is
+    /// saying "not measured": averaging it in turned one run at 150 bpm into
+    /// `Avg HR 75` on the card while the prompt said 150.
+    func testAZeroHeartRateIsNotAMeasurement() {
+        let summaries = [
+            summary("run", daysAgo: 1, source: .strava, kind: .run, heartRate: 150),
+            summary("indoor", daysAgo: 2, source: .strava, kind: .ride, heartRate: 0),
+        ]
+
+        let metrics = RecoveryMetrics(summaries: summaries, details: [], now: reference, calendar: calendar)
+
+        XCTAssertEqual(metrics.averageHeartRate, 150)
+    }
+
+    /// Only zeros: nothing was measured, so there is no figure and no cell.
+    func testOnlyZeroHeartRatesLeaveNoMean() {
+        let summaries = [summary("indoor", daysAgo: 1, source: .strava, kind: .ride, heartRate: 0)]
+
+        let metrics = RecoveryMetrics(summaries: summaries, details: [], now: reference, calendar: calendar)
+
+        XCTAssertNil(metrics.averageHeartRate)
+    }
+
     func testAverageHeartRateIsNilWhenNothingRecordedOne() {
         let summaries = [summary("run", daysAgo: 1, source: .strava, kind: .run)]
 

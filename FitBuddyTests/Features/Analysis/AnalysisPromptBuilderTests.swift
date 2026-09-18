@@ -543,16 +543,52 @@ final class AnalysisPromptBuilderTests: XCTestCase {
 
     // MARK: - Week structure (US-15 AC2, #183)
 
-    /// The section exists to relate the two domains, so it appears exactly
-    /// when there are two of them.
-    func testTheWeekStructureSectionAppearsOnlyWhenBothDomainsHaveSessions() {
+    /// The gate is endurance, not both domains (#184 review, finding 5): a
+    /// Hevy-only prompt is unchanged (#183 AC1), while a Strava-only one needs
+    /// the day count the app overrules it on. Replaces
+    /// `testTheWeekStructureSectionAppearsOnlyWhenBothDomainsHaveSessions`.
+    func testTheWeekStructureSectionAppearsWheneverThereIsEndurance() {
         let both = make([workout(daysAgo: 1, volume: 3_000), run(daysAgo: 2)])
         let strengthOnly = make([workout(daysAgo: 1, volume: 3_000)])
         let enduranceOnly = make([run(daysAgo: 2)])
 
         XCTAssertTrue(both.user.contains("## Week structure (last 4 weeks)"))
         XCTAssertFalse(strengthOnly.user.contains("## Week structure"))
-        XCTAssertFalse(enduranceOnly.user.contains("## Week structure"))
+        XCTAssertTrue(enduranceOnly.user.contains("## Week structure (last 4 weeks)"))
+    }
+
+    /// An endurance-only window gets the streak and the last seven days and
+    /// nothing else: its own training days are in the endurance header, and
+    /// "Days with strength only: 0" would restate the absence of a section the
+    /// model was told not to reason about.
+    func testAnEnduranceOnlyWeekStructureCarriesOnlyTheCrossWeekFigures() throws {
+        let prompt = make([
+            run(daysAgo: 1, id: "s1"),
+            run(daysAgo: 2, id: "s2", title: "Evening Run"),
+        ])
+        let structure = try section(prompt, "## Week structure")
+
+        XCTAssertTrue(
+            structure.contains("Last 7 days: 2 training days (0 strength sessions, 2 endurance sessions)"),
+            structure
+        )
+        XCTAssertTrue(structure.contains("Longest streak of consecutive training days: 2 days ("))
+        XCTAssertFalse(structure.contains("Days with strength only"))
+        XCTAssertFalse(structure.contains("Days with both"))
+        XCTAssertFalse(structure.contains("Rest days"))
+        XCTAssertFalse(structure.contains("Training days:"))
+    }
+
+    /// Six runs on six days: the prompt states the count US-3 AC6 turns on,
+    /// where before #184 no such line existed for a cache without strength.
+    func testAnEnduranceOnlyWeekReportsSixTrainingDays() throws {
+        let prompt = make((0..<6).map { run(daysAgo: $0, id: "s\($0)") })
+        let structure = try section(prompt, "## Week structure")
+
+        XCTAssertTrue(
+            structure.contains("Last 7 days: 6 training days (0 strength sessions, 6 endurance sessions)"),
+            structure
+        )
     }
 
     func testTheWeekStructureCountsDaysPerDomainAndTheLongestStreak() throws {
@@ -642,6 +678,39 @@ final class AnalysisPromptBuilderTests: XCTestCase {
             structure.contains("Last 7 days: 1 training day (1 strength session, 1 endurance session)"),
             structure
         )
+    }
+
+    /// The line carries the figure the recovery card prints as "Avg HR", not
+    /// the endurance section's window mean — otherwise a card reason could cite
+    /// one number above a label showing another (#184 review, finding 4).
+    func testTheLastSevenDaysLineCarriesTheCardsHeartRate() throws {
+        let summaries = [
+            workout(daysAgo: 1, volume: 3_000, id: "h1"),
+            run(daysAgo: 2, id: "s1", heartRate: 150),
+            run(daysAgo: 3, id: "s2", heartRate: 160),
+            // Older than the week, and far off the week's mean: it moves the
+            // endurance section's figure and must not move this one.
+            run(daysAgo: 20, id: "s3", heartRate: 100),
+        ]
+        let prompt = make(summaries)
+        let structure = try section(prompt, "## Week structure")
+        let metrics = RecoveryMetrics(summaries: summaries, details: [], now: reference, calendar: calendar)
+
+        XCTAssertEqual(metrics.averageHeartRate, 155)
+        XCTAssertTrue(structure.contains("mean heart rate 155 bpm"), structure)
+    }
+
+    /// Nothing in the week wore a strap: the figure is omitted, not zero
+    /// (US-15 AC7).
+    func testTheLastSevenDaysLineOmitsAHeartRateNobodyRecorded() throws {
+        let prompt = make([
+            workout(daysAgo: 1, volume: 3_000, id: "h1"),
+            run(daysAgo: 2, id: "s1"),
+        ])
+        let structure = try section(prompt, "## Week structure")
+
+        XCTAssertTrue(structure.contains("Last 7 days:"), structure)
+        XCTAssertFalse(structure.contains("mean heart rate"), structure)
     }
 
     // MARK: - Exercises (#173)
