@@ -22,7 +22,7 @@ enum SetMetricFormatter {
         return CountFormatter.labelled(reps, singular: "rep")
     }
 
-    /// `800` → `"800 m"`, `5000` → `"5.0 km"`.
+    /// `800` → `"800 m"`, `5_000` → `"5 km"`, `5_400` → `"5.4 km"`.
     ///
     /// The unit rules are `DistanceFormatter`'s since #181, so a distance
     /// logged as a set and the same distance on an endurance card read the

@@ -321,11 +321,13 @@ enum AnalysisPromptBuilder {
     are trained at clearly different frequencies, naming each group and its \
     sessions per week exactly as the Muscle groups section lists them. Use \
     "metric" for a figure of the week as a whole rather than of one exercise \
-    — weekly distance, long run, weekly volume, mean heart rate, weekly \
-    training time: label names the figure, unit is the unit both numbers are \
-    in, from is that figure as the last 7 days report it, to is the figure \
-    you recommend, source is a short header label such as Run, Ride or \
-    Strength, or an empty string when none fits. Keep to within a fifth of \
+    — weekly distance, long run, weekly volume, weekly training time: label \
+    names the figure, unit is the unit both numbers are in, from is that \
+    figure written exactly as the last 7 days report it, to is the figure you \
+    recommend, source is a short header label such as Run, Ride or Strength, \
+    or an empty string when none fits. There is no unit for a heart rate: \
+    rule 7 stands, and a card is a target, so a heart rate is not something \
+    to recommend a new value for. Keep to within a fifth of \
     from: one week of data does not back a larger step. Use "interference" \
     when strength and endurance sessions shared days in the last 7, taking \
     the three day counts from the Week structure section. Use \

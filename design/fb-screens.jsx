@@ -797,7 +797,8 @@ const REPORT_ENDURANCE = {
 // Overall load (3.4d, US-15 AC2/AC7): both domains in one report. The
 // interference card is the one card neither domain could have produced — it is
 // about how the two sit in the same week. Colour follows meaning: the metric
-// card that adds load is green, the interference card warns and is orange.
+// card that adds load is green, the one that asks for less and the interference
+// card are orange.
 const REPORT_OVERALL = {
   verdict: 'hold',
   lead: 'Strength and running landed on the same three days last week. Separate them before adding anything.',
@@ -817,9 +818,9 @@ const REPORT_OVERALL = {
     },
     {
       kind: 'metric',
-      label: 'Mean heart rate', unit: 'bpm', source: 'Run',
-      from: '152 bpm', to: '148 bpm', delta: '−4 bpm',
-      reasoning: 'Run the easy sessions a little easier so the lifting days start fresher.',
+      label: 'Weekly running time', unit: 'h', source: 'Run',
+      from: '3 h 20 min', to: '2 h 50 min', delta: '−30 min',
+      reasoning: 'Half an hour less running this week, taken off the day before you lift.',
     },
   ],
 };
@@ -1091,8 +1092,12 @@ function ProgressionRecCard({ exercise, muscle, from, to, delta, reasoning }) {
  * label do not compete on the left.
  *
  * @prop label      string  what the figure is, e.g. 'Weekly distance'
- * @prop unit       string  'kg' | 'km' | 'min/km' | 'bpm' | 'h' — the enum the
- *                          schema carries; the app formats the value with it
+ * @prop unit       string  'kg' | 'km' | 'min/km' | 'h' — the enum the schema
+ *                          carries; the app formats the value with it.
+ *                          **No heart-rate unit:** a card is a figure and a
+ *                          target for it, and ground rule 7 forbids the model
+ *                          naming a target heart rate. The app may still build
+ *                          a heart-rate card from its own figure.
  * @prop source     string? small right-hand label ('Run', 'Strength', 'Chest').
  *                          Absent → no label, never an empty pill
  * @prop from       string  the app's own current figure — checked against the
