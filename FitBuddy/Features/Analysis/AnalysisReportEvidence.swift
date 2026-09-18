@@ -74,6 +74,11 @@ extension AnalysisReportEvidence {
     ///   - analysisProfile: The profile the run was made under (#185, #186).
     ///     The default covers both domains, i.e. the behaviour of every build
     ///     before the choice existed.
+    ///   - promptDetail: The rung the prompt was built at (#187). Only the
+    ///     exercise list is affected: it is the one piece of evidence a
+    ///     shortened prompt would otherwise leave the validator holding more
+    ///     of than the model ever saw. Every other figure here is an aggregate
+    ///     the ladder does not touch.
     init(
         summaries: [WorkoutSummary],
         exercises: [ExerciseSummary],
@@ -82,7 +87,8 @@ extension AnalysisReportEvidence {
         window: AnalysisWindow,
         now: Date,
         calendar: Calendar = .current,
-        analysisProfile: AnalysisProfile = .overallLoad
+        analysisProfile: AnalysisProfile = .overallLoad,
+        promptDetail: AnalysisPromptDetail = .full
     ) {
         let recovery = RecoveryMetrics(summaries: summaries, details: details, now: now, calendar: calendar)
         let unanalysed = RecoveryMetrics
@@ -94,7 +100,8 @@ extension AnalysisReportEvidence {
                 progressions: progressions,
                 window: window,
                 now: now,
-                calendar: calendar
+                calendar: calendar,
+                detail: promptDetail
             ),
             muscleGroupsPerWeek: MuscleGroupFrequency.sessionsPerWeek(
                 in: AnalysisPromptBuilder.analysedSessions(

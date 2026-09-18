@@ -31,4 +31,12 @@ struct AnalysisRunReads: Sendable {
     /// under a profile that left strength out it was shown no exercise to
     /// progress.
     var analysisProfile: AnalysisProfile = .overallLoad
+    /// The rung of the token budget's ladder the prompt was built at (#187).
+    ///
+    /// Travels for the same reason the profile does: a prompt trimmed to six
+    /// exercises has to be validated against six, or a progression card could
+    /// be checked against a movement the model was never shown. Defaulted, so
+    /// a fixture written before the budget existed describes the untouched
+    /// prompt.
+    var promptDetail: AnalysisPromptDetail = .full
 }
