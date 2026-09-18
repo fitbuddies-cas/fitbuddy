@@ -56,6 +56,17 @@ extension FitBuddySchemaV5 {
         /// before #182, where it means "all of them Hevy's" and not "none" —
         /// the analysis had no other source to count.
         var sessionCountsJSON: Data?
+        /// The analysis profile the run was made under, as
+        /// `AnalysisProfile.rawValue` (US-15 AC1, #185) — `nil` on every row
+        /// written before the choice existed, where it means "there was none"
+        /// and not "Overall load".
+        ///
+        /// Stored because the profile decided which domains reached the
+        /// prompt: without it two rows from the same week can give opposite
+        /// advice with nothing in the history to explain why. Its own column
+        /// rather than a key in `sessionCountsJSON`: that blob describes the
+        /// sessions, and this is a decision about them.
+        var analysisProfileRawValue: String?
         /// The training goal the run was steered by, as `TrainingGoal.rawValue`
         /// (US-13 AC4, #192) — `nil` when the user had not set one. Stored for
         /// the same reason as `sessionCount`: the basis line above a restored
@@ -97,6 +108,14 @@ extension FitBuddySchemaV5 {
             providerRawValue.flatMap(LLMProvider.init(rawValue:))
         }
 
+        /// Typed view of `analysisProfileRawValue`, with the same reading of an
+        /// unknown value as `provider`: a profile a newer build wrote is
+        /// nothing this one can name, so the row renders without one rather
+        /// than claiming a guess.
+        var analysisProfile: AnalysisProfile? {
+            analysisProfileRawValue.flatMap(AnalysisProfile.init(rawValue:))
+        }
+
         init(
             id: UUID = UUID(),
             text: String,
@@ -104,6 +123,7 @@ extension FitBuddySchemaV5 {
             windowWeeks: Int,
             sessionCount: Int,
             sessionCountsJSON: Data? = nil,
+            analysisProfileRawValue: String? = nil,
             goal: String? = nil,
             experience: String? = nil,
             reportJSON: Data? = nil,
@@ -116,6 +136,7 @@ extension FitBuddySchemaV5 {
             self.windowWeeks = windowWeeks
             self.sessionCount = sessionCount
             self.sessionCountsJSON = sessionCountsJSON
+            self.analysisProfileRawValue = analysisProfileRawValue
             self.goal = goal
             self.experience = experience
             self.reportJSON = reportJSON
