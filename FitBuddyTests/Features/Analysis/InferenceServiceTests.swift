@@ -97,19 +97,35 @@ final class InferenceServiceTests: XCTestCase {
         }
     }
 
-    // MARK: - Streaming (AC: Streaming-Output erscheint inkrementell)
+    // MARK: - Answer (#174: collected, then decoded)
 
-    func testStreamsIncrementalTextAfterAnnouncingTheProvider() async throws {
+    /// The chunks of a structured answer are fragments of one JSON document:
+    /// they are joined and decoded before anything reaches the consumer.
+    func testYieldsTheDecodedReportAfterAnnouncingTheProvider() async throws {
+        let json = AnalysisReportFixtures.progressJSON
+        let middle = json.index(json.startIndex, offsetBy: json.count / 2)
+        claude.chunks = [String(json[..<middle]), String(json[middle...])]
+
+        let events = try await run()
+
+        XCTAssertEqual(events, [
+            .attempting(.claude),
+            .report(AnalysisReportFixtures.progress)
+        ])
+    }
+
+    /// US-14 AC5: an answer that is not a report is still an answer — one
+    /// piece of prose, not an error and not a fallback to the next provider.
+    func testYieldsProseInOnePieceWhenTheAnswerIsNotAReport() async throws {
         claude.chunks = ["Increase ", "squat ", "by 2.5 kg."]
 
         let events = try await run()
 
         XCTAssertEqual(events, [
             .attempting(.claude),
-            .text("Increase "),
-            .text("squat "),
-            .text("by 2.5 kg.")
+            .text("Increase squat by 2.5 kg.")
         ])
+        XCTAssertEqual(claude.callCount, 1)
     }
 
     func testPassesThePromptsAndTheStoredKeyToTheClient() async throws {
@@ -215,10 +231,10 @@ final class InferenceServiceTests: XCTestCase {
         XCTAssertEqual(attempted(in: events), [.claude, .gemini])
     }
 
-    /// The partial text of a failed provider still reaches the consumer, but
-    /// only ahead of the `attempting` that tells it to throw the text away —
-    /// so the two answers can never be shown merged.
-    func testPartialOutputOfAFailedProviderIsFollowedByTheNextAttempt() async throws {
+    /// The partial output of a failed provider never reaches the consumer:
+    /// the answer is only yielded once it is complete, so the two answers can
+    /// never be shown merged.
+    func testPartialOutputOfAFailedProviderIsNeverYielded() async throws {
         try await keychain.save("AIza", for: .geminiAPIKey)
         claude.chunks = ["Half an ans"]
         claude.streamError = InferenceServiceError.streamInterrupted(message: "Overloaded")
@@ -228,10 +244,58 @@ final class InferenceServiceTests: XCTestCase {
 
         XCTAssertEqual(events, [
             .attempting(.claude),
-            .text("Half an ans"),
             .attempting(.gemini),
             .text("Gemini answer")
         ])
+    }
+
+    /// A JSON answer cut off before its summary would reach the screen as raw
+    /// JSON: it is treated as unreadable, and the chain moves on.
+    func testFallsBackWhenAJSONAnswerIsCutOffBeforeItsSummary() async throws {
+        try await keychain.save("AIza", for: .geminiAPIKey)
+        claude.chunks = [#"{"headline": "Go.", "verdict": "progress", "summ"#]
+        sut = makeService(priority: [.claude, .gemini])
+
+        let events = try await run()
+
+        XCTAssertEqual(attempted(in: events), [.claude, .gemini])
+        XCTAssertEqual(text(of: events), "Gemini answer")
+    }
+
+    func testRaisesInvalidResponseWhenTheLastProviderCutsOffItsJSON() async throws {
+        claude.chunks = [#"{"headline": "Go.", "verdict": "progress", "summ"#]
+
+        do {
+            _ = try await run()
+            XCTFail("expected invalidResponse")
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .invalidResponse)
+        }
+    }
+
+    /// Cut off after the summary: that summary is the answer, and no second
+    /// provider is paid for.
+    func testKeepsTheSalvagedSummaryOfATruncatedAnswer() async throws {
+        try await keychain.save("AIza", for: .geminiAPIKey)
+        claude.chunks = [#"{"headline": "Go.", "verdict": "progress", "summary": "Add 2.5 kg.", "cards": [{"ki"#]
+        sut = makeService(priority: [.claude, .gemini])
+
+        let events = try await run()
+
+        XCTAssertEqual(events, [.attempting(.claude), .text("Add 2.5 kg.")])
+        XCTAssertEqual(gemini.callCount, 0)
+    }
+
+    /// Whitespace is not an answer either.
+    func testFallsBackWhenAProviderAnswersOnlyWhitespace() async throws {
+        try await keychain.save("AIza", for: .geminiAPIKey)
+        claude.chunks = ["  ", "\n"]
+        sut = makeService(priority: [.claude, .gemini])
+
+        let events = try await run()
+
+        XCTAssertEqual(attempted(in: events), [.claude, .gemini])
+        XCTAssertEqual(text(of: events), "Gemini answer")
     }
 
     /// A provider can answer 200 and then say nothing — a thinking pass that

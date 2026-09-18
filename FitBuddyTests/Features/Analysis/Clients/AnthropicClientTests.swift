@@ -53,6 +53,30 @@ final class AnthropicClientTests: LLMClientTestCase {
         XCTAssertEqual(sut.provider, .claude)
     }
 
+    // MARK: - Structured output (#174)
+
+    func testRequestAsksForTheReportSchemaAlongsideTheEffort() async throws {
+        stub(body: ClaudeSSEFactory.body(textChunks: ["Hi"]))
+
+        _ = try await collect(try await stream())
+
+        let json = try jsonBody(of: try capturedRequest())
+        let outputConfig = try XCTUnwrap(json["output_config"] as? [String: Any])
+        XCTAssertEqual(outputConfig["effort"] as? String, AnthropicClient.effort)
+        let format = try XCTUnwrap(outputConfig["format"] as? [String: Any])
+        XCTAssertEqual(format["type"] as? String, "json_schema")
+        let schema = try XCTUnwrap(format["schema"] as? NSDictionary)
+        XCTAssertEqual(schema, try jsonObject(of: AnalysisReportSchema.schema))
+    }
+
+    func testAStreamedJSONAnswerDecodesAsAReport() async throws {
+        stub(body: ClaudeSSEFactory.body(textChunks: AnalysisReportFixtures.progressChunks()))
+
+        let event = try await parsedAnswer(of: try await stream())
+
+        XCTAssertEqual(event, .report(AnalysisReportFixtures.progress))
+    }
+
     // MARK: - Stream parsing
 
     func testStreamsIncrementalTextChunks() async throws {

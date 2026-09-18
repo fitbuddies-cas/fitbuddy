@@ -199,8 +199,36 @@ enum AnalysisPromptBuilder {
     step listed for it, and where none is listed, progress reps rather than \
     weight.
 
-    Answer in English and keep it under 200 words: first what stands out in \
-    the data, then a concrete recommendation for the next block.
+    Answer in English, as one JSON object that follows the response schema:
+
+    - headline: one short sentence stating the verdict.
+    - verdict: "progress" when the data supports adding load or reps, \
+    "recover" when rest has to come first, "hold" when neither is justified \
+    yet.
+    - lead: the key takeaway in one to three sentences, at most about 50 \
+    words. It must stand on its own: someone who reads only the headline and \
+    the lead knows what to do next.
+    - summary: the full analysis as plain prose under 200 words, readable \
+    without the cards: first what stands out in the data, then a concrete \
+    recommendation for the next block.
+    - cards: zero to four cards, most important first. Add a card only when \
+    the data supports it; when the data is too thin for any, return an empty \
+    array — the lead and the summary carry the answer. Use "progression" for \
+    a load increase on one exercise: fromKg is the weight listed for its most \
+    recent session, toKg the new weight, reasoning one sentence. Use \
+    "recovery" when rest comes before any progression, with the rest you \
+    recommend in suggestedRestHours. Use "imbalance" when two muscle groups \
+    are trained at clearly different frequencies, with each group's sessions \
+    per week. Use "note" for anything else worth saying, including a rep \
+    progression without a weight change. Every card follows the ground rules \
+    above; a recommendation you cannot ground in the data does not become a \
+    card.
+
+    Write the fields in this order.
+
+    Never write placeholder or filler text in any field. A field you have \
+    nothing to say in is not a reason to invent something; leave a card out \
+    instead.
     """
 
     // MARK: - User

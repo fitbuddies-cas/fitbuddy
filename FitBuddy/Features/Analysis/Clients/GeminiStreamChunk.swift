@@ -64,8 +64,10 @@ struct GeminiStreamChunk: Decodable {
         return Self.answeredFinishReasons.contains(reason) ? nil : reason
     }
 
-    /// The two ways a candidate ends with an answer behind it. `MAX_TOKENS`
-    /// truncates, but what arrived is still the model's own text; anything else
-    /// (`SAFETY`, `RECITATION`, `PROHIBITED_CONTENT`, …) means there is none.
+    /// The two ways a candidate can end with an answer behind it. `MAX_TOKENS`
+    /// truncates; whether what arrived is still usable — a cut-off JSON report
+    /// often still carries its summary — is `AnalysisReportParser`'s call.
+    /// Anything else (`SAFETY`, `RECITATION`, `PROHIBITED_CONTENT`, …) means
+    /// there is none.
     private static let answeredFinishReasons: Set<String> = ["STOP", "MAX_TOKENS"]
 }

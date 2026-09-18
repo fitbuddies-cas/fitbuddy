@@ -76,6 +76,35 @@ final class GeminiClientTests: LLMClientTestCase {
         XCTAssertEqual(sut.provider, .gemini)
     }
 
+    // MARK: - Structured output (#174)
+
+    /// `responseJsonSchema`, not the OpenAPI-subset `responseSchema` — the two
+    /// are mutually exclusive, so only one may be sent.
+    func testRequestAsksForJSONInTheReportSchema() async throws {
+        stub(body: GeminiSSEFactory.body(textChunks: ["Hi"]))
+
+        _ = try await collect(try await stream())
+
+        let json = try jsonBody(of: try capturedRequest())
+        let config = try XCTUnwrap(json["generationConfig"] as? [String: Any])
+        XCTAssertEqual(config["responseMimeType"] as? String, "application/json")
+        XCTAssertNil(config["responseSchema"])
+        let schema = try XCTUnwrap(config["responseJsonSchema"] as? NSDictionary)
+        XCTAssertEqual(schema, try jsonObject(of: AnalysisReportSchema.schema))
+        // Not a documented `responseJsonSchema` keyword; a 400 here would fail
+        // every Gemini analysis.
+        let sent = try JSONSerialization.data(withJSONObject: schema)
+        XCTAssertFalse(String(decoding: sent, as: UTF8.self).contains("propertyOrdering"))
+    }
+
+    func testAStreamedJSONAnswerDecodesAsAReport() async throws {
+        stub(body: GeminiSSEFactory.body(textChunks: AnalysisReportFixtures.progressChunks()))
+
+        let event = try await parsedAnswer(of: try await stream())
+
+        XCTAssertEqual(event, .report(AnalysisReportFixtures.progress))
+    }
+
     // MARK: - Stream parsing
 
     func testStreamsIncrementalTextChunks() async throws {
