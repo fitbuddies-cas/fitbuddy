@@ -31,8 +31,8 @@ struct AnalysisContextView: View {
                 Text(widenedNote)
                     .font(.caption)
             }
-            if context.isThin {
-                thinDataWarning
+            if let warning = context.thinDataWarning {
+                thinDataWarning(warning)
             }
         }
         .foregroundStyle(Color.fbInkSecondary)
@@ -43,23 +43,19 @@ struct AnalysisContextView: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// `"Based on 12 Hevy sessions · last 4 weeks"`, with the counted part
-    /// emphasised as in `design/fb-screens.jsx:544` — the number is what the
-    /// line exists for.
+    /// `"Based on 14 Hevy · 9 Strava sessions · last 4 weeks"`, with the
+    /// counted part emphasised as in `FBAnalysisContextLine`
+    /// (`design/fb-screens.jsx`, #196) — the number is what the line exists
+    /// for.
     ///
-    /// The sources are joined by hand rather than via `Array.formatted()`:
-    /// that style follows the device locale and would drop a German "und" into
-    /// an English sentence once #33/#35 make `sources` a real list.
-    ///
-    /// "Sessions" rather than "workouts": Hevy calls a logged entry a workout,
-    /// but the same word is what the recommendation uses for a planned one,
-    /// and the two must not blur in a line whose whole job is to say what was
-    /// counted.
+    /// The counted part is built in `AnalysisContext` rather than here: which
+    /// sources are named, in which order, and how they are joined is a
+    /// statement about the data basis (US-15 AC4) that has to be testable
+    /// without a view, and the same string also has to hold for a restored
+    /// row.
     private var basis: Text {
-        let sessions = context.sessionCount == 1 ? "session" : "sessions"
-        let counted = "\(context.sessionCount) \(context.sources.joined(separator: ", ")) \(sessions)"
-        return Text("Based on ")
-            + Text(counted).foregroundColor(.fbInk).fontWeight(.semibold)
+        Text("Based on ")
+            + Text(context.basisDescription).foregroundColor(.fbInk).fontWeight(.semibold)
             + Text(" · last \(context.window.weeks) weeks")
     }
 
@@ -103,20 +99,16 @@ struct AnalysisContextView: View {
         """
     }
 
-    /// US-6 AC2. Deliberately blunt: a recommendation drawn from three
-    /// sessions reads exactly as confident as one drawn from twenty, and this
-    /// line is the only thing that tells the two apart. `fbWarn` is the token
-    /// the rest of the app warns in (`SyncStatusView`, `LLMKeysView`), so an
-    /// explicit warning reads as one here too.
-    private var thinDataWarning: some View {
+    /// US-6 AC2, naming the thin domain since US-15 AC4 — the wording comes
+    /// from `AnalysisContext.thinDataWarning` for the same reason as `basis`.
+    /// `fbWarn` is the token the rest of the app warns in (`SyncStatusView`,
+    /// `LLMKeysView`), so an explicit warning reads as one here too.
+    private func thinDataWarning(_ text: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.caption2)
-            Text("""
-            Thin data — fewer than \(AnalysisContext.thinDataThreshold) \
-            sessions. Treat the recommendation as a starting point.
-            """)
-            .font(.caption)
+            Text(text)
+                .font(.caption)
         }
         .foregroundStyle(Color.fbWarn)
     }
@@ -129,6 +121,12 @@ struct AnalysisContextView: View {
         AnalysisContextView(context: AnalysisContext(sessionCount: 3, window: .default))
         AnalysisContextView(context: AnalysisContext(sessionCount: 7, window: AnalysisWindow(weeks: 8)))
         AnalysisContextView(context: AnalysisContext(sessionCount: 1, window: AnalysisWindow(weeks: 13)))
+        AnalysisContextView(
+            context: AnalysisContext(sessionCounts: [.hevy: 14, .strava: 9], window: .default)
+        )
+        AnalysisContextView(
+            context: AnalysisContext(sessionCounts: [.hevy: 14, .strava: 2, .polar: 1], window: .default)
+        )
         AnalysisContextView(
             context: AnalysisContext(
                 sessionCount: 14,
