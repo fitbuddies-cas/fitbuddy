@@ -182,10 +182,8 @@ enum AnalysisFailure: Equatable {
     /// setting in the provider's console (#211). `nil` for every other
     /// failure, and for providers that never report a plan restriction.
     var planURL: URL? {
-        guard case .planExcludesModel(.mistral) = self else { return nil }
-        // The Limits page shows the zero allowance and the current tier, and
-        // links on to Billing where pay-as-you-go is switched on.
-        return URL(staticString: "https://admin.mistral.ai/plateforme/limits")
+        guard case .planExcludesModel(let provider) = self else { return nil }
+        return provider?.planURL
     }
 
     /// The provider's name, or a neutral stand-in when the run failed before

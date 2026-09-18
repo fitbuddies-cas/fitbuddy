@@ -19,10 +19,18 @@ enum MistralSSEFactory {
     /// array — a `thinking` chunk, then a `text` chunk — before the plain
     /// string deltas of `textChunks` (#211).
     static func bodyWithThinkingChunks(thinking: String, leadingText: String, textChunks: [String]) -> Data {
-        let chunkArray: [[String: Any]] = [
-            ["type": "thinking", "thinking": [["type": "text", "text": thinking]]],
-            ["type": "text", "text": leadingText]
-        ]
+        bodyWithContentChunks(
+            [
+                ["type": "thinking", "thinking": [["type": "text", "text": thinking]]],
+                ["type": "text", "text": leadingText]
+            ],
+            textChunks: textChunks
+        )
+    }
+
+    /// A stream whose first content delta carries `chunkArray` verbatim as
+    /// `delta.content`, followed by the plain string deltas of `textChunks`.
+    static func bodyWithContentChunks(_ chunkArray: [[String: Any]], textChunks: [String]) -> Data {
         var lines = [line(payload(role: "assistant", content: nil, finishReason: nil))]
         lines.append(line(payload(role: nil, content: chunkArray, finishReason: nil)))
         lines += textChunks.map { line(payload(role: nil, content: $0, finishReason: nil)) }

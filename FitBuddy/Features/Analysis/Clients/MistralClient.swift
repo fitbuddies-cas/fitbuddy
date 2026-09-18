@@ -6,21 +6,26 @@ import Foundation
 /// Paris), so a run answered here involves no third-country transfer — see
 /// ADR-007.
 struct MistralClient: LLMProviderClient {
-    /// Mistral Medium 3.5, under the id Mistral bills it as and documents it
-    /// under (#211). Pinned rather than `mistral-medium-latest`: the alias can
-    /// move to a new version mid-deploy, changing both behaviour and the price
-    /// charged to the user's own key. The dated `mistral-medium-2604` this
-    /// client first shipped with resolves to the same model, but only as one
-    /// of its aliases; the docs and the pricing page never mention it.
+    /// Mistral Medium 3.5 (v26.04), under the id Mistral bills it as and
+    /// documents it under (#211). Pinned rather than `mistral-medium-latest`:
+    /// that alias moves to the next major version, changing both behaviour
+    /// and the price charged to the user's own key. The dated
+    /// `mistral-medium-2604` this client first shipped with is an alias of
+    /// the same release, not a separate snapshot; the docs and the pricing
+    /// page never mention it. Whether Mistral can re-point either id to a
+    /// revised build of 3.5 is not documented — the two are equal in that
+    /// respect, so the documented name wins.
     static let model = "mistral-medium-3-5"
     /// Same budget as the other two: the report is a summary plus up to four
     /// cards, and a JSON answer cut off before its summary is no answer (#174).
     static let maxTokens = 8192
-    /// Medium 3.5 is a reasoning model. FitBuddy wants prose, not thinking
-    /// chunks, and with reasoning on the stream's `delta.content` switches
-    /// between a string and a chunk array. Off keeps the answer plain and
-    /// spares the user's key the reasoning tokens.
-    static let reasoningEffort = "none"
+    /// Medium 3.5 is a reasoning model, and the request leaves reasoning at
+    /// Mistral's default. `reasoning_effort: "none"` would spare the user's
+    /// key the thinking tokens, but Mistral rejects the field with a 400 on
+    /// models it is not enabled for, and it could not be verified against
+    /// Medium 3.5 yet (#211) — a wrong guess would take Mistral out for every
+    /// user. `MistralStreamChunk` drops the thinking chunks either way, so
+    /// the answer stays plain without it.
 
     /// Terminator of an OpenAI-shaped SSE stream. Not JSON, so it has to be
     /// recognised before the decoder sees it.
@@ -80,7 +85,6 @@ struct MistralClient: LLMProviderClient {
             MistralChatRequest(
                 model: Self.model,
                 maxTokens: Self.maxTokens,
-                reasoningEffort: Self.reasoningEffort,
                 stream: true,
                 messages: [
                     MistralChatRequest.Message(role: "system", content: systemPrompt),

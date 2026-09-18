@@ -8,9 +8,6 @@ import Foundation
 struct MistralChatRequest: Encodable {
     let model: String
     let maxTokens: Int
-    /// `none` / `low` / `medium` / `high` — how much the model thinks before
-    /// answering (#211).
-    let reasoningEffort: String
     let stream: Bool
     let messages: [Message]
     let responseFormat: ResponseFormat
@@ -48,7 +45,6 @@ struct MistralChatRequest: Encodable {
     enum CodingKeys: String, CodingKey {
         case model, stream, messages
         case maxTokens = "max_tokens"
-        case reasoningEffort = "reasoning_effort"
         case responseFormat = "response_format"
     }
 }

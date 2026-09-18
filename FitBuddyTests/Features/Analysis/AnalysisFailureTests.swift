@@ -120,18 +120,32 @@ final class AnalysisFailureTests: XCTestCase {
         XCTAssertTrue(AnalysisFailure.rateLimited(provider: .claude, retryAfter: nil).message.hasSuffix("in a few minutes."))
     }
 
+    /// The error screen offers at most one way forward next to "Back": a
+    /// retry, the settings tab, or the provider's plan page. The three come
+    /// from three separate properties, so nothing but this test keeps them
+    /// from being offered together (#211).
+    func testNoFailureOffersMoreThanOneWayForward() {
+        for failure in Self.everyFailure {
+            let offers = [failure.isRetryable, failure.leadsToSettings, failure.planURL != nil].filter { $0 }
+            XCTAssertLessThanOrEqual(offers.count, 1, "\(failure) offers \(offers.count) actions")
+        }
+    }
+
     func testEveryFailureHasATitleMessageAndSymbol() {
-        let failures: [AnalysisFailure] = [
-            .missingAPIKey, .keychainUnavailable, .unauthorized(.claude), .offline(.gemini),
-            .rateLimited(provider: .mistral, retryAfter: nil), .planExcludesModel(.mistral),
-            .planExcludesModel(nil), .serviceUnavailable(.claude),
-            .noTrainingData,
-            .cacheUnavailable, .unreadableResponse(.gemini), .unreadableResponse(nil),
-        ]
-        for failure in failures {
+        for failure in Self.everyFailure {
             XCTAssertFalse(failure.title.isEmpty, "\(failure) has no title")
             XCTAssertFalse(failure.message.isEmpty, "\(failure) has no message")
             XCTAssertFalse(failure.symbolName.isEmpty, "\(failure) has no symbol")
         }
     }
+
+    /// One value per case, plus the provider-less variants of the cases that
+    /// have one.
+    private static let everyFailure: [AnalysisFailure] = [
+        .missingAPIKey, .keychainUnavailable, .unauthorized(.claude), .offline(.gemini),
+        .rateLimited(provider: .mistral, retryAfter: nil), .planExcludesModel(.mistral),
+        .planExcludesModel(nil), .serviceUnavailable(.claude),
+        .noTrainingData,
+        .cacheUnavailable, .unreadableResponse(.gemini), .unreadableResponse(nil),
+    ]
 }

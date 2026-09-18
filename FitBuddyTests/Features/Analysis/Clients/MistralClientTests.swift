@@ -37,8 +37,9 @@ final class MistralClientTests: LLMClientTestCase {
         XCTAssertEqual(json["model"] as? String, MistralClient.model)
         XCTAssertEqual(json["max_tokens"] as? Int, MistralClient.maxTokens)
         XCTAssertEqual(json["stream"] as? Bool, true)
-        // Medium 3.5 is a reasoning model; the analysis wants prose only (#211).
-        XCTAssertEqual(json["reasoning_effort"] as? String, "none")
+        // Not sent until it has been seen accepted by Medium 3.5 (#211): on a
+        // model it is not enabled for, Mistral answers the field with a 400.
+        XCTAssertNil(json["reasoning_effort"])
 
         // OpenAI-shaped: the system prompt is the first message, not a field.
         let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])
@@ -107,6 +108,22 @@ final class MistralClientTests: LLMClientTestCase {
         let chunks = try await collect(try await stream())
 
         XCTAssertEqual(chunks, ["Increase ", "squat ", "by 2.5 kg."])
+    }
+
+    /// The array is decoded in one go, so one entry the decoder does not
+    /// know must not take the text chunk beside it down with it (#211).
+    func testChunkWithoutATypeDoesNotDropTheTextChunkBesideIt() async throws {
+        stub(body: MistralSSEFactory.bodyWithContentChunks(
+            [
+                ["thinking": [["type": "text", "text": "Hmm."]]],
+                ["type": "text", "text": "Increase "]
+            ],
+            textChunks: ["squat."]
+        ))
+
+        let chunks = try await collect(try await stream())
+
+        XCTAssertEqual(chunks, ["Increase ", "squat."])
     }
 
     func testStopsAtTheDoneSentinel() async throws {
