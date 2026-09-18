@@ -5,32 +5,39 @@ import Foundation
 // stripped from the Release bundle via EXCLUDED_SOURCE_FILE_NAMES.
 #if DEBUG
 
-/// Reads the bundled Hevy mock payloads (#44) and hands them out either as
+/// Reads the bundled mock payloads (#44, #188) and hands them out either as
 /// cache models or as `GET /v1/workouts` pages.
 ///
-/// The payload files hold nothing but a `workouts` array in Hevy's wire
-/// format; they are decoded through the same `HevyWorkoutDTO` path as live
-/// data, so anything built against them — SwiftUI previews, dashboard metrics
-/// (#26), a stubbed `URLProtocol` — sees exactly what the API delivers. The
-/// wire types are the one place outside `HevyConnector` that names Hevy, and
-/// deliberately so: these are recorded Hevy payloads, and a fixture that
-/// decoded them through anything else would stop proving what it exists to
-/// prove. The file is DEBUG-only and never ships (#44). The
-/// `page`/`page_count` envelope is not stored, it is built per request in
-/// `pageData(for:page:pageSize:)`, so a file can never claim a page count that
-/// contradicts the request it answers.
+/// A payload file holds nothing but the sessions of one source, in that
+/// source's own wire format: Hevy's `{"workouts": [...]}`, and the bare arrays
+/// Strava's `GET /athlete/activities` and Polar's `GET /v3/exercises` return.
+/// Each is decoded through that source's own DTO — `HevyWorkoutDTO`,
+/// `StravaActivityDTO`, `PolarExerciseDTO` — so anything built against them
+/// (SwiftUI previews, dashboard metrics, an analysis run, a stubbed
+/// `URLProtocol`) sees exactly what the API delivers, and a cardio profile
+/// gets its `ActivityKind` and `CardioMetrics` from the real mapping rather
+/// than from a fixture's opinion. The wire types are the one place outside the
+/// connectors that names a provider, and deliberately so: these are recorded
+/// payloads, and a fixture that decoded them through anything else would stop
+/// proving what it exists to prove. The files are DEBUG-only and never ship
+/// (#44). Hevy's `page`/`page_count` envelope is not stored, it is built per
+/// request in `pageData(for:page:pageSize:)`, so a file can never claim a page
+/// count that contradicts the request it answers.
 ///
 /// **Re-anchoring:** the payloads carry fixed timestamps, which would age out
 /// of the dashboard's 90-day window (US-2) within weeks. The loader therefore
-/// shifts every timestamp by whole days, so the newest workout lands inside the
+/// shifts every timestamp by whole days, so the newest session lands inside the
 /// last 24 hours before `now` and the remaining sessions keep their spacing and
-/// time of day.
+/// time of day. The shift is computed **once per profile, over all its payloads
+/// together**: a mixed profile whose Hevy and Strava halves were anchored
+/// separately would move its lifts and its runs against each other and lose
+/// exactly the overlap days it exists to show.
 ///
 /// ```swift
 /// // Preview / debug seeding:
 /// let workouts = (try? MockWorkoutLoader().workouts(for: .personA)) ?? []
 ///
-/// // Stubbing the network path, page by page:
+/// // Stubbing the Hevy network path, page by page:
 /// let payload = try MockWorkoutLoader().pageData(for: .personB, page: 1)
 /// ```
 struct MockWorkoutLoader {
@@ -38,7 +45,7 @@ struct MockWorkoutLoader {
     static let pageSize = 10
 
     /// Workout-level timestamps in Hevy's payload. Exercises and sets carry none.
-    private static let timestampKeys = ["start_time", "end_time", "updated_at", "created_at"]
+    private static let hevyTimestampKeys = ["start_time", "end_time", "updated_at", "created_at"]
 
     private let bundle: Bundle
 
@@ -61,30 +68,58 @@ struct MockWorkoutLoader {
 
     // MARK: - Workouts
 
-    /// Every workout of `profile`, newest first, as cache models ready to be
-    /// inserted into a `ModelContext` or handed to a view.
+    /// Every session of `profile`, from every source, newest first, as cache
+    /// models ready to be inserted into a `ModelContext` or handed to a view.
     func workouts(for profile: MockWorkoutProfile) throws -> [Workout] {
         try activities(for: profile).map { $0.makeWorkout() }
     }
 
-    /// Every workout of `profile` as the normalized `Activity` a connector
-    /// would hand back — what the cache is written from (#148).
-    ///
-    /// The same decoding path as `workouts(for:)`, one step earlier: both go
-    /// payload → `HevyWorkoutDTO` → `Activity`, so the fixtures and a live
-    /// sync cannot drift apart in how they are mapped.
+    /// Every session of `profile` as the normalized `Activity` a connector
+    /// would hand back — what the cache is written from (#148), newest first
+    /// across all sources.
     func activities(for profile: MockWorkoutProfile) throws -> [Activity] {
-        try page(for: profile).workouts.map { $0.makeActivity() }
+        try profile.payloads
+            .flatMap { try activities(for: profile, from: $0.source) }
+            .sorted { $0.startTime > $1.startTime }
     }
 
-    /// The profile's whole history as a single decoded page.
+    /// The sessions one source contributes to `profile`, newest first — what
+    /// `WorkoutStore.replaceCachedWorkouts(from:with:)` takes, one source at a
+    /// time (#188).
+    ///
+    /// Throws `.noPayload` for a source this profile records nothing from: a
+    /// caller asking for the runner's lifts has made a mistake, and an empty
+    /// array would answer it with "trained nothing" instead.
+    func activities(
+        for profile: MockWorkoutProfile,
+        from source: ConnectorSource
+    ) throws -> [Activity] {
+        guard let payload = profile.payloads.first(where: { $0.source == source }) else {
+            throw MockWorkoutError.noPayload(profile: profile.rawValue, source: source)
+        }
+        let entries = try shiftedEntries(for: profile, payload: payload)
+        let data = try serialized(entries, for: payload)
+        switch source {
+        case .hevy:
+            return try decodeHevy(data, name: payload.resourceName).workouts.map { $0.makeActivity() }
+        case .strava:
+            guard let activities = try? JSONDecoder.strava.decode([StravaActivityDTO].self, from: data)
+            else { throw MockWorkoutError.invalidPayload(payload.resourceName) }
+            return activities.map { $0.makeActivity() }
+        case .polar:
+            guard let exercises = try? JSONDecoder().decode([PolarExerciseDTO].self, from: data)
+            else { throw MockWorkoutError.invalidPayload(payload.resourceName) }
+            // A session Polar dated unparseably is dropped by the DTO itself;
+            // a fixture that lost one that way is a broken fixture, and the
+            // count assertions in `MockWorkoutLoaderTests` are what catch it.
+            return exercises.compactMap { $0.makeActivity() }
+        }
+    }
+
+    /// The profile's whole Hevy history as a single decoded page.
     func page(for profile: MockWorkoutProfile) throws -> HevyWorkoutsPage {
         let data = try pageData(for: profile, page: 1, pageSize: Int.max)
-        do {
-            return try JSONDecoder.hevy.decode(HevyWorkoutsPage.self, from: data)
-        } catch {
-            throw MockWorkoutError.invalidPayload(profile.resourceName)
-        }
+        return try decodeHevy(data, name: try hevyPayload(of: profile).resourceName)
     }
 
     // MARK: - Wire format
@@ -94,78 +129,161 @@ struct MockWorkoutLoader {
     ///
     /// `page` is clamped into the available range, mirroring Hevy, which serves
     /// the last page rather than an error for an overshooting page number.
+    /// Hevy-only by nature: this is Hevy's envelope, and a profile without a
+    /// Hevy payload has no page to serve.
     func pageData(
         for profile: MockWorkoutProfile,
         page: Int = 1,
         pageSize: Int = pageSize
     ) throws -> Data {
-        let workouts = try shiftedWorkouts(for: profile)
+        let payload = try hevyPayload(of: profile)
+        let workouts = try shiftedEntries(for: profile, payload: payload)
         let size = max(1, pageSize)
         let pageCount = max(1, Int((Double(workouts.count) / Double(size)).rounded(.up)))
         let clamped = min(max(page, 1), pageCount)
         let slice = Array(workouts.dropFirst((clamped - 1) * size).prefix(size))
 
-        let payload: [String: Any] = [
+        let body: [String: Any] = [
             "page": clamped,
             "page_count": pageCount,
             "workouts": slice,
         ]
-        guard let data = try? JSONSerialization.data(withJSONObject: payload) else {
-            throw MockWorkoutError.invalidPayload(profile.resourceName)
+        guard let data = try? JSONSerialization.data(withJSONObject: body) else {
+            throw MockWorkoutError.invalidPayload(payload.resourceName)
+        }
+        return data
+    }
+
+    private func hevyPayload(of profile: MockWorkoutProfile) throws -> MockWorkoutPayload {
+        guard let payload = profile.hevyPayload else {
+            throw MockWorkoutError.noPayload(profile: profile.rawValue, source: .hevy)
+        }
+        return payload
+    }
+
+    private func decodeHevy(_ data: Data, name: String) throws -> HevyWorkoutsPage {
+        guard let page = try? JSONDecoder.hevy.decode(HevyWorkoutsPage.self, from: data) else {
+            throw MockWorkoutError.invalidPayload(name)
+        }
+        return page
+    }
+
+    /// The entries of one payload, back in the shape its DTO decodes: Hevy's
+    /// envelope, or the bare array the other two return.
+    private func serialized(_ entries: [[String: Any]], for payload: MockWorkoutPayload) throws -> Data {
+        let body: Any = payload.source == .hevy ? ["workouts": entries] : entries
+        guard let data = try? JSONSerialization.data(withJSONObject: body) else {
+            throw MockWorkoutError.invalidPayload(payload.resourceName)
         }
         return data
     }
 
     // MARK: - Loading & re-anchoring
 
-    /// The payload's workouts with all timestamps moved into the present.
+    /// One payload's sessions with all timestamps moved into the present.
     ///
-    /// Cached per loader: walking a profile page by page would otherwise re-read
-    /// and re-parse the whole payload once per page.
-    private func shiftedWorkouts(for profile: MockWorkoutProfile) throws -> [[String: Any]] {
-        if let cached = cache.shifted[profile] { return cached }
-        let shifted = try makeShiftedWorkouts(for: profile)
-        cache.shifted[profile] = shifted
+    /// Cached per loader and per payload: walking a profile page by page would
+    /// otherwise re-read and re-parse the whole payload once per page.
+    private func shiftedEntries(
+        for profile: MockWorkoutProfile,
+        payload: MockWorkoutPayload
+    ) throws -> [[String: Any]] {
+        if let cached = cache.shifted[payload] { return cached }
+        let offset = try self.offset(for: profile)
+        let entries = try rawEntries(of: payload)
+        let shifted = offset == 0 ? entries : entries.map { shift($0, by: offset, from: payload.source) }
+        cache.shifted[payload] = shifted
         return shifted
     }
 
-    private func makeShiftedWorkouts(for profile: MockWorkoutProfile) throws -> [[String: Any]] {
-        let workouts = try rawWorkouts(for: profile)
-        let starts = workouts
-            .compactMap { $0["start_time"] as? String }
-            .compactMap(Self.date(from:))
-        guard let newest = starts.max() else { return workouts }
-
-        // Whole days only, rounded down: the newest workout ends up at most 24
-        // hours old and never in the future.
+    /// How far the whole profile moves — whole days, rounded down, so its
+    /// newest session ends up at most 24 hours old and never in the future.
+    ///
+    /// Over every payload at once. A profile's sources describe one person's
+    /// week, and a per-file offset would slide the runs off the days that
+    /// carried the lifts.
+    private func offset(for profile: MockWorkoutProfile) throws -> TimeInterval {
+        if let cached = cache.offsets[profile] { return cached }
+        var newest: Date?
+        for payload in profile.payloads {
+            let starts = try rawEntries(of: payload).compactMap { start(of: $0, from: payload.source) }
+            if let latest = starts.max(), latest > (newest ?? .distantPast) { newest = latest }
+        }
+        guard let newest else { return 0 }
         let days = (anchor.timeIntervalSince(newest) / 86_400).rounded(.down)
-        guard days != 0 else { return workouts }
         let offset = days * 86_400
-        return workouts.map { shift($0, by: offset) }
+        cache.offsets[profile] = offset
+        return offset
     }
 
-    private func rawWorkouts(for profile: MockWorkoutProfile) throws -> [[String: Any]] {
-        guard let url = bundle.url(forResource: profile.resourceName, withExtension: "json"),
+    private func rawEntries(of payload: MockWorkoutPayload) throws -> [[String: Any]] {
+        if let cached = cache.raw[payload] { return cached }
+        guard let url = bundle.url(forResource: payload.resourceName, withExtension: "json"),
               let data = try? Data(contentsOf: url) else {
-            throw MockWorkoutError.missingPayload(profile.resourceName)
+            throw MockWorkoutError.missingPayload(payload.resourceName)
         }
-        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let workouts = root["workouts"] as? [[String: Any]] else {
-            throw MockWorkoutError.invalidPayload(profile.resourceName)
+        guard let root = try? JSONSerialization.jsonObject(with: data) else {
+            throw MockWorkoutError.invalidPayload(payload.resourceName)
         }
-        return workouts
+        let entries: [[String: Any]]?
+        switch payload.source {
+        case .hevy: entries = (root as? [String: Any])?["workouts"] as? [[String: Any]]
+        case .strava, .polar: entries = root as? [[String: Any]]
+        }
+        guard let entries else { throw MockWorkoutError.invalidPayload(payload.resourceName) }
+        cache.raw[payload] = entries
+        return entries
     }
 
-    private func shift(_ workout: [String: Any], by offset: TimeInterval) -> [String: Any] {
-        var shifted = workout
-        for key in Self.timestampKeys {
-            guard let raw = workout[key] as? String, let date = Self.date(from: raw) else { continue }
-            shifted[key] = ISO8601DateFormatter.hevyPlain.string(from: date.addingTimeInterval(offset))
+    /// When one session started, read in its source's own wire format.
+    private func start(of entry: [String: Any], from source: ConnectorSource) -> Date? {
+        switch source {
+        case .hevy:
+            return (entry["start_time"] as? String).flatMap(Self.isoDate(from:))
+        case .strava:
+            return (entry["start_date"] as? String).flatMap(Self.isoDate(from:))
+        case .polar:
+            guard let raw = entry["start_time"] as? String,
+                  let local = PolarDate.localFormatter.date(from: raw) else { return nil }
+            let minutes = entry["start_time_utc_offset"] as? Int ?? 0
+            return local.addingTimeInterval(TimeInterval(-minutes * 60))
+        }
+    }
+
+    private func shift(
+        _ entry: [String: Any],
+        by offset: TimeInterval,
+        from source: ConnectorSource
+    ) -> [String: Any] {
+        var shifted = entry
+        switch source {
+        case .hevy:
+            for key in Self.hevyTimestampKeys {
+                guard let raw = entry[key] as? String, let date = Self.isoDate(from: raw) else { continue }
+                shifted[key] = ISO8601DateFormatter.hevyPlain.string(from: date.addingTimeInterval(offset))
+            }
+        case .strava:
+            if let raw = entry["start_date"] as? String, let date = Self.isoDate(from: raw) {
+                shifted["start_date"] = ISO8601DateFormatter.hevyPlain.string(
+                    from: date.addingTimeInterval(offset)
+                )
+            }
+        case .polar:
+            // Polar's `start_time` is a local wall clock with the zone carried
+            // beside it. The offset is whole days, so the wall clock moves by
+            // the same whole days and `start_time_utc_offset` stays what it
+            // was — the session keeps the local time of day it was recorded at.
+            if let raw = entry["start_time"] as? String,
+               let local = PolarDate.localFormatter.date(from: raw) {
+                shifted["start_time"] = PolarDate.localFormatter.string(
+                    from: local.addingTimeInterval(offset)
+                )
+            }
         }
         return shifted
     }
 
-    private static func date(from raw: String) -> Date? {
+    private static func isoDate(from raw: String) -> Date? {
         ISO8601DateFormatter.hevyPlain.date(from: raw)
             ?? ISO8601DateFormatter.hevyFractional.date(from: raw)
     }
@@ -173,7 +291,9 @@ struct MockWorkoutLoader {
     /// Shared storage for the copies of one loader — the loader stays a value
     /// type, the parsed payloads are computed once.
     private final class Cache {
-        var shifted: [MockWorkoutProfile: [[String: Any]]] = [:]
+        var raw: [MockWorkoutPayload: [[String: Any]]] = [:]
+        var shifted: [MockWorkoutPayload: [[String: Any]]] = [:]
+        var offsets: [MockWorkoutProfile: TimeInterval] = [:]
     }
 }
 

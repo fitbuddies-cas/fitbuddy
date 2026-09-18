@@ -6,9 +6,10 @@ import XCTest
 // stripped from the Release bundle via EXCLUDED_SOURCE_FILE_NAMES.
 #if DEBUG
 
-/// Guards the two properties the bundled mock data is supposed to have (#44):
-/// it decodes through the real Hevy path, and each profile keeps its training
-/// frequency inside the dashboard's 90-day window.
+/// Guards the properties the bundled mock data is supposed to have (#44,
+/// #188): every payload decodes through its own source's real path, a profile
+/// keeps its training frequency inside the dashboard's 90-day window, and a
+/// profile built from several sources moves as one when it is re-anchored.
 final class MockWorkoutLoaderTests: XCTestCase {
     /// Fixed reference point — every assertion is relative to it.
     private let now = Date(timeIntervalSince1970: 1_788_000_000)
@@ -35,9 +36,12 @@ final class MockWorkoutLoaderTests: XCTestCase {
         }
     }
 
-    func testEveryWorkoutHasLoggedSets() throws {
-        for profile in MockWorkoutProfile.allCases {
-            for workout in try loader.workouts(for: profile) {
+    /// Hevy's half of every profile. Strava and Polar report no sets at all —
+    /// an activity *is* the effort — so the assertion is about the sessions
+    /// Hevy recorded, whichever profile holds them (#188).
+    func testEveryHevyWorkoutHasLoggedSets() throws {
+        for profile in hevyProfiles {
+            for workout in try hevyWorkouts(of: profile) {
                 XCTAssertFalse(workout.exercises.isEmpty, "\(workout.title) has no exercises")
                 for exercise in workout.exercises {
                     XCTAssertFalse(exercise.sets.isEmpty, "\(exercise.title) has no sets")
@@ -51,8 +55,8 @@ final class MockWorkoutLoaderTests: XCTestCase {
     /// The dashboard's volume metric (#26) only counts non-warm-up weighted
     /// sets — mock data has to produce a non-zero number there.
     func testProfilesProduceTrainingVolume() throws {
-        for profile in MockWorkoutProfile.allCases {
-            let volume = try totalVolume(of: loader.workouts(for: profile))
+        for profile in hevyProfiles {
+            let volume = try totalVolume(of: hevyWorkouts(of: profile))
             XCTAssertGreaterThan(volume, 0, "\(profile.rawValue) has no countable volume")
         }
     }
@@ -61,8 +65,8 @@ final class MockWorkoutLoaderTests: XCTestCase {
     /// a trend out of it, so the fixture has to rise across the window — not
     /// only per exercise, where set and rep variation can hide the progression.
     func testVolumePerSessionTrendsUpAcrossTheWindow() throws {
-        for profile in MockWorkoutProfile.allCases {
-            let workouts = try loader.workouts(for: profile).sorted { $0.startTime < $1.startTime }
+        for profile in hevyProfiles {
+            let workouts = try hevyWorkouts(of: profile).sorted { $0.startTime < $1.startTime }
             let third = workouts.count / 3
             let oldest = averageVolume(of: Array(workouts.prefix(third)))
             let newest = averageVolume(of: Array(workouts.suffix(third)))
@@ -73,8 +77,8 @@ final class MockWorkoutLoaderTests: XCTestCase {
     /// A logged session that counts zero volume reads as "did not train" in the
     /// dashboard — even the conditioning days carry some weighted work.
     func testEverySessionCountsSomeVolume() throws {
-        for profile in MockWorkoutProfile.allCases {
-            for workout in try loader.workouts(for: profile) {
+        for profile in hevyProfiles {
+            for workout in try hevyWorkouts(of: profile) {
                 XCTAssertGreaterThan(totalVolume(of: [workout]), 0, "\(workout.title) counts no volume")
             }
         }
@@ -83,8 +87,8 @@ final class MockWorkoutLoaderTests: XCTestCase {
     /// Person A trains heavier and more often, so the dashboard shows a clearly
     /// different picture for the two profiles.
     func testPersonATrainsMoreVolumeThanPersonB() throws {
-        let personA = try totalVolume(of: loader.workouts(for: .personA))
-        let personB = try totalVolume(of: loader.workouts(for: .personB))
+        let personA = try totalVolume(of: hevyWorkouts(of: .personA))
+        let personB = try totalVolume(of: hevyWorkouts(of: .personB))
         XCTAssertGreaterThan(personA, personB)
     }
 
@@ -241,17 +245,36 @@ final class MockWorkoutLoaderTests: XCTestCase {
 
     // MARK: - Wire format
 
-    /// The payload files are workout archives, not recorded responses: a stored
+    /// The payload files are session archives, not recorded responses: a stored
     /// `page`/`page_count` would contradict every request they answer, and the
-    /// loader builds the envelope per request anyway.
-    func testPayloadFilesCarryNoPageEnvelope() throws {
-        for profile in MockWorkoutProfile.allCases {
-            let url = try XCTUnwrap(Bundle(for: Workout.self)
-                .url(forResource: profile.resourceName, withExtension: "json"))
-            let root = try XCTUnwrap(
-                JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
-            )
-            XCTAssertEqual(Set(root.keys), ["workouts"], "\(profile.rawValue) stores more than its workouts")
+    /// loader builds Hevy's envelope per request anyway.
+    ///
+    /// Each file is in its own source's wire shape — Hevy's `workouts` object,
+    /// and the bare arrays Strava and Polar return (#188).
+    func testPayloadFilesCarryTheirSourcesWireShape() throws {
+        for payload in MockWorkoutProfile.allCases.flatMap(\.payloads) {
+            let root = try json(of: payload)
+            switch payload.source {
+            case .hevy:
+                let object = try XCTUnwrap(root as? [String: Any], payload.resourceName)
+                XCTAssertEqual(
+                    Set(object.keys),
+                    ["workouts"],
+                    "\(payload.resourceName) stores more than its workouts"
+                )
+            case .strava, .polar:
+                XCTAssertNotNil(root as? [[String: Any]], "\(payload.resourceName) is not an array")
+            }
+        }
+    }
+
+    /// Every payload is named so the Release exclusion covers it: the app
+    /// target strips `mock-workouts-*.json`, and a cardio fixture named
+    /// anything else would ship a training history in a TestFlight binary
+    /// (#44, #188).
+    func testEveryPayloadIsNamedForTheReleaseExclusion() {
+        for payload in MockWorkoutProfile.allCases.flatMap(\.payloads) {
+            XCTAssertTrue(payload.resourceName.hasPrefix("mock-workouts-"), payload.resourceName)
         }
     }
 
@@ -300,11 +323,182 @@ final class MockWorkoutLoaderTests: XCTestCase {
         XCTAssertFalse(page.workouts.isEmpty)
     }
 
-    func testMissingPayloadIsReported() {
+    func testMissingPayloadIsReported() throws {
         // A bundle without the payloads — the "app bundle is broken" path.
         let empty = MockWorkoutLoader(bundle: Bundle(for: XCTestCase.self), now: { self.now })
+        let name = try XCTUnwrap(MockWorkoutProfile.personA.payloads.first).resourceName
         XCTAssertThrowsError(try empty.workouts(for: .personA)) { error in
-            XCTAssertEqual(error as? MockWorkoutError, .missingPayload(MockWorkoutProfile.personA.resourceName))
+            XCTAssertEqual(error as? MockWorkoutError, .missingPayload(name))
+        }
+    }
+
+    /// A profile that records no strength training has no Hevy page to serve.
+    /// Answering with an empty one would claim the runner has a gym half and
+    /// trained nothing in it (#188).
+    func testAHevyPageIsRefusedForAProfileWithoutOne() {
+        XCTAssertThrowsError(try loader.pageData(for: .runner)) { error in
+            XCTAssertEqual(
+                error as? MockWorkoutError,
+                .noPayload(profile: MockWorkoutProfile.runner.rawValue, source: .hevy)
+            )
+        }
+        XCTAssertThrowsError(try loader.activities(for: .mixed, from: .polar)) { error in
+            XCTAssertEqual(
+                error as? MockWorkoutError,
+                .noPayload(profile: MockWorkoutProfile.mixed.rawValue, source: .polar)
+            )
+        }
+    }
+
+    // MARK: - Cross-source profiles (#188)
+
+    /// Every profile caches under the sources it declares, and under no other
+    /// — the seeding path writes one source at a time.
+    func testEachProfileCachesUnderTheSourcesItDeclares() throws {
+        for profile in MockWorkoutProfile.allCases {
+            let activities = try loader.activities(for: profile)
+            XCTAssertEqual(
+                Set(activities.map(\.source)),
+                Set(profile.payloads.map(\.source)),
+                profile.rawValue
+            )
+            let counted = try profile.payloads
+                .map { try loader.activities(for: profile, from: $0.source).count }
+                .reduce(0, +)
+            XCTAssertEqual(counted, activities.count, profile.rawValue)
+        }
+    }
+
+    /// The runner's window is endurance and nothing else: every session is
+    /// mapped to a running kind by `StravaActivityDTO`, and none of them
+    /// counts a kilogram.
+    func testTheRunnerRecordsNothingButRunning() throws {
+        let summaries = try summaries(of: .runner)
+
+        XCTAssertEqual(summaries.count, 32)
+        XCTAssertTrue(summaries.allSatisfy { $0.source == .strava })
+        XCTAssertEqual(Set(summaries.map(\.kind)), [.run])
+        XCTAssertTrue(summaries.allSatisfy(\.isCardio))
+        XCTAssertTrue(summaries.allSatisfy { $0.volumeKg == 0 })
+    }
+
+    /// The figures US-15 reports come out of the real mapping, not out of the
+    /// fixture: distance and moving time off the set, heart rate, ascent,
+    /// speed and effort out of `CardioMetrics`.
+    func testTheRunnerCarriesTheCardioMetricsStravaSends() throws {
+        let summaries = try summaries(of: .runner)
+        let trail = try XCTUnwrap(summaries.first { $0.title == "Long trail run" })
+
+        XCTAssertEqual(trail.kind, .run)
+        XCTAssertEqual(try XCTUnwrap(trail.distanceMeters), 17_000, accuracy: 1)
+        XCTAssertNotNil(trail.durationSeconds)
+        let cardio = try XCTUnwrap(trail.cardio)
+        XCTAssertEqual(cardio.averageHeartRate, 148)
+        XCTAssertEqual(cardio.maxHeartRate, 167)
+        XCTAssertEqual(cardio.elevationGainMeters, 390)
+        XCTAssertEqual(try XCTUnwrap(cardio.averageSpeedMetersPerSecond), 2.78, accuracy: 0.01)
+        XCTAssertEqual(cardio.perceivedEffort, 148)
+
+        // The shake-out run wore no strap: its cells have to be absent rather
+        // than zero (US-15 AC7).
+        let shakeOut = try XCTUnwrap(summaries.first { $0.title == "Shake-out run" })
+        XCTAssertNil(shakeOut.cardio?.averageHeartRate)
+        XCTAssertNil(shakeOut.cardio?.perceivedEffort)
+    }
+
+    /// Four runs a week, never six days in seven — the runner is a dense week,
+    /// not a recovery week. The week's offsets all sit inside the five days a
+    /// seven-day span holds however the re-anchoring falls, so the count is
+    /// four at any hour rather than sliding between three and four.
+    func testTheRunnerTrainsFourDaysAWeekAtAnyHour() throws {
+        for hour in [0, 6, 12, 18, 23] {
+            let metrics = try recoveryMetrics(of: .runner, atHour: hour)
+
+            XCTAssertEqual(metrics.trainingDays, 4, "at \(hour):01 UTC")
+            XCTAssertFalse(metrics.needsRecovery, "at \(hour):01 UTC")
+            XCTAssertNil(metrics.averageRPE, "a run logs no RPE")
+            XCTAssertNotNil(metrics.averageHeartRate)
+        }
+    }
+
+    /// The mixed week is what US-15 AC2 is written about: three lifts, three
+    /// endurance sessions, and two days that carried both.
+    func testTheMixedProfileOverlapsTwoDaysAWeek() throws {
+        let summaries = try summaries(of: .mixed)
+        let week = RecoveryMetrics.lastSevenDaysSessions(in: summaries, now: now, calendar: Self.utc)
+        let strength = Set(week.filter { !$0.isCardio }.map { Self.utc.startOfDay(for: $0.startTime) })
+        let endurance = Set(week.filter(\.isCardio).map { Self.utc.startOfDay(for: $0.startTime) })
+
+        XCTAssertEqual(strength.count, 3)
+        XCTAssertEqual(endurance.count, 3)
+        XCTAssertEqual(strength.intersection(endurance).count, 2)
+        XCTAssertEqual(strength.union(endurance).count, 4, "four training days, so no recovery week")
+        XCTAssertEqual(Set(summaries.map(\.source)), [.hevy, .strava])
+    }
+
+    /// The whole profile moves by one offset. Anchored per file, the Hevy and
+    /// the Strava half would slide against each other and the overlap days
+    /// would disappear — silently, since both halves would still look sane.
+    func testAProfileMovesAsOneWhateverTheClock() throws {
+        let later = MockWorkoutLoader(bundle: Bundle(for: Workout.self), now: {
+            self.now.addingTimeInterval(200 * 86_400)
+        })
+
+        let base = try summaries(of: .mixed).map { $0.startTime }.sorted()
+        let shifted = try later.activities(for: .mixed)
+            .map(\.startTime)
+            .sorted()
+
+        XCTAssertEqual(base.count, shifted.count)
+        let offsets = Set(zip(base, shifted).map { $1.timeIntervalSince($0) })
+        XCTAssertEqual(offsets.count, 1, "the sources moved by different offsets")
+        XCTAssertEqual(try XCTUnwrap(offsets.first).truncatingRemainder(dividingBy: 86_400), 0)
+    }
+
+    /// US-15 AC3: six of the last seven days, and no single source shows it —
+    /// three lifts, two runs and one ride. This is the case the recovery rule
+    /// only catches because #184 counts across sources.
+    func testTheOverreachedMixedWeekIsSixDaysAcrossThreeSources() throws {
+        for hour in [0, 6, 12, 18, 23] {
+            let metrics = try recoveryMetrics(of: .overreachedMixed, atHour: hour)
+
+            XCTAssertEqual(metrics.trainingDays, 6, "at \(hour):01 UTC")
+            XCTAssertEqual(metrics.sessions, 6, "at \(hour):01 UTC")
+            XCTAssertTrue(metrics.needsRecovery, "at \(hour):01 UTC")
+            XCTAssertEqual(metrics.suggestedRestHours, 48)
+            XCTAssertEqual(try XCTUnwrap(metrics.averageRPE), 8.5, accuracy: 0.0001)
+            XCTAssertNotNil(metrics.averageHeartRate, "the runs and the ride wore a strap")
+        }
+    }
+
+    func testNoSingleSourceOfTheOverreachedMixedWeekReachesTheThreshold() throws {
+        let week = RecoveryMetrics.lastSevenDaysSessions(
+            in: try summaries(of: .overreachedMixed),
+            now: now,
+            calendar: Self.utc
+        )
+        XCTAssertEqual(Set(week.map(\.source)), [.hevy, .strava, .polar])
+
+        for source in ConnectorSource.allCases {
+            let days = Set(week.filter { $0.source == source }
+                .map { Self.utc.startOfDay(for: $0.startTime) })
+            XCTAssertLessThan(days.count, RecoveryMetrics.recoveryTrainingDays, source.rawValue)
+        }
+    }
+
+    /// Polar reports no sets at all: its distance and duration travel in the
+    /// cardio block, and the cache has to read them back from there.
+    func testThePolarRidesCarryTheirFiguresInTheCardioBlock() throws {
+        let rides = try summaries(of: .overreachedMixed).filter { $0.source == .polar }
+
+        XCTAssertEqual(rides.count, 9)
+        for ride in rides {
+            XCTAssertEqual(ride.kind, .ride)
+            XCTAssertEqual(ride.exerciseCount, 0)
+            XCTAssertGreaterThan(try XCTUnwrap(ride.distanceMeters), 0)
+            XCTAssertGreaterThan(try XCTUnwrap(ride.durationSeconds), 0)
+            XCTAssertNotNil(ride.cardio?.averageHeartRate)
+            XCTAssertNotNil(ride.cardio?.trainingLoad)
         }
     }
 
@@ -328,16 +522,43 @@ final class MockWorkoutLoaderTests: XCTestCase {
     /// `RecoveryMetrics` over the profile as a loader re-anchored at
     /// `hour`:01 UTC on the reference day would cache it — the rule the
     /// analysis applies, not a copy of it.
+    ///
+    /// The details are handed over as well since #188, so the mean RPE of a
+    /// cross-source week is the figure the recovery card would carry rather
+    /// than a `nil` the helper produced.
     private func recoveryMetrics(of profile: MockWorkoutProfile, atHour hour: Int) throws -> RecoveryMetrics {
         let reference = Self.utc.startOfDay(for: now).addingTimeInterval(Double(hour) * 3_600 + 60)
         let workouts = try MockWorkoutLoader(bundle: Bundle(for: Workout.self), now: { reference })
             .workouts(for: profile)
         return RecoveryMetrics(
             summaries: workouts.map(WorkoutSummary.init(workout:)),
-            details: [],
+            details: workouts.map(WorkoutDetail.init(workout:)),
             now: reference,
             calendar: Self.utc
         )
+    }
+
+    /// The profiles that record strength training — everything asserted about
+    /// Hevy's volume, its sets and its pages is about these (#188).
+    private var hevyProfiles: [MockWorkoutProfile] {
+        MockWorkoutProfile.allCases.filter { $0.hevyPayload != nil }
+    }
+
+    /// The Hevy half of a profile, as cache models.
+    private func hevyWorkouts(of profile: MockWorkoutProfile) throws -> [Workout] {
+        try loader.activities(for: profile, from: .hevy).map { $0.makeWorkout() }
+    }
+
+    /// The whole profile, across every source, as the cache would summarise it.
+    private func summaries(of profile: MockWorkoutProfile) throws -> [WorkoutSummary] {
+        try loader.workouts(for: profile).map(WorkoutSummary.init(workout:))
+    }
+
+    /// One payload file's raw JSON, straight off the bundle.
+    private func json(of payload: MockWorkoutPayload) throws -> Any {
+        let url = try XCTUnwrap(Bundle(for: Workout.self)
+            .url(forResource: payload.resourceName, withExtension: "json"))
+        return try JSONSerialization.jsonObject(with: Data(contentsOf: url))
     }
 
     /// Dashboard volume rule (#26): weight × reps, warm-ups excluded.

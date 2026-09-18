@@ -39,6 +39,11 @@ enum LaunchArgument {
         static let personB = "person-b"
         static let progressionReady = "progression-ready"
         static let overreached = "overreached"
+        /// The cross-source profiles of US-15 (#188): Strava only, Hevy plus
+        /// Strava, and six of seven days across all three sources.
+        static let runner = "runner"
+        static let mixed = "mixed"
+        static let overreachedMixed = "overreached-mixed"
     }
 
     /// The reports `seedAnalysis` can store (`MockAnalysisSeeder.reports`).
