@@ -173,6 +173,114 @@ final class StravaConnectorTests: XCTestCase {
         XCTAssertNil(set.durationSeconds)
     }
 
+    // MARK: - Kind & cardio metrics (#180)
+
+    /// US-15 / #180 AC1: a run with heart rate and elevation arrives as a
+    /// classified session with its cardio block filled.
+    func testARunWithHeartRateAndElevationFillsTheCardioBlock() async throws {
+        stub(pages: [StravaPayloadFactory.page([
+            StravaPayloadFactory.activity(
+                id: 987,
+                start: Self.daysAgo(1),
+                sportType: "TrailRun",
+                type: "Run",
+                totalElevationGain: 412.5,
+                averageSpeed: 2.78,
+                averageHeartRate: 148.4,
+                maxHeartRate: 171.6,
+                kilojoules: 920,
+                sufferScore: 64
+            ),
+        ])])
+
+        let activities = await fetchAll()
+        let activity = try XCTUnwrap(activities.first)
+        let cardio = try XCTUnwrap(activity.cardio)
+
+        XCTAssertEqual(activity.kind, .run)
+        XCTAssertEqual(cardio.averageHeartRate, 148)
+        XCTAssertEqual(cardio.maxHeartRate, 172)
+        XCTAssertEqual(cardio.elevationGainMeters, 412.5)
+        XCTAssertEqual(cardio.averageSpeedMetersPerSecond, 2.78)
+        XCTAssertEqual(cardio.energyKilojoules, 920)
+        XCTAssertEqual(cardio.perceivedEffort, 64)
+        // Distance and moving time stay on the set, where the dashboard reads
+        // them — the block must not double-count them.
+        XCTAssertNil(cardio.distanceMeters)
+        XCTAssertNil(cardio.durationSeconds)
+    }
+
+    func testAnActivityWithoutMetricsHasNoCardioBlock() async throws {
+        stub(pages: [StravaPayloadFactory.page([
+            StravaPayloadFactory.activity(id: 1, start: Self.daysAgo(1)),
+        ])])
+
+        let activities = await fetchAll()
+        XCTAssertNil(activities.first?.cardio)
+    }
+
+    /// Zero is what Strava sends for what it never measured, so it must not
+    /// turn into "0 m of ascent" or "0 m/s".
+    func testZeroElevationSpeedAndEnergyDecodeAsNotLogged() async throws {
+        stub(pages: [StravaPayloadFactory.page([
+            StravaPayloadFactory.activity(
+                id: 1,
+                start: Self.daysAgo(1),
+                sportType: "Swim",
+                totalElevationGain: 0,
+                averageSpeed: 0,
+                kilojoules: 0
+            ),
+        ])])
+
+        let activities = await fetchAll()
+        XCTAssertNil(activities.first?.cardio)
+    }
+
+    /// Strava composes its finer sports out of the coarse ones, so the
+    /// mapping is matched on the suffix rather than on a lookup table.
+    func testSportTypeMapsOntoTheNormalizedKind() async throws {
+        let cases: [(String, ActivityKind)] = [
+            ("Run", .run),
+            ("TrailRun", .run),
+            ("VirtualRun", .run),
+            ("Ride", .ride),
+            ("GravelRide", .ride),
+            ("EMountainBikeRide", .ride),
+            ("Swim", .swim),
+            ("Hike", .hike),
+            ("Walk", .walk),
+            ("WeightTraining", .strength),
+            ("Crossfit", .strength),
+            ("Yoga", .other),
+            ("Kitesurf", .other),
+        ]
+
+        for (sportType, expected) in cases {
+            stub(pages: [StravaPayloadFactory.page([
+                StravaPayloadFactory.activity(id: 1, start: Self.daysAgo(1), sportType: sportType),
+            ])])
+
+            let activities = await fetchAll()
+            let activity = try XCTUnwrap(activities.first)
+            XCTAssertEqual(activity.kind, expected, sportType)
+        }
+    }
+
+    func testAnUnknownSportTypeFallsBackToTypeBeforeGivingUp() async throws {
+        stub(pages: [StravaPayloadFactory.page([
+            StravaPayloadFactory.activity(id: 1, start: Self.daysAgo(1), sportType: nil, type: "Ride"),
+        ])])
+
+        let activities = await fetchAll()
+        XCTAssertEqual(activities.first?.kind, .ride)
+    }
+
+    /// Every activity of the default 90-day window.
+    private func fetchAll() async -> [Activity] {
+        (try? await sut.fetchActivities(since: Self.daysAgo(90))) ?? []
+    }
+
     func testMissingNameFallsBackToTheSportAndMissingSportTypeToType() async throws {
         stub(pages: [StravaPayloadFactory.page([
             StravaPayloadFactory.activity(id: 1, start: Self.daysAgo(1), name: nil, sportType: nil, type: "Ride"),

@@ -35,14 +35,14 @@ final class PolarExerciseDTOTests: XCTestCase {
         XCTAssertEqual(activity.endTime, activity.startTime.addingTimeInterval(2 * 3600 + 44 * 60 + 30))
         XCTAssertTrue(activity.exercises.isEmpty)
 
-        let metrics = try XCTUnwrap(activity.metrics)
+        let metrics = try XCTUnwrap(activity.cardio)
         XCTAssertEqual(metrics.averageHeartRate, 129)
-        XCTAssertEqual(metrics.maximumHeartRate, 147)
+        XCTAssertEqual(metrics.maxHeartRate, 147)
         XCTAssertEqual(metrics.activeCalories, 530)
         XCTAssertEqual(metrics.distanceMeters, 1600.2)
         XCTAssertEqual(metrics.durationSeconds, 9870)
         XCTAssertEqual(metrics.trainingLoad, 143.22)
-        XCTAssertEqual(metrics.sport, "TREADMILL_RUNNING")
+        XCTAssertEqual(activity.kind, .run)
     }
 
     func testDropsAnExerciseThatHasNoParseableStartTime() throws {
@@ -71,7 +71,7 @@ final class PolarExerciseDTOTests: XCTestCase {
             try JSONDecoder().decode(PolarExerciseDTO.self, from: json).makeActivity()
         )
 
-        XCTAssertNil(activity.metrics)
+        XCTAssertNil(activity.cardio)
     }
 
     func testDurationParserHandlesPartialComponentsAndRejectsGarbage() {

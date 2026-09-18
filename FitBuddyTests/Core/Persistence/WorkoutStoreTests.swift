@@ -60,6 +60,79 @@ final class WorkoutStoreTests: XCTestCase {
         XCTAssertEqual(sets.last?.rpe, 9.5)
     }
 
+    // MARK: - Kind & cardio (#180)
+
+    /// US-15 / #180 AC2: a Hevy workout is cached as strength training with
+    /// no cardio block — the defaults carry it, no mapping has to say so.
+    func testAStrengthActivityCachesAsStrengthWithoutCardio() async throws {
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
+            ActivityFactory.activity(id: "w-1", start: Date(timeIntervalSince1970: 1_750_000_000)),
+        ])
+
+        let workout = try XCTUnwrap(try ModelContext(container).fetch(FetchDescriptor<Workout>()).first)
+        XCTAssertEqual(workout.kind, .strength)
+        XCTAssertNil(workout.cardio)
+        XCTAssertNil(WorkoutSummary(workout: workout).cardio)
+        XCTAssertEqual(WorkoutSummary(workout: workout).kind, .strength)
+    }
+
+    /// Every cardio field survives `Activity` → `Workout` → `WorkoutSummary`:
+    /// the columns are flat, so one forgotten assignment would silently drop
+    /// a metric on the way into the cache.
+    func testACardioActivityCachesItsKindAndEveryMetric() async throws {
+        let start = Date(timeIntervalSince1970: 1_750_000_000)
+        try await sut.replaceCachedWorkouts(from: .strava, with: [
+            ActivityFactory.cardioActivity(id: "strava:1", start: start),
+        ])
+
+        let workout = try XCTUnwrap(try ModelContext(container).fetch(FetchDescriptor<Workout>()).first)
+        let cardio = try XCTUnwrap(workout.cardio)
+        XCTAssertEqual(workout.kind, .run)
+        XCTAssertEqual(cardio.averageHeartRate, 148)
+        XCTAssertEqual(cardio.maxHeartRate, 172)
+        XCTAssertEqual(cardio.elevationGainMeters, 412.5)
+        XCTAssertEqual(cardio.averageSpeedMetersPerSecond, 2.78)
+        XCTAssertEqual(cardio.energyKilojoules, 920)
+        XCTAssertEqual(cardio.perceivedEffort, 64)
+        XCTAssertEqual(cardio.activeCalories, 530)
+        XCTAssertEqual(cardio.distanceMeters, 10_400)
+        XCTAssertEqual(cardio.durationSeconds, 3742)
+        XCTAssertEqual(cardio.trainingLoad, 143.22)
+
+        let summary = WorkoutSummary(workout: workout)
+        XCTAssertEqual(summary.kind, .run)
+        XCTAssertEqual(summary.cardio, cardio)
+        // The session logged no sets, so the dashboard's two figures come out
+        // of the cardio block rather than out of an aggregation over nothing.
+        XCTAssertEqual(summary.distanceMeters, 10_400)
+        XCTAssertEqual(summary.durationSeconds, 3742)
+        XCTAssertTrue(summary.isCardio)
+    }
+
+    /// A row written before V5 has no sport recorded. It must not read as
+    /// strength training just because that is the newer default — a cached
+    /// run would end up in the wrong domain of the analysis.
+    func testASessionCachedBeforeV5ReadsItsKindFromItsSource() async throws {
+        let start = Date(timeIntervalSince1970: 1_750_000_000)
+        try await sut.replaceCachedWorkouts(from: .strava, with: [
+            ActivityFactory.cardioActivity(id: "strava:1", start: start),
+        ])
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
+            ActivityFactory.activity(id: "w-1", start: start),
+        ])
+
+        let context = ModelContext(container)
+        let workouts = try context.fetch(FetchDescriptor<Workout>())
+        for workout in workouts {
+            workout.kindRawValue = nil
+        }
+        try context.save()
+
+        let byID = Dictionary(uniqueKeysWithValues: workouts.map { ($0.id, $0.kind) })
+        XCTAssertEqual(byID["strava:1"], .other)
+        XCTAssertEqual(byID["w-1"], .strength)
+    }
+
     // MARK: - Replacement
 
     func testReplaceDropsWorkoutsMissingFromTheNewWindow() async throws {
