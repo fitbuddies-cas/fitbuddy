@@ -15,14 +15,47 @@ enum AnalysisReportCard: Equatable, Sendable {
     case progression(exercise: String, muscleGroup: MuscleGroup, fromKg: Double, toKg: Double, reasoning: String)
     case recovery(reasoning: String, metrics: RecoveryMetrics)
     case imbalance(groupA: MuscleGroup, perWeekA: Double, groupB: MuscleGroup, perWeekB: Double, reasoning: String)
+    /// One figure of the week, with the app's own current value in place of
+    /// the model's (US-15 AC5, #186).
+    ///
+    /// `from` is the weekly aggregate the app computed, `to` and `reasoning`
+    /// are the model's, and the delta is derived from the two by
+    /// `MetricUnit.delta(from:to:)` — never sent, never stored. `source` is
+    /// the header label and is empty where the card has none.
+    case metric(label: String, from: Double, to: Double, unit: MetricUnit, reasoning: String, source: String)
+    /// Strength and endurance in the same week, with the app's day counts
+    /// (US-15 AC2, #186). Only the reasoning is the model's.
+    case interference(metrics: InterferenceMetrics, reasoning: String)
     /// A model note, or a card that failed validation, reduced to its text.
     case note(title: String, text: String)
+
+    /// Whether this card states a step that adds training load — what decides
+    /// whether a "progress" verdict has a card behind it (#177).
+    ///
+    /// A progression always does. A metric card does when its step is an
+    /// improvement in its own unit (`MetricUnit.isImprovement`), so a card
+    /// asking for fewer kilometres or an easier heart rate does not hold up a
+    /// progress verdict, and an endurance report recommending +3 km does —
+    /// without this, the "Endurance" profile could never reach a progress
+    /// verdict at all, because it produces no progression cards.
+    var backsProgress: Bool {
+        switch self {
+        case .progression:
+            return true
+        case let .metric(_, from, to, unit, _, _):
+            return unit.isImprovement(from: from, to: to)
+        case .recovery, .imbalance, .interference, .note:
+            return false
+        }
+    }
 
     var kind: AnalysisCard.Kind {
         switch self {
         case .progression: return .progression
         case .recovery: return .recovery
         case .imbalance: return .imbalance
+        case .metric: return .metric
+        case .interference: return .interference
         case .note: return .note
         }
     }
@@ -34,6 +67,8 @@ extension AnalysisReportCard: Codable {
         case exercise, muscleGroup, fromKg, toKg
         case metrics
         case groupA, perWeekA, groupB, perWeekB
+        case label, from, to, unit, source
+        case interference
         case reasoning
         case title, text
     }
@@ -62,6 +97,20 @@ extension AnalysisReportCard: Codable {
                 perWeekB: try container.decode(Double.self, forKey: .perWeekB),
                 reasoning: try container.decode(String.self, forKey: .reasoning)
             )
+        case .metric:
+            self = .metric(
+                label: try container.decode(String.self, forKey: .label),
+                from: try container.decode(Double.self, forKey: .from),
+                to: try container.decode(Double.self, forKey: .to),
+                unit: try container.decode(MetricUnit.self, forKey: .unit),
+                reasoning: try container.decode(String.self, forKey: .reasoning),
+                source: try container.decodeIfPresent(String.self, forKey: .source) ?? ""
+            )
+        case .interference:
+            self = .interference(
+                metrics: try container.decode(InterferenceMetrics.self, forKey: .interference),
+                reasoning: try container.decode(String.self, forKey: .reasoning)
+            )
         case .note:
             self = .note(
                 title: try container.decode(String.self, forKey: .title),
@@ -88,6 +137,16 @@ extension AnalysisReportCard: Codable {
             try container.encode(perWeekA, forKey: .perWeekA)
             try container.encode(groupB, forKey: .groupB)
             try container.encode(perWeekB, forKey: .perWeekB)
+            try container.encode(reasoning, forKey: .reasoning)
+        case let .metric(label, from, to, unit, reasoning, source):
+            try container.encode(label, forKey: .label)
+            try container.encode(from, forKey: .from)
+            try container.encode(to, forKey: .to)
+            try container.encode(unit, forKey: .unit)
+            try container.encode(reasoning, forKey: .reasoning)
+            try container.encode(source, forKey: .source)
+        case let .interference(metrics, reasoning):
+            try container.encode(metrics, forKey: .interference)
             try container.encode(reasoning, forKey: .reasoning)
         case let .note(title, text):
             try container.encode(title, forKey: .title)

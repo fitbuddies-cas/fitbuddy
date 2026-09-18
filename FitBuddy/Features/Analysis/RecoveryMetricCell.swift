@@ -1,7 +1,16 @@
 import Foundation
 
-/// One figure in the recovery card's metrics row (US-14 AC4, US-15 AC7,
-/// #177, #184).
+/// One figure in a card's metrics row (US-14 AC4, US-15 AC7, #177, #184,
+/// #186).
+///
+/// Named for the recovery card, which is where the row came from, and used by
+/// the interference card since #186 as well — see
+/// `AnalysisCardFormatter.interferenceCells`. Kept under its own name rather
+/// than renamed to something neutral: the type is referenced by
+/// `RecoveryMetricCellTests` and by `RecoveryCardView` on a branch still under
+/// review, and a rename would be a conflict in every one of them for no
+/// behaviour. What the two cards share is the rule, not the wording: **a cell
+/// with no value is left out, never filled with `"—"`** (US-15 AC7).
 struct RecoveryMetricCell: Equatable, Sendable {
     let label: String
     let value: String

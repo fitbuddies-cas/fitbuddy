@@ -37,6 +37,25 @@ enum AnalysisCardAccessibility {
                 .map { "\($0.group.displayName) \(AnalysisCardFormatter.frequency($0.perWeek)) \($0.perWeek == 1 ? "time" : "times") per week" }
                 .joined(separator: ", ")
             return "Imbalance. \(frequencies). \(reasoning)"
+        case let .metric(label, from, to, unit, reasoning, source):
+            // The unit is spelled out — VoiceOver reads "km" and "bpm" letter
+            // by letter — and so is the direction, because "32 35" says
+            // nothing about which way the figure moves.
+            var sentence = AnalysisCardFormatter.metricChipTitle(from: from, to: to, unit: unit) + "."
+            if !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                sentence += " \(source)."
+            }
+            sentence += " \(label)."
+            if let start = unit.spoken(from), let target = unit.spoken(to) {
+                sentence += " From \(start) to \(target)."
+            }
+            return sentence + " \(reasoning)"
+        case let .interference(metrics, reasoning):
+            return """
+            Interference. \(AnalysisCardFormatter.interferenceHeadline(metrics)) \
+            \(metrics.strengthDays) strength days, \(metrics.cardioDays) endurance days, \
+            \(metrics.overlapDays) days with both, of the last \(metrics.days). \(reasoning)
+            """
         case let .note(title, text):
             return "\(title). \(text)"
         }

@@ -132,6 +132,9 @@ enum AccessibilityID {
         static let progressionCard = "analysis.progressionCard"
         static let recoveryCard = "analysis.recoveryCard"
         static let imbalanceCard = "analysis.imbalanceCard"
+        /// The generic metric card and the interference card (US-15, #186).
+        static let metricCard = "analysis.metricCard"
+        static let interferenceCard = "analysis.interferenceCard"
         static let noteCard = "analysis.noteCard"
         /// The prose card of an answer that is not a report (US-14 AC5/AC6).
         static let prose = "analysis.prose"

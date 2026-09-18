@@ -320,8 +320,17 @@ enum AnalysisPromptBuilder {
     recommend in suggestedRestHours. Use "imbalance" when two muscle groups \
     are trained at clearly different frequencies, naming each group and its \
     sessions per week exactly as the Muscle groups section lists them. Use \
+    "metric" for a figure of the week as a whole rather than of one exercise \
+    — weekly distance, long run, weekly volume, mean heart rate, weekly \
+    training time: label names the figure, unit is the unit both numbers are \
+    in, from is that figure as the last 7 days report it, to is the figure \
+    you recommend, source is a short header label such as Run, Ride or \
+    Strength, or an empty string when none fits. Keep to within a fifth of \
+    from: one week of data does not back a larger step. Use "interference" \
+    when strength and endurance sessions shared days in the last 7, taking \
+    the three day counts from the Week structure section. Use \
     "note" for anything else worth saying, including a rep progression \
-    without a weight change and anything about endurance training. Every \
+    without a weight change. Every \
     card follows the ground rules above; a recommendation you cannot ground \
     in the data does not become a card.
 

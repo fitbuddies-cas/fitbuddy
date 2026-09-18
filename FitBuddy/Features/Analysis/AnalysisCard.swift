@@ -20,6 +20,37 @@ enum AnalysisCard: Equatable, Sendable {
     case recovery(reasoning: String, suggestedRestHours: Double)
     /// Two muscle groups trained at clearly different frequencies.
     case imbalance(groupA: String, perWeekA: Double, groupB: String, perWeekB: Double, reasoning: String)
+    /// One figure of the training week, from where it stands to where the
+    /// model recommends it goes, in whatever unit that figure is measured in
+    /// (US-15 AC5, #186).
+    ///
+    /// The generic card. `source` is the small label on the right of the
+    /// header — "Run", "Strength", "Chest" — and may be empty, in which case
+    /// no label is drawn. `from` is meant to be the app's own weekly figure;
+    /// #175 checks it against the aggregate and replaces it with the app's.
+    /// The difference is **not** on the wire: the app computes it, because a
+    /// delta the model wrote could disagree with the two figures printed
+    /// beside it.
+    ///
+    /// **`.progression` is deliberately not folded into this case**, although
+    /// `.metric(unit: .kilograms)` can state the same numbers. A progression
+    /// carries an exercise and a muscle group this case has no slot for; it is
+    /// validated against the listed exercises and the barbell step of prompt
+    /// rule 6, which is nothing like a check against a weekly aggregate; and
+    /// US-14's schema, prompt and card view all name it. Merging the two would
+    /// either lose the exercise or force every metric card to carry two fields
+    /// only kilograms ever fills. The prompt therefore asks for `progression`
+    /// for a load increase on one exercise and for `metric` for a figure of
+    /// the week as a whole.
+    case metric(label: String, from: Double, to: Double, unit: MetricUnit, reasoning: String, source: String)
+    /// Strength and endurance in the same week: how many days carried each,
+    /// and how many carried both (US-15 AC2, #186).
+    ///
+    /// The three counts are the model's reading back of what the prompt's week
+    /// structure told it. The app ignores them and uses its own, like the
+    /// recovery card's figures — they are on the wire only so the model has to
+    /// commit to the week it is reasoning about.
+    case interference(strengthDays: Int, cardioDays: Int, overlapDays: Int, reasoning: String)
     /// Anything else worth saying, e.g. a rep progression without a weight
     /// change.
     case note(title: String, text: String)
@@ -30,6 +61,8 @@ enum AnalysisCard: Equatable, Sendable {
         case progression
         case recovery
         case imbalance
+        case metric
+        case interference
         case note
     }
 
@@ -39,7 +72,9 @@ enum AnalysisCard: Equatable, Sendable {
         switch self {
         case .progression(_, _, _, _, let reasoning),
              .recovery(let reasoning, _),
-             .imbalance(_, _, _, _, let reasoning):
+             .imbalance(_, _, _, _, let reasoning),
+             .metric(_, _, _, _, let reasoning, _),
+             .interference(_, _, _, let reasoning):
             return reasoning
         case .note(_, let text):
             return text
@@ -51,6 +86,8 @@ enum AnalysisCard: Equatable, Sendable {
         case .progression: return .progression
         case .recovery: return .recovery
         case .imbalance: return .imbalance
+        case .metric: return .metric
+        case .interference: return .interference
         case .note: return .note
         }
     }
@@ -64,6 +101,8 @@ extension AnalysisCard: Codable {
         case exercise, muscleGroup, fromKg, toKg
         case suggestedRestHours
         case groupA, perWeekA, groupB, perWeekB
+        case label, from, to, unit, source
+        case strengthDays, cardioDays, overlapDays
         case reasoning
         case title, text
     }
@@ -92,6 +131,25 @@ extension AnalysisCard: Codable {
                 perWeekB: try container.decode(Double.self, forKey: .perWeekB),
                 reasoning: try container.decode(String.self, forKey: .reasoning)
             )
+        case .metric:
+            self = .metric(
+                label: try container.decode(String.self, forKey: .label),
+                from: try container.decode(Double.self, forKey: .from),
+                to: try container.decode(Double.self, forKey: .to),
+                unit: try container.decode(MetricUnit.self, forKey: .unit),
+                reasoning: try container.decode(String.self, forKey: .reasoning),
+                // The only optional key across every card: the schema asks for
+                // it, but an empty header label is a card without a source,
+                // not a broken card.
+                source: try container.decodeIfPresent(String.self, forKey: .source) ?? ""
+            )
+        case .interference:
+            self = .interference(
+                strengthDays: try container.decode(Int.self, forKey: .strengthDays),
+                cardioDays: try container.decode(Int.self, forKey: .cardioDays),
+                overlapDays: try container.decode(Int.self, forKey: .overlapDays),
+                reasoning: try container.decode(String.self, forKey: .reasoning)
+            )
         case .note:
             self = .note(
                 title: try container.decode(String.self, forKey: .title),
@@ -118,6 +176,18 @@ extension AnalysisCard: Codable {
             try container.encode(perWeekA, forKey: .perWeekA)
             try container.encode(groupB, forKey: .groupB)
             try container.encode(perWeekB, forKey: .perWeekB)
+            try container.encode(reasoning, forKey: .reasoning)
+        case let .metric(label, from, to, unit, reasoning, source):
+            try container.encode(label, forKey: .label)
+            try container.encode(from, forKey: .from)
+            try container.encode(to, forKey: .to)
+            try container.encode(unit, forKey: .unit)
+            try container.encode(reasoning, forKey: .reasoning)
+            try container.encode(source, forKey: .source)
+        case let .interference(strengthDays, cardioDays, overlapDays, reasoning):
+            try container.encode(strengthDays, forKey: .strengthDays)
+            try container.encode(cardioDays, forKey: .cardioDays)
+            try container.encode(overlapDays, forKey: .overlapDays)
             try container.encode(reasoning, forKey: .reasoning)
         case let .note(title, text):
             try container.encode(title, forKey: .title)

@@ -123,6 +123,22 @@ enum AnalysisReportFactory {
                 perWeekB: 1,
                 reasoning: "Add a second leg session this week."
             )
+        case .metric:
+            return .metric(
+                label: "Weekly distance",
+                from: 32,
+                to: 35,
+                unit: .kilometers,
+                reasoning: "32 km held for three weeks at an unchanged easy heart rate.",
+                source: "Run"
+            )
+        case .interference:
+            return .interference(
+                strengthDays: 4,
+                cardioDays: 4,
+                overlapDays: 3,
+                reasoning: "Move one run onto a day without lifting."
+            )
         case .note:
             return .note(title: "Pull-ups", text: "Add one rep per set before adding weight.")
         }
@@ -151,6 +167,8 @@ enum AnalysisReportFactory {
             validatedCard(.recovery),
             validatedCard(.progression),
             validatedCard(.imbalance),
+            validatedCard(.metric),
+            validatedCard(.interference),
             validatedCard(.note),
         ],
         summary: "Rest two days, then add 2.5 kg on bench and give legs a second slot."
@@ -179,6 +197,20 @@ enum AnalysisReportFactory {
                 groupB: .legs,
                 perWeekB: 0.8,
                 reasoning: "Legs get a third of the chest's sessions."
+            )
+        case .metric:
+            return .metric(
+                label: "Weekly distance",
+                from: 32,
+                to: 35,
+                unit: .kilometers,
+                reasoning: "32 km held for three weeks at an unchanged easy heart rate.",
+                source: "Run"
+            )
+        case .interference:
+            return .interference(
+                metrics: InterferenceMetrics(strengthDays: 4, cardioDays: 4, overlapDays: 3),
+                reasoning: "Move one run onto a day without lifting."
             )
         case .note:
             return .note(title: "Reps first", text: "Add a rep on rows before adding weight.")
