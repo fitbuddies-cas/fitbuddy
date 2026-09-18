@@ -327,8 +327,12 @@ enum AnalysisReportFactory {
 
     /// What a model answers for `MockWorkoutProfile.mixed` under "Overall
     /// load": the interference card of design 3.4d with a metric card under
-    /// it. The day counts are the model's guess — the app replaces them with
-    /// its own (#186).
+    /// it.
+    ///
+    /// **Its day counts are deliberately wrong** — nine strength days in a
+    /// seven-day week, one cardio day and no overlap at all. The app replaces
+    /// them with its own (#186), and a fixture that already stated the right
+    /// figures would satisfy the same assertion with that replacement deleted.
     static func mixedOverallLoad(weeklyKilometers: Double) -> AnalysisReport {
         AnalysisReport(
             headline: "Hold steady this week.",
@@ -336,9 +340,9 @@ enum AnalysisReportFactory {
             lead: "Two of the three endurance sessions sit on a lifting day.",
             cards: [
                 .interference(
-                    strengthDays: 3,
-                    cardioDays: 3,
-                    overlapDays: 2,
+                    strengthDays: 9,
+                    cardioDays: 1,
+                    overlapDays: 0,
                     reasoning: "Move the easy run onto a day without lifting."
                 ),
                 .metric(
