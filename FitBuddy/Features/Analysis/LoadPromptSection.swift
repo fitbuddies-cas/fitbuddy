@@ -32,14 +32,19 @@ enum LoadPromptSection {
         let trainingDays = strengthDays.union(enduranceDays)
         let both = strengthDays.intersection(enduranceDays)
 
+        // Clamped to the window, as the rest days already were: a session
+        // dated after `now` — a provider clock running fast, a time zone the
+        // cache and the window disagree about — would otherwise read as "29 of
+        // 28 training days" and a negative number of rest days.
+        let counted = min(trainingDays.count, window.days)
         var lines = [
             "## Week structure (last \(window.weeks) weeks)",
-            "Training days: \(trainingDays.count) of \(window.days) "
-                + "(\(PromptFigures.frequency(trainingDays.count, window: window)) per week)",
+            "Training days: \(counted) of \(window.days) "
+                + "(\(PromptFigures.frequency(counted, window: window)) per week)",
             "Days with strength only: \(strengthDays.subtracting(enduranceDays).count)",
             "Days with endurance only: \(enduranceDays.subtracting(strengthDays).count)",
             "Days with both: \(both.count)",
-            "Rest days: \(max(0, window.days - trainingDays.count))",
+            "Rest days: \(window.days - counted)",
         ]
         if let streak = longestStreakLine(trainingDays, calendar: calendar, days: formatter) {
             lines.append(streak)
