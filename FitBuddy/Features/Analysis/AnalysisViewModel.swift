@@ -95,6 +95,7 @@ final class AnalysisViewModel: ObservableObject {
     private var isRestoring = false
 
     private let cache: WorkoutSummaryReading
+    private let exerciseCache: (any ExerciseSummaryReading & ExerciseProgressionReading)?
     private let inference: AnalysisStreaming
     private let rateLimit: AnalysisRateLimitStore
     private let resultStore: (any AnalysisResultStoring)?
@@ -109,6 +110,11 @@ final class AnalysisViewModel: ObservableObject {
 
     /// - Parameters:
     ///   - cache: Read access to the cached window (`WorkoutStore` in the app).
+    ///   - exerciseCache: Per-exercise read access for the prompt's Exercises
+    ///     section (#173) — `WorkoutStore` in the app, like `cache`. `nil` —
+    ///     the default — builds the prompt without exercise data, which is
+    ///     what SwiftUI previews get: the prompt then says there is none, and
+    ///     the system prompt forbids naming a weight it was not given.
     ///   - inference: The streaming call (`InferenceService` in the app).
     ///   - rateLimit: The shared lock store — the same one the service writes
     ///     to, so the label and the service's own guard never disagree.
@@ -128,6 +134,7 @@ final class AnalysisViewModel: ObservableObject {
     ///     recommendation's age still changes, and it changes slowly.
     init(
         cache: WorkoutSummaryReading,
+        exerciseCache: (any ExerciseSummaryReading & ExerciseProgressionReading)? = nil,
         inference: AnalysisStreaming,
         rateLimit: AnalysisRateLimitStore = AnalysisRateLimitStore(),
         resultStore: (any AnalysisResultStoring)? = nil,
@@ -139,6 +146,7 @@ final class AnalysisViewModel: ObservableObject {
         restingTickInterval: TimeInterval = 60
     ) {
         self.cache = cache
+        self.exerciseCache = exerciseCache
         self.inference = inference
         self.rateLimit = rateLimit
         self.resultStore = resultStore
@@ -431,14 +439,21 @@ final class AnalysisViewModel: ObservableObject {
                 state = .error(.noTrainingData)
                 return nil
             }
+            let start = window.start(endingAt: reference, calendar: calendar)
+            // Read before the context is published: a read that fails here
+            // fails the run, and a failed run must not leave a data basis on
+            // screen.
+            let exercises = try await readExercises(since: start)
+            guard !Task.isCancelled else { return nil }
+
+            // Read here, per run: what the user changed in Settings a minute
+            // ago has to be what this analysis sees (US-13 AC3/AC4).
+            let profile = await trainingProfile.profile
+
             // Counted over the resolved window, not over everything the read
             // returned: the cache was read wide enough for the widest rung and
             // its comparison window, and reporting those sessions as the data
             // basis would overstate it by a factor of six.
-            let start = window.start(endingAt: reference, calendar: calendar)
-            // Read here, per run: what the user changed in Settings a minute
-            // ago has to be what this analysis sees (US-13 AC3/AC4).
-            let profile = await trainingProfile.profile
             context = AnalysisContext(
                 sessionCount: summaries.filter { $0.startTime >= start }.count,
                 window: window,
@@ -446,6 +461,8 @@ final class AnalysisViewModel: ObservableObject {
             )
             return AnalysisPromptBuilder.make(
                 summaries: summaries,
+                exercises: exercises.summaries,
+                progressions: exercises.progressions,
                 window: window,
                 now: reference,
                 calendar: calendar,
@@ -456,6 +473,27 @@ final class AnalysisViewModel: ObservableObject {
             state = .error(.cacheUnavailable)
             return nil
         }
+    }
+
+    /// The movements of the analysed window, and the progression of each one
+    /// the prompt lists (#173).
+    ///
+    /// Read over the resolved window, not over the wide read above: the
+    /// Exercises section ranks by volume *in the window*, and a 26-week roll-up
+    /// would rank by lifts the user may have long moved away from. Progressions
+    /// are read only for the movements `AnalysisPromptBuilder` will list, so a
+    /// window with forty exercises costs ten reads, not forty.
+    private func readExercises(
+        since start: Date
+    ) async throws -> (summaries: [ExerciseSummary], progressions: [String: ExerciseProgression]) {
+        guard let exerciseCache else { return ([], [:]) }
+        let summaries = try await exerciseCache.exerciseSummaries(since: start)
+        var progressions: [String: ExerciseProgression] = [:]
+        for exercise in AnalysisPromptBuilder.promptedExercises(from: summaries) {
+            guard !Task.isCancelled else { break }
+            progressions[exercise.id] = try await exerciseCache.exerciseProgression(id: exercise.id, since: start)
+        }
+        return (summaries, progressions)
     }
 
     /// Appends the finished recommendation to the history, so it is still there

@@ -168,8 +168,10 @@ struct RootView: View {
     /// otherwise restore from (#97, #117).
     private func makeAnalysisViewModel() -> AnalysisViewModel {
         let rateLimit = AnalysisRateLimitStore()
+        let store = WorkoutStore(modelContainer: modelContext.container)
         return AnalysisViewModel(
-            cache: WorkoutStore(modelContainer: modelContext.container),
+            cache: store,
+            exerciseCache: store,
             inference: InferenceService(rateLimit: rateLimit),
             rateLimit: rateLimit,
             resultStore: AnalysisResultStore(modelContainer: modelContext.container)

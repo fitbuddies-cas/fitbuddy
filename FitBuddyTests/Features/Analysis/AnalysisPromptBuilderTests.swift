@@ -334,6 +334,489 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertTrue(prompt.user.contains("No workouts are recorded in this window"))
     }
 
+    // MARK: - Exercises (#173)
+
+    /// AC2 of #173: the mock profile "bench 60 kg x 5, three sessions" has
+    /// to reach the model as exactly that — the value a card starts from.
+    func testBenchPressProfileNamesTheWorkingWeight() {
+        let bench = exercise("Bench Press", volume: 4_500, sessions: 3)
+        let prompt = makeWithExercises([
+            (bench, progression(bench, sessions: [
+                session(daysAgo: 12, sets: working(60, 5, count: 5)),
+                session(daysAgo: 8, sets: working(60, 5, count: 5)),
+                session(daysAgo: 3, sets: working(60, 5, count: 5)),
+            ])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("## Exercises (last 4 weeks)"))
+        XCTAssertTrue(prompt.user.contains("- Bench Press: 60 kg × 5 (most recent session, 2025-06-12)"))
+        XCTAssertTrue(prompt.user.contains("Chest, 3 sessions, 4500 kg"))
+    }
+
+    /// AC1 of #173: at least the eight exercises with the most volume, each
+    /// with weight, reps and the 1RM trend — and the cap named, so a missing
+    /// exercise reads as omitted rather than untrained.
+    func testListsTheExercisesWithTheMostVolumeAndNamesTheCap() throws {
+        let entries = (1...12).map { index -> (ExerciseSummary, ExerciseProgression) in
+            let summary = exercise("Lift \(index)", volume: Double(index) * 1_000, sessions: 2)
+            return (summary, progression(summary, sessions: [
+                session(daysAgo: 10, sets: working(Double(40 + index), 8)),
+                session(daysAgo: 2, sets: working(Double(42 + index), 8)),
+            ]))
+        }
+        let prompt = makeWithExercises(entries)
+        let rows = try exerciseRows(prompt)
+
+        XCTAssertEqual(rows.count, AnalysisPromptBuilder.maxListedExercises)
+        XCTAssertGreaterThanOrEqual(rows.count, 8)
+        // Highest volume first.
+        XCTAssertTrue(rows.first?.hasPrefix("- Lift 12: 54 kg × 8") == true)
+        for row in rows {
+            XCTAssertTrue(row.contains(" kg × 8"), row)
+            XCTAssertTrue(row.contains("e1RM "), row)
+            XCTAssertTrue(row.contains("kg at first session in window"), row)
+        }
+        XCTAssertFalse(prompt.user.contains("- Lift 1:"))
+        XCTAssertFalse(prompt.user.contains("- Lift 2:"))
+        XCTAssertTrue(prompt.user.contains("10 exercises with the most volume listed; 2 more in this window omitted"))
+    }
+
+    /// The footer counts what the cap cut, not what is missing for any other
+    /// reason: a top exercise without a progression is skipped, not omitted.
+    func testOmittedCountsOnlyExercisesPastTheCap() throws {
+        let entries = (1...11).map { index -> (ExerciseSummary, ExerciseProgression) in
+            let summary = exercise("Lift \(index)", volume: Double(index) * 1_000, sessions: 1)
+            return (summary, progression(summary, sessions: [session(daysAgo: 2, sets: working(50, 8))]))
+        }
+        // The highest-volume lift has no progression: one row fewer, but the
+        // cap still cut exactly one exercise.
+        let withoutTop = entries.filter { $0.0.title != "Lift 11" }
+        let prompt = AnalysisPromptBuilder.make(
+            summaries: [workout(daysAgo: 2, volume: 5_000)],
+            exercises: entries.map { $0.0 },
+            progressions: Dictionary(uniqueKeysWithValues: withoutTop.map { ($0.0.id, $0.1) }),
+            now: reference,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(try exerciseRows(prompt).count, AnalysisPromptBuilder.maxListedExercises - 1)
+        XCTAssertTrue(prompt.user.contains("; 1 more in this window omitted)"))
+
+        let noneCut = AnalysisPromptBuilder.make(
+            summaries: [workout(daysAgo: 2, volume: 5_000)],
+            exercises: Array(entries.map { $0.0 }.suffix(3)),
+            progressions: [:],
+            now: reference,
+            calendar: calendar
+        )
+        XCTAssertFalse(noneCut.user.contains("omitted)"))
+    }
+
+    func testFewerExercisesThanTheCapNameNoOmission() {
+        let squat = exercise("Squat (Barbell)", volume: 5_000, sessions: 1)
+        let prompt = makeWithExercises([
+            (squat, progression(squat, sessions: [session(daysAgo: 2, sets: working(80, 5))])),
+        ])
+
+        XCTAssertFalse(prompt.user.contains("omitted)"))
+    }
+
+    /// Names travel exactly as the cache spells them: they are the key the
+    /// recommendation cards are validated against (#175).
+    func testExerciseNamesArePassedExactlyAsLogged() {
+        let press = exercise("Überkopfdrücken (Kurzhantel)", volume: 900, sessions: 1)
+        let prompt = makeWithExercises([
+            (press, progression(press, sessions: [session(daysAgo: 1, sets: working(12.5, 10))])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("- Überkopfdrücken (Kurzhantel): 12.5 kg × 10"))
+    }
+
+    /// The heaviest *working* set: a warm-up is not what the user trains at,
+    /// and heaviest means weight, not the best Epley projection (60 x 8
+    /// projects higher than 65 x 3, but 65 kg is what was on the bar).
+    func testTheWorkingSetIsTheHeaviestNonWarmUpSet() {
+        let row = exercise("Bench Press", volume: 1_000, sessions: 1)
+        let prompt = makeWithExercises([
+            (row, progression(row, sessions: [
+                session(daysAgo: 1, sets: [
+                    set(0, .warmup, 70, 3),
+                    set(1, .normal, 60, 8),
+                    set(2, .normal, 65, 3),
+                    set(3, .normal, 65, 2),
+                ]),
+            ])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("- Bench Press: 65 kg × 3 "))
+        XCTAssertFalse(prompt.user.contains("70 kg ×"))
+    }
+
+    func testTheWorkingSetComesFromTheMostRecentSession() {
+        let row = exercise("Bench Press", volume: 1_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (row, progression(row, sessions: [
+                session(daysAgo: 9, sets: working(70, 5)),
+                session(daysAgo: 2, sets: working(62.5, 5)),
+            ])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("- Bench Press: 62.5 kg × 5 (most recent session, 2025-06-13)"))
+    }
+
+    func testMeanRPEIsListedOnlyWhenLogged() {
+        let logged = exercise("Bench Press", volume: 2_000, sessions: 1)
+        let unlogged = exercise("Row", volume: 1_000, sessions: 1)
+        let prompt = makeWithExercises([
+            (logged, progression(logged, sessions: [
+                session(daysAgo: 1, sets: [
+                    set(0, .warmup, 40, 10, rpe: 5),
+                    set(1, .normal, 60, 5, rpe: 7),
+                    set(2, .normal, 60, 5, rpe: 8),
+                ]),
+            ])),
+            (unlogged, progression(unlogged, sessions: [session(daysAgo: 1, sets: working(50, 10))])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("- Bench Press: 60 kg × 5, mean RPE 7.5 "))
+        XCTAssertTrue(prompt.user.contains("- Row: 50 kg × 10 (most recent session"))
+    }
+
+    /// Epley at the first and the latest session of the window: 60 x 5 is
+    /// 70 kg, 62.5 x 5 is 72.9 kg.
+    func testOneRepMaxTrendRunsFromWindowStartToNow() {
+        let row = exercise("Bench Press", volume: 3_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (row, progression(row, sessions: [
+                session(daysAgo: 20, sets: working(60, 5)),
+                session(daysAgo: 2, sets: working(62.5, 5)),
+            ])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("e1RM 70 kg at first session in window, 72.9 kg now (+2.9 kg)"))
+    }
+
+    /// The progression read may reach further back than the window; the
+    /// trend still has to describe the window every other figure describes.
+    func testSessionsBeforeTheWindowStayOutOfTheTrend() {
+        let row = exercise("Bench Press", volume: 3_000, sessions: 1)
+        let prompt = makeWithExercises([
+            (row, progression(row, sessions: [
+                session(daysAgo: 40, sets: working(100, 5)),
+                session(daysAgo: 2, sets: working(60, 5)),
+            ])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("e1RM 70 kg (one session, no trend yet)"))
+        XCTAssertFalse(prompt.user.contains("100 kg"))
+        XCTAssertFalse(prompt.user.contains("116.7"))
+    }
+
+    func testAFallingTrendAndAnUnchangedOneAreSpelledOut() {
+        let falling = exercise("Squat", volume: 3_000, sessions: 2)
+        let flat = exercise("Row", volume: 2_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (falling, progression(falling, sessions: [
+                session(daysAgo: 20, sets: working(90, 5)),
+                session(daysAgo: 2, sets: working(87.5, 5)),
+            ])),
+            (flat, progression(flat, sessions: [
+                session(daysAgo: 20, sets: working(50, 10)),
+                session(daysAgo: 2, sets: working(50, 10)),
+            ])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("105 kg at first session in window, 102.1 kg now (-2.9 kg)"))
+        XCTAssertTrue(prompt.user.contains("66.7 kg at first session in window, 66.7 kg now (no change)"))
+    }
+
+    /// The flag is `ExerciseProgression.isPlateaued`, not a second rule.
+    func testPlateauFlagComesFromTheProgression() {
+        let stalled = exercise("Bench Press", volume: 3_000, sessions: 4)
+        let fresh = exercise("Row", volume: 2_000, sessions: 3)
+        let prompt = makeWithExercises([
+            (stalled, progression(stalled, sessions: [
+                session(daysAgo: 21, sets: working(65, 5)),
+                session(daysAgo: 14, sets: working(62.5, 5)),
+                session(daysAgo: 7, sets: working(62.5, 5)),
+                session(daysAgo: 2, sets: working(65, 5)),
+            ])),
+            (fresh, progression(fresh, sessions: [
+                session(daysAgo: 14, sets: working(50, 10)),
+                session(daysAgo: 7, sets: working(52.5, 10)),
+                session(daysAgo: 2, sets: working(55, 10)),
+            ])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("Plateau: yes, no new e1RM best in the last 3 sessions"))
+        XCTAssertTrue(prompt.user.contains("Plateau: too few sessions to tell"))
+    }
+
+    func testAProgressingLiftIsNoPlateau() {
+        let row = exercise("Bench Press", volume: 3_000, sessions: 4)
+        let prompt = makeWithExercises([
+            (row, progression(row, sessions: [
+                session(daysAgo: 21, sets: working(60, 5)),
+                session(daysAgo: 14, sets: working(62.5, 5)),
+                session(daysAgo: 7, sets: working(65, 5)),
+                session(daysAgo: 2, sets: working(67.5, 5)),
+            ])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("Plateau: no."))
+    }
+
+    /// The increment the system prompt caps a load increase at, taken from
+    /// the user's own log — warm-ups excluded: counting the 26 kg warm-up
+    /// would make the step 1 kg.
+    func testSmallestLoggedStepComesFromTheWorkingWeights() {
+        let press = exercise("Shoulder Press (Machine)", volume: 3_000, sessions: 2)
+        let single = exercise("Row", volume: 1_000, sessions: 1)
+        let prompt = makeWithExercises([
+            (press, progression(press, sessions: [
+                session(daysAgo: 9, sets: [set(0, .warmup, 26, 10), set(1, .normal, 25, 8)]),
+                session(daysAgo: 2, sets: [set(0, .normal, 27.5, 8), set(1, .normal, 32.5, 6)]),
+            ])),
+            (single, progression(single, sessions: [session(daysAgo: 1, sets: working(50, 10))])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("Smallest logged step: 2.5 kg."))
+        XCTAssertEqual(prompt.user.components(separatedBy: "Smallest logged step").count, 2)
+    }
+
+    /// A gap larger than `maxStepShare` of the working weight is a change of
+    /// equipment, not an increment: 8 → 12 kg would be +33 % in one session.
+    /// The step is left out, and rule 6 falls back to reps.
+    func testALargeGapBetweenLoggedWeightsIsNoStep() {
+        let raise = exercise("Lateral Raise (Dumbbell)", volume: 1_000, sessions: 2)
+        let machine = exercise("Chest Press (Machine)", volume: 3_000, sessions: 2)
+        let bench = exercise("Bench Press", volume: 5_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (raise, progression(raise, sessions: [
+                session(daysAgo: 9, sets: working(8, 15)),
+                session(daysAgo: 2, sets: working(12, 10)),
+            ])),
+            (machine, progression(machine, sessions: [
+                session(daysAgo: 9, sets: working(40, 12)),
+                session(daysAgo: 2, sets: working(70, 8)),
+            ])),
+            (bench, progression(bench, sessions: [
+                session(daysAgo: 9, sets: working(60, 5)),
+                session(daysAgo: 2, sets: working(62.5, 5)),
+            ])),
+        ])
+
+        XCTAssertEqual(prompt.user.components(separatedBy: "Smallest logged step").count, 2)
+        XCTAssertTrue(prompt.user.contains("Smallest logged step: 2.5 kg."))
+        XCTAssertFalse(prompt.user.contains("Smallest logged step: 4 kg"))
+        XCTAssertFalse(prompt.user.contains("Smallest logged step: 30 kg"))
+    }
+
+    /// Below the share, the floor keeps a light dumbbell's real step: 2 kg on
+    /// a 10 kg lateral raise is 20 %, but no more than one plate pair.
+    func testASmallStepOnALightWeightIsKeptByTheFloor() {
+        let raise = exercise("Lateral Raise (Dumbbell)", volume: 1_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (raise, progression(raise, sessions: [
+                session(daysAgo: 9, sets: working(8, 15)),
+                session(daysAgo: 2, sets: working(10, 12)),
+            ])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("Smallest logged step: 2 kg."))
+    }
+
+    /// The floor does not turn a change of dumbbells into a step: 8 → 12 kg
+    /// is 4 kg, past both the share and the floor.
+    func testTheFloorStillDropsAChangeOfEquipment() {
+        let raise = exercise("Lateral Raise (Dumbbell)", volume: 1_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (raise, progression(raise, sessions: [
+                session(daysAgo: 9, sets: working(8, 15)),
+                session(daysAgo: 2, sets: working(12, 10)),
+            ])),
+        ])
+
+        XCTAssertFalse(prompt.user.contains("Smallest logged step"))
+    }
+
+    /// A step exactly at the share still counts: 2.5 kg on 25 kg is 10 %.
+    func testAStepAtTheShareIsKept() {
+        let curl = exercise("Bicep Curl (Cable)", volume: 1_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (curl, progression(curl, sessions: [
+                session(daysAgo: 9, sets: working(22.5, 10)),
+                session(daysAgo: 2, sets: working(25, 10)),
+            ])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("Smallest logged step: 2.5 kg."))
+    }
+
+    /// A set with weight but no reps — a loaded carry — is not a working set:
+    /// it neither sets the working weight nor a step. Counted, 102.5 kg would
+    /// make the step 2.5 kg.
+    func testASetWithWeightButNoRepsIsNoWorkingSet() {
+        let deadlift = exercise("Deadlift (Barbell)", volume: 5_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (deadlift, progression(deadlift, sessions: [
+                session(daysAgo: 9, sets: working(100, 5)),
+                session(daysAgo: 2, sets: [
+                    set(0, .normal, 105, 5),
+                    SetDetail(index: 1, type: .normal, weightKg: 120, reps: nil,
+                              distanceMeters: 40, durationSeconds: nil, rpe: nil),
+                    SetDetail(index: 2, type: .normal, weightKg: 102.5, reps: nil,
+                              distanceMeters: 40, durationSeconds: nil, rpe: nil),
+                ]),
+            ])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("- Deadlift (Barbell): 105 kg × 5 "))
+        XCTAssertTrue(prompt.user.contains("Smallest logged step: 5 kg."))
+    }
+
+    /// Only weighted sets without reps: the line says what is missing
+    /// instead of claiming nothing was logged.
+    func testASessionWithWeightsButNoRepsSaysSo() {
+        let carry = exercise("Farmers Walk", volume: 0, sessions: 1)
+        let prompt = makeWithExercises([
+            (carry, progression(carry, sessions: [
+                session(daysAgo: 2, sets: [
+                    SetDetail(index: 0, type: .normal, weightKg: 32, reps: nil,
+                              distanceMeters: 40, durationSeconds: nil, rpe: nil),
+                ]),
+            ])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("- Farmers Walk: no set with both weight and reps logged"))
+    }
+
+    /// A most recent session holding only warm-ups does not hide the working
+    /// weight of the session before it.
+    func testTheWorkingSetComesFromTheLatestSessionWithWorkingSets() {
+        let row = exercise("Bench Press", volume: 3_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (row, progression(row, sessions: [
+                session(daysAgo: 9, sets: working(60, 5)),
+                session(daysAgo: 2, sets: [set(0, .warmup, 40, 10), set(1, .warmup, 50, 5)]),
+            ])),
+        ])
+
+        XCTAssertTrue(prompt.user.contains("- Bench Press: 60 kg × 5 (most recent session, 2025-06-06)"))
+        XCTAssertFalse(prompt.user.contains("no working sets logged"))
+    }
+
+    /// Bodyweight work has no working weight and no Epley estimate: the line
+    /// says so instead of printing a zero or a trend nobody measured.
+    func testBodyweightExerciseReportsRepsWithoutWeightOrTrend() throws {
+        let pullUp = exercise("Pull Up", volume: 0, sessions: 2)
+        let prompt = makeWithExercises([
+            (pullUp, progression(pullUp, sessions: [
+                session(daysAgo: 2, sets: [set(0, .normal, nil, 8), set(1, .normal, nil, 12)]),
+            ])),
+        ])
+        let row = try XCTUnwrap(try exerciseRows(prompt).first)
+
+        XCTAssertTrue(row.hasPrefix("- Pull Up: no weight logged, best set 12 reps"))
+        XCTAssertFalse(row.contains("e1RM"))
+        XCTAssertFalse(row.contains("Plateau"))
+    }
+
+    func testWeightsAreLocaleIndependent() {
+        var swiss = Calendar(identifier: .gregorian)
+        swiss.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+        swiss.locale = Locale(identifier: "de_CH")
+        let row = exercise("Bench Press", volume: 3_000, sessions: 1)
+
+        let prompt = AnalysisPromptBuilder.make(
+            summaries: [workout(daysAgo: 1, volume: 3_000)],
+            exercises: [row],
+            progressions: [row.id: progression(row, sessions: [session(daysAgo: 1, sets: working(62.5, 5))])],
+            now: reference,
+            calendar: swiss
+        )
+
+        XCTAssertTrue(prompt.user.contains("62.5 kg × 5"))
+        XCTAssertFalse(prompt.user.contains("62,5"))
+    }
+
+    /// Without exercise data the section says so, rather than disappearing
+    /// and leaving rule 6 pointing at nothing.
+    func testMissingExerciseDataIsStatedPlainly() {
+        let prompt = make([workout(daysAgo: 2, volume: 5_000)])
+
+        XCTAssertTrue(prompt.user.contains("## Exercises (last 4 weeks)\nNo exercise-level data is available"))
+    }
+
+    func testAnEmptyWindowHasNoExerciseSection() {
+        let prompt = make([])
+
+        XCTAssertFalse(prompt.user.contains("## Exercises"))
+    }
+
+    func testWidenedWindowNamesItsLengthInTheExerciseSection() {
+        let row = exercise("Bench Press", volume: 3_000, sessions: 1)
+        let prompt = AnalysisPromptBuilder.make(
+            summaries: [workout(daysAgo: 40, volume: 3_000)],
+            exercises: [row],
+            progressions: [row.id: progression(row, sessions: [session(daysAgo: 40, sets: working(60, 5))])],
+            window: AnalysisWindow(weeks: 8),
+            now: reference,
+            calendar: calendar
+        )
+
+        XCTAssertTrue(prompt.user.contains("## Exercises (last 8 weeks)"))
+        XCTAssertTrue(prompt.user.contains("- Bench Press: 60 kg × 5"))
+    }
+
+    func testPromptedExercisesRankByVolumeThenSessionsThenTitle() {
+        let ranked = AnalysisPromptBuilder.promptedExercises(from: [
+            exercise("B", volume: 0, sessions: 2),
+            exercise("A", volume: 0, sessions: 2),
+            exercise("C", volume: 0, sessions: 5),
+            exercise("D", volume: 1_000, sessions: 1),
+        ])
+
+        XCTAssertEqual(ranked.map(\.title), ["D", "C", "A", "B"])
+    }
+
+    /// US-3 AC3 with exercise data in the prompt: the new section adds the
+    /// user's own figures only, never a norm to compare them against.
+    func testExerciseSectionCarriesNoExternalBenchmarks() {
+        let bench = exercise("Bench Press", volume: 4_500, sessions: 3)
+        let prompt = makeWithExercises([
+            (bench, progression(bench, sessions: [
+                session(daysAgo: 12, sets: working(60, 5, rpe: 7)),
+                session(daysAgo: 8, sets: working(60, 5, rpe: 7)),
+                session(daysAgo: 3, sets: working(60, 5, rpe: 7)),
+            ])),
+        ])
+
+        let forbidden = ["average", "benchmark", "standard", "typical", "percentile", "compared to other", "norm"]
+        for term in forbidden {
+            XCTAssertFalse(
+                prompt.user.lowercased().contains(term),
+                "The user prompt must not carry the notion of \(term)"
+            )
+        }
+    }
+
+    /// Rule 6: recommendations name only what the Exercises section lists,
+    /// in the increments the user can actually load.
+    func testSystemPromptLimitsRecommendationsToTheExerciseSection() {
+        let system = AnalysisPromptBuilder.systemPrompt.lowercased()
+
+        XCTAssertTrue(system.contains("name only exercises and weights from the exercises section"))
+        XCTAssertTrue(system.contains("exactly as it is listed"))
+        XCTAssertTrue(system.contains("steps of 2.5 kg"))
+        XCTAssertTrue(system.contains("at most the smallest step listed"))
+        // The starting weight must be listed; the target is one step above it,
+        // so the rule no longer forbids the weight it asks for.
+        XCTAssertTrue(system.contains("or a weight it does not list as a starting point"))
+        XCTAssertTrue(system.contains("a new target weight is always the listed weight of the most recent session plus one step"))
+        XCTAssertFalse(system.contains("a weight that section does not contain"))
+    }
+
     // MARK: - Training profile (US-13 AC3, #192)
 
     private let fullProfile = TrainingProfile(goal: .improveEndurance, experience: .oneToThreeYears)
@@ -419,6 +902,66 @@ final class AnalysisPromptBuilderTests: XCTestCase {
             now: reference,
             calendar: calendar,
             profile: profile
+        )
+    }
+
+    private func makeWithExercises(_ entries: [(ExerciseSummary, ExerciseProgression)]) -> AnalysisPrompt {
+        AnalysisPromptBuilder.make(
+            summaries: [workout(daysAgo: 2, volume: 5_000)],
+            exercises: entries.map { $0.0 },
+            progressions: Dictionary(uniqueKeysWithValues: entries.map { ($0.0.id, $0.1) }),
+            now: reference,
+            calendar: calendar
+        )
+    }
+
+    /// The rows of the Exercises section, in order.
+    private func exerciseRows(_ prompt: AnalysisPrompt) throws -> [String] {
+        let range = try XCTUnwrap(prompt.user.range(of: "## Exercises"))
+        return prompt.user[range.lowerBound...]
+            .split(separator: "\n")
+            .filter { $0.hasPrefix("- ") }
+            .map(String.init)
+    }
+
+    private func exercise(_ title: String, volume: Double, sessions: Int) -> ExerciseSummary {
+        ExerciseSummary(
+            id: ExerciseSummary.key(templateID: nil, title: title),
+            title: title,
+            muscleGroup: MuscleGroup.from(exerciseTitle: title),
+            sessionCount: sessions,
+            countedSetCount: sessions * 3,
+            volumeKg: volume,
+            lastPerformed: reference
+        )
+    }
+
+    private func progression(_ summary: ExerciseSummary, sessions: [ExerciseHistoryEntry]) -> ExerciseProgression {
+        ExerciseProgression(id: summary.id, title: summary.title, sessions: sessions)
+    }
+
+    private func session(daysAgo: Int, sets: [SetDetail]) -> ExerciseHistoryEntry {
+        ExerciseHistoryEntry(
+            workoutID: "w-\(daysAgo)",
+            sessionStart: calendar.startOfDay(for: reference)
+                .addingTimeInterval(Double(-daysAgo) * 86_400 + 43_200),
+            sets: sets
+        )
+    }
+
+    private func working(_ weightKg: Double, _ reps: Int, count: Int = 3, rpe: Double? = nil) -> [SetDetail] {
+        (0..<count).map { set($0, .normal, weightKg, reps, rpe: rpe) }
+    }
+
+    private func set(_ index: Int, _ type: SetType, _ weightKg: Double?, _ reps: Int?, rpe: Double? = nil) -> SetDetail {
+        SetDetail(
+            index: index,
+            type: type,
+            weightKg: weightKg,
+            reps: reps,
+            distanceMeters: nil,
+            durationSeconds: nil,
+            rpe: rpe
         )
     }
 
