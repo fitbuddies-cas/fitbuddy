@@ -109,37 +109,69 @@ extension AnalysisReportEvidence {
             analysisProfile: analysisProfile,
             recoveryCountsUnanalysedTraining: unanalysed,
             interference: InterferenceMetrics.metrics(in: summaries, now: now, calendar: calendar),
-            weeklyMetrics: Self.weeklyMetrics(in: summaries, recovery: recovery, now: now, calendar: calendar)
+            weeklyMetrics: Self.weeklyMetrics(
+                in: summaries,
+                now: now,
+                calendar: calendar,
+                analysisProfile: analysisProfile
+            )
         )
     }
 
-    /// The app's figure for each unit, over the last seven days — the
-    /// "Wochenaggregat" a metric card's `from` is checked against (#186).
+    /// The app's figure for each unit, over the last seven days — the weekly
+    /// aggregate a metric card's `from` is checked against (#186).
     ///
-    /// One rule for all five: **the week, whatever filled it.** No domain
-    /// filter, because the units already carry the distinction that matters —
-    /// only a strength session has volume in kilograms, only an endurance one
-    /// covers a distance, and a heart rate and a duration belong to both. A
-    /// filter would add a second place where "what counts as endurance" is
-    /// decided, which is exactly what ADR-012 settled once.
+    /// **Only over the sessions the profile covers.** An anchor is what a card
+    /// states as a measurement, so it may only come from training this
+    /// analysis actually looked at: under "Strength" a `Weekly training time`
+    /// card must not be anchored on hours that came from the runs the same
+    /// screen says were left out. The recovery card is allowed to count them
+    /// because it says so in its own reasoning (#185); a metric card has no
+    /// such sentence and would simply print the figure.
     ///
-    /// A unit whose figure is zero, or which nothing in the week recorded, is
-    /// **absent** rather than present as `0`: a card cannot be checked against
-    /// a figure that does not exist, and the validator turns it into a note
-    /// instead of drawing a step from nowhere (US-15 AC7).
+    /// A unit whose figure is zero, or which nothing in the covered week
+    /// recorded, is **absent** rather than present as `0`: a card cannot be
+    /// checked against a figure that does not exist, and the validator turns
+    /// it into a note instead of drawing a step from nowhere (US-15 AC7).
     ///
-    /// The pace is the week's total distance over its total time, taken only
-    /// over the sessions that recorded both — the same rule
-    /// `EndurancePromptSection` settled on after its review, for the same
-    /// reason: dividing a total that includes a treadmill session with no
-    /// distance by a total that includes its time is not a pace anybody ran.
+    /// What each unit means, precisely:
+    ///
+    /// - `kilograms` — Σ `volumeKg` of the covered sessions. Only a strength
+    ///   session has any, so under "Endurance" this is absent.
+    /// - `kilometers` — Σ `distanceMeters`. A strength session has one only
+    ///   where its sets logged a distance.
+    /// - `hours` — Σ `durationSeconds`, which is **the time the sessions
+    ///   recorded, not the time they lasted**: `WorkoutSummary.durationSeconds`
+    ///   is the sum over the counted sets for a Hevy session and the session
+    ///   time for a source that reports whole sessions. An ordinary barbell
+    ///   session logs no set duration and contributes nothing, so under
+    ///   "Strength" over a Hevy cache this is usually absent — which is the
+    ///   honest reading, not a gap: the app has no session length there.
+    /// - `beatsPerMinute` — the mean over the covered sessions that recorded
+    ///   one, by `RecoveryMetrics.meanHeartRate(in:)`. Kept although no model
+    ///   card may use the unit (`MetricUnit.isStatableByTheModel`), because it
+    ///   is a figure the app itself computes and a card the app builds from it
+    ///   breaks no ground rule.
+    /// - `minutesPerKilometer` — see below.
+    ///
+    /// The pace is the covered week's distance over its time, taken over the
+    /// sessions that recorded **both** and whose sport is read in minutes per
+    /// kilometre (`ActivityKind.isPacedPerKilometer`). Both restrictions come
+    /// from `EndurancePromptSection.meanSpeed`, which settled them for the
+    /// prompt: a treadmill session with no distance would otherwise divide a
+    /// total that excludes its kilometres by a total that includes its
+    /// minutes, and a ride is read in km/h — one run at 5:00 next to one ride
+    /// at 30 km/h averages to 2:45 /km, a pace neither of them ran and one no
+    /// card should either reject a real pace against or print.
     static func weeklyMetrics(
         in summaries: [WorkoutSummary],
-        recovery: RecoveryMetrics,
         now: Date,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        analysisProfile: AnalysisProfile = .overallLoad
     ) -> [MetricUnit: Double] {
-        let week = RecoveryMetrics.lastSevenDaysSessions(in: summaries, now: now, calendar: calendar)
+        let week = RecoveryMetrics
+            .lastSevenDaysSessions(in: summaries, now: now, calendar: calendar)
+            .filter { analysisProfile.covers(AnalysisDomain(summary: $0)) }
         var metrics: [MetricUnit: Double] = [:]
 
         let volume = week.reduce(0) { $0 + $1.volumeKg }
@@ -151,11 +183,15 @@ extension AnalysisReportEvidence {
         let seconds = week.compactMap(\.durationSeconds).reduce(0, +)
         if seconds > 0 { metrics[.hours] = Double(seconds) / 3_600 }
 
-        if let heartRate = recovery.averageHeartRate, heartRate > 0 {
+        if let heartRate = RecoveryMetrics.meanHeartRate(in: week) {
             metrics[.beatsPerMinute] = Double(heartRate)
         }
 
-        let paced = week.filter { ($0.distanceMeters ?? 0) > 0 && ($0.durationSeconds ?? 0) > 0 }
+        let paced = week.filter {
+            $0.kind.isPacedPerKilometer
+                && ($0.distanceMeters ?? 0) > 0
+                && ($0.durationSeconds ?? 0) > 0
+        }
         let pacedMeters = paced.compactMap(\.distanceMeters).reduce(0, +)
         let pacedSeconds = paced.compactMap(\.durationSeconds).reduce(0, +)
         if pacedMeters > 0, pacedSeconds > 0 {
