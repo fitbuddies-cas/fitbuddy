@@ -17,10 +17,12 @@ struct SeededApp {
 
     /// - Parameters:
     ///   - profile: Which bundled history to seed — `person-a` trains five
-    ///     times a week, `person-b` twice.
-    ///   - seedsAnalysis: Also stores an analysis with a progress report, so
-    ///     the analysis tab opens on its cards (#177).
-    init(profile: String = LaunchArgument.Profile.personA, seedsAnalysis: Bool = false) {
+    ///     times a week, `person-b` twice, `progression-ready` and
+    ///     `overreached` reproduce US-14 AC2 and AC4 (#179).
+    ///   - analysisReport: Also stores an analysis with this report
+    ///     (`LaunchArgument.Report`), so the analysis tab opens on its cards
+    ///     (#177). `nil` stores none.
+    init(profile: String = LaunchArgument.Profile.personA, analysisReport: String? = nil) {
         app = XCUIApplication()
         app.launchArguments = [
             // Honoured on this path too since #148: the forced reset runs
@@ -34,8 +36,8 @@ struct SeededApp {
             LaunchArgument.stubHevy, LaunchArgument.Verdict.accepts,
             LaunchArgument.seedMockData, profile,
         ]
-        if seedsAnalysis {
-            app.launchArguments.append(LaunchArgument.seedAnalysis)
+        if let analysisReport {
+            app.launchArguments += [LaunchArgument.seedAnalysis, analysisReport]
         }
     }
 
@@ -124,6 +126,23 @@ struct SeededApp {
 
     var progressionCards: XCUIElementQuery {
         app.descendants(matching: .any).matching(identifier: AccessibilityID.Analysis.progressionCard)
+    }
+
+    var recoveryCards: XCUIElementQuery {
+        app.descendants(matching: .any).matching(identifier: AccessibilityID.Analysis.recoveryCard)
+    }
+
+    var analysisLead: XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.Analysis.lead]
+    }
+
+    var fullAnalysisToggle: XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.Analysis.fullAnalysisToggle]
+    }
+
+    /// Present only while the "Show full analysis" disclosure is open.
+    var fullAnalysis: XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.Analysis.fullAnalysis]
     }
 
     var analysisProse: XCUIElement {

@@ -155,10 +155,10 @@ final class AnalysisResultRenderingTests: XCTestCase {
             AnalysisHistoryDetailView(
                 entry: AnalysisResultSnapshot(
                     id: UUID(),
-                    text: ValidatedAnalysisReportFixtures.everyCard.summary,
+                    text: AnalysisReportFactory.validatedEveryCard.summary,
                     generatedAt: .now,
                     context: AnalysisContext(sessionCount: 12, window: .default),
-                    report: ValidatedAnalysisReportFixtures.everyCard,
+                    report: AnalysisReportFactory.validatedEveryCard,
                     provider: .gemini
                 ),
                 now: .now

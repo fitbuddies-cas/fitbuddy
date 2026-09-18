@@ -53,7 +53,7 @@ final class AnalysisReportSchemaTests: XCTestCase {
     /// field renamed in Swift cannot silently drift from what the model is
     /// asked to send.
     func testTheReportFixtureUsesExactlyTheSchemaKeys() throws {
-        let data = try JSONEncoder().encode(AnalysisReportFixtures.progress)
+        let data = try JSONEncoder().encode(AnalysisReportFactory.progress)
         let report = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let schema = try encoded(AnalysisReportSchema.schema)
 
@@ -74,7 +74,7 @@ final class AnalysisReportSchemaTests: XCTestCase {
 
     func testEachVariantRequiresExactlyTheKeysItsCardEncodes() throws {
         let cardsByKind = Dictionary(
-            uniqueKeysWithValues: AnalysisReportFixtures.progress.cards.map { ($0.kind.rawValue, $0) }
+            uniqueKeysWithValues: AnalysisReportFactory.progress.cards.map { ($0.kind.rawValue, $0) }
         )
         XCTAssertEqual(cardsByKind.count, AnalysisCard.Kind.allCases.count, "the fixture must cover every kind")
 

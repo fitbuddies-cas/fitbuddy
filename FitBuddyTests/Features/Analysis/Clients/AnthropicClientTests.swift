@@ -70,11 +70,11 @@ final class AnthropicClientTests: LLMClientTestCase {
     }
 
     func testAStreamedJSONAnswerDecodesAsAReport() async throws {
-        stub(body: ClaudeSSEFactory.body(textChunks: AnalysisReportFixtures.progressChunks()))
+        stub(body: ClaudeSSEFactory.body(textChunks: AnalysisReportFactory.progressChunks()))
 
         let event = try await parsedAnswer(of: try await stream())
 
-        XCTAssertEqual(event, .report(AnalysisReportFixtures.progress))
+        XCTAssertEqual(event, .report(AnalysisReportFactory.progress))
     }
 
     // MARK: - Stream parsing

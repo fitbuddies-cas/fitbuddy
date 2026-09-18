@@ -177,7 +177,7 @@ final class ModelContainerFactoryTests: XCTestCase {
         XCTAssertNil(migrated?.report)
         XCTAssertNil(migrated?.provider)
 
-        let report = ValidatedAnalysisReportFixtures.everyCard
+        let report = AnalysisReportFactory.validatedEveryCard
         try await store.save(
             text: report.summary,
             report: report,

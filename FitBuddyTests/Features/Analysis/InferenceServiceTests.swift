@@ -94,7 +94,7 @@ final class InferenceServiceTests: XCTestCase {
     /// The chunks of a structured answer are fragments of one JSON document:
     /// they are joined and decoded before anything reaches the consumer.
     func testYieldsTheDecodedReportAfterAnnouncingTheProvider() async throws {
-        let json = AnalysisReportFixtures.progressJSON
+        let json = AnalysisReportFactory.progressJSON
         let middle = json.index(json.startIndex, offsetBy: json.count / 2)
         claude.chunks = [String(json[..<middle]), String(json[middle...])]
 
@@ -102,7 +102,7 @@ final class InferenceServiceTests: XCTestCase {
 
         XCTAssertEqual(events, [
             .attempting(.claude),
-            .report(AnalysisReportFixtures.progress)
+            .report(AnalysisReportFactory.progress)
         ])
     }
 

@@ -1,6 +1,6 @@
 import XCTest
 
-/// End-to-end test for the structured result screen (US-14, #177).
+/// End-to-end test for the structured result screen (US-14, #177, #179).
 ///
 /// What the card views' unit and rendering tests cannot see: that a report
 /// stored by `AnalysisResultStore` survives the round trip through
@@ -12,21 +12,86 @@ final class AnalysisResultUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    /// A seeded progress report opens on the verdict headline and at least one
-    /// progression card — and not on the report's summary as prose.
+    /// A stored progress report renders as the verdict headline, its lead and
+    /// at least one progression card — not as its summary in prose. With an
+    /// actionable card on screen, the full analysis starts collapsed (#170).
+    ///
+    /// The report goes straight into the store, so the profile does not
+    /// produce it; it is seeded only to put a matching history behind the
+    /// screen. The profile's own path to the card is covered end-to-end in
+    /// `AnalysisMockProfileTests`.
     @MainActor
     func testASeededReportShowsAProgressionCard() {
-        let sut = SeededApp(seedsAnalysis: true).launch()
+        let sut = SeededApp(
+            profile: LaunchArgument.Profile.progressionReady,
+            analysisReport: LaunchArgument.Report.progress
+        ).launch()
 
-        sut.assertAppears(sut.dashboard)
-        sut.select(sut.analysisTab)
+        openResult(in: sut)
 
-        sut.assertAppears(sut.analysisResult)
-        sut.assertAppears(sut.analysisHeadline)
+        XCTAssertEqual(sut.analysisHeadline.label, "You're ready to progress.")
+        sut.assertAppears(sut.analysisLead)
         sut.firstRow(of: sut.progressionCards)
         XCTAssertFalse(
             sut.analysisProse.exists,
             "A stored report must render as cards, not as its summary"
         )
+        sut.assertAppears(sut.fullAnalysisToggle)
+        XCTAssertFalse(sut.fullAnalysis.exists, "With cards on screen the full analysis starts collapsed")
+    }
+
+    /// Thin data (design 3.4b, #170): a stored report without cards shows its
+    /// lead and the full analysis already open — no card and no prose
+    /// fallback.
+    @MainActor
+    func testASeededThinReportShowsTheLeadAndTheOpenFullAnalysis() {
+        let sut = SeededApp(
+            profile: LaunchArgument.Profile.personB,
+            analysisReport: LaunchArgument.Report.thin
+        ).launch()
+
+        openResult(in: sut)
+
+        XCTAssertEqual(sut.analysisHeadline.label, "Hold steady this week.")
+        sut.assertAppears(sut.analysisLead)
+        sut.assertAppears(sut.fullAnalysisToggle)
+        sut.assertAppears(sut.fullAnalysis)
+        XCTAssertEqual(sut.progressionCards.count, 0)
+        XCTAssertEqual(sut.recoveryCards.count, 0)
+        XCTAssertFalse(sut.analysisProse.exists)
+    }
+
+    /// A stored recovery report renders as its own headline and the recovery
+    /// card, with no progression card and no prose.
+    ///
+    /// Rendering only: the report is stored directly, and the `overreached`
+    /// profile just puts a matching history behind the screen. US-14 AC4 —
+    /// six of seven days forcing the recovery card — is covered end-to-end in
+    /// `AnalysisMockProfileTests`.
+    @MainActor
+    func testASeededRecoveryReportShowsTheRecoveryCard() {
+        let sut = SeededApp(
+            profile: LaunchArgument.Profile.overreached,
+            analysisReport: LaunchArgument.Report.recover
+        ).launch()
+
+        openResult(in: sut)
+
+        XCTAssertEqual(sut.analysisHeadline.label, "Recover this week.")
+        sut.firstRow(of: sut.recoveryCards)
+        XCTAssertEqual(sut.progressionCards.count, 0)
+        XCTAssertFalse(sut.analysisProse.exists)
+    }
+
+    // MARK: - Helpers
+
+    /// Dashboard → analysis tab → the restored result and its headline.
+    @MainActor
+    private func openResult(in sut: SeededApp) {
+        sut.assertAppears(sut.dashboard)
+        sut.select(sut.analysisTab)
+
+        sut.assertAppears(sut.analysisResult)
+        sut.assertAppears(sut.analysisHeadline)
     }
 }

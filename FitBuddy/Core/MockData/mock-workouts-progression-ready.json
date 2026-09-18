@@ -1,0 +1,3076 @@
+{
+  "workouts": [
+    {
+      "id": "4335f68e-3090-52f8-ba4f-1036e14f04ac",
+      "title": "Upper Body",
+      "description": null,
+      "start_time": "2026-09-15T17:30:00Z",
+      "end_time": "2026-09-15T18:30:00Z",
+      "updated_at": "2026-09-15T18:32:00Z",
+      "created_at": "2026-09-15T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Bench Press (Barbell)",
+          "notes": null,
+          "exercise_template_id": "069817E4",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 60,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 60,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 60,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Bent Over Row (Barbell)",
+          "notes": null,
+          "exercise_template_id": "8E9745C9",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 50.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 50.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 50.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lateral Raise (Dumbbell)",
+          "notes": null,
+          "exercise_template_id": "BA5F56AB",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 10,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 10,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 10,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "59bd24b4-d7c8-551a-9f59-5c8d5aa4cade",
+      "title": "Lower Body",
+      "description": null,
+      "start_time": "2026-09-13T17:30:00Z",
+      "end_time": "2026-09-13T18:30:00Z",
+      "updated_at": "2026-09-13T18:32:00Z",
+      "created_at": "2026-09-13T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Squat (Barbell)",
+          "notes": null,
+          "exercise_template_id": "159D8616",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 80.0,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 80.0,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 80.0,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Romanian Deadlift (Barbell)",
+          "notes": null,
+          "exercise_template_id": "6B5FD559",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 65.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 65.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 65.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lat Pulldown (Cable)",
+          "notes": null,
+          "exercise_template_id": "EA9F2E55",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 50,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 50,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 50,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "9a111934-5ded-5919-8e63-13222a4121fa",
+      "title": "Upper Body",
+      "description": null,
+      "start_time": "2026-09-11T17:30:00Z",
+      "end_time": "2026-09-11T18:30:00Z",
+      "updated_at": "2026-09-11T18:32:00Z",
+      "created_at": "2026-09-11T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Bench Press (Barbell)",
+          "notes": null,
+          "exercise_template_id": "069817E4",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 60,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 6.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 60,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 60,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Bent Over Row (Barbell)",
+          "notes": null,
+          "exercise_template_id": "8E9745C9",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 50.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 50.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 50.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lateral Raise (Dumbbell)",
+          "notes": null,
+          "exercise_template_id": "BA5F56AB",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 10,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 10,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 10,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "465fe7e4-f937-5fc9-ae6a-09a0261969a1",
+      "title": "Lower Body",
+      "description": null,
+      "start_time": "2026-09-08T17:30:00Z",
+      "end_time": "2026-09-08T18:30:00Z",
+      "updated_at": "2026-09-08T18:32:00Z",
+      "created_at": "2026-09-08T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Squat (Barbell)",
+          "notes": null,
+          "exercise_template_id": "159D8616",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 77.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 77.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 77.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Romanian Deadlift (Barbell)",
+          "notes": null,
+          "exercise_template_id": "6B5FD559",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 62.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 62.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 62.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lat Pulldown (Cable)",
+          "notes": null,
+          "exercise_template_id": "EA9F2E55",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 50,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 50,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 50,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "3599265f-fd14-51b4-abbf-fb42576795a0",
+      "title": "Upper Body",
+      "description": null,
+      "start_time": "2026-09-06T17:30:00Z",
+      "end_time": "2026-09-06T18:30:00Z",
+      "updated_at": "2026-09-06T18:32:00Z",
+      "created_at": "2026-09-06T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Bench Press (Barbell)",
+          "notes": null,
+          "exercise_template_id": "069817E4",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 60,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 6.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 60,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 60,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Bent Over Row (Barbell)",
+          "notes": null,
+          "exercise_template_id": "8E9745C9",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 47.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 47.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 47.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lateral Raise (Dumbbell)",
+          "notes": null,
+          "exercise_template_id": "BA5F56AB",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 10,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 10,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 10,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "7c5599df-e588-57b7-a9f9-a9f8762c7e02",
+      "title": "Lower Body",
+      "description": null,
+      "start_time": "2026-09-04T17:30:00Z",
+      "end_time": "2026-09-04T18:30:00Z",
+      "updated_at": "2026-09-04T18:32:00Z",
+      "created_at": "2026-09-04T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Squat (Barbell)",
+          "notes": null,
+          "exercise_template_id": "159D8616",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 77.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 77.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 77.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Romanian Deadlift (Barbell)",
+          "notes": null,
+          "exercise_template_id": "6B5FD559",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 62.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 62.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 62.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lat Pulldown (Cable)",
+          "notes": null,
+          "exercise_template_id": "EA9F2E55",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 50,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 50,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 50,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "0495bf90-4a62-5799-bef6-817d18085a75",
+      "title": "Upper Body",
+      "description": null,
+      "start_time": "2026-09-01T17:30:00Z",
+      "end_time": "2026-09-01T18:30:00Z",
+      "updated_at": "2026-09-01T18:32:00Z",
+      "created_at": "2026-09-01T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Bench Press (Barbell)",
+          "notes": null,
+          "exercise_template_id": "069817E4",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 57.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 57.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 57.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Bent Over Row (Barbell)",
+          "notes": null,
+          "exercise_template_id": "8E9745C9",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 47.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 47.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 47.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lateral Raise (Dumbbell)",
+          "notes": null,
+          "exercise_template_id": "BA5F56AB",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 10,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 10,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 10,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b304e49b-8634-57cc-81b9-ecfce2d371ce",
+      "title": "Lower Body",
+      "description": null,
+      "start_time": "2026-08-30T17:30:00Z",
+      "end_time": "2026-08-30T18:30:00Z",
+      "updated_at": "2026-08-30T18:32:00Z",
+      "created_at": "2026-08-30T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Squat (Barbell)",
+          "notes": null,
+          "exercise_template_id": "159D8616",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 75.0,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 75.0,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 75.0,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Romanian Deadlift (Barbell)",
+          "notes": null,
+          "exercise_template_id": "6B5FD559",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 60.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 60.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 60.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lat Pulldown (Cable)",
+          "notes": null,
+          "exercise_template_id": "EA9F2E55",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 45,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 45,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 45,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b4b1bb60-393c-59bc-9fd7-ec888888e26d",
+      "title": "Upper Body",
+      "description": null,
+      "start_time": "2026-08-28T17:30:00Z",
+      "end_time": "2026-08-28T18:30:00Z",
+      "updated_at": "2026-08-28T18:32:00Z",
+      "created_at": "2026-08-28T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Bench Press (Barbell)",
+          "notes": null,
+          "exercise_template_id": "069817E4",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 55,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 55,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 55,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Bent Over Row (Barbell)",
+          "notes": null,
+          "exercise_template_id": "8E9745C9",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 47.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 47.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 47.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lateral Raise (Dumbbell)",
+          "notes": null,
+          "exercise_template_id": "BA5F56AB",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 10,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 10,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 10,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "2c4e0ef0-c5ed-5a85-84c6-ba962c7b6b7e",
+      "title": "Lower Body",
+      "description": null,
+      "start_time": "2026-08-25T17:30:00Z",
+      "end_time": "2026-08-25T18:30:00Z",
+      "updated_at": "2026-08-25T18:32:00Z",
+      "created_at": "2026-08-25T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Squat (Barbell)",
+          "notes": null,
+          "exercise_template_id": "159D8616",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 72.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 72.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 72.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Romanian Deadlift (Barbell)",
+          "notes": null,
+          "exercise_template_id": "6B5FD559",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 60.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 60.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 60.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lat Pulldown (Cable)",
+          "notes": null,
+          "exercise_template_id": "EA9F2E55",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 45,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 45,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 45,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "df1d1762-058d-5489-8b63-e7bd4bc31068",
+      "title": "Upper Body",
+      "description": null,
+      "start_time": "2026-08-23T17:30:00Z",
+      "end_time": "2026-08-23T18:30:00Z",
+      "updated_at": "2026-08-23T18:32:00Z",
+      "created_at": "2026-08-23T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Bench Press (Barbell)",
+          "notes": null,
+          "exercise_template_id": "069817E4",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 55,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 55,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 55,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Bent Over Row (Barbell)",
+          "notes": null,
+          "exercise_template_id": "8E9745C9",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 45.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 45.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 45.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lateral Raise (Dumbbell)",
+          "notes": null,
+          "exercise_template_id": "BA5F56AB",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 10,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 10,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 10,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "1f235c63-beff-5441-a825-cb5366f0986b",
+      "title": "Lower Body",
+      "description": null,
+      "start_time": "2026-08-21T17:30:00Z",
+      "end_time": "2026-08-21T18:30:00Z",
+      "updated_at": "2026-08-21T18:32:00Z",
+      "created_at": "2026-08-21T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Squat (Barbell)",
+          "notes": null,
+          "exercise_template_id": "159D8616",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 70.0,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 70.0,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 70.0,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Romanian Deadlift (Barbell)",
+          "notes": null,
+          "exercise_template_id": "6B5FD559",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 57.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 57.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 57.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lat Pulldown (Cable)",
+          "notes": null,
+          "exercise_template_id": "EA9F2E55",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 45,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 45,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 45,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "c45c8ccf-a180-598d-a05a-7a11afe44cfa",
+      "title": "Upper Body",
+      "description": null,
+      "start_time": "2026-08-18T17:30:00Z",
+      "end_time": "2026-08-18T18:30:00Z",
+      "updated_at": "2026-08-18T18:32:00Z",
+      "created_at": "2026-08-18T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Bench Press (Barbell)",
+          "notes": null,
+          "exercise_template_id": "069817E4",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 52.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 52.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 52.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Bent Over Row (Barbell)",
+          "notes": null,
+          "exercise_template_id": "8E9745C9",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 45.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 45.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 45.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lateral Raise (Dumbbell)",
+          "notes": null,
+          "exercise_template_id": "BA5F56AB",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 8,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 8,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 8,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "0e30dd24-71c1-519d-bb09-fdc3009c43bb",
+      "title": "Lower Body",
+      "description": null,
+      "start_time": "2026-08-16T17:30:00Z",
+      "end_time": "2026-08-16T18:30:00Z",
+      "updated_at": "2026-08-16T18:32:00Z",
+      "created_at": "2026-08-16T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Squat (Barbell)",
+          "notes": null,
+          "exercise_template_id": "159D8616",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 70.0,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 70.0,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 70.0,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Romanian Deadlift (Barbell)",
+          "notes": null,
+          "exercise_template_id": "6B5FD559",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 57.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 57.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 57.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lat Pulldown (Cable)",
+          "notes": null,
+          "exercise_template_id": "EA9F2E55",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 45,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 45,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 45,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "7f0b961b-0829-504a-b1da-2d3fbbe163a9",
+      "title": "Upper Body",
+      "description": null,
+      "start_time": "2026-08-14T17:30:00Z",
+      "end_time": "2026-08-14T18:30:00Z",
+      "updated_at": "2026-08-14T18:32:00Z",
+      "created_at": "2026-08-14T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Bench Press (Barbell)",
+          "notes": null,
+          "exercise_template_id": "069817E4",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 50,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 50,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 50,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Bent Over Row (Barbell)",
+          "notes": null,
+          "exercise_template_id": "8E9745C9",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 42.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 42.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 42.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lateral Raise (Dumbbell)",
+          "notes": null,
+          "exercise_template_id": "BA5F56AB",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 8,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 8,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 8,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "4df57a90-65fb-51ef-b484-a56cc45ef3f7",
+      "title": "Lower Body",
+      "description": null,
+      "start_time": "2026-08-11T17:30:00Z",
+      "end_time": "2026-08-11T18:30:00Z",
+      "updated_at": "2026-08-11T18:32:00Z",
+      "created_at": "2026-08-11T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Squat (Barbell)",
+          "notes": null,
+          "exercise_template_id": "159D8616",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 67.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 67.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 67.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Romanian Deadlift (Barbell)",
+          "notes": null,
+          "exercise_template_id": "6B5FD559",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 55.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 55.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 55.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lat Pulldown (Cable)",
+          "notes": null,
+          "exercise_template_id": "EA9F2E55",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 45,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 45,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 45,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "03aba5ab-35cc-58dc-95f6-ceef45410fb4",
+      "title": "Upper Body",
+      "description": null,
+      "start_time": "2026-08-09T17:30:00Z",
+      "end_time": "2026-08-09T18:30:00Z",
+      "updated_at": "2026-08-09T18:32:00Z",
+      "created_at": "2026-08-09T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Bench Press (Barbell)",
+          "notes": null,
+          "exercise_template_id": "069817E4",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 50,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 50,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 50,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Bent Over Row (Barbell)",
+          "notes": null,
+          "exercise_template_id": "8E9745C9",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 42.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 42.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 42.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lateral Raise (Dumbbell)",
+          "notes": null,
+          "exercise_template_id": "BA5F56AB",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 8,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 8,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 8,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "72ea3c4a-c87a-5dd6-9bad-985a2bf6389f",
+      "title": "Lower Body",
+      "description": null,
+      "start_time": "2026-08-07T17:30:00Z",
+      "end_time": "2026-08-07T18:30:00Z",
+      "updated_at": "2026-08-07T18:32:00Z",
+      "created_at": "2026-08-07T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Squat (Barbell)",
+          "notes": null,
+          "exercise_template_id": "159D8616",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 65.0,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 65.0,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 65.0,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Romanian Deadlift (Barbell)",
+          "notes": null,
+          "exercise_template_id": "6B5FD559",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 55.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 55.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 55.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lat Pulldown (Cable)",
+          "notes": null,
+          "exercise_template_id": "EA9F2E55",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 45,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 45,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 45,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "22a91c08-fbfa-5738-a15a-8b1f29bb92f6",
+      "title": "Upper Body",
+      "description": null,
+      "start_time": "2026-08-04T17:30:00Z",
+      "end_time": "2026-08-04T18:30:00Z",
+      "updated_at": "2026-08-04T18:32:00Z",
+      "created_at": "2026-08-04T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Bench Press (Barbell)",
+          "notes": null,
+          "exercise_template_id": "069817E4",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 47.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 47.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 47.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Bent Over Row (Barbell)",
+          "notes": null,
+          "exercise_template_id": "8E9745C9",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 42.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 42.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 42.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lateral Raise (Dumbbell)",
+          "notes": null,
+          "exercise_template_id": "BA5F56AB",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 8,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 8,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 8,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bb80225b-959d-5f70-a93c-a1e9d956ab45",
+      "title": "Lower Body",
+      "description": null,
+      "start_time": "2026-08-02T17:30:00Z",
+      "end_time": "2026-08-02T18:30:00Z",
+      "updated_at": "2026-08-02T18:32:00Z",
+      "created_at": "2026-08-02T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Squat (Barbell)",
+          "notes": null,
+          "exercise_template_id": "159D8616",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 62.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 62.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 62.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Romanian Deadlift (Barbell)",
+          "notes": null,
+          "exercise_template_id": "6B5FD559",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 52.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 52.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 52.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lat Pulldown (Cable)",
+          "notes": null,
+          "exercise_template_id": "EA9F2E55",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 40,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 40,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 40,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "d48a29dc-b081-5966-833f-347e41099a11",
+      "title": "Upper Body",
+      "description": null,
+      "start_time": "2026-07-31T17:30:00Z",
+      "end_time": "2026-07-31T18:30:00Z",
+      "updated_at": "2026-07-31T18:32:00Z",
+      "created_at": "2026-07-31T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Bench Press (Barbell)",
+          "notes": null,
+          "exercise_template_id": "069817E4",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 47.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 47.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 47.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Bent Over Row (Barbell)",
+          "notes": null,
+          "exercise_template_id": "8E9745C9",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 40.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 40.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 40.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lateral Raise (Dumbbell)",
+          "notes": null,
+          "exercise_template_id": "BA5F56AB",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 8,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 8,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 8,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "3f346b3e-e7d8-5174-aacd-c660dfe63007",
+      "title": "Lower Body",
+      "description": null,
+      "start_time": "2026-07-28T17:30:00Z",
+      "end_time": "2026-07-28T18:30:00Z",
+      "updated_at": "2026-07-28T18:32:00Z",
+      "created_at": "2026-07-28T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Squat (Barbell)",
+          "notes": null,
+          "exercise_template_id": "159D8616",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 62.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 62.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 62.5,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Romanian Deadlift (Barbell)",
+          "notes": null,
+          "exercise_template_id": "6B5FD559",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 52.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 52.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 52.5,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lat Pulldown (Cable)",
+          "notes": null,
+          "exercise_template_id": "EA9F2E55",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 40,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 40,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 40,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "e1af98df-fa5d-566c-bd37-e5f87a408642",
+      "title": "Upper Body",
+      "description": null,
+      "start_time": "2026-07-26T17:30:00Z",
+      "end_time": "2026-07-26T18:30:00Z",
+      "updated_at": "2026-07-26T18:32:00Z",
+      "created_at": "2026-07-26T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Bench Press (Barbell)",
+          "notes": null,
+          "exercise_template_id": "069817E4",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 45,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 45,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 45,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Bent Over Row (Barbell)",
+          "notes": null,
+          "exercise_template_id": "8E9745C9",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 40.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 40.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 40.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lateral Raise (Dumbbell)",
+          "notes": null,
+          "exercise_template_id": "BA5F56AB",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 8,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 8,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 8,
+              "reps": 12,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b95197c1-97b7-5f47-a434-e47a55c76dcd",
+      "title": "Lower Body",
+      "description": null,
+      "start_time": "2026-07-24T17:30:00Z",
+      "end_time": "2026-07-24T18:30:00Z",
+      "updated_at": "2026-07-24T18:32:00Z",
+      "created_at": "2026-07-24T17:30:00Z",
+      "exercises": [
+        {
+          "index": 0,
+          "title": "Squat (Barbell)",
+          "notes": null,
+          "exercise_template_id": "159D8616",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "warmup",
+              "weight_kg": 40,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": null
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 60.0,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 60.0,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 3,
+              "type": "normal",
+              "weight_kg": 60.0,
+              "reps": 5,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "title": "Romanian Deadlift (Barbell)",
+          "notes": null,
+          "exercise_template_id": "6B5FD559",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 50.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 50.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 50.0,
+              "reps": 8,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "title": "Lat Pulldown (Cable)",
+          "notes": null,
+          "exercise_template_id": "EA9F2E55",
+          "supersets_id": null,
+          "sets": [
+            {
+              "index": 0,
+              "type": "normal",
+              "weight_kg": 40,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7
+            },
+            {
+              "index": 1,
+              "type": "normal",
+              "weight_kg": 40,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 7.5
+            },
+            {
+              "index": 2,
+              "type": "normal",
+              "weight_kg": 40,
+              "reps": 10,
+              "distance_meters": null,
+              "duration_seconds": null,
+              "rpe": 8
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

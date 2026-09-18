@@ -39,6 +39,78 @@ final class MockAnalysisSeederTests: XCTestCase {
         XCTAssertEqual(stored.first?.generatedAt, reference)
     }
 
+    // MARK: - Report choice (#179)
+
+    func testABareArgumentAsksForTheProgressReport() {
+        XCTAssertEqual(MockAnalysisSeeder.requestedReport(in: ["-fbSeedAnalysis"]), AnalysisReportSamples.progress)
+        XCTAssertEqual(
+            MockAnalysisSeeder.requestedReport(in: ["-fbSeedAnalysis", "-fbResetState"]),
+            AnalysisReportSamples.progress
+        )
+    }
+
+    func testTheNameAfterTheArgumentPicksTheReport() {
+        XCTAssertEqual(
+            MockAnalysisSeeder.requestedReport(in: ["-fbSeedAnalysis", "progress"]),
+            AnalysisReportSamples.progress
+        )
+        XCTAssertEqual(
+            MockAnalysisSeeder.requestedReport(in: ["-fbSeedAnalysis", "recover"]),
+            AnalysisReportSamples.recover
+        )
+        XCTAssertEqual(MockAnalysisSeeder.requestedReport(in: ["-fbSeedAnalysis", "hold"]), AnalysisReportSamples.hold)
+        XCTAssertEqual(MockAnalysisSeeder.requestedReport(in: ["-fbSeedAnalysis", "thin"]), AnalysisReportSamples.thin)
+        XCTAssertNil(MockAnalysisSeeder.requestedReport(in: []))
+    }
+
+    /// Every verdict can be seeded, so a UI test can open each headline.
+    func testEveryVerdictHasASeedableReport() {
+        XCTAssertEqual(
+            Set(MockAnalysisSeeder.reports.values.map(\.verdict)),
+            Set(AnalysisVerdict.allCases)
+        )
+    }
+
+    func testTheRecoverArgumentStoresTheRecoveryReport() async throws {
+        await MockAnalysisSeeder.seedIfRequested(
+            container: container,
+            launchArguments: ["-fbSeedAnalysis", "recover"],
+            now: { self.reference }
+        )
+
+        let stored = try await AnalysisResultStore(modelContainer: container).recent(limit: 5)
+        XCTAssertEqual(stored.map(\.report), [AnalysisReportSamples.recover])
+        XCTAssertEqual(stored.first?.context, AnalysisContext(sessionCount: 14, window: .default))
+    }
+
+    /// The thin report survives the store with its lead and without cards,
+    /// so the restored screen opens the full analysis (#170).
+    func testTheThinArgumentStoresTheReportWithoutCards() async throws {
+        await MockAnalysisSeeder.seedIfRequested(
+            container: container,
+            launchArguments: ["-fbSeedAnalysis", "thin"],
+            now: { self.reference }
+        )
+
+        let stored = try await AnalysisResultStore(modelContainer: container).recent(limit: 5)
+        XCTAssertEqual(stored.map(\.report), [AnalysisReportSamples.thin])
+        XCTAssertEqual(stored.first?.report?.cards, [])
+        XCTAssertEqual(stored.first?.report?.lead, AnalysisReportSamples.thin.lead)
+        XCTAssertEqual(stored.first?.context, AnalysisContext(sessionCount: 2, window: .default), "Design 3.4b rests on 2 sessions")
+    }
+
+    /// A typo stores nothing rather than a report the test did not ask for.
+    func testAnUnknownReportNameStoresNothing() async throws {
+        await MockAnalysisSeeder.seedIfRequested(
+            container: container,
+            launchArguments: ["-fbSeedAnalysis", "deload"],
+            now: { self.reference }
+        )
+
+        let stored = try await AnalysisResultStore(modelContainer: container).recent(limit: 5)
+        XCTAssertTrue(stored.isEmpty)
+    }
+
     /// A second launch replaces the row rather than adding one, which would
     /// bring up the history link the test did not ask for.
     func testSeedingTwiceLeavesOneRow() async throws {

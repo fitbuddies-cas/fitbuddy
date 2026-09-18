@@ -74,7 +74,7 @@ final class AnalysisResultStoreTests: XCTestCase {
     /// The history detail has to show exactly the cards the user saw, and
     /// the badge the provider that wrote them.
     func testSavedReportRoundTripsWithItsVersionAndProvider() async throws {
-        let report = ValidatedAnalysisReportFixtures.everyCard
+        let report = AnalysisReportFactory.validatedEveryCard
         try await sut.save(
             text: report.summary,
             report: report,
@@ -132,7 +132,7 @@ final class AnalysisResultStoreTests: XCTestCase {
     /// A newer build may store a format this one does not know. Even valid
     /// JSON of today's shape is not read under a version it does not claim.
     func testUnknownReportVersionFallsBackToTheText() async throws {
-        let json = try JSONEncoder().encode(ValidatedAnalysisReportFixtures.everyCard)
+        let json = try JSONEncoder().encode(AnalysisReportFactory.validatedEveryCard)
         try insertRow(text: "Prose fallback.", reportJSON: json, reportVersion: 99)
 
         let recent = try await sut.recent(limit: 10)
@@ -234,7 +234,7 @@ final class AnalysisResultStoreTests: XCTestCase {
         for index in 0..<(AnalysisHistoryLimit.rows + 5) {
             try await sut.save(
                 text: "Analysis \(index)",
-                report: index.isMultiple(of: 2) ? ValidatedAnalysisReportFixtures.everyCard : nil,
+                report: index.isMultiple(of: 2) ? AnalysisReportFactory.validatedEveryCard : nil,
                 provider: .claude,
                 generatedAt: Self.reference.addingTimeInterval(Double(index) * 3_600),
                 context: Self.context()
@@ -249,7 +249,7 @@ final class AnalysisResultStoreTests: XCTestCase {
         // The newest survive the trim, the oldest are the ones dropped.
         let recent = try await sut.recent(limit: AnalysisHistoryLimit.rows)
         XCTAssertEqual(recent.first?.text, "Analysis 24")
-        XCTAssertEqual(recent.first?.report, ValidatedAnalysisReportFixtures.everyCard)
+        XCTAssertEqual(recent.first?.report, AnalysisReportFactory.validatedEveryCard)
         XCTAssertEqual(recent.last?.text, "Analysis 5")
         XCTAssertNil(recent.last?.report)
     }

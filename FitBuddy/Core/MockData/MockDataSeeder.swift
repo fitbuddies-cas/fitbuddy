@@ -19,8 +19,8 @@ import SwiftData
 /// same path a live sync takes, so a test walks over data shaped like the
 /// data users have.
 ///
-/// `-fbSeedMockData person-a` (or `person-b`) turns it on; without the
-/// argument nothing here runs.
+/// `-fbSeedMockData person-a` (or `person-b`, `progression-ready`,
+/// `overreached`) turns it on; without the argument nothing here runs.
 enum MockDataSeeder {
     static let launchArgument = "-fbSeedMockData"
 
