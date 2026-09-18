@@ -36,7 +36,13 @@ struct RecoveryMetricCell: Equatable, Sendable {
             cells.append(RecoveryMetricCell(label: "Avg RPE", value: AnalysisCardFormatter.rpe(averageRPE)))
         }
         if let averageHeartRate = metrics.averageHeartRate {
-            cells.append(RecoveryMetricCell(label: "Avg HR", value: "\(averageHeartRate)", unit: "bpm"))
+            cells.append(
+                RecoveryMetricCell(
+                    label: "Avg HR",
+                    value: HeartRateFormatter.value(Double(averageHeartRate)),
+                    unit: HeartRateFormatter.unit
+                )
+            )
         }
         // "SUGGESTED REST" needs about 106 pt and scales to 84.8 pt at most,
         // while a four-column row gives each cell about 69.5 pt on a 390 pt

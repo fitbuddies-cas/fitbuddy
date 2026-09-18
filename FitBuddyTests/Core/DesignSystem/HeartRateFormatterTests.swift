@@ -56,4 +56,15 @@ final class HeartRateFormatterTests: XCTestCase {
         XCTAssertEqual(HeartRateFormatter.plain(148), "148 bpm")
         XCTAssertEqual(HeartRateFormatter.plain(62.4), "62 bpm")
     }
+
+    /// The figure and its unit separately, for the one layout that sets them
+    /// in different type — the recovery card's four-column row (#184, #186).
+    func testTheValueAndTheUnitCanBeReadApart() {
+        XCTAssertEqual(HeartRateFormatter.value(148.4, locale: english), "148")
+        XCTAssertEqual(HeartRateFormatter.unit, "bpm")
+        XCTAssertEqual(
+            HeartRateFormatter.value(148.4, locale: english) + " " + HeartRateFormatter.unit,
+            HeartRateFormatter.display(148.4, locale: english)
+        )
+    }
 }

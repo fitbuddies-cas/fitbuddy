@@ -16,12 +16,16 @@ import Foundation
 /// this user's own sessions is exactly what the prompt may state, so it is
 /// spelled the way the existing RPE line already spells it.
 ///
-/// > **#186 will unify this with #181.** That branch adds `DistanceFormatter`,
-/// > `PaceFormatter`, `HeartRateFormatter` and `WorkoutDurationFormatter`,
-/// > each with a locale-free `plain(_:)` variant that says the same thing as
-/// > the functions here. #181 is not in this branch's base, so nothing was
-/// > copied from it; when both have landed, the bodies below become calls into
-/// > those `plain` variants and the ranges are decided in one place.
+/// **Unified with #181 in #186, as that comment promised.** Every endurance
+/// figure below is now one call into `DistanceFormatter.plain`,
+/// `PaceFormatter.plain`, `HeartRateFormatter.plain` or
+/// `WorkoutDurationFormatter.seconds`, so the ranges are decided in
+/// `Core/DesignSystem` once and a card and the prompt behind it cannot state
+/// the same session differently. What stays here is the part that is about the
+/// *prompt* rather than about a unit: the `nil` at a figure nothing recorded
+/// (AC7 — the prompt leaves the line out, where a formatter would print
+/// `"0 km"`), the aggregation helpers, and `speed`, which has no display
+/// counterpart because no screen shows a ride in km/h yet.
 enum PromptFigures {
     // MARK: - Strength
 
@@ -48,32 +52,26 @@ enum PromptFigures {
     /// placeholder.
     static func distance(_ meters: Double) -> String? {
         guard meters.isFinite, meters > 0 else { return nil }
-        let kilometers = meters / 1_000
-        // Rounded at the precision it is printed with, so the threshold and
-        // the printed value cannot disagree (999.6 m is 1 km, never 1000 m).
-        if PlainWeightFormatter.rounded(kilometers, decimals: 1) < 1 {
-            return "\(Int(meters.rounded())) m"
-        }
-        if kilometers.rounded() >= 100 {
-            return "\(Int(kilometers.rounded())) km"
-        }
-        return "\(PlainWeightFormatter.string(kilometers, decimals: 1)) km"
+        return DistanceFormatter.plain(meters)
     }
 
     /// A duration in seconds as hours and minutes: `45 min`, `1 h`,
     /// `9 h 10 min`.
     ///
     /// Hours are never rolled into days — a four-week endurance total reads
-    /// `26 h 30 min`, which is how a training log states it. `nil` below half
-    /// a minute, for the same reason `distance` returns `nil` at zero.
+    /// `26 h 30 min`, which is how a training log states it. `nil` at zero and
+    /// below, for the same reason `distance` returns `nil` there.
+    ///
+    /// `WorkoutDurationFormatter.seconds` decides the form, as the detail
+    /// header and the endurance cards do (#186). Two consequences of the one
+    /// rule, both deliberate: the seconds are **truncated** rather than
+    /// rounded to a minute — a watch shows `1 h 29 min` for 1:29:40, and a
+    /// prompt that rounded it up would state a minute the card below it does
+    /// not — and a session shorter than a minute reads `< 1 min` rather than
+    /// disappearing from the section.
     static func duration(_ seconds: Int) -> String? {
         guard seconds > 0 else { return nil }
-        let minutes = Int((Double(seconds) / 60).rounded())
-        guard minutes > 0 else { return nil }
-        let hours = minutes / 60
-        let rest = minutes % 60
-        if hours == 0 { return "\(rest) min" }
-        return rest == 0 ? "\(hours) h" : "\(hours) h \(rest) min"
+        return WorkoutDurationFormatter.seconds(TimeInterval(seconds))
     }
 
     /// Pace per kilometre in `M:SS min/km`, the form a runner reads.
@@ -82,13 +80,7 @@ enum PromptFigures {
     /// a GPS artefact rather than a pace, and a figure the model would have to
     /// explain.
     static func pace(metersPerSecond: Double) -> String? {
-        guard metersPerSecond.isFinite, metersPerSecond > 0 else { return nil }
-        let secondsPerKilometer = 1_000 / metersPerSecond
-        // Bounded as a `Double` before the `Int` conversion: a speed of
-        // 1e-20 m/s overflows `Int` on the way in.
-        guard secondsPerKilometer <= 5_999 else { return nil }
-        let total = Int(secondsPerKilometer.rounded())
-        return String(format: "%d:%02d min/km", total / 60, total % 60)
+        PaceFormatter.plain(metersPerSecond: metersPerSecond)
     }
 
     /// Speed in `km/h` — what a ride is read in, where a pace per kilometre
@@ -98,10 +90,12 @@ enum PromptFigures {
         return "\(PlainWeightFormatter.string(metersPerSecond * 3.6, decimals: 1)) km/h"
     }
 
-    /// A heart rate in beats per minute. `nil` at or below zero.
+    /// A heart rate in beats per minute. `nil` at or below zero — a rate
+    /// nobody recorded is left out of the section, where
+    /// `HeartRateFormatter.plain` would print `"0 bpm"` (AC7).
     static func heartRate(_ beatsPerMinute: Int) -> String? {
         guard beatsPerMinute > 0 else { return nil }
-        return "\(beatsPerMinute) bpm"
+        return HeartRateFormatter.plain(Double(beatsPerMinute))
     }
 
     // MARK: - Aggregation

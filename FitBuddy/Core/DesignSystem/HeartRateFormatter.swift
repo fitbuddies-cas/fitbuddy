@@ -8,6 +8,11 @@ import Foundation
 /// nobody reads a heart rate to a tenth, so the rounding rule lives here once
 /// rather than at each call site.
 enum HeartRateFormatter {
+    /// The unit, for a caller that lays the figure and its unit out
+    /// separately — `FBStat`'s `unit:` slot on the recovery card, where
+    /// `"148 bpm"` as one bold value wraps in a four-column row (#184, #186).
+    static let unit = "bpm"
+
     /// `148` → `"148 bpm"`, `148.4` → `"148 bpm"`, `148.5` → `"149 bpm"`.
     ///
     /// Rounded half away from zero by `PlainWeightFormatter`, the rule the
@@ -21,8 +26,16 @@ enum HeartRateFormatter {
     /// follow for their own units. A session without a heart rate passes `nil`
     /// further up and shows no cell at all (US-15 AC7).
     static func display(_ beatsPerMinute: Double, locale: Locale = .current) -> String {
-        beats(beatsPerMinute)
-            .formatted(.number.precision(.fractionLength(0)).locale(locale)) + " bpm"
+        value(beatsPerMinute, locale: locale) + " " + unit
+    }
+
+    /// The rounded figure without its unit: `148.4` → `"148"`.
+    ///
+    /// For the one layout that sets the two in different type rather than in
+    /// one string — see `unit`. Everything else calls `display`, so a card and
+    /// the prompt behind it cannot round differently.
+    static func value(_ beatsPerMinute: Double, locale: Locale = .current) -> String {
+        beats(beatsPerMinute).formatted(.number.precision(.fractionLength(0)).locale(locale))
     }
 
     /// The same heart rate as data rather than as display text: `"148 bpm"` on

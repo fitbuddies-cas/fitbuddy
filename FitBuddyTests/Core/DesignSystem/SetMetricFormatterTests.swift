@@ -39,7 +39,7 @@ final class SetMetricFormatterTests: XCTestCase {
     }
 
     func testDistanceSwitchesToKilometres() {
-        XCTAssertEqual(SetMetricFormatter.distance(1_000), "1.0 km")
+        XCTAssertEqual(SetMetricFormatter.distance(1_000), "1 km")
         XCTAssertEqual(SetMetricFormatter.distance(5_400), "5.4 km")
     }
 

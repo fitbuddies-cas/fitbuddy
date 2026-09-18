@@ -42,6 +42,24 @@ enum PaceFormatter {
         return clock + " min/km"
     }
 
+    /// The same form from a pace the caller already holds in minutes per
+    /// kilometre: `5.3333` → `"5:20 /km"` (#186).
+    ///
+    /// The connectors report a speed; a model asked for a pace states one, and
+    /// a metric card carries whatever the model wrote. Converting to metres
+    /// per second first and back again would let a rounding step decide a
+    /// second, so both units enter the same clock rule directly.
+    static func perKilometer(minutesPerKilometer: Double) -> String? {
+        guard let clock = clock(secondsPerKilometer: minutesPerKilometer * 60) else { return nil }
+        return clock + " /km"
+    }
+
+    /// The prompt's form of the same pace: `"5:20 min/km"`.
+    static func plain(minutesPerKilometer: Double) -> String? {
+        guard let clock = clock(secondsPerKilometer: minutesPerKilometer * 60) else { return nil }
+        return clock + " min/km"
+    }
+
     /// `"5:12"` — minutes and seconds per kilometre, seconds always padded.
     ///
     /// The pace is bounded while it is still a `Double`: a speed of `1e-20`
@@ -49,12 +67,16 @@ enum PaceFormatter {
     /// `Int` — converting first would trap rather than return `nil`.
     private static func clock(metersPerSecond: Double) -> String? {
         guard metersPerSecond > 0, metersPerSecond.isFinite else { return nil }
-        let secondsPerKilometer = (1_000 / metersPerSecond).rounded()
-        guard secondsPerKilometer >= 1,
-              secondsPerKilometer <= Double(slowestSecondsPerKilometer) else {
-            return nil
-        }
-        let seconds = Int(secondsPerKilometer)
+        return clock(secondsPerKilometer: 1_000 / metersPerSecond)
+    }
+
+    /// The clock form of a pace already expressed as seconds per kilometre —
+    /// the one place the padding and the bounds are decided.
+    private static func clock(secondsPerKilometer: Double) -> String? {
+        guard secondsPerKilometer > 0, secondsPerKilometer.isFinite else { return nil }
+        let rounded = secondsPerKilometer.rounded()
+        guard rounded >= 1, rounded <= Double(slowestSecondsPerKilometer) else { return nil }
+        let seconds = Int(rounded)
         return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 }

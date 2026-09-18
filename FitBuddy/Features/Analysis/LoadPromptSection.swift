@@ -192,8 +192,9 @@ enum LoadPromptSection {
         var line = "Last 7 days: \(CountFormatter.labelled(days.count, singular: "training day")) "
             + "(\(CountFormatter.labelled(recentStrength.count, singular: "strength session")), "
             + "\(CountFormatter.labelled(recentEndurance.count, singular: "endurance session")))"
-        if let heartRate = RecoveryMetrics.meanHeartRate(in: recentStrength + recentEndurance) {
-            line += ", mean heart rate \(heartRate) bpm"
+        if let heartRate = RecoveryMetrics.meanHeartRate(in: recentStrength + recentEndurance),
+           let figure = PromptFigures.heartRate(heartRate) {
+            line += ", mean heart rate \(figure)"
         }
         return line
     }
