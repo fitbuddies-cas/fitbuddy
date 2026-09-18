@@ -67,6 +67,21 @@ enum AnalysisReportValidator {
     static let insertedRecoveryReasoning =
         "Recovery comes before progression: take the suggested rest before your next hard session."
 
+    /// The same reasoning, with the sentence a single-domain profile needs
+    /// (#185).
+    ///
+    /// The card's figures are profile-blind on purpose — one body has one
+    /// recovery — so under "Strength" it can read "Sessions / 7d: 7" on a week
+    /// that held two runs, next to a screen that mentions no running at all.
+    /// Without this sentence that figure looks like a mistake; with it, it is
+    /// the point.
+    static func insertedRecoveryReasoning(countingUnanalysedTraining: Bool) -> String {
+        guard countingUnanalysedTraining else { return insertedRecoveryReasoning }
+        return insertedRecoveryReasoning
+            + " These figures count every session of the week, including the training "
+            + "this analysis left out."
+    }
+
     /// Validates every card and enforces the recovery hint.
     ///
     /// - Parameters:
@@ -97,7 +112,12 @@ enum AnalysisReportValidator {
         if evidence.recovery.needsRecovery {
             if !cards.contains(where: { $0.kind == .recovery }) {
                 cards.insert(
-                    .recovery(reasoning: insertedRecoveryReasoning, metrics: evidence.recovery),
+                    .recovery(
+                        reasoning: insertedRecoveryReasoning(
+                            countingUnanalysedTraining: evidence.recoveryCountsUnanalysedTraining
+                        ),
+                        metrics: evidence.recovery
+                    ),
                     at: 0
                 )
             }
@@ -119,7 +139,16 @@ enum AnalysisReportValidator {
         // downgrade or the cap — because only then did the model's lead argue
         // for a load increase no card backs (#170). A progress verdict over
         // notes alone keeps the model's lead: the app overruled nothing in it.
-        if verdict == .progress, !kept.contains(where: { $0.kind == .progression }) {
+        //
+        // Only where the run covered strength (#185). A progression card is a
+        // load increase on an exercise from the Exercises section, and an
+        // endurance analysis is given no such section — so no progression card
+        // can survive, and reading their absence as "the cards do not back the
+        // verdict" would rewrite *every* endurance progress verdict to "Hold
+        // steady this week." over the model's own argument for progressing.
+        if verdict == .progress,
+           evidence.analysisProfile.covers(.strength),
+           !kept.contains(where: { $0.kind == .progression }) {
             verdict = .hold
             headline = holdHeadline
             if rejectedProgressions + cutProgressions > 0 {
@@ -164,7 +193,11 @@ enum AnalysisReportValidator {
                 return note(title: recoveryNoteTitle, text: reasoning)
             }
             return .recovery(
-                reasoning: isBlank(reasoning) ? insertedRecoveryReasoning : reasoning,
+                reasoning: isBlank(reasoning)
+                    ? insertedRecoveryReasoning(
+                        countingUnanalysedTraining: evidence.recoveryCountsUnanalysedTraining
+                    )
+                    : reasoning,
                 metrics: evidence.recovery
             )
 

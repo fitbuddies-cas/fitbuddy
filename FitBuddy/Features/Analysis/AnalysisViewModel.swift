@@ -216,14 +216,15 @@ final class AnalysisViewModel: ObservableObject {
     ///
     /// A failing read leaves the options as they are: the user came for the
     /// analysis screen, and the run itself reports a cache it cannot read.
+    ///
+    /// The remembered choice is read **after** the cache, immediately before
+    /// the write. The cache read releases the main actor for as long as
+    /// SwiftData needs, and a tap landing in that window would otherwise be
+    /// overwritten by the value that was current before it: the segmented
+    /// control would snap back under the finger, and the run would use the
+    /// profile the user had just moved away from.
     func prepareProfileSelection() async {
         guard !state.isRunning else { return }
-        let remembered: AnalysisProfile?
-        if let chosenProfile {
-            remembered = chosenProfile
-        } else {
-            remembered = await analysisProfiles.profile
-        }
         let reference = now()
         let cached: [WorkoutSummary]
         do {
@@ -239,6 +240,14 @@ final class AnalysisViewModel: ObservableObject {
         if let window = AnalysisWindow.resolve(for: cached, endingAt: reference, calendar: calendar) {
             let start = window.start(endingAt: reference, calendar: calendar)
             domains = Self.sessionCounts(in: cached, from: start).domains
+        }
+        var remembered = chosenProfile
+        if remembered == nil {
+            let stored = await analysisProfiles.profile
+            // Re-read afterwards for the same reason: the store read is a
+            // second hop off this actor, and a tap inside it has to win over a
+            // value written before it.
+            remembered = chosenProfile ?? stored
         }
         let options = AnalysisProfileOptions(domainCounts: domains, remembered: remembered)
         profileOptions = options
@@ -521,7 +530,8 @@ final class AnalysisViewModel: ObservableObject {
             details: reads.details ?? [],
             window: reads.window,
             now: reads.now,
-            calendar: calendar
+            calendar: calendar,
+            analysisProfile: reads.analysisProfile
         )
         return AnalysisOutcome(validated: AnalysisReportValidator.validate(report, against: evidence))
     }
@@ -617,7 +627,8 @@ final class AnalysisViewModel: ObservableObject {
                 progressions: exercises.progressions,
                 details: details,
                 window: window,
-                now: reference
+                now: reference,
+                analysisProfile: analysisProfile
             )
             let prompt = AnalysisPromptBuilder.make(
                 summaries: reads.summaries,
