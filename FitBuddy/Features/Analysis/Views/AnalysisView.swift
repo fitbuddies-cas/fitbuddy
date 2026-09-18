@@ -4,16 +4,16 @@ import SwiftUI
 ///
 /// Its own tab in `MainTabView` (#107). Renders `AnalysisViewModel`'s state
 /// and nothing else: the spinner appears the moment `start()` publishes
-/// `.loading`, the recommendation grows chunk by chunk while `.streaming`, and
-/// the cancel button joins the spinner once the run has gone 30s without a
-/// first token (US-3 AC1).
+/// `.running` and stays until the whole answer is in, the answer then appears
+/// in one step (#178), and the cancel button joins the spinner once the run
+/// has gone 30s without an answer (US-3 AC1).
 ///
 /// Switching tabs does not cancel a running stream: in a tab bar, tapping
 /// away is not leaving the screen, and the tokens are spent either way. The
 /// cancel button in the progress view is the only way to abort.
 struct AnalysisView: View {
     /// Observed, not owned: the view model belongs to `MainTabView`, which
-    /// keeps it alive across tab switches so a run and its countdown survive.
+    /// keeps it alive across tab switches so a run survives them.
     @ObservedObject var viewModel: AnalysisViewModel
     /// Builds the history screen's view model, once per push (#117). A factory
     /// rather than a ready-made instance: the screen exists only while the user
@@ -33,7 +33,7 @@ struct AnalysisView: View {
                     // not after (#87, #36) — and the thin-data warning of US-6
                     // AC2 is worth least at the bottom of a text the user has
                     // already believed.
-                    if viewModel.state.text != nil, let context = viewModel.context {
+                    if viewModel.state.outcome != nil, let context = viewModel.context {
                         AnalysisContextView(context: context)
                     }
                     content
@@ -57,17 +57,13 @@ struct AnalysisView: View {
                         .onDisappear { Task { await viewModel.refreshHistory() } }
                 }
             }
-            // A bar rather than a plain inset: the content underneath gets the
-            // same soft scroll-edge fade the tab bar has, so the footer sits
-            // with the glass instead of stacking a second opaque strip on it.
-            .safeAreaBar(edge: .bottom) { footer }
         }
-        // Keeps the lock label counting down for as long as the tab is
+        // Keeps the recommendation's age current for as long as the tab is
         // visible; cancelled with the view.
-        .task { await viewModel.trackLock() }
+        .task { await viewModel.trackResultAge() }
         // Brings back the newest recommendation, so a returning user lands on
         // the answer they paid for rather than on the intro (US-3 AC10). Its
-        // own `.task`, because `trackLock()` never returns — and here
+        // own `.task`, because `trackResultAge()` never returns — and here
         // rather than in `DashboardView`, whose `reloadToken` path drops
         // exactly this state when the Hevy key changes (#91).
         .task { await viewModel.restore() }
@@ -91,34 +87,25 @@ struct AnalysisView: View {
         switch viewModel.state {
         case .idle:
             AnalysisIntroView(
-                lockMessage: viewModel.lockMessage,
                 canStart: viewModel.canStartAnalysis,
                 onStart: start
             )
-        case .loading:
+        case .running:
             AnalysisProgressView(
-                text: nil,
                 provider: viewModel.attribution?.provider,
                 isTakingLong: viewModel.isTakingLong,
                 onCancel: viewModel.cancel
             )
-        case .streaming(let text):
-            AnalysisProgressView(
-                text: text,
-                provider: viewModel.attribution?.provider,
-                isTakingLong: viewModel.isTakingLong,
-                onCancel: viewModel.cancel
-            )
-        case .result(let text):
+        case .result(let outcome):
+            // A report renders as its summary until the cards have their
+            // views (#177), which switch on `outcome` right here.
             AnalysisResultView(
-                text: text,
+                text: outcome.text,
                 attribution: viewModel.attribution,
                 age: viewModel.resultAge,
-                // Offered only while a new run is actually possible: while the lock
-                // holds, the intro screen would be a dead end with the same countdown
-                // on it, and the recommendation the user still has is the more useful
-                // thing to keep on screen (#97).
-                onNewAnalysis: viewModel.canStartAnalysis ? { viewModel.reset() } : nil
+                // Always offered on a finished result: there is no cooldown,
+                // and no run is in flight once a result is showing.
+                onNewAnalysis: { viewModel.reset() }
             )
         case .error(let failure):
             AnalysisErrorView(
@@ -128,41 +115,10 @@ struct AnalysisView: View {
                 onOpenSettings: failure.leadsToSettings ? openSettings : nil,
                 // Not a bare `reset()`: leaving the error screen must be
                 // able to put the last stored recommendation back, so the
-                // user is not left with a countdown and an empty screen (#97).
+                // user is not left with an empty screen (#97).
                 onBack: { Task { await viewModel.dismissFailure() } }
             )
         }
-    }
-
-    /// The bar under the recommendation or the error: the lock label while a
-    /// lock is running, and nothing at all while a run is in flight, where it
-    /// does not apply.
-    ///
-    /// `.idle` is deliberately not in the lock branch: `AnalysisIntroView`
-    /// already prints the same label under its button, and repeating it in the
-    /// bottom bar would show the user the same sentence twice. In `.error` the
-    /// repetition is wanted — `AnalysisFailure.lockActive` names the time,
-    /// the label next to it keeps ticking.
-    @ViewBuilder
-    private var footer: some View {
-        switch viewModel.state {
-        case .result, .error:
-            if let lockMessage = viewModel.lockMessage {
-                lockBar(lockMessage)
-            }
-        case .idle, .loading, .streaming:
-            EmptyView()
-        }
-    }
-
-    private func lockBar(_ message: String) -> some View {
-        Text(message)
-            .font(.subheadline.weight(.semibold))
-            .fbTabularNumbers()
-            .foregroundStyle(Color.fbInkSecondary)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .padding(.horizontal, 16)
     }
 
     private func start() {
@@ -210,6 +166,15 @@ private struct AnalysisViewPreviewHost: View {
         cache: PreviewWorkoutCache.filled,
         inference: PreviewAnalysisStreamer.recommendation,
         resultStore: PreviewAnalysisResultStore()
+    ))
+}
+
+/// Tapping "Analyze with AI" here has Mistral answer in prose instead of a
+/// report — the fallback of US-14 AC5.
+#Preview("Prose answer") {
+    AnalysisViewPreviewHost(viewModel: AnalysisViewModel(
+        cache: PreviewWorkoutCache.filled,
+        inference: PreviewAnalysisStreamer.prose
     ))
 }
 

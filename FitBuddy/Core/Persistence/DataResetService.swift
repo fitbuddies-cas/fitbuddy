@@ -8,16 +8,10 @@ import OSLog
 /// Wipes all Keychain items (every API key, the Strava credentials *and* the
 /// consent metadata, so consent is asked for again per US-4 AC5), the
 /// SwiftData workout cache, the whole analysis history, the sync timestamp,
-/// the analysis rate limit, the LLM priority order and the step-3 skip
-/// marker. The connectors' in-memory copies of the keys are not reachable
-/// from here; `WorkoutSyncService` drops them on the next sync when it finds
-/// the stored ones gone.
-///
-/// The rate-limit timestamp is included on purpose (#97). It is the one thing
-/// here whose removal gives the user something back rather than taking it
-/// away, but a deletion right that leaves timestamps behind is only half
-/// honoured — and the same call drops both API keys and the whole cache, so
-/// nobody reaches this path to skip a 60s wait.
+/// the LLM priority order, the step-3 skip marker, the training profile and
+/// the legacy timestamp of the removed analysis lock. The connectors' in-memory
+/// copies of the keys are not reachable from here; `WorkoutSyncService` drops them on the next sync
+/// when it finds the stored ones gone.
 ///
 /// Deliberately kept: `FirstLaunchResetService`'s marker. It records the
 /// installation, not the session — clearing it would only trigger a redundant
@@ -31,10 +25,10 @@ actor DataResetService {
     private let workouts: WorkoutStore
     private let results: AnalysisResultStore
     private let timestamps: SyncTimestampStore
-    private let rateLimit: AnalysisRateLimitStore
     private let priority: LLMPriorityStore
     private let skip: LLMKeysSkipStore
     private let trainingProfile: TrainingProfileStore
+    private let defaults: UserDefaults
 
     private let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "DataReset")
 
@@ -43,20 +37,25 @@ actor DataResetService {
         workouts: WorkoutStore,
         results: AnalysisResultStore,
         timestamps: SyncTimestampStore = SyncTimestampStore(),
-        rateLimit: AnalysisRateLimitStore = AnalysisRateLimitStore(),
         priority: LLMPriorityStore = LLMPriorityStore(),
         skip: LLMKeysSkipStore = LLMKeysSkipStore(),
-        trainingProfile: TrainingProfileStore = TrainingProfileStore()
+        trainingProfile: TrainingProfileStore = TrainingProfileStore(),
+        defaults: UserDefaults = .standard
     ) {
         self.keychain = keychain
         self.workouts = workouts
         self.results = results
         self.timestamps = timestamps
-        self.rateLimit = rateLimit
         self.priority = priority
         self.skip = skip
         self.trainingProfile = trainingProfile
+        self.defaults = defaults
     }
+
+    /// Where the removed 60s analysis lock (#117) stored its last call. Nothing
+    /// reads it any more; it is only deleted, so "delete all data" leaves no
+    /// trace of it on devices that ran a build with the lock.
+    static let legacyAnalysisLockKey = "fitbuddy.analysis.lastCallTimestamp"
 
     /// Deletes all locally stored data. Never throws — see the type comment.
     func deleteAllData() async {
@@ -78,7 +77,8 @@ actor DataResetService {
             logger.error("Analysis history not cleared: \(error, privacy: .public)")
         }
         await timestamps.clear()
-        await rateLimit.clear()
+        // Legacy from #117: the analysis lock is gone, its timestamp may not be.
+        defaults.removeObject(forKey: Self.legacyAnalysisLockKey)
         await priority.clear()
         await skip.clear()
         // Profile and skip decision, not the introduction marker: that one

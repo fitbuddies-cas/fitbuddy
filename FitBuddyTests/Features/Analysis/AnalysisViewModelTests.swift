@@ -1,11 +1,11 @@
+import Combine
 import SwiftData
 import XCTest
 @testable import FitBuddy
 
 /// Unit tests for `AnalysisViewModel` (#31, #117): the state machine, the
-/// cancel path, and the countdown label. No network and no Keychain — the
-/// stream comes from `StubAnalysisStreamer`, the rate limit from an isolated
-/// `UserDefaults` suite.
+/// cancel path, and the result age. No network and no Keychain — the stream
+/// comes from `StubAnalysisStreamer`, the history from an in-memory store.
 @MainActor
 final class AnalysisViewModelTests: XCTestCase {
     /// Fixed reference point, so both analysis windows are deterministic.
@@ -15,7 +15,6 @@ final class AnalysisViewModelTests: XCTestCase {
     private var streamer: StubAnalysisStreamer!
     private var defaults: UserDefaults!
     private var suiteName: String!
-    private var rateLimit: AnalysisRateLimitStore!
     private var container: ModelContainer!
     private var results: AnalysisResultStore!
 
@@ -26,7 +25,6 @@ final class AnalysisViewModelTests: XCTestCase {
         streamer = StubAnalysisStreamer()
         suiteName = "fitbuddy.tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
-        rateLimit = AnalysisRateLimitStore(defaults: defaults)
         container = try ModelContainerFactory.makeInMemory()
         results = AnalysisResultStore(modelContainer: container)
     }
@@ -35,7 +33,6 @@ final class AnalysisViewModelTests: XCTestCase {
         defaults.removePersistentDomain(forName: suiteName)
         results = nil
         container = nil
-        rateLimit = nil
         defaults = nil
         streamer = nil
         cache = nil
@@ -48,22 +45,21 @@ final class AnalysisViewModelTests: XCTestCase {
         clock: TestClock = TestClock(AnalysisViewModelTests.reference),
         slowThreshold: TimeInterval = 30,
         tickInterval: TimeInterval = 60,
-        restingTickInterval: TimeInterval = 60,
         resultStore: (any AnalysisResultStoring)? = nil,
-        exerciseCache: StubAnalysisExerciseCache? = nil
+        exerciseCache: StubAnalysisExerciseCache? = nil,
+        detailCache: StubWorkoutDetailCache? = nil
     ) -> AnalysisViewModel {
         AnalysisViewModel(
             cache: cache,
             exerciseCache: exerciseCache,
+            detailCache: detailCache,
             inference: streamer,
-            rateLimit: rateLimit,
             resultStore: resultStore ?? results,
             trainingProfile: TrainingProfileStore(defaults: defaults),
             calendar: Self.calendar,
             now: { clock.date },
             slowThreshold: slowThreshold,
-            tickInterval: tickInterval,
-            restingTickInterval: restingTickInterval
+            tickInterval: tickInterval
         )
     }
 
@@ -94,46 +90,300 @@ final class AnalysisViewModelTests: XCTestCase {
     // MARK: - Happy path
 
     func testSuccessfulRunEndsInResult() async {
-        await streamer.setChunks(["Your bench ", "volume is rising."])
+        await streamer.setText("Your bench volume is rising.")
         let sut = makeSUT()
 
         await sut.start()
 
-        XCTAssertEqual(sut.state, .result("Your bench volume is rising."))
+        XCTAssertEqual(sut.state, .result(.prose("Your bench volume is rising.")))
         XCTAssertFalse(sut.isTakingLong)
-        XCTAssertNil(sut.lockMessage)
+        XCTAssertTrue(sut.canStartAnalysis)
     }
 
-    /// #174: until the cards have a screen (#177) and a stored format (#176),
-    /// a structured answer is shown and kept as its prose summary.
-    func testAReportEndsInItsSummaryAndIsPersistedAsSuch() async throws {
-        await streamer.setEvents([.attempting(.claude), .report(AnalysisReportFixtures.progress)])
+    func testOnlyTheResultCarriesAnOutcome() {
+        let report = ValidatedAnalysisReportFixtures.everyCard
+        XCTAssertEqual(AnalysisState.result(.prose("whole")).outcome, .prose("whole"))
+        XCTAssertEqual(AnalysisState.result(.report(report)).outcome, .report(report))
+        XCTAssertNil(AnalysisState.running.outcome)
+        XCTAssertNil(AnalysisState.idle.outcome)
+        XCTAssertNil(AnalysisState.error(.offline(.claude)).outcome)
+        XCTAssertTrue(AnalysisState.running.isRunning)
+        XCTAssertFalse(AnalysisState.result(.prose("whole")).isRunning)
+        XCTAssertFalse(AnalysisState.idle.isRunning)
+        XCTAssertFalse(AnalysisState.error(.offline(.claude)).isRunning)
+    }
+
+    func testTheOutcomeReadsAsProse() {
+        let report = ValidatedAnalysisReportFixtures.everyCard
+        XCTAssertEqual(AnalysisOutcome.report(report).text, report.summary)
+        XCTAssertEqual(AnalysisOutcome.report(report).report, report)
+        XCTAssertEqual(AnalysisOutcome.prose("whole").text, "whole")
+        XCTAssertNil(AnalysisOutcome.prose("whole").report)
+    }
+
+    // MARK: - Report in one step (#178)
+
+    /// US-14 #178 AC1/AC3: the screen goes straight from the spinner to the
+    /// complete answer. Every state the run publishes is recorded, so no
+    /// intermediate state carrying part of the answer can slip through.
+    func testNoPartialAnswerIsPublishedBetweenTheSpinnerAndTheResult() async {
+        await streamer.setEvents([
+            .attempting(.claude),
+            .text("An answer from a provider that then fails"),
+            .attempting(.gemini),
+            .report(AnalysisReportFixtures.progress),
+        ])
+        let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache())
+        var published: [AnalysisState] = []
+        // Combine in a test only: the `@Published` publisher is the one place
+        // that sees every state the run publishes, including the ones it
+        // passes straight through. CLAUDE.md's "async/await, not Combine"
+        // governs the app code.
+        let subscription = sut.$state.sink { published.append($0) }
+
+        await sut.start()
+        subscription.cancel()
+
+        XCTAssertEqual(published.count, 3, "published \(published)")
+        XCTAssertEqual(published.first, .idle)
+        XCTAssertEqual(published.dropFirst().first, .running)
+        guard case .report(let report)? = published.last?.outcome else {
+            return XCTFail("expected a report outcome, got \(String(describing: published.last))")
+        }
+        XCTAssertEqual(report.summary, AnalysisReportFixtures.progress.summary)
+    }
+
+    /// Previews have no exercise cache: the prompt carried no exercise data,
+    /// so the cards cannot be checked and the summary is shown instead.
+    func testAReportWithoutAnExerciseCacheIsShownAndStoredAsItsSummary() async throws {
+        await streamer.setReport(AnalysisReportFixtures.progress)
         let sut = makeSUT()
 
         await sut.start()
 
-        XCTAssertEqual(sut.state, .result(AnalysisReportFixtures.progress.summary))
+        XCTAssertEqual(sut.state, .result(.prose(AnalysisReportFixtures.progress.summary)))
         XCTAssertFalse(sut.isTakingLong)
         let latest = try await results.latest()
         XCTAssertEqual(latest?.text, AnalysisReportFixtures.progress.summary)
-        // No stored cards until #178 hands the validated report through.
         XCTAssertNil(latest?.report)
         XCTAssertEqual(latest?.provider, .claude)
     }
 
-    func testStateCarriesTheTextInStreamingAndResult() {
-        XCTAssertEqual(AnalysisState.streaming("half").text, "half")
-        XCTAssertEqual(AnalysisState.result("whole").text, "whole")
-        XCTAssertNil(AnalysisState.loading.text)
-        XCTAssertNil(AnalysisState.idle.text)
-        XCTAssertNil(AnalysisState.error(.offline(.claude)).text)
-        XCTAssertTrue(AnalysisState.streaming("half").isRunning)
-        XCTAssertTrue(AnalysisState.loading.isRunning)
-        XCTAssertFalse(AnalysisState.result("whole").isRunning)
+    /// US-14 AC3: a progression on an exercise the prompt did not list is a
+    /// note, one on a listed exercise with the cached working weight and a
+    /// barbell step (rule 6) stays.
+    func testAReportIsValidatedAgainstTheReadsOfTheRun() async throws {
+        let bench = Self.exercise("Bench Press (Barbell)", volume: 1_000)
+        let exercises = StubAnalysisExerciseCache()
+        exercises.exercises = [bench]
+        exercises.progressions = [bench.id: Self.progression(bench, weightKg: 60, reps: 5, daysAgo: 2)]
+        let reasoning = "Five sessions at 60 kg with the reps held."
+        await streamer.setReport(AnalysisReport(
+            headline: "You're ready to progress.",
+            verdict: .progress,
+            lead: "Bench press can go up.",
+            cards: [
+                .progression(exercise: "Bench Press (Barbell)", muscleGroup: "Chest", fromKg: 60, toKg: 62.5, reasoning: reasoning),
+                .progression(exercise: "Squat", muscleGroup: "Legs", fromKg: 100, toKg: 102.5, reasoning: "Squat is ready."),
+            ],
+            summary: "Add 2.5 kg on bench."
+        ))
+        let sut = makeSUT(exerciseCache: exercises)
+
+        await sut.start()
+
+        let report = try XCTUnwrap(sut.state.outcome?.report)
+        XCTAssertEqual(report.cards, [
+            .progression(
+                exercise: "Bench Press (Barbell)",
+                muscleGroup: MuscleGroup.from(exerciseTitle: "Bench Press (Barbell)"),
+                fromKg: 60,
+                toKg: 62.5,
+                reasoning: reasoning
+            ),
+            .note(title: "Squat", text: "Squat is ready."),
+        ])
+        XCTAssertEqual(report.verdict, .progress)
+        XCTAssertEqual(report.lead, "Bench press can go up.")
+    }
+
+    /// US-14 AC4: at six training days of the last seven the app inserts the
+    /// recovery card the model left out, with the RPE read from the details.
+    func testSixOfSevenTrainingDaysInsertTheRecoveryCardWithTheRPE() async throws {
+        cache.summaries = (0...5).map { Self.workout(daysAgo: $0) }
+        let details = StubWorkoutDetailCache()
+        details.details = (0...5).map { Self.detail(daysAgo: $0, rpe: 8) }
+        await streamer.setReport(Self.noteOnlyReport)
+        let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache(), detailCache: details)
+
+        await sut.start()
+
+        let report = try XCTUnwrap(sut.state.outcome?.report)
+        XCTAssertEqual(report.verdict, .recover)
+        XCTAssertEqual(report.cards.first, .recovery(
+            reasoning: AnalysisReportValidator.insertedRecoveryReasoning,
+            metrics: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: 8)
+        ))
+        XCTAssertEqual(details.callCount, 6)
+    }
+
+    /// A failing detail read costs the RPE, not the paid-for answer.
+    func testADetailReadFailureValidatesWithoutRPE() async throws {
+        cache.summaries = (0...5).map { Self.workout(daysAgo: $0) }
+        let details = StubWorkoutDetailCache()
+        details.details = (0...5).map { Self.detail(daysAgo: $0, rpe: 8) }
+        details.error = StubWorkoutDetailCache.Failure()
+        await streamer.setReport(Self.noteOnlyReport)
+        let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache(), detailCache: details)
+
+        await sut.start()
+
+        let report = try XCTUnwrap(sut.state.outcome?.report)
+        XCTAssertEqual(report.cards.first, .recovery(
+            reasoning: AnalysisReportValidator.insertedRecoveryReasoning,
+            metrics: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: nil)
+        ))
+        let latest = try await results.latest()
+        XCTAssertEqual(latest?.report, report)
+    }
+
+    /// A session removed by a sync since the summaries were read makes the
+    /// details unavailable as a whole — no mean over part of the week.
+    func testAMissingDetailValidatesWithoutRPE() async throws {
+        cache.summaries = (0...5).map { Self.workout(daysAgo: $0) }
+        let details = StubWorkoutDetailCache()
+        details.details = (1...5).map { Self.detail(daysAgo: $0, rpe: 8) }
+        await streamer.setReport(Self.noteOnlyReport)
+        let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache(), detailCache: details)
+
+        await sut.start()
+
+        let report = try XCTUnwrap(sut.state.outcome?.report)
+        XCTAssertEqual(report.cards.first, .recovery(
+            reasoning: AnalysisReportValidator.insertedRecoveryReasoning,
+            metrics: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: nil)
+        ))
+    }
+
+    /// #178: the details are read with the prompt, before the provider is
+    /// called — so the report is validated against one snapshot, and the
+    /// answer's own validation reads nothing.
+    func testTheDetailsAreReadBeforeTheProviderIsCalled() async {
+        cache.summaries = (0...5).map { Self.workout(daysAgo: $0) }
+        let details = StubWorkoutDetailCache()
+        details.details = (0...5).map { Self.detail(daysAgo: $0, rpe: 8) }
+        details.gatesCalls = true
+        await streamer.setReport(Self.noteOnlyReport)
+        let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache(), detailCache: details)
+
+        let run = Task { await sut.start() }
+        await details.waitForCall()
+        let calls = await streamer.callCount
+        XCTAssertEqual(calls, 0)
+
+        details.gatesCalls = false
+        details.release()
+        await run.value
+        XCTAssertEqual(details.callCount, 6)
+        XCTAssertNotNil(sut.state.outcome?.report)
+    }
+
+    /// A cancel while the details are read ends the run there: nothing is
+    /// shown, nothing is stored, and no provider is paid.
+    func testCancelDuringTheDetailReadShowsAndStoresNothing() async throws {
+        cache.summaries = (0...5).map { Self.workout(daysAgo: $0) }
+        let details = StubWorkoutDetailCache()
+        details.details = (0...5).map { Self.detail(daysAgo: $0, rpe: 8) }
+        details.gatesCalls = true
+        await streamer.setReport(Self.noteOnlyReport)
+        let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache(), detailCache: details)
+
+        let run = Task { await sut.start() }
+        await details.waitForCall()
+        sut.cancel()
+        details.release()
+        await run.value
+
+        XCTAssertEqual(sut.state, .idle)
+        XCTAssertNil(sut.generatedAt)
+        let latest = try await results.latest()
+        XCTAssertNil(latest)
+        let calls = await streamer.callCount
+        XCTAssertEqual(calls, 0)
+        XCTAssertEqual(details.callCount, 1)
+    }
+
+    /// US-14 AC5: prose stays prose, even where a report would be validated.
+    func testAProseAnswerEndsInTheProseOutcome() async throws {
+        await streamer.setText("Give legs a second slot.", from: .mistral)
+        let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache())
+
+        await sut.start()
+
+        XCTAssertEqual(sut.state, .result(.prose("Give legs a second slot.")))
+        let latest = try await results.latest()
+        XCTAssertEqual(latest?.text, "Give legs a second slot.")
+        XCTAssertNil(latest?.report)
+        XCTAssertEqual(latest?.provider, .mistral)
+    }
+
+    /// US-14 AC6 (#176): the validated report is stored as shown, with its
+    /// summary as the prose fallback and the provider, and a restart brings
+    /// back the same cards.
+    func testTheValidatedReportIsStoredAndRestored() async throws {
+        await streamer.setReport(AnalysisReportFixtures.progress, from: .gemini)
+        let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache())
+        await sut.start()
+        let shown = try XCTUnwrap(sut.state.outcome?.report)
+
+        let latest = try await results.latest()
+        XCTAssertEqual(latest?.report, shown)
+        XCTAssertEqual(latest?.text, shown.summary)
+        XCTAssertEqual(latest?.provider, .gemini)
+
+        let restarted = makeSUT()
+        await restarted.restore()
+
+        XCTAssertEqual(restarted.state, .result(.report(shown)))
+        XCTAssertEqual(restarted.attribution, AnalysisAttribution(first: .gemini))
+    }
+
+    /// A report with a single note, so the recovery card in the result can
+    /// only have come from the app.
+    private static let noteOnlyReport = AnalysisReport(
+        headline: "Keep going.",
+        verdict: .progress,
+        lead: "Add reps before weight.",
+        cards: [.note(title: "Reps first", text: "Add a rep on rows before adding weight.")],
+        summary: "Add a rep on rows before adding weight."
+    )
+
+    /// A session matching `workout(daysAgo:)`, with one counted set per
+    /// exercise at `rpe`.
+    private static func detail(daysAgo: Int, rpe: Double?) -> WorkoutDetail {
+        WorkoutDetail(
+            id: "w-\(daysAgo)",
+            title: "Push Day",
+            workoutDescription: nil,
+            startTime: reference.addingTimeInterval(-Double(daysAgo) * 86_400),
+            endTime: nil,
+            volumeKg: 600,
+            countedSetCount: 1,
+            exercises: [
+                ExerciseDetail(
+                    index: 0,
+                    title: "Bench Press",
+                    sets: [
+                        SetDetail(index: 0, type: .normal, weightKg: 60, reps: 10,
+                                  distanceMeters: nil, durationSeconds: nil, rpe: rpe),
+                    ]
+                ),
+            ]
+        )
     }
 
     func testRunSendsThePromptBuiltFromTheCachedWindow() async {
-        await streamer.setChunks(["ok"])
+        await streamer.setText("ok")
         let sut = makeSUT()
 
         await sut.start()
@@ -156,7 +406,7 @@ final class AnalysisViewModelTests: XCTestCase {
     /// The run hands the exercise reads to the prompt: the working weight of
     /// the cached session reaches the model.
     func testRunSendsTheExerciseDataToThePrompt() async {
-        await streamer.setChunks(["ok"])
+        await streamer.setText("ok")
         let exercises = StubAnalysisExerciseCache()
         let bench = Self.exercise("Bench Press", volume: 4_500)
         exercises.exercises = [bench]
@@ -173,7 +423,7 @@ final class AnalysisViewModelTests: XCTestCase {
     /// Both reads cover the resolved window — not the 26 weeks the session
     /// read reaches back — so the ranking is by volume in the analysed window.
     func testExerciseReadsCoverTheResolvedWindow() async {
-        await streamer.setChunks(["ok"])
+        await streamer.setText("ok")
         let exercises = StubAnalysisExerciseCache()
         let bench = Self.exercise("Bench Press", volume: 4_500)
         exercises.exercises = [bench]
@@ -188,7 +438,7 @@ final class AnalysisViewModelTests: XCTestCase {
 
     /// Progressions are read for the listed movements only.
     func testProgressionsAreReadOnlyForTheListedExercises() async {
-        await streamer.setChunks(["ok"])
+        await streamer.setText("ok")
         let exercises = StubAnalysisExerciseCache()
         exercises.exercises = (1...14).map { Self.exercise("Lift \($0)", volume: Double($0) * 100) }
         let sut = makeSUT(exerciseCache: exercises)
@@ -219,7 +469,7 @@ final class AnalysisViewModelTests: XCTestCase {
     /// Without an exercise cache — the previews' case — the prompt says there
     /// is no exercise data instead of leaving the model to invent weights.
     func testRunWithoutAnExerciseCacheStatesThatThereIsNoExerciseData() async {
-        await streamer.setChunks(["ok"])
+        await streamer.setText("ok")
         let sut = makeSUT()
 
         await sut.start()
@@ -276,7 +526,7 @@ final class AnalysisViewModelTests: XCTestCase {
     /// screen changes it while this view model lives on (#191), and the next
     /// analysis has to see the change.
     func testARunReadsTheProfileSavedSinceTheViewModelWasCreated() async {
-        await streamer.setChunks(["ok"])
+        await streamer.setText("ok")
         let sut = makeSUT()
         let profile = TrainingProfile(goal: .buildMuscle, experience: .overThreeYears)
         await TrainingProfileStore(defaults: defaults).save(profile)
@@ -290,7 +540,7 @@ final class AnalysisViewModelTests: XCTestCase {
     }
 
     func testARunWithoutAProfileSendsNoneAndShowsNone() async {
-        await streamer.setChunks(["ok"])
+        await streamer.setText("ok")
         let sut = makeSUT()
 
         await sut.start()
@@ -313,7 +563,7 @@ final class AnalysisViewModelTests: XCTestCase {
             Self.workout(daysAgo: 40),
             Self.workout(daysAgo: 80)
         ]
-        await streamer.setChunks(["ok"])
+        await streamer.setText("ok")
         let sut = makeSUT()
 
         await sut.start()
@@ -330,7 +580,7 @@ final class AnalysisViewModelTests: XCTestCase {
             Self.workout(daysAgo: 3, title: "Morning Run", source: .strava),
             Self.workout(daysAgo: 5),
         ]
-        await streamer.setChunks(["ok"])
+        await streamer.setText("ok")
         let sut = makeSUT()
 
         await sut.start()
@@ -354,7 +604,7 @@ final class AnalysisViewModelTests: XCTestCase {
     /// analysis found are exactly the ones the wider rung holds.
     func testContextCountsTheWidenedWindowWhenTheLadderMoves() async {
         cache.summaries = [Self.workout(daysAgo: 40), Self.workout(daysAgo: 50), Self.workout(daysAgo: 80)]
-        await streamer.setChunks(["ok"])
+        await streamer.setText("ok")
         let sut = makeSUT()
 
         await sut.start()
@@ -366,7 +616,7 @@ final class AnalysisViewModelTests: XCTestCase {
     /// A run that never resolves a window must not leave the previous run's
     /// basis on screen.
     func testContextIsClearedWhenARunFails() async {
-        await streamer.setChunks(["first"])
+        await streamer.setText("first")
         let clock = TestClock(Self.reference)
         let sut = makeSUT(clock: clock)
         XCTAssertNil(sut.context)
@@ -374,7 +624,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await sut.start()
         XCTAssertNotNil(sut.context)
 
-        // Past the lock, on a cache that no rung can serve.
+        // Later, on a cache that no rung can serve.
         clock.advance(by: 7 * 3_600)
         cache.summaries = []
         await sut.start()
@@ -387,23 +637,23 @@ final class AnalysisViewModelTests: XCTestCase {
     /// failure path: while the second run is still loading, the first run's
     /// basis would otherwise sit above a recommendation it does not describe.
     func testContextIsClearedWhileANewRunIsStillLoading() async {
-        await streamer.setChunks(["first"])
+        await streamer.setText("first")
         let clock = TestClock(Self.reference)
         let sut = makeSUT(clock: clock)
 
         await sut.start()
         XCTAssertNotNil(sut.context)
 
-        // Past the lock, second run held inside the cache read — after
+        // Later, second run held inside the cache read — after
         // the clearing, before the window is resolved.
         clock.advance(by: 7 * 3_600)
-        await streamer.setChunks(["second"])
+        await streamer.setText("second")
         cache.gatesFirstCall = true
         cache.gatedCall = 2
         let run = Task { await sut.start() }
         await cache.waitForFirstCall()
 
-        XCTAssertEqual(sut.state, .loading)
+        XCTAssertEqual(sut.state, .running)
         XCTAssertNil(sut.context)
 
         cache.releaseFirstCall()
@@ -411,20 +661,20 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertNotNil(sut.context)
     }
 
-    /// The state has to pass through `.loading` before any text arrives — that
-    /// is the spinner phase of US-3 AC1.
-    func testStateIsLoadingBeforeTheFirstToken() async {
+    /// The state has to pass through `.running` before the answer arrives —
+    /// that is the spinner phase of US-3 AC1.
+    func testStateIsRunningBeforeTheAnswer() async {
         await streamer.gateCall()
-        await streamer.setChunks(["done"])
+        await streamer.setText("done")
         let sut = makeSUT()
 
         let run = Task { await sut.start() }
         await streamer.waitForCall()
-        XCTAssertEqual(sut.state, .loading)
+        XCTAssertEqual(sut.state, .running)
 
         await streamer.release()
         await run.value
-        XCTAssertEqual(sut.state, .result("done"))
+        XCTAssertEqual(sut.state, .result(.prose("done")))
     }
 
     // MARK: - Guards
@@ -433,12 +683,12 @@ final class AnalysisViewModelTests: XCTestCase {
     /// window widens and the run goes through.
     func testEmptyFourWeekWindowRunsOverTheWidenedWindow() async {
         cache.summaries = [Self.workout(daysAgo: 40)]
-        await streamer.setChunks(["Back after a break."])
+        await streamer.setText("Back after a break.")
         let sut = makeSUT()
 
         await sut.start()
 
-        XCTAssertEqual(sut.state, .result("Back after a break."))
+        XCTAssertEqual(sut.state, .result(.prose("Back after a break.")))
         XCTAssertEqual(sut.context?.window.weeks, 8)
         let user = await streamer.userPrompt
         XCTAssertEqual(user?.contains("## Last 8 weeks ("), true)
@@ -446,12 +696,12 @@ final class AnalysisViewModelTests: XCTestCase {
 
     func testEmptyEightWeekWindowWidensTo13Weeks() async {
         cache.summaries = [Self.workout(daysAgo: 80)]
-        await streamer.setChunks(["ok"])
+        await streamer.setText("ok")
         let sut = makeSUT()
 
         await sut.start()
 
-        XCTAssertEqual(sut.state, .result("ok"))
+        XCTAssertEqual(sut.state, .result(.prose("ok")))
         XCTAssertEqual(sut.context?.window.weeks, 13)
     }
 
@@ -486,17 +736,17 @@ final class AnalysisViewModelTests: XCTestCase {
     /// must not keep the previous run's widened label.
     func testWindowResetsToTheDefaultOnANewRun() async {
         cache.summaries = [Self.workout(daysAgo: 40)]
-        await streamer.setChunks(["first"])
+        await streamer.setText("first")
         let clock = TestClock(Self.reference)
         let sut = makeSUT(clock: clock)
 
         await sut.start()
         XCTAssertEqual(sut.context?.window.weeks, 8)
 
-        // Past the lock, with recent training in the cache this time.
+        // Later, with recent training in the cache this time.
         clock.advance(by: 7 * 3_600)
         cache.summaries = [Self.workout(daysAgo: 2)]
-        await streamer.setChunks(["second"])
+        await streamer.setText("second")
         await sut.start()
 
         XCTAssertEqual(sut.context?.window, .default)
@@ -513,28 +763,49 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(calls, 0)
     }
 
-    func testAnActiveLockBlocksTheRun() async {
-        await rateLimit.recordCall(at: Self.reference.addingTimeInterval(-15))
+    /// No cooldown: the moment a run has ended, the next one starts and
+    /// reaches the provider — at the same instant on the clock.
+    func testANewRunStartsRightAfterAFinishedOne() async {
+        await streamer.setText("first")
         let sut = makeSUT()
+        await sut.start()
+        XCTAssertEqual(sut.state, .result(.prose("first")))
+        XCTAssertTrue(sut.canStartAnalysis)
 
+        await streamer.setText("second")
+        sut.reset()
         await sut.start()
 
-        let availableAt = Self.reference.addingTimeInterval(AnalysisRateLimitStore.duration - 15)
-        XCTAssertEqual(sut.state, .error(.lockActive(availableAt: availableAt)))
-        XCTAssertEqual(sut.lockMessage, "New analysis available in 45s")
-        XCTAssertFalse(sut.canStartAnalysis)
+        XCTAssertEqual(sut.state, .result(.prose("second")))
         let calls = await streamer.callCount
-        XCTAssertEqual(calls, 0)
+        XCTAssertEqual(calls, 2)
+    }
+
+    /// No cooldown after a failure either: "Try again" reaches the provider.
+    func testARetryAfterAFailureReachesTheProvider() async {
+        await streamer.setStartError(InferenceServiceError.networkUnavailable)
+        let sut = makeSUT()
+        await sut.start()
+        XCTAssertEqual(sut.state, .error(.offline(nil)))
+
+        await streamer.setStartError(nil)
+        await streamer.setText("done")
+        await sut.start()
+
+        XCTAssertEqual(sut.state, .result(.prose("done")))
+        let calls = await streamer.callCount
+        XCTAssertEqual(calls, 2)
     }
 
     /// A double tap must not buy two analyses.
     func testSecondStartWhileRunningIsIgnored() async {
         await streamer.gateCall()
-        await streamer.setChunks(["done"])
+        await streamer.setText("done")
         let sut = makeSUT()
 
         let run = Task { await sut.start() }
         await streamer.waitForCall()
+        XCTAssertFalse(sut.canStartAnalysis)
         await sut.start()
 
         await streamer.release()
@@ -546,7 +817,7 @@ final class AnalysisViewModelTests: XCTestCase {
     /// Both taps land before the first run has passed its first await, where
     /// the state is still `.idle` unless the slot is claimed synchronously.
     func testTwoTapsInTheSameRunLoopStartOnlyOneRun() async {
-        await streamer.setChunks(["done"])
+        await streamer.setText("done")
         let sut = makeSUT()
 
         async let first: Void = sut.start()
@@ -555,13 +826,13 @@ final class AnalysisViewModelTests: XCTestCase {
 
         let calls = await streamer.callCount
         XCTAssertEqual(calls, 1)
-        XCTAssertEqual(sut.state, .result("done"))
+        XCTAssertEqual(sut.state, .result(.prose("done")))
     }
 
-    /// A cancel during the lock lookup must not be overrun by the run it
-    /// stopped before it reached the service.
+    /// A cancel while the prompt is still being built must not be overrun by
+    /// the run it stopped before it reached the service.
     func testCancelBeforeTheCallReachesTheServiceStopsTheRun() async {
-        await streamer.setChunks(["never rendered"])
+        await streamer.setText("never rendered")
         let sut = makeSUT()
 
         let run = Task { await sut.start() }
@@ -572,24 +843,6 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(sut.state, .idle)
         let calls = await streamer.callCount
         XCTAssertEqual(calls, 0)
-    }
-
-    /// The explanation must not outlive its reason: once the lock lifts, the
-    /// error clears on the next refresh.
-    func testTheLockErrorClearsOnceTheLockLifts() async {
-        let clock = TestClock(Self.reference)
-        await rateLimit.recordCall(at: Self.reference.addingTimeInterval(-30))
-        let sut = makeSUT(clock: clock)
-
-        await sut.start()
-        XCTAssertEqual(sut.state, .error(.lockActive(availableAt: Self.reference.addingTimeInterval(30))))
-
-        clock.advance(by: 31)
-        await sut.refreshLock()
-
-        XCTAssertEqual(sut.state, .idle)
-        XCTAssertNil(sut.lockMessage)
-        XCTAssertTrue(sut.canStartAnalysis)
     }
 
     // MARK: - Failures
@@ -606,7 +859,7 @@ final class AnalysisViewModelTests: XCTestCase {
     // MARK: - Provider attribution (#79)
 
     func testPublishesTheAnsweringProvider() async {
-        await streamer.setChunks(["Recommendation"], from: .gemini)
+        await streamer.setText("Recommendation", from: .gemini)
         let sut = makeSUT()
 
         await sut.start()
@@ -650,10 +903,10 @@ final class AnalysisViewModelTests: XCTestCase {
 
     /// DoD: the user never sees two answers merged. Whatever the failed
     /// provider already streamed is dropped when the next one takes over.
-    func testDiscardsThePartialTextOfAProviderThatGaveWay() async {
+    func testDiscardsTheAnswerOfAProviderThatGaveWay() async {
         await streamer.setEvents([
             .attempting(.claude),
-            .text("Half a Claude answ"),
+            .text("A Claude answer that is then discarded"),
             .attempting(.gemini),
             .text("A complete Gemini answer."),
         ])
@@ -661,7 +914,7 @@ final class AnalysisViewModelTests: XCTestCase {
 
         await sut.start()
 
-        XCTAssertEqual(sut.state, .result("A complete Gemini answer."))
+        XCTAssertEqual(sut.state, .result(.prose("A complete Gemini answer.")))
     }
 
     /// A run that failed with nothing on screen still has to say who was tried,
@@ -690,7 +943,7 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(sut.state, .error(.unauthorized(.gemini)))
     }
 
-    /// No provider was ever announced (no key, lock, cache failure), so
+    /// No provider was ever announced (no key, cache failure), so
     /// there is nothing to attribute.
     func testLeavesTheAttributionEmptyWhenNoProviderWasTried() async {
         await streamer.setStartError(InferenceServiceError.missingAPIKey)
@@ -702,26 +955,22 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(sut.state, .error(.missingAPIKey))
     }
 
-    /// A blocked run has no providers of its own; showing the previous run's
-    /// under a "wait a moment" message would read as "we tried Claude, then
-    /// Gemini, and the answer is: come back later".
-    func testALockErrorDoesNotInheritThePreviousRunsAttribution() async {
+    /// A new run starts without the previous run's providers: they have
+    /// nothing to do with who answers this one.
+    func testANewRunDoesNotInheritThePreviousRunsAttribution() async {
         await streamer.setEvents([.attempting(.claude), .attempting(.gemini), .text("Recommendation")])
         let sut = makeSUT()
         await sut.start()
         XCTAssertEqual(sut.attribution?.attempted, [.claude, .gemini])
 
-        await rateLimit.recordCall(at: Self.reference)
+        await streamer.setEvents([.attempting(.mistral), .text("Another")])
         await sut.start()
 
-        XCTAssertNil(sut.attribution)
-        guard case .error(.lockActive) = sut.state else {
-            return XCTFail("expected a lock error, got \(sut.state)")
-        }
+        XCTAssertEqual(sut.attribution?.attempted, [.mistral])
     }
 
     func testResetClearsTheAttribution() async {
-        await streamer.setChunks(["Recommendation"])
+        await streamer.setText("Recommendation")
         let sut = makeSUT()
         await sut.start()
         XCTAssertNotNil(sut.attribution)
@@ -732,8 +981,8 @@ final class AnalysisViewModelTests: XCTestCase {
     }
 
     /// A stream that dies half-way is a failure, not a short recommendation.
-    func testMidStreamFailureReplacesThePartialText() async {
-        await streamer.setChunks(["Your training "])
+    func testMidStreamFailureDiscardsTheCollectedAnswer() async {
+        await streamer.setText("Your training ")
         await streamer.setStreamError(InferenceServiceError.streamInterrupted(message: "overloaded"))
         let sut = makeSUT()
 
@@ -743,7 +992,7 @@ final class AnalysisViewModelTests: XCTestCase {
     }
 
     func testStreamWithoutAnyTokenIsAnUnreadableResponse() async {
-        await streamer.setChunks([])
+        await streamer.setEvents([.attempting(.claude)])
         let sut = makeSUT()
 
         await sut.start()
@@ -766,7 +1015,7 @@ final class AnalysisViewModelTests: XCTestCase {
 
     func testCancelStopsTheRunAndReturnsToIdle() async {
         await streamer.gateCall()
-        await streamer.setChunks(["never rendered"])
+        await streamer.setText("never rendered")
         let sut = makeSUT()
 
         let run = Task { await sut.start() }
@@ -783,17 +1032,17 @@ final class AnalysisViewModelTests: XCTestCase {
     }
 
     func testCancelWithoutARunningCallDoesNothing() async {
-        await streamer.setChunks(["done"])
+        await streamer.setText("done")
         let sut = makeSUT()
         await sut.start()
 
         sut.cancel()
 
-        XCTAssertEqual(sut.state, .result("done"))
+        XCTAssertEqual(sut.state, .result(.prose("done")))
     }
 
     func testResetClearsAFinishedRun() async {
-        await streamer.setChunks(["done"])
+        await streamer.setText("done")
         let sut = makeSUT()
         await sut.start()
 
@@ -834,14 +1083,14 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertFalse(sut.isTakingLong)
     }
 
-    /// The first token of the provider that later gave way stops the timer. If
-    /// the handover does not restart it, a second provider that hangs shows a
+    /// An answer from a provider that later gave way stops the timer. If the
+    /// handover does not restart it, a second provider that hangs shows a
     /// bare spinner with no way to cancel it — the affordance US-3 AC1 exists
     /// for.
     func testTheSlowHintComesBackWhenAnotherProviderTakesOver() async {
         await streamer.setEvents([
             .attempting(.claude),
-            .text("Half a Claude answ"),
+            .text("A Claude answer that is then discarded"),
             .attempting(.gemini),
         ])
         await streamer.holdOpenAfterEvents()
@@ -850,13 +1099,34 @@ final class AnalysisViewModelTests: XCTestCase {
         let run = Task { await sut.start() }
         await waitUntil("the slow hint returns for the provider that took over") { sut.isTakingLong }
 
-        XCTAssertEqual(sut.state, .loading)
+        XCTAssertEqual(sut.state, .running)
+        sut.cancel()
+        await run.value
+    }
+
+    /// The production handover: the provider that gave way sent no answer, so
+    /// the hint has been counting since the tap and must stay up — the cancel
+    /// button the user may be reaching for does not disappear (US-3 AC1).
+    func testAHandoverKeepsTheSlowHintThatIsAlreadyShowing() async {
+        await streamer.setEvents([.attempting(.claude), .attempting(.gemini)])
+        await streamer.pauseAfterEvents(1)
+        await streamer.holdOpenAfterEvents()
+        let sut = makeSUT(slowThreshold: 0.05)
+
+        let run = Task { await sut.start() }
+        await waitUntil("the slow hint appears for the first provider") { sut.isTakingLong }
+
+        await streamer.resumeEvents()
+        await waitUntil("the handover reaches the screen") { sut.attribution?.attempted == [.claude, .gemini] }
+
+        XCTAssertTrue(sut.isTakingLong)
+        XCTAssertEqual(sut.state, .running)
         sut.cancel()
         await run.value
     }
 
     func testFastRunNeverAnnouncesItselfAsSlow() async {
-        await streamer.setChunks(["done"])
+        await streamer.setText("done")
         let sut = makeSUT(slowThreshold: 60)
 
         await sut.start()
@@ -864,103 +1134,24 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertFalse(sut.isTakingLong)
     }
 
-    // MARK: - Lock label (#31 AC3)
+    // MARK: - Result age ticker
 
-    func testTheLabelCountsDownWithTheClock() async {
-        await rateLimit.recordCall(at: Self.reference.addingTimeInterval(-15))
+    /// The ticker keeps the age of the recommendation on screen current, so a
+    /// screen left open does not keep claiming "just now".
+    func testTheTickerRefreshesTheResultAge() async throws {
         let clock = TestClock(Self.reference)
-        let sut = makeSUT(clock: clock, tickInterval: 0.01, restingTickInterval: 0.01)
+        try await storeRecommendation(at: Self.reference)
+        let sut = makeSUT(clock: clock, tickInterval: 0.01)
+        await sut.restore()
+        XCTAssertEqual(sut.resultAge, "just now")
 
-        let ticker = Task { await sut.trackLock() }
-        await waitUntil("the initial label appears") {
-            sut.lockMessage == "New analysis available in 45s"
-        }
-
-        clock.advance(by: 30)
-        await waitUntil("the label counts down") {
-            sut.lockMessage == "New analysis available in 15s"
-        }
-
-        clock.advance(by: 15)
-        await waitUntil("the label disappears once the lock lifts") {
-            sut.lockMessage == nil
-        }
-        XCTAssertTrue(sut.canStartAnalysis)
-
-        ticker.cancel()
-    }
-
-    /// A 60s lock counted down once a minute would never visibly move, so the
-    /// ticker runs at a second while it is on — and drops back to a slower
-    /// beat once there is only the recommendation's age left to refresh.
-    func testTheTickerSlowsDownOnceTheLockHasLifted() async {
-        let clock = TestClock(Self.reference)
-        await rateLimit.recordCall(at: Self.reference.addingTimeInterval(-59))
-        // A resting interval far beyond the test's own timeout: if the loop
-        // took it while the lock is still running, the label below never
-        // appears.
-        let sut = makeSUT(clock: clock, tickInterval: 0.01, restingTickInterval: 600)
-
-        let ticker = Task { await sut.trackLock() }
-        await waitUntil("the countdown is running") {
-            sut.lockMessage == "New analysis available in 1s"
-        }
-
-        clock.advance(by: 1)
-        await waitUntil("the label disappears once the lock lifts") {
-            sut.lockMessage == nil
+        let ticker = Task { await sut.trackResultAge() }
+        clock.advance(by: 2 * 3_600)
+        await waitUntil("the age follows the clock") {
+            sut.resultAge == "2 h ago"
         }
 
         ticker.cancel()
-    }
-
-    /// The lock starts mid-call, which is almost always while the ticker is
-    /// resting. If the resting sleep had to run out first, the countdown would
-    /// stand still for most of the 60s it counts down — the stretch the fast
-    /// rate exists for.
-    func testALockStartedWhileTheTickerRestsCutsTheRestingSleepShort() async {
-        let clock = TestClock(Self.reference)
-        // A resting interval far beyond the test's own timeout: if the loop
-        // had to wait it out, the countdown below would never move.
-        let sut = makeSUT(clock: clock, tickInterval: 0.01, restingTickInterval: 600)
-
-        let ticker = Task { await sut.trackLock() }
-        await waitUntil("the ticker has settled with no lock") {
-            sut.lockMessage == nil
-        }
-
-        // Stands in for the service recording the call once a provider
-        // accepted the request, mid-run.
-        await rateLimit.recordCall(at: Self.reference)
-        await sut.refreshLock()
-        XCTAssertEqual(sut.lockMessage, "New analysis available in 60s")
-
-        clock.advance(by: 15)
-        await waitUntil("the countdown moves without waiting out the resting sleep") {
-            sut.lockMessage == "New analysis available in 45s"
-        }
-
-        ticker.cancel()
-    }
-
-    /// `InferenceService` starts the lock mid-call, so the label has to be
-    /// re-read when the run ends — not only when the screen is next opened.
-    func testTheLabelIsRefreshedAfterARun() async {
-        await streamer.gateCall()
-        await streamer.setChunks(["done"])
-        let sut = makeSUT()
-
-        let run = Task { await sut.start() }
-        await streamer.waitForCall()
-        // Stands in for the service recording the call once Claude accepted
-        // the request — after the run's own rate-limit check has passed.
-        await rateLimit.recordCall(at: Self.reference)
-        await streamer.release()
-        await run.value
-
-        XCTAssertEqual(sut.state, .result("done"))
-        XCTAssertEqual(sut.lockMessage, "New analysis available in 60s")
-        XCTAssertFalse(sut.canStartAnalysis)
     }
 
     // MARK: - Helpers
@@ -984,7 +1175,7 @@ final class AnalysisViewModelTests: XCTestCase {
     }
 }
 
-/// Movable clock for the lock countdown.
+/// Movable clock for windows and the result age.
 ///
 /// `@unchecked Sendable`: it is only ever read from the ViewModel's main actor
 /// and advanced from the test body, which runs there too.
@@ -1019,7 +1210,7 @@ extension AnalysisViewModelTests {
     }
 
     func testFinishedRunPersistsTheRecommendation() async throws {
-        await streamer.setChunks(["Your bench ", "volume is rising."])
+        await streamer.setText("Your bench volume is rising.")
         let sut = makeSUT()
 
         await sut.start()
@@ -1038,7 +1229,7 @@ extension AnalysisViewModelTests {
     /// rests on, so they are what gets stored.
     func testPersistedContextIsTheOneTheRunResolved() async throws {
         cache.summaries = [Self.workout(daysAgo: 40)]
-        await streamer.setChunks(["Back after a break."])
+        await streamer.setText("Back after a break.")
         let sut = makeSUT()
 
         await sut.start()
@@ -1053,7 +1244,7 @@ extension AnalysisViewModelTests {
     func testCancelledRunKeepsThePreviousStoredRecommendation() async throws {
         try await storeRecommendation(at: Self.reference.addingTimeInterval(-7 * 3_600))
         await streamer.gateCall()
-        await streamer.setChunks(["never rendered"])
+        await streamer.setText("never rendered")
         let sut = makeSUT()
 
         let run = Task { await sut.start() }
@@ -1090,7 +1281,7 @@ extension AnalysisViewModelTests {
         XCTAssertEqual(stored?.text, "Add 2.5 kg on bench next session.")
     }
 
-    /// US-3 AC10: reopening the app during the lock shows the last
+    /// US-3 AC10: reopening the app shows the last
     /// recommendation instead of the intro screen.
     func testRestoreBringsBackTheStoredRecommendation() async throws {
         try await storeRecommendation(
@@ -1103,7 +1294,7 @@ extension AnalysisViewModelTests {
 
         await sut.restore()
 
-        XCTAssertEqual(sut.state, .result("Give legs a second slot."))
+        XCTAssertEqual(sut.state, .result(.prose("Give legs a second slot.")))
         // #36: the restored screen names the basis of the run that produced
         // the text, not a basis re-counted from today's cache.
         XCTAssertEqual(sut.context, AnalysisContext(sessionCount: 6, window: AnalysisWindow(weeks: 8)))
@@ -1127,7 +1318,7 @@ extension AnalysisViewModelTests {
 
         await sut.restore()
 
-        XCTAssertEqual(sut.state, .result("Give legs a second slot."))
+        XCTAssertEqual(sut.state, .result(.prose("Give legs a second slot.")))
         XCTAssertEqual(sut.attribution, AnalysisAttribution(first: .gemini))
         XCTAssertEqual(sut.attribution?.provider.displayName, "Gemini")
         XCTAssertEqual(sut.attribution?.didFallBack, false)
@@ -1168,7 +1359,7 @@ extension AnalysisViewModelTests {
     /// has to appear without the screen being reopened.
     func testAFinishedRunOpensTheHistoryOnTheFirstRepeat() async throws {
         try await storeRecommendation("Older advice.", at: Self.reference.addingTimeInterval(-9 * 3_600))
-        await streamer.setChunks(["Fresh advice."])
+        await streamer.setText("Fresh advice.")
         let sut = makeSUT()
 
         await sut.start()
@@ -1192,7 +1383,7 @@ extension AnalysisViewModelTests {
         await sut.refreshHistory()
 
         XCTAssertFalse(sut.hasHistory)
-        XCTAssertEqual(sut.state, .result("Add 2.5 kg on bench next session."))
+        XCTAssertEqual(sut.state, .result(.prose("Add 2.5 kg on bench next session.")))
     }
 
     /// Deleting the analysis on screen from the history must take it off the
@@ -1203,12 +1394,12 @@ extension AnalysisViewModelTests {
         let newest = try await storeRecommendation(at: Self.reference.addingTimeInterval(-2 * 3_600))
         let sut = makeSUT()
         await sut.restore()
-        XCTAssertEqual(sut.state, .result("Add 2.5 kg on bench next session."))
+        XCTAssertEqual(sut.state, .result(.prose("Add 2.5 kg on bench next session.")))
 
         try await results.delete(id: newest)
         await sut.refreshHistory()
 
-        XCTAssertEqual(sut.state, .result("Older advice."))
+        XCTAssertEqual(sut.state, .result(.prose("Older advice.")))
         XCTAssertFalse(sut.hasHistory)
     }
 
@@ -1230,17 +1421,17 @@ extension AnalysisViewModelTests {
     func testRestoreDoesNotOverwriteARunInFlight() async throws {
         try await storeRecommendation("Older advice.", at: Self.reference.addingTimeInterval(-7 * 3_600))
         await streamer.gateCall()
-        await streamer.setChunks(["Fresh advice."])
+        await streamer.setText("Fresh advice.")
         let sut = makeSUT()
 
         let run = Task { await sut.start() }
         await streamer.waitForCall()
         await sut.restore()
-        XCTAssertEqual(sut.state, .loading)
+        XCTAssertEqual(sut.state, .running)
 
         await streamer.release()
         await run.value
-        XCTAssertEqual(sut.state, .result("Fresh advice."))
+        XCTAssertEqual(sut.state, .result(.prose("Fresh advice.")))
     }
 
     /// "New analysis" must survive a reopened sheet: `AnalysisView.task` runs
@@ -1270,59 +1461,34 @@ extension AnalysisViewModelTests {
         XCTAssertEqual(sut.state, .error(.missingAPIKey))
         await sut.dismissFailure()
 
-        XCTAssertEqual(sut.state, .result("Add 2.5 kg on bench next session."))
+        XCTAssertEqual(sut.state, .result(.prose("Add 2.5 kg on bench next session.")))
         XCTAssertEqual(sut.resultAge, "2 h ago")
     }
 
-    /// A "New analysis" tap the lock refuses must not cost the user their
-    /// recommendation for the rest of the session: `start()` returns early on
-    /// that path, and clearing the dismissal only after that early return left
-    /// "Back" with nothing to restore — countdown on screen, recommendation
-    /// still on disk (#97).
-    func testALockRefusedRunStillLetsBackRestoreTheRecommendation() async throws {
-        try await storeRecommendation(at: Self.reference.addingTimeInterval(-2 * 3_600))
-        await rateLimit.recordCall(at: Self.reference.addingTimeInterval(-30))
-        let sut = makeSUT()
-        await sut.restore()
-        sut.reset()
-
-        await sut.start()
-        let availableAt = Self.reference.addingTimeInterval(AnalysisRateLimitStore.duration - 30)
-        XCTAssertEqual(sut.state, .error(.lockActive(availableAt: availableAt)))
-        await sut.dismissFailure()
-
-        XCTAssertEqual(sut.state, .result("Add 2.5 kg on bench next session."))
-        XCTAssertEqual(sut.resultAge, "2 h ago")
-        let calls = await streamer.callCount
-        XCTAssertEqual(calls, 0)
-    }
-
-    /// The result must not become visible while `lockMessage` still holds
-    /// the value from before the run: `canStartAnalysis` would be true, the
-    /// result screen would offer "New analysis", and the tap would replace the
-    /// recommendation the user just paid for with a lock error.
-    func testTheResultIsNotPublishedWhileTheLockLabelIsStale() async throws {
+    /// The run stays in flight until its answer is stored: "New analysis"
+    /// must not start a second run while the first one is still writing, and
+    /// the moment it is done, the next run is allowed.
+    func testTheRunStaysInFlightWhileItPersists() async throws {
         let gate = GatedAnalysisResultStore(wrapping: results)
         await streamer.gateCall()
-        await streamer.setChunks(["done"])
+        await streamer.setText("done")
         let sut = makeSUT(resultStore: gate)
 
         let run = Task { await sut.start() }
         await streamer.waitForCall()
-        // Stands in for the service recording the window once the provider
-        // accepted the request.
-        await rateLimit.recordCall(at: Self.reference)
         await streamer.release()
 
         await gate.waitForSave()
-        XCTAssertEqual(sut.state, .streaming("done"), "The run must still read as in flight while it persists")
+        XCTAssertEqual(sut.state, .running, "The run must still read as in flight while it persists")
         XCTAssertFalse(sut.canStartAnalysis)
+        await sut.start()
+        let callsDuringSave = await streamer.callCount
+        XCTAssertEqual(callsDuringSave, 1, "A tap during the write must not start a second run")
 
         await gate.releaseSave()
         await run.value
-        XCTAssertEqual(sut.state, .result("done"))
-        XCTAssertEqual(sut.lockMessage, "New analysis available in 60s")
-        XCTAssertFalse(sut.canStartAnalysis)
+        XCTAssertEqual(sut.state, .result(.prose("done")))
+        XCTAssertTrue(sut.canStartAnalysis)
     }
 
     /// "Back" on the very first run's error screen has nothing to fall back
@@ -1343,7 +1509,7 @@ extension AnalysisViewModelTests {
     func testRestoreDoesNotOverwriteARunStartedMeanwhile() async throws {
         let generatedAt = Self.reference.addingTimeInterval(-7 * 3_600)
         try await storeRecommendation("Older advice.", at: generatedAt)
-        await streamer.setChunks(["Fresh advice."])
+        await streamer.setText("Fresh advice.")
         let sut = makeSUT()
 
         // Both run concurrently, the way a tap on "Analyze" lands while the
@@ -1352,7 +1518,7 @@ extension AnalysisViewModelTests {
         async let run: Void = sut.start()
         _ = await (restored, run)
 
-        XCTAssertEqual(sut.state, .result("Fresh advice."))
+        XCTAssertEqual(sut.state, .result(.prose("Fresh advice.")))
     }
 
     /// "New analysis" only clears the screen — the recommendation stays on
@@ -1372,8 +1538,8 @@ extension AnalysisViewModelTests {
         XCTAssertEqual(stored?.text, "Add 2.5 kg on bench next session.")
     }
 
-    /// The age is re-rendered by the same ticker as the lock label, so a
-    /// sheet left open does not keep claiming "just now".
+    /// The age is re-rendered against the clock, so a screen left open does
+    /// not keep claiming "just now".
     func testResultAgeAgesWithTheClock() async throws {
         let clock = TestClock(Self.reference)
         try await storeRecommendation(at: Self.reference)
@@ -1382,7 +1548,7 @@ extension AnalysisViewModelTests {
         XCTAssertEqual(sut.resultAge, "just now")
 
         clock.advance(by: 2 * 3_600)
-        await sut.refreshLock()
+        sut.refreshResultAge()
 
         XCTAssertEqual(sut.resultAge, "2 h ago")
     }

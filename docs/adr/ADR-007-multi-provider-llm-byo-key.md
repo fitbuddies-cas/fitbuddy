@@ -70,3 +70,13 @@ FitBuddy erlaubt im PoC bis zu drei LLM-Provider (Claude, Gemini, Mistral) im st
 ---
 
 *Quellen: Gemini API Additional Terms of Service (ai.google.dev/gemini-api/terms), Gemini API Logs Policy (ai.google.dev/gemini-api/docs/logs-policy), Mistral Privacy & Data Controls (docs.mistral.ai), Mistral Help Center (Training-Opt-out), Mistral DPA (legal.mistral.ai) — alle geprüft 2026-08-21.*
+
+---
+
+## Nachtrag 2026-09: 60-s-Sperre entfernt
+
+**Kontext:** Die Konsequenzen oben beschreiben die Sperre pro Analyse-Durchlauf: Der `InferenceService` schrieb den Zeitstempel einmal, sobald der erste Provider die Anfrage annahm (seit #117 60 s). Sie sollte nur versehentliche Mehrfach-Calls verhindern, liess den User aber nach jedem Durchlauf warten.
+
+**Entscheidung:** Mit #178 ist die Sperre entfernt. Die Fallback-Kette schreibt keinen Zeitstempel mehr. Ein neuer Durchlauf ist direkt nach dem vorherigen möglich; parallel laufen kann weiterhin nur einer, weil der Button während eines laufenden Durchlaufs gesperrt ist.
+
+**Konsequenzen:** Die Frage, ob ein Durchlauf mit Fallback die Sperre pro Provider oder pro Durchlauf setzt, entfällt. Die Kosten jedes Durchlaufs trägt der Account des Users beim jeweils antwortenden Provider; **ein Spending Limit im Provider-Account bleibt Pflicht** ([[ADR-004]]), denn eine client-seitige Sperre war nie ein Kostenlimit.

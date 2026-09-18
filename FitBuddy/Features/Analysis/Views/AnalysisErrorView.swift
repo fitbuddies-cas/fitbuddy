@@ -11,9 +11,9 @@ struct AnalysisErrorView: View {
     /// than one: `failure` already describes the last provider's problem, and
     /// on a single-provider run repeating that name adds nothing.
     let attribution: AnalysisAttribution?
-    /// `nil` for a failure a retry cannot fix (a missing or rejected key, an
-    /// active lock), where a "Try again" button would only produce the
-    /// same message again.
+    /// `nil` for a failure a retry cannot fix (a missing or rejected key, no
+    /// training data), where a "Try again" button would only produce the same
+    /// message again.
     let onRetry: (() -> Void)?
     /// Opens the settings tab, for the failure whose fix is stored there — no
     /// key at all (#207). `nil` everywhere else, where the button would lead

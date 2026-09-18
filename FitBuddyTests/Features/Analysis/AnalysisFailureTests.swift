@@ -29,11 +29,6 @@ final class AnalysisFailureTests: XCTestCase {
         XCTAssertEqual(failure(.streamInterrupted(message: "overloaded")), .serviceUnavailable(.claude))
     }
 
-    func testCarriesLockInstant() {
-        let availableAt = Date(timeIntervalSince1970: 1_788_000_000)
-        XCTAssertEqual(failure(.lockActive(availableAt: availableAt)), .lockActive(availableAt: availableAt))
-    }
-
     func testMapsUnreadableResponses() {
         XCTAssertEqual(failure(.invalidResponse), .unreadableResponse(.claude))
         XCTAssertEqual(failure(.unexpectedStatus(418)), .unreadableResponse(.claude))
@@ -79,11 +74,10 @@ final class AnalysisFailureTests: XCTestCase {
 
     // MARK: - Retry and formatting
 
-    func testKeyAndLockFailuresAreNotRetryable() {
+    func testKeyAndDataFailuresAreNotRetryable() {
         XCTAssertFalse(AnalysisFailure.missingAPIKey.isRetryable)
         XCTAssertFalse(AnalysisFailure.unauthorized(.claude).isRetryable)
         XCTAssertFalse(AnalysisFailure.noTrainingData.isRetryable)
-        XCTAssertFalse(AnalysisFailure.lockActive(availableAt: Date()).isRetryable)
         XCTAssertTrue(AnalysisFailure.offline(.claude).isRetryable)
         XCTAssertTrue(AnalysisFailure.keychainUnavailable.isRetryable)
     }
@@ -96,7 +90,7 @@ final class AnalysisFailureTests: XCTestCase {
         XCTAssertFalse(AnalysisFailure.unauthorized(.claude).leadsToSettings)
         XCTAssertFalse(AnalysisFailure.keychainUnavailable.leadsToSettings)
         XCTAssertFalse(AnalysisFailure.offline(.claude).leadsToSettings)
-        XCTAssertFalse(AnalysisFailure.lockActive(availableAt: Date()).leadsToSettings)
+        XCTAssertFalse(AnalysisFailure.unreadableResponse(.gemini).leadsToSettings)
         XCTAssertFalse(AnalysisFailure.noTrainingData.leadsToSettings)
     }
 
@@ -110,7 +104,7 @@ final class AnalysisFailureTests: XCTestCase {
         let failures: [AnalysisFailure] = [
             .missingAPIKey, .keychainUnavailable, .unauthorized(.claude), .offline(.gemini),
             .rateLimited(provider: .mistral, retryAfter: nil), .serviceUnavailable(.claude),
-            .lockActive(availableAt: Date()), .noTrainingData,
+            .noTrainingData,
             .cacheUnavailable, .unreadableResponse(.gemini), .unreadableResponse(nil),
         ]
         for failure in failures {

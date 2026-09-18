@@ -4,8 +4,8 @@ import Foundation
 /// Wraps a real `AnalysisResultStoring` and lets a test hold `save` open.
 ///
 /// Used to inspect what the screen shows *while* a finished run is being
-/// persisted — the window in which a stale `lockMessage` used to offer
-/// "New analysis" for a run `start()` would immediately refuse.
+/// persisted — the run must still read as in flight, so "New analysis"
+/// cannot start a second one before the first has stored its answer.
 actor GatedAnalysisResultStore: AnalysisResultStoring {
     private let wrapped: any AnalysisResultStoring
     private var entered: CheckedContinuation<Void, Never>?

@@ -2,16 +2,25 @@ import Foundation
 import OSLog
 
 /// Drives the on-demand AI analysis: builds the prompt from the local cache,
-/// streams the answer of whichever provider takes the call, and owns the short
-/// lock between two runs (US-3, #31/#79/#117).
+/// waits for the complete answer of whichever provider takes the call,
+/// and validates a structured one against the same reads (US-3, #31/#79/#117,
+/// US-14 #178).
 ///
 /// Several things are published separately because they answer different
 /// questions. `state` says what the screen shows right now, `attribution` says
-/// who is answering it and who was asked before them, `lockMessage` says
-/// when the next run is allowed, `resultAge` says how old the recommendation
-/// on screen is, and `isTakingLong` says whether this run has passed the 30s
-/// mark without a single token — the moment US-3 AC1 wants the cancel button
-/// to appear.
+/// who is answering it and who was asked before them, `resultAge` says how old
+/// the recommendation on screen is, and `isTakingLong` says whether this run
+/// has passed the 30s mark without an answer — the moment US-3 AC1 wants the
+/// cancel button to appear.
+///
+/// There is no cooldown between two runs: the 60s lock of #117 is gone. A run
+/// in flight still blocks a second one, so a double tap cannot buy two
+/// analyses, and the hard limit on spending is the spending limit in the
+/// user's own provider account (BYO key, ADR-004).
+///
+/// The answer is taken in one step (#178): a report is JSON, and half of it is
+/// neither a report nor readable prose. The transport still streams underneath,
+/// which is what keeps timeouts, cancel and the fallback chain working.
 ///
 /// Every finished recommendation is persisted, and the newest one is restored
 /// (`restore()`), so it survives an app restart and the ones before it stay
@@ -22,7 +31,7 @@ import OSLog
 /// handles.
 @MainActor
 final class AnalysisViewModel: ObservableObject {
-    /// How long a run may go without a first token before the screen offers to
+    /// How long a run may go without an answer before the screen offers to
     /// cancel it (US-3 AC1). Not a deadline: the request keeps running, and
     /// `URLSession`'s own idle timeout still applies underneath. Killing a slow
     /// but healthy stream automatically would spend the user's tokens on
@@ -34,11 +43,9 @@ final class AnalysisViewModel: ObservableObject {
     /// had to fall back to reach them (#79). `nil` before the first provider
     /// is tried, and whenever the screen is at rest.
     @Published private(set) var attribution: AnalysisAttribution?
-    /// `"New analysis available in 45s"`, or `nil` while a run is allowed.
-    @Published private(set) var lockMessage: String?
     /// Whether the running call has passed `slowThreshold` without answering.
-    /// Cleared as soon as the first token arrives, and on every state change
-    /// out of a running state.
+    /// Cleared as soon as the answer arrives, and on every state change out of
+    /// the running state.
     @Published private(set) var isTakingLong = false
     /// What the analysis on screen rests on: how many sessions, over which
     /// period, from which sources (US-6, #36). `nil` until a run has resolved
@@ -48,30 +55,28 @@ final class AnalysisViewModel: ObservableObject {
     /// When the recommendation on screen was produced. Set by a finished run
     /// and by `restore()`; `nil` whenever no recommendation is showing (#97).
     @Published private(set) var generatedAt: Date?
-    /// `generatedAt` as the screen prints it — `"2 h ago"`. Refreshed with the
-    /// lock label, so a sheet left open does not keep claiming "just now".
+    /// `generatedAt` as the screen prints it — `"2 h ago"`. Refreshed by
+    /// `trackResultAge()`, so a screen left open does not keep claiming "just
+    /// now".
     @Published private(set) var resultAge: String?
     /// Whether more than one analysis is stored, and the history is therefore
     /// worth opening (US-3 AC11, #117). With a single one the screen already
     /// shows it, and a link to a list of exactly that would be a detour.
     @Published private(set) var hasHistory = false
 
-    /// Whether tapping "Analyse" can start a run right now.
+    /// Whether tapping "Analyse" can start a run right now: whenever no run is
+    /// in flight.
     var canStartAnalysis: Bool {
-        !state.isRunning && lockMessage == nil
+        !state.isRunning
     }
 
     /// The run currently in flight, held so `cancel()` can stop it.
     private var runTask: Task<Void, Never>?
     /// Counts runs, so a superseded one cannot clean up after the run that
-    /// replaced it. A finished run refreshes the lock label before it lets
-    /// go, and the user can start the next one during exactly that await.
+    /// replaced it.
     private var runID: UInt64 = 0
-    /// Fires once `slowThreshold` has passed without a first token.
+    /// Fires once `slowThreshold` has passed without an answer.
     private var slowTask: Task<Void, Never>?
-    /// The ticker's current sleep, held so a lock that starts while the ticker
-    /// is resting can cut that sleep short (#117).
-    private var tickerSleep: Task<Void, Never>?
     /// Whether the user deliberately dismissed the stored recommendation by
     /// tapping "New analysis". Held so a reopened sheet does not put it right
     /// back — and cleared again as soon as the run they asked for is under
@@ -96,15 +101,14 @@ final class AnalysisViewModel: ObservableObject {
 
     private let cache: WorkoutSummaryReading
     private let exerciseCache: (any ExerciseSummaryReading & ExerciseProgressionReading)?
+    private let detailCache: (any WorkoutDetailReading)?
     private let inference: AnalysisStreaming
-    private let rateLimit: AnalysisRateLimitStore
     private let resultStore: (any AnalysisResultStoring)?
     private let trainingProfile: TrainingProfileStore
     private let calendar: Calendar
     private let now: () -> Date
     private let slowThreshold: TimeInterval
     private let tickInterval: TimeInterval
-    private let restingTickInterval: TimeInterval
 
     private let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "Analysis")
 
@@ -114,10 +118,14 @@ final class AnalysisViewModel: ObservableObject {
     ///     section (#173) — `WorkoutStore` in the app, like `cache`. `nil` —
     ///     the default — builds the prompt without exercise data, which is
     ///     what SwiftUI previews get: the prompt then says there is none, and
-    ///     the system prompt forbids naming a weight it was not given.
+    ///     the system prompt forbids naming a weight it was not given. It is
+    ///     also what a report is validated against (#175), so without it a
+    ///     report is shown as its prose summary rather than as cards nothing
+    ///     has checked.
+    ///   - detailCache: Full workouts of the last seven days, for the mean RPE
+    ///     of the recovery figures (#175) — `WorkoutStore` in the app. `nil` —
+    ///     the default — validates without RPE.
     ///   - inference: The streaming call (`InferenceService` in the app).
-    ///   - rateLimit: The shared lock store — the same one the service writes
-    ///     to, so the label and the service's own guard never disagree.
     ///   - resultStore: Where a finished recommendation is persisted, so it
     ///     survives an app restart (US-3 AC10). `nil` — the default — turns
     ///     persistence off, which is what SwiftUI previews need: they have no
@@ -125,76 +133,56 @@ final class AnalysisViewModel: ObservableObject {
     ///   - trainingProfile: Where the user's goal and experience live
     ///     (US-13). Read at the start of every run, not once at init: the
     ///     Settings screen changes it while this view model lives on (#191).
-    ///   - now: Injectable clock, so windows and lock math are testable.
+    ///   - now: Injectable clock, so windows and the result age are testable.
     ///   - slowThreshold: Injectable, so tests do not wait 30 real seconds.
-    ///   - tickInterval: How often `trackLock()` refreshes the label while
-    ///     the lock is running. One second, because a 60s lock counted down in
-    ///     minute steps would never visibly move.
-    ///   - restingTickInterval: The same, once no lock is active — only the
-    ///     recommendation's age still changes, and it changes slowly.
+    ///   - tickInterval: How often `trackResultAge()` re-renders the
+    ///     recommendation's age. A minute: the label counts in minutes and
+    ///     hours, so a faster beat would only wake the app for nothing.
     init(
         cache: WorkoutSummaryReading,
         exerciseCache: (any ExerciseSummaryReading & ExerciseProgressionReading)? = nil,
+        detailCache: (any WorkoutDetailReading)? = nil,
         inference: AnalysisStreaming,
-        rateLimit: AnalysisRateLimitStore = AnalysisRateLimitStore(),
         resultStore: (any AnalysisResultStoring)? = nil,
         trainingProfile: TrainingProfileStore = TrainingProfileStore(),
         calendar: Calendar = .current,
         now: @escaping () -> Date = Date.init,
         slowThreshold: TimeInterval = AnalysisViewModel.defaultSlowThreshold,
-        tickInterval: TimeInterval = 1,
-        restingTickInterval: TimeInterval = 60
+        tickInterval: TimeInterval = 60
     ) {
         self.cache = cache
         self.exerciseCache = exerciseCache
+        self.detailCache = detailCache
         self.inference = inference
-        self.rateLimit = rateLimit
         self.resultStore = resultStore
         self.trainingProfile = trainingProfile
         self.calendar = calendar
         self.now = now
         self.slowThreshold = slowThreshold
         self.tickInterval = tickInterval
-        self.restingTickInterval = restingTickInterval
     }
 
     // MARK: - Run
 
-    /// Runs one analysis: cache read → prompt → stream → result.
+    /// Runs one analysis: cache read → prompt → complete answer → validation →
+    /// result.
     ///
     /// Never throws. Every failure lands in `state`, so the screen always has
     /// something to show and the button always comes back (#31 AC1). A second
     /// call while one is running is ignored rather than queued — the user
-    /// tapping twice must not buy two analyses.
+    /// tapping twice must not buy two analyses. Once a run has ended, the next
+    /// one may start straight away: there is no cooldown.
     func start() async {
         guard !state.isRunning else { return }
         // Claim the slot before the first await: an await releases the main
         // actor, so two taps landing in that window would otherwise both pass
         // the guard above and start a run each.
-        state = .loading
-        // Cleared before the lock branch below can return: that branch
-        // publishes an error which `AnalysisErrorView` renders together with
-        // the attribution, and the providers of the *previous* run have nothing
-        // to do with a blocked one.
+        state = .running
+        // The providers of the previous run have nothing to do with this one.
         attribution = nil
-        // Cleared before the lock branch below can return, too: that branch
-        // publishes an error, and `dismissFailure()` then calls `restore()` to
-        // put the stored recommendation back. Clearing this only on the path
-        // that actually starts a run would leave a refused tap holding the flag
-        // for the rest of the session — countdown on screen, recommendation
-        // still on disk, unreachable until the app restarts (#97).
+        // The run the user asked for is under way, so a failure of it has to
+        // be able to bring the stored recommendation back (#97).
         didDismissStoredResult = false
-
-        if let availableAt = await refreshLock() {
-            // Checked here as well as inside `InferenceService`: the button is
-            // already disabled, but a stale label plus a fast tap must produce
-            // an explanation, not a silent no-op.
-            state = .error(.lockActive(availableAt: availableAt))
-            return
-        }
-        // A `cancel()` that landed during the await above already published a
-        // resting state; it wins over the run it stopped before it started.
-        guard case .loading = state else { return }
 
         currentResultID = nil
         context = nil
@@ -211,11 +199,9 @@ final class AnalysisViewModel: ObservableObject {
 
     /// Stops the running call — the cancel button of US-3 AC1.
     ///
-    /// Returns to `.idle` rather than keeping the half-written text: a
-    /// recommendation cut off mid-sentence is not a recommendation, and
-    /// presenting one as a result would be worse than showing none. The
-    /// lock may still have started, so `lockMessage` explains why the
-    /// button does not immediately come back.
+    /// Returns to `.idle`: an answer that has not arrived in full is not a
+    /// recommendation, and nothing of it has been shown. The button comes back
+    /// right away.
     func cancel() {
         guard state.isRunning else { return }
         runTask?.cancel()
@@ -232,7 +218,8 @@ final class AnalysisViewModel: ObservableObject {
     /// screen, and the stored recommendation must not come straight back.
     /// "Back" on an error is not: it leaves the screen empty, and
     /// `dismissFailure()` brings the stored recommendation back instead of
-    /// leaving a countdown with nothing under it (#97).
+    /// leaving the intro screen while the recommendation is still on disk
+    /// (#97).
     func reset() {
         guard !state.isRunning else { return }
         if case .result = state {
@@ -300,7 +287,9 @@ final class AnalysisViewModel: ObservableObject {
         // meantime, and the restore must never overwrite it.
         guard case .idle = state else { return }
 
-        state = .result(stored.text)
+        // The cards the user saw, when the row stored them (#176); prose for
+        // every other row, including those written before V4.
+        state = .result(stored.report.map(AnalysisOutcome.report) ?? .prose(stored.text))
         // The provider that wrote it, when the row recorded one (#176) — so
         // the badge reads "AI · Gemini" after a restart too. No fallback chain
         // is stored, so a restored result never shows the switch notice.
@@ -341,85 +330,125 @@ final class AnalysisViewModel: ObservableObject {
     }
 
     private func performAnalysis(_ id: UInt64) async {
-        // `state` is already `.loading` — `start()` claimed the slot there.
+        // `state` is already `.running` — `start()` claimed the slot there.
         startSlowTimer()
 
-        guard let prompt = await buildPrompt() else { return await finish(id) }
+        guard let built = await buildPrompt() else { return finish(id) }
 
-        var text = ""
+        // Collected, never shown while the run is in flight: the answer only
+        // means something once the stream has ended, and a provider that gives
+        // way before then takes its answer with it (#178).
+        var prose = ""
+        var report: AnalysisReport?
         do {
-            let stream = try await inference.streamAnalysis(systemPrompt: prompt.system, userPrompt: prompt.user)
+            let stream = try await inference.streamAnalysis(
+                systemPrompt: built.prompt.system,
+                userPrompt: built.prompt.user
+            )
             for try await event in stream {
                 try Task.checkCancellation()
                 switch event {
                 case .attempting(let provider):
-                    // A provider is taking over. Everything streamed so far
-                    // came from one that has since failed, and showing it
-                    // alongside the new answer would read as one recommendation
-                    // written by two models — so it goes.
-                    text = ""
+                    // A provider is taking over. Whatever arrived before came
+                    // from one that has since failed, and keeping it would
+                    // present one model's answer under another's name.
+                    prose = ""
+                    report = nil
                     if attribution != nil {
                         attribution?.append(provider)
-                        // Back to the spinner: the new provider has not sent
-                        // anything yet.
-                        state = .loading
-                        // And the slow hint with it: the first `.text` of the
-                        // provider that gave way already stopped the timer, so
-                        // without a restart here the cancel button of US-3 AC1
-                        // never comes back while the new provider hangs.
-                        startSlowTimer()
+                        // The slow hint keeps counting from the tap: the user
+                        // has been looking at the same spinner all along, and a
+                        // handover must not take away a cancel button they may
+                        // be about to press. Only when a discarded answer had
+                        // already stopped the timer does it start again —
+                        // otherwise the cancel button of US-3 AC1 would never
+                        // come back while the new provider hangs. That branch
+                        // is only reachable with a test double: `InferenceService`
+                        // ends the run right after a provider's answer, so no
+                        // handover ever follows one.
+                        if slowTask == nil {
+                            startSlowTimer()
+                        }
                     } else {
                         attribution = AnalysisAttribution(first: provider)
                     }
-                case .text(let chunk):
-                    // The first token is the answer arriving: the slow hint has
-                    // served its purpose, whatever the rest of the stream costs.
+                case .text(let text):
+                    // The answer is in: the slow hint has served its purpose.
                     stopSlowTimer()
-                    text += chunk
-                    state = .streaming(text)
-                case .report(let report):
-                    // Shown and stored as its prose summary until the cards
-                    // have a screen (#177) and a stored format (#176); #178
-                    // reworks this loop around the report.
+                    prose = text
+                    report = nil
+                case .report(let received):
                     stopSlowTimer()
-                    text = report.summary
-                    state = .streaming(text)
+                    report = received
+                    prose = ""
                 }
             }
-            guard !Task.isCancelled else { return await finish(id) }
-            // A stream that ends without a single token is not an empty
-            // recommendation — it is a response this version could not read.
-            if text.isEmpty {
-                state = .error(.unreadableResponse(attribution?.provider))
+            guard !Task.isCancelled else { return finish(id) }
+
+            let outcome: AnalysisOutcome
+            if let report {
+                outcome = self.outcome(for: report, reads: built.reads)
+            } else if !prose.isEmpty {
+                outcome = .prose(prose)
             } else {
-                await persist(text)
-                // Before `.result`, not after: `canStartAnalysis` reads
-                // `lockMessage`, and a value still nil from before the run
-                // makes `AnalysisResultView` offer "New analysis" for a run
-                // that `start()` would immediately refuse — replacing the
-                // recommendation that just arrived with a lock error. While
-                // these awaits run the state stays `.streaming`, so the button
-                // is never enabled in between.
-                await refreshLock()
-                // A `cancel()` during the awaits above already published a
-                // resting state; it wins over the run it stopped.
-                guard !Task.isCancelled else { return await finish(id) }
-                state = .result(text)
+                // A stream that ends without an answer is not an empty
+                // recommendation — it is a response this version could not
+                // read.
+                state = .error(.unreadableResponse(attribution?.provider))
+                return finish(id)
             }
+            // Before `.result`, not after: while the write runs the state stays
+            // `.running`, so "New analysis" cannot start a second run before
+            // this one has stored its answer.
+            await persist(outcome)
+            // A `cancel()` during the await above already published a resting
+            // state; it wins over the run it stopped.
+            guard !Task.isCancelled else { return finish(id) }
+            // The whole answer in one step (#178).
+            state = .result(outcome)
         } catch {
             // A cancelled run already published `.idle` in `cancel()`; the
             // error here is only the echo of that, and must not overwrite it.
-            guard !Task.isCancelled, !error.isCancellation else { return await finish(id) }
+            guard !Task.isCancelled, !error.isCancellation else { return finish(id) }
             // The provider named is the last one the chain tried — the one whose
             // failure the user is actually looking at.
             state = .error(AnalysisFailure(analysisError: error, provider: attribution?.provider))
         }
-        await finish(id)
+        finish(id)
+    }
+
+    /// What a report becomes on screen: validated against the reads its prompt
+    /// was built from (US-14 AC3/AC4, #175).
+    ///
+    /// Synchronous on purpose: every read it needs was made with the prompt.
+    ///
+    /// Without an exercise cache — the previews' case — the prompt carried no
+    /// exercise data, so every progression card would be downgraded for lack
+    /// of data rather than for being wrong. The report is then shown as its
+    /// summary, which is what the model wrote for exactly that purpose, and
+    /// never as cards nothing has checked.
+    private func outcome(for report: AnalysisReport, reads: AnalysisRunReads) -> AnalysisOutcome {
+        guard exerciseCache != nil else { return .prose(report.summary) }
+        let evidence = AnalysisReportEvidence(
+            summaries: reads.summaries,
+            exercises: reads.exercises,
+            progressions: reads.progressions,
+            // Unavailable details leave the recovery card without RPE, which
+            // `RecoveryMetrics` already shows as "none logged" (#175).
+            details: reads.details ?? [],
+            window: reads.window,
+            now: reads.now,
+            calendar: calendar
+        )
+        return .report(AnalysisReportValidator.validate(report, against: evidence))
     }
 
     /// Reads the window and builds the prompt, or publishes the reason it
     /// could not. `nil` means the run is over.
-    private func buildPrompt() async -> AnalysisPrompt? {
+    ///
+    /// Returns the reads alongside the prompt, so a report can be validated
+    /// against exactly what the model was shown (#178).
+    private func buildPrompt() async -> (prompt: AnalysisPrompt, reads: AnalysisRunReads)? {
         let reference = now()
         do {
             // Read wide enough for the widest rung of the ladder and its
@@ -456,6 +485,8 @@ final class AnalysisViewModel: ObservableObject {
             // screen.
             let exercises = try await readExercises(since: start)
             guard !Task.isCancelled else { return nil }
+            let details = await readRecentDetails(in: summaries, now: reference)
+            guard !Task.isCancelled else { return nil }
 
             // Read here, per run: what the user changed in Settings a minute
             // ago has to be what this analysis sees (US-13 AC3/AC4).
@@ -470,20 +501,63 @@ final class AnalysisViewModel: ObservableObject {
                 window: window,
                 profile: profile
             )
-            return AnalysisPromptBuilder.make(
+            let reads = AnalysisRunReads(
                 summaries: summaries,
                 exercises: exercises.summaries,
                 progressions: exercises.progressions,
+                details: details,
                 window: window,
-                now: reference,
+                now: reference
+            )
+            let prompt = AnalysisPromptBuilder.make(
+                summaries: reads.summaries,
+                exercises: reads.exercises,
+                progressions: reads.progressions,
+                window: reads.window,
+                now: reads.now,
                 calendar: calendar,
                 profile: profile
             )
+            return (prompt, reads)
         } catch {
             guard !Task.isCancelled, !error.isCancellation else { return nil }
             state = .error(.cacheUnavailable)
             return nil
         }
+    }
+
+    /// The full workouts of the last seven days, for the mean RPE of the
+    /// recovery figures (#175), or `nil` when they are unavailable.
+    ///
+    /// Read with the prompt's other reads, so a report is validated against one
+    /// snapshot of the cache (#178). Unlike those reads, a failure here does
+    /// not fail the run: the RPE is the one recovery figure the card can do
+    /// without. It is logged, and the details count as unavailable as a whole —
+    /// as does a session a sync has removed since the summaries were read.
+    /// A mean over the part of the week that happened to be readable would
+    /// read as the week's.
+    private func readRecentDetails(
+        in summaries: [WorkoutSummary],
+        now reference: Date
+    ) async -> [WorkoutDetail]? {
+        guard let detailCache else { return nil }
+        let sessions = RecoveryMetrics.lastSevenDaysSessions(in: summaries, now: reference, calendar: calendar)
+        var details: [WorkoutDetail] = []
+        do {
+            for session in sessions {
+                guard !Task.isCancelled else { return nil }
+                guard let detail = try await detailCache.workoutDetail(id: session.id) else {
+                    logger.notice("Workout detail for the recovery figures missing; validating without RPE")
+                    return nil
+                }
+                details.append(detail)
+            }
+        } catch {
+            guard !Task.isCancelled, !error.isCancellation else { return nil }
+            logger.error("Workout details for the recovery figures not readable: \(error, privacy: .public)")
+            return nil
+        }
+        return details
     }
 
     /// The movements of the analysed window, and the progression of each one
@@ -518,22 +592,24 @@ final class AnalysisViewModel: ObservableObject {
     /// A failing write is logged, not surfaced: the recommendation is on screen
     /// and readable, and an error banner over it would be about the next
     /// launch, not about anything the user can act on now.
-    private func persist(_ text: String) async {
+    private func persist(_ outcome: AnalysisOutcome) async {
         let timestamp = now()
         generatedAt = timestamp
         refreshResultAge()
         // Both are set by the time a run reaches `.result`: the context is
-        // written when the window resolves, well before the first token.
+        // written when the window resolves, well before the answer.
         guard let resultStore, let context else { return }
         do {
             // The id is kept, so deleting this row from the history clears it
             // off this screen too, rather than whatever is newest by then (#117).
-            // Prose only until #178 hands the validated report through; the
-            // provider is the one that answered, so the history badge can
-            // name it (#176).
+            // The validated report is stored as shown, so the history brings
+            // back the same cards rather than re-validating against a cache
+            // that has moved on; its summary is the row's prose fallback. The
+            // provider is the one that answered, so the history badge can name
+            // it (#176).
             currentResultID = try await resultStore.save(
-                text: text,
-                report: nil,
+                text: outcome.text,
+                report: outcome.report,
                 provider: attribution?.provider,
                 generatedAt: timestamp,
                 context: context
@@ -546,10 +622,8 @@ final class AnalysisViewModel: ObservableObject {
         }
     }
 
-    /// Ends a run: the slow hint goes, and the lock label is re-read from
-    /// the store — including after a cancellation, where a provider may
-    /// already have been billed and the window already started.
-    private func finish(_ id: UInt64) async {
+    /// Ends a run: the slow hint goes, and the task handle is released.
+    private func finish(_ id: UInt64) {
         // Superseded: the user started a new run while this one was letting
         // go. Its timer and its task handle belong to that run now.
         guard id == runID else { return }
@@ -562,7 +636,6 @@ final class AnalysisViewModel: ObservableObject {
         if Task.isCancelled && state.isRunning {
             state = .idle
         }
-        await refreshLock()
     }
 
     // MARK: - Slow-run hint
@@ -578,55 +651,20 @@ final class AnalysisViewModel: ObservableObject {
                 return
             }
             guard let self, !Task.isCancelled else { return }
-            // Only while nothing has arrived: a stream already producing text
-            // is slow but visibly alive, and does not need the hint.
-            guard case .loading = self.state else { return }
+            // Only while the run is still in flight: a finished or cancelled
+            // run has nothing left to cancel.
+            guard case .running = self.state else { return }
             self.isTakingLong = true
         }
     }
 
     private func stopSlowTimer() {
-        // Called for every chunk of the stream: without this, each token would
-        // publish an `isTakingLong` change nothing is listening for.
+        // Called for every answer event: without this, each one would publish
+        // an `isTakingLong` change nothing is listening for.
         guard slowTask != nil || isTakingLong else { return }
         slowTask?.cancel()
         slowTask = nil
         isTakingLong = false
-    }
-
-    // MARK: - Rate limit
-
-    /// Recomputes `lockMessage` from the stored timestamp and returns the
-    /// instant the lock lifts, or `nil` while a run is allowed.
-    ///
-    /// Callers that need the decision as well as the label take it from here
-    /// rather than asking the store again: one reading of the clock and one of
-    /// the store, so message and decision can never describe different
-    /// instants.
-    @discardableResult
-    func refreshLock() async -> Date? {
-        let reference = now()
-        let availableAt = await rateLimit.activeLock(now: reference)
-        let wasResting = lockMessage == nil
-        lockMessage = RateLimitFormatter.message(until: availableAt, now: reference)
-        // The lock starts mid-call, which is almost always while the ticker is
-        // resting — and a resting sleep is a minute long. Without this the
-        // countdown would stand still for most of the 60s it is counting down,
-        // which is exactly the second-by-second stretch the fast rate exists
-        // for. Cutting the sleep short here puts the loop back on `tickInterval`
-        // on its next pass.
-        if wasResting, lockMessage != nil {
-            tickerSleep?.cancel()
-        }
-        // Both labels age at the same rate and are driven by the same ticker,
-        // so they are refreshed together against one reading of the clock.
-        refreshResultAge(now: reference)
-        // A lock message on screen outlives its reason otherwise: once the
-        // lock lifts, the explanation is wrong and the button is back.
-        if availableAt == nil, case .error(.lockActive) = state {
-            state = .idle
-        }
-        return availableAt
     }
 
     // MARK: - Result age
@@ -636,12 +674,12 @@ final class AnalysisViewModel: ObservableObject {
     /// Reuses `SyncTimeFormatter`, which the sync banner already uses: the two
     /// timestamps say the same kind of thing, and a second formatter would
     /// drift from it.
-    private func refreshResultAge(now reference: Date? = nil) {
+    func refreshResultAge() {
         guard let generatedAt else {
             resultAge = nil
             return
         }
-        resultAge = SyncTimeFormatter.relative(since: generatedAt, now: reference ?? now())
+        resultAge = SyncTimeFormatter.relative(since: generatedAt, now: now())
     }
 
     /// Takes the recommendation's timestamp off the screen. Does not touch the
@@ -651,45 +689,16 @@ final class AnalysisViewModel: ObservableObject {
         resultAge = nil
     }
 
-    /// Keeps the label counting down while the screen is on display — the
-    /// analysis view's `.task`.
-    ///
-    /// Runs until cancelled rather than until the lock lifts: the label has to
-    /// appear the moment a run finishes, not only the next time the screen is
-    /// opened.
-    ///
-    /// Two rates, because there are two things being refreshed. While the lock
-    /// runs, the label is a second-by-second countdown over a 60s window. Once
-    /// it lifts, only the recommendation's age is still changing, and that is
-    /// worth a wake-up a minute rather than one a second.
-    func trackLock() async {
+    /// Keeps the recommendation's age current while the screen is on display —
+    /// the analysis view's `.task`. Runs until cancelled.
+    func trackResultAge() async {
         while !Task.isCancelled {
-            let availableAt = await refreshLock()
-            await tick(after: availableAt == nil ? restingTickInterval : tickInterval)
+            refreshResultAge()
+            do {
+                try await Task.sleep(for: .seconds(tickInterval))
+            } catch {
+                return
+            }
         }
-    }
-
-    /// Waits out one tick — or less, when `refreshLock()` sees a lock start
-    /// and cancels the sleep.
-    ///
-    /// Its own task rather than a bare `Task.sleep`, because that is what makes
-    /// the sleep interruptible from outside the loop. The cancellation handler
-    /// passes the view's own cancellation through, so closing the screen still
-    /// ends the wait immediately rather than a minute later.
-    private func tick(after interval: TimeInterval) async {
-        let sleeper = Task {
-            // Discarded on purpose, and `_ =` rather than `try?` as the
-            // closure's result: a cancelled sleep ends the wait exactly like
-            // an elapsed one, and the optional would make this a
-            // `Task<Void?, Never>`.
-            _ = try? await Task.sleep(for: .seconds(interval))
-        }
-        tickerSleep = sleeper
-        await withTaskCancellationHandler {
-            await sleeper.value
-        } onCancel: {
-            sleeper.cancel()
-        }
-        tickerSleep = nil
     }
 }

@@ -6,9 +6,8 @@ import Foundation
 /// without three stubbed endpoints.
 ///
 /// Distinguishes the two failure shapes the orchestrator treats differently:
-/// `startError` means the provider never accepted the request (no lock is
-/// started), `streamError` means it accepted and then died mid-answer (the
-/// lock is).
+/// `startError` means the provider never accepted the request (no tokens
+/// billed), `streamError` means it accepted and then died mid-answer.
 final class StubProviderClient: LLMProviderClient, @unchecked Sendable {
     let provider: LLMProvider
 
@@ -19,6 +18,12 @@ final class StubProviderClient: LLMProviderClient, @unchecked Sendable {
     /// Thrown through the stream after `chunks` — the provider accepted, then
     /// failed.
     var streamError: Error?
+    /// Holds the stream open, ignoring cancellation, until `releaseStream()` —
+    /// a provider whose request takes a moment to unwind after a cancel.
+    var gatesStream = false
+    private let gateLock = NSLock()
+    private var isReleased = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
 
     /// How often this client was asked, so a test can assert a provider was
     /// skipped rather than merely failing quietly.
@@ -45,11 +50,40 @@ final class StubProviderClient: LLMProviderClient, @unchecked Sendable {
         callCount += 1
         receivedAPIKey = apiKey
         if let startError { throw startError }
+        if gatesStream {
+            return AsyncThrowingStream(unfolding: { [self] in
+                await waitForRelease()
+                return nil
+            })
+        }
         let chunks = chunks
         let streamError = streamError
         return AsyncThrowingStream { continuation in
             for chunk in chunks { continuation.yield(chunk) }
             continuation.finish(throwing: streamError)
+        }
+    }
+
+    /// Ends every gated stream.
+    func releaseStream() {
+        gateLock.lock()
+        isReleased = true
+        let pending = waiters
+        waiters = []
+        gateLock.unlock()
+        pending.forEach { $0.resume() }
+    }
+
+    private func waitForRelease() async {
+        await withCheckedContinuation { continuation in
+            gateLock.lock()
+            if isReleased {
+                gateLock.unlock()
+                continuation.resume()
+            } else {
+                waiters.append(continuation)
+                gateLock.unlock()
+            }
         }
     }
 }

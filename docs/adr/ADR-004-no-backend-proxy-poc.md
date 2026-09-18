@@ -64,3 +64,13 @@ Wir verzichten im PoC auf einen Backend-Proxy. Sowohl Hevy- als auch Claude-API-
 ---
 
 *Korrektur 2026-06-03: AUP-Offener-Punkt als geschlossen markiert (im Kontext dokumentiert); «Kein Team-Key für externe Tester» als Architekturpflicht ergänzt (BYO-Key-Konsistenz mit ADR-5).*
+
+---
+
+## Nachtrag 2026-09: 60-s-Sperre entfernt
+
+**Kontext:** Die mit #117 eingeführte 60-s-Doppeltipp-Sperre (siehe Konsequenzen oben) liess den User nach jeder Analyse warten, auch wenn er bewusst sofort eine neue starten wollte. Als Kostenlimit taugte sie nie: Sie ist client-seitig und damit bypassbar.
+
+**Entscheidung:** Mit #178 ist die Sperre entfernt. Es gibt keinen Cooldown mehr; doppelte Calls verhindert allein der Button, der gesperrt ist, solange ein Call läuft. «Alle Daten löschen» entfernt den alten Sperr-Zeitstempel weiterhin von Geräten, auf denen ein Build mit Sperre lief.
+
+**Konsequenzen:** Ein neuer Durchlauf ist direkt nach dem vorherigen möglich, und jeder Durchlauf verursacht Kosten auf dem Account des Users. Die Kostenkontrolle liegt damit vollständig beim Spending Limit: **Das Anthropic Spending Limit im Console-Account bleibt Pflicht-Massnahme**, bevor TestFlight-Tester Zugang erhalten (Offene Punkte oben).

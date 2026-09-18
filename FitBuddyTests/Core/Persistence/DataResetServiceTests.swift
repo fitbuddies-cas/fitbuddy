@@ -11,7 +11,6 @@ final class DataResetServiceTests: XCTestCase {
     private var workouts: WorkoutStore!
     private var results: AnalysisResultStore!
     private var timestamps: SyncTimestampStore!
-    private var rateLimit: AnalysisRateLimitStore!
     private var priority: LLMPriorityStore!
     private var skip: LLMKeysSkipStore!
     private var defaults: UserDefaults!
@@ -28,7 +27,6 @@ final class DataResetServiceTests: XCTestCase {
         suiteName = "fitbuddy.tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
         timestamps = SyncTimestampStore(defaults: defaults)
-        rateLimit = AnalysisRateLimitStore(defaults: defaults)
         priority = LLMPriorityStore(defaults: defaults)
         skip = LLMKeysSkipStore(defaults: defaults)
         sut = DataResetService(
@@ -36,9 +34,9 @@ final class DataResetServiceTests: XCTestCase {
             workouts: workouts,
             results: results,
             timestamps: timestamps,
-            rateLimit: rateLimit,
             priority: priority,
-            skip: skip
+            skip: skip,
+            defaults: defaults
         )
     }
 
@@ -48,7 +46,6 @@ final class DataResetServiceTests: XCTestCase {
         sut = nil
         skip = nil
         priority = nil
-        rateLimit = nil
         timestamps = nil
         results = nil
         workouts = nil
@@ -161,9 +158,9 @@ final class DataResetServiceTests: XCTestCase {
             workouts: workouts,
             results: results,
             timestamps: timestamps,
-            rateLimit: rateLimit,
             priority: priority,
-            skip: skip
+            skip: skip,
+            defaults: defaults
         )
         await timestamps.setLastSync(Date(timeIntervalSince1970: 1_754_400_000))
         await priority.save([.claude])
@@ -196,7 +193,7 @@ private actor FailingDeleteKeychainStub: KeychainStoring {
 
 extension DataResetServiceTests {
     /// The deletion right covers everything the analysis leaves behind, not
-    /// just the workouts: the whole history, the tally and the rate limit.
+    /// just the workouts: the whole history and its leftovers.
     ///
     /// Rows with a stored report (#176) go the same way as prose rows.
     func testDeleteAllDataRemovesTheWholeAnalysisHistory() async throws {
@@ -218,16 +215,14 @@ extension DataResetServiceTests {
         XCTAssertEqual(try ModelContext(container).fetchCount(FetchDescriptor<AnalysisResult>()), 0)
     }
 
-    /// Losing the 60s lock is accepted collateral: the same call wipes both
-    /// API keys and the whole cache, so nobody reaches this path to skip a
-    /// wait (#97).
-    func testDeleteAllDataRemovesTheAnalysisRateLimit() async throws {
-        let reference = Date(timeIntervalSince1970: 1_788_000_000)
-        await rateLimit.recordCall(at: reference)
+    /// The 60s analysis lock of #117 is gone, but a device that ran a build
+    /// with it still holds its timestamp. "Delete all data" removes it too.
+    func testDeleteAllDataRemovesTheLegacyAnalysisLockTimestamp() async throws {
+        defaults.set(1_788_000_000.0, forKey: "fitbuddy.analysis.lastCallTimestamp")
+        XCTAssertEqual(DataResetService.legacyAnalysisLockKey, "fitbuddy.analysis.lastCallTimestamp")
 
         await sut.deleteAllData()
 
-        let active = await rateLimit.activeLock(now: reference)
-        XCTAssertNil(active)
+        XCTAssertNil(defaults.object(forKey: "fitbuddy.analysis.lastCallTimestamp"))
     }
 }
