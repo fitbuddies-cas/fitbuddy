@@ -70,14 +70,18 @@ struct PolarExerciseDTO: Decodable, Equatable, Sendable {
         guard let start = resolvedStartTime() else { return nil }
         let seconds = duration.flatMap(PolarDuration.seconds(from:))
 
-        let metrics = ActivityMetrics(
+        // Polar reports no sets, so distance and duration travel in the
+        // cardio block rather than on an `ActivityExerciseSet`. Average speed
+        // is derived here — Polar sends neither speed nor pace at session
+        // level, and the pair it does send determines it.
+        let cardio = CardioMetrics(
             averageHeartRate: averageHeartRate,
-            maximumHeartRate: maximumHeartRate,
+            maxHeartRate: maximumHeartRate,
+            averageSpeedMetersPerSecond: Self.averageSpeed(meters: distanceMeters, seconds: seconds),
             activeCalories: calories,
             distanceMeters: distanceMeters,
             durationSeconds: seconds.map(Int.init),
-            trainingLoad: trainingLoad,
-            sport: detailedSportInfo ?? sport
+            trainingLoad: trainingLoad
         )
 
         return Activity(
@@ -86,8 +90,9 @@ struct PolarExerciseDTO: Decodable, Equatable, Sendable {
             startTime: start,
             endTime: seconds.map { start.addingTimeInterval($0) },
             source: .polar,
+            kind: Self.kind(sport: sport, detailed: detailedSportInfo),
             exercises: [],
-            metrics: metrics.isEmpty ? nil : metrics
+            cardio: cardio.nonEmpty
         )
     }
 
@@ -97,6 +102,31 @@ struct PolarExerciseDTO: Decodable, Equatable, Sendable {
         guard let local = PolarDate.localFormatter.date(from: startTime) else { return nil }
         guard let offsetMinutes = startTimeUTCOffsetMinutes else { return local }
         return local.addingTimeInterval(TimeInterval(-offsetMinutes * 60))
+    }
+
+    /// Maps Polar's sport vocabulary onto `ActivityKind` — the only place it
+    /// happens (#180).
+    ///
+    /// Matched on a substring of the upper-case label, because Polar composes
+    /// its sports the other way round from Strava: the discipline sits at the
+    /// end (`TREADMILL_RUNNING`, `OPEN_WATER_SWIMMING`) or the start
+    /// (`RUNNING_INDOOR`), and `detailed_sport_info` is the finer of the two
+    /// labels. Anything else — `OTHER_INDOOR`, `YOGA` — is `.other`.
+    static func kind(sport: String?, detailed: String?) -> ActivityKind {
+        let raw = (detailed ?? sport ?? "").uppercased()
+        if raw.contains("STRENGTH") { return .strength }
+        if raw.contains("RUNNING") || raw.contains("JOGGING") { return .run }
+        if raw.contains("CYCLING") || raw.contains("BIKING") { return .ride }
+        if raw.contains("SWIMMING") { return .swim }
+        if raw.contains("HIKING") { return .hike }
+        if raw.contains("WALKING") { return .walk }
+        return .other
+    }
+
+    /// Metres per second over the session, when Polar reported both figures.
+    private static func averageSpeed(meters: Double?, seconds: TimeInterval?) -> Double? {
+        guard let meters, let seconds, meters > 0, seconds > 0 else { return nil }
+        return meters / seconds
     }
 
     /// A readable session title from Polar's sport labels — `RUNNING` →

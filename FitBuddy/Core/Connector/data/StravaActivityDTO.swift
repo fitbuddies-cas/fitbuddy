@@ -26,6 +26,16 @@ struct StravaActivityDTO: Decodable, Equatable, Sendable {
     let movingTime: Int?
     /// Metres.
     let distance: Double?
+    /// Cumulative ascent in metres.
+    let totalElevationGain: Double?
+    /// Metres per second, averaged over the moving time.
+    let averageSpeed: Double?
+    let averageHeartRate: Double?
+    let maxHeartRate: Double?
+    /// Mechanical work in kilojoules — rides with a power meter only.
+    let kilojoules: Double?
+    /// Strava's Relative Effort score.
+    let sufferScore: Double?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -36,6 +46,12 @@ struct StravaActivityDTO: Decodable, Equatable, Sendable {
         case elapsedTime = "elapsed_time"
         case movingTime = "moving_time"
         case distance
+        case totalElevationGain = "total_elevation_gain"
+        case averageSpeed = "average_speed"
+        case averageHeartRate = "average_heartrate"
+        case maxHeartRate = "max_heartrate"
+        case kilojoules
+        case sufferScore = "suffer_score"
     }
 
     /// The `Activity.id` this activity maps to. Prefixed so the source is
@@ -53,6 +69,7 @@ struct StravaActivityDTO: Decodable, Equatable, Sendable {
             startTime: startDate,
             endTime: elapsedTime.map { startDate.addingTimeInterval(TimeInterval($0)) },
             source: .strava,
+            kind: Self.kind(sportType: sportType, type: type),
             exercises: [
                 ActivityExercise(
                     index: 0,
@@ -69,7 +86,48 @@ struct StravaActivityDTO: Decodable, Equatable, Sendable {
                         ),
                     ]
                 ),
-            ]
+            ],
+            cardio: cardioMetrics()
         )
+    }
+
+    /// Strava's session metrics, or `nil` when the activity carries none —
+    /// distance and moving time stay on the set, where the dashboard already
+    /// reads them.
+    private func cardioMetrics() -> CardioMetrics? {
+        CardioMetrics(
+            averageHeartRate: averageHeartRate.map { Int($0.rounded()) },
+            maxHeartRate: maxHeartRate.map { Int($0.rounded()) },
+            // Zero means "not logged" here as it does for distance above:
+            // Strava sends 0 for an activity it never measured spatially, and
+            // "0 m of ascent" on a pool swim would read as a bug.
+            elevationGainMeters: totalElevationGain.flatMap { $0 > 0 ? $0 : nil },
+            averageSpeedMetersPerSecond: averageSpeed.flatMap { $0 > 0 ? $0 : nil },
+            energyKilojoules: kilojoules.flatMap { $0 > 0 ? $0 : nil },
+            perceivedEffort: sufferScore
+        ).nonEmpty
+    }
+
+    /// Maps Strava's sport vocabulary onto `ActivityKind` — the only place it
+    /// happens (#180).
+    ///
+    /// Matched on the suffix of the lowercased `sport_type`, because Strava's
+    /// finer classification composes its names from the coarse one:
+    /// `TrailRun`, `VirtualRun`, `GravelRide`, `EMountainBikeRide` all end in
+    /// the discipline they belong to. That keeps a sport Strava adds later
+    /// classified instead of dropping it into `.other` until someone extends
+    /// a lookup table. `type` is the fallback for a payload that predates
+    /// `sport_type`.
+    static func kind(sportType: String?, type: String?) -> ActivityKind {
+        let raw = (sportType ?? type ?? "").lowercased()
+        switch raw {
+        case _ where raw.hasSuffix("run"): return .run
+        case _ where raw.hasSuffix("ride"): return .ride
+        case _ where raw.hasSuffix("swim"): return .swim
+        case _ where raw.hasSuffix("hike"): return .hike
+        case _ where raw.hasSuffix("walk"): return .walk
+        case "weighttraining", "workout", "crossfit": return .strength
+        default: return .other
+        }
     }
 }
