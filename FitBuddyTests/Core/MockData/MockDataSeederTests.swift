@@ -42,6 +42,19 @@ final class MockDataSeederTests: XCTestCase {
             .progressionReady
         )
         XCTAssertEqual(MockDataSeeder.requestedProfile(in: ["-fbSeedMockData", "overreached"]), .overreached)
+        XCTAssertEqual(MockDataSeeder.requestedProfile(in: ["-fbSeedMockData", "mixed"]), .mixed)
+    }
+
+    /// A UI test names a profile by the string in `LaunchArgument.Profile`,
+    /// from another process. Every case has to be reachable that way, or a
+    /// profile exists that no test can launch (#188).
+    func testEveryProfileIsReachableByItsLaunchName() {
+        for profile in MockWorkoutProfile.allCases {
+            XCTAssertEqual(
+                MockDataSeeder.requestedProfile(in: ["-fbSeedMockData", profile.rawValue]),
+                profile
+            )
+        }
     }
 
     func testNoArgumentMeansNoProfile() {
@@ -132,6 +145,29 @@ final class MockDataSeederTests: XCTestCase {
 
         let summaries = try await store.workoutSummaries(since: TrainingWindow.start(endingAt: .now))
         XCTAssertGreaterThan(summaries.count, 0)
+    }
+
+    /// A profile with several sources reaches the cache as several sources
+    /// (#188). Seeding it all under Hevy would label the runs Hevy sessions,
+    /// and the second write would delete the first.
+    func testAMixedProfileIsCachedUnderEachOfItsSources() async throws {
+        let store = WorkoutStore(modelContainer: container)
+
+        await MockDataSeeder.seedIfRequested(
+            container: container,
+            launchArguments: ["-fbSeedMockData", "overreached-mixed"],
+            timestamps: timestamps,
+            now: { self.reference }
+        )
+
+        let summaries = try await store.workoutSummaries(since: .distantPast)
+        let expected = try MockWorkoutLoader().activities(for: .overreachedMixed).count
+        XCTAssertEqual(summaries.count, expected)
+        XCTAssertEqual(Set(summaries.map(\.source)), [.hevy, .strava, .polar])
+        XCTAssertTrue(
+            summaries.contains { $0.cardio?.averageHeartRate != nil },
+            "the cardio metrics have to survive the seeding"
+        )
     }
 
     func testWithoutTheArgumentNothingIsWritten() async throws {

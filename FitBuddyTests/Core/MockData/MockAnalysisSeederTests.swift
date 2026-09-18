@@ -6,13 +6,19 @@ import XCTest
 final class MockAnalysisSeederTests: XCTestCase {
     private let reference = Date(timeIntervalSince1970: 1_750_000_000)
     private var container: ModelContainer!
+    private var defaults: UserDefaults!
+    private var suiteName: String!
 
     override func setUp() async throws {
         try await super.setUp()
         container = try ModelContainerFactory.makeInMemory()
+        suiteName = "fitbuddy.tests.\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
     }
 
     override func tearDown() async throws {
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults = nil
         container = nil
         try await super.tearDown()
     }
@@ -109,6 +115,67 @@ final class MockAnalysisSeederTests: XCTestCase {
 
         let stored = try await AnalysisResultStore(modelContainer: container).recent(limit: 5)
         XCTAssertTrue(stored.isEmpty)
+    }
+
+    // MARK: - The basis behind a seeded report (#188)
+
+    /// Without a workout profile there is no cache to read, so the stored
+    /// report keeps the fixed Hevy-only line it has had since #177.
+    func testWithoutAProfileTheBasisStaysTheFixedLine() async throws {
+        await MockAnalysisSeeder.seedIfRequested(
+            container: container,
+            launchArguments: ["-fbSeedAnalysis", "overall"],
+            now: { self.reference }
+        )
+
+        let stored = try await AnalysisResultStore(modelContainer: container).recent(limit: 1)
+        let context = try XCTUnwrap(stored.first?.context)
+        XCTAssertEqual(context.sessionCounts, [.hevy: MockAnalysisSeeder.defaultSessionCount])
+    }
+
+    /// Seeded beside a cross-source profile, the report rests on the window
+    /// that profile actually cached — the line US-15 AC4 asks for, counted the
+    /// way a real run counts it.
+    func testWithAMixedProfileTheBasisNamesBothSources() async throws {
+        let arguments = ["-fbSeedMockData", "mixed", "-fbSeedAnalysis", "overall"]
+        await MockDataSeeder.seedIfRequested(
+            container: container,
+            launchArguments: arguments,
+            timestamps: SyncTimestampStore(defaults: defaults),
+            now: { self.reference }
+        )
+
+        await MockAnalysisSeeder.seedIfRequested(
+            container: container,
+            launchArguments: arguments,
+            now: { self.reference }
+        )
+
+        let stored = try await AnalysisResultStore(modelContainer: container).recent(limit: 1)
+        let context = try XCTUnwrap(stored.first?.context)
+        XCTAssertEqual(context.countedSources, [.hevy, .strava])
+        XCTAssertEqual(context.basisDescription, "12 Hevy · 12 Strava sessions")
+        XCTAssertEqual(context.analysisProfile, .overallLoad)
+        XCTAssertFalse(context.isThin)
+    }
+
+    /// The counting is the view model's own, so a seeded line and a live run's
+    /// cannot drift apart.
+    func testTheBasisIsCountedOverTheResolvedWindow() throws {
+        let summaries = try MockWorkoutLoader(now: { self.reference })
+            .workouts(for: .runner)
+            .map(WorkoutSummary.init(workout:))
+
+        let context = MockAnalysisSeeder.context(
+            forReportNamed: "endurance",
+            summaries: summaries,
+            now: reference
+        )
+
+        XCTAssertEqual(context.countedSources, [.strava])
+        XCTAssertEqual(context.domainCounts, [.endurance: 16])
+        XCTAssertEqual(context.analysisProfile, .endurance)
+        XCTAssertEqual(context.window, .default)
     }
 
     /// A second launch replaces the row rather than adding one, which would

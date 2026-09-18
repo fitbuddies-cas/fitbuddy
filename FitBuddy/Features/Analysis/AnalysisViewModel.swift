@@ -669,7 +669,12 @@ final class AnalysisViewModel: ObservableObject {
     ///
     /// A source with nothing in the window never enters the dictionary, so a
     /// connector the user has linked but not used stays out of the line.
-    private static func sessionCounts(
+    ///
+    /// `nonisolated` and visible to the feature since #188: `MockAnalysisSeeder`
+    /// builds a seeded report's context line from the same cache a run would
+    /// have read, off the main actor, and a second copy of this loop would let
+    /// a UI test assert a breakdown the app itself never computes.
+    nonisolated static func sessionCounts(
         in summaries: [WorkoutSummary],
         from start: Date
     ) -> (sources: [ConnectorSource: Int], domains: [AnalysisDomain: Int]) {
