@@ -13,6 +13,7 @@ final class DataResetServiceTests: XCTestCase {
     private var timestamps: SyncTimestampStore!
     private var priority: LLMPriorityStore!
     private var skip: LLMKeysSkipStore!
+    private var analysisProfile: AnalysisProfileStore!
     private var defaults: UserDefaults!
     private var suiteName: String!
     private var sut: DataResetService!
@@ -29,6 +30,7 @@ final class DataResetServiceTests: XCTestCase {
         timestamps = SyncTimestampStore(defaults: defaults)
         priority = LLMPriorityStore(defaults: defaults)
         skip = LLMKeysSkipStore(defaults: defaults)
+        analysisProfile = AnalysisProfileStore(defaults: defaults)
         sut = DataResetService(
             keychain: keychain,
             workouts: workouts,
@@ -36,6 +38,7 @@ final class DataResetServiceTests: XCTestCase {
             timestamps: timestamps,
             priority: priority,
             skip: skip,
+            analysisProfile: analysisProfile,
             defaults: defaults
         )
     }
@@ -128,6 +131,17 @@ final class DataResetServiceTests: XCTestCase {
     /// The first-launch marker records the installation, not the session.
     /// Clearing it would only trigger a redundant Keychain purge on the next
     /// launch.
+    /// The remembered analysis profile goes with the training it was chosen
+    /// for: the next run starts from the default its data suggests (#185).
+    func testDeleteAllDataForgetsTheAnalysisProfile() async throws {
+        await analysisProfile.save(.overallLoad)
+
+        await sut.deleteAllData()
+
+        let remembered = await analysisProfile.profile
+        XCTAssertNil(remembered)
+    }
+
     func testDeleteAllDataKeepsTheFirstLaunchMarker() async throws {
         defaults.set(true, forKey: "fitbuddy.firstLaunchReset.completed")
 
