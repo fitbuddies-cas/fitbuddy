@@ -129,8 +129,22 @@ struct SeededApp {
     /// The segmented control on the intro screen. Present only where the
     /// window gives the user a choice — a Hevy-only or an endurance-only cache
     /// shows none (US-15 AC1, #188).
+    ///
+    /// Addressed by element type, not by identifier. A SwiftUI `Picker` in the
+    /// segmented style renders a `UISegmentedControl`, and whether an
+    /// identifier put on the `Picker` lands on that control or is propagated to
+    /// each of its segments is not something this suite has ever established —
+    /// a descendant query on the identifier would be ambiguous in the second
+    /// case. The intro screen has exactly one segmented control, so its type
+    /// identifies it without the guess.
     var analysisProfilePicker: XCUIElement {
-        app.descendants(matching: .any)[AccessibilityID.Analysis.profilePicker]
+        app.segmentedControls.firstMatch
+    }
+
+    /// One segment of that control, by the label the picker renders
+    /// (`AnalysisProfile.displayName`).
+    func analysisProfileSegment(_ name: String) -> XCUIElement {
+        analysisProfilePicker.buttons[name]
     }
 
     /// The data-basis line over the result. One accessibility element, so its

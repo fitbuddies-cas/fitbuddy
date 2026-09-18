@@ -12,7 +12,9 @@ import XCTest
 /// No analysis is seeded here on purpose: with a stored report the tab
 /// restores straight to the result and the intro is never shown.
 ///
-/// **Not run locally** — CI runs the UI suite (#120, #148).
+/// **Not run locally** — CI runs the UI suite (#120, #148). The segmented
+/// control is addressed by element type (see `SeededApp.analysisProfilePicker`);
+/// the first CI run is what confirms that query.
 final class AnalysisProfileChoiceUITests: XCTestCase {
     override func setUp() {
         super.setUp()
@@ -28,36 +30,52 @@ final class AnalysisProfileChoiceUITests: XCTestCase {
         openIntro(in: sut)
 
         sut.assertAppears(sut.analysisProfilePicker)
-        let segments = sut.analysisProfilePicker.buttons
-        XCTAssertEqual(segments.count, 3)
-        XCTAssertTrue(segments["Overall load"].isSelected, "Overall load is the default for two domains")
-        XCTAssertTrue(segments["Strength"].exists)
-        XCTAssertTrue(segments["Endurance"].exists)
+        XCTAssertEqual(sut.analysisProfilePicker.buttons.count, 3)
+        XCTAssertTrue(sut.analysisProfileSegment("Strength").exists)
+        XCTAssertTrue(sut.analysisProfileSegment("Endurance").exists)
+        XCTAssertTrue(
+            sut.analysisProfileSegment("Overall load").isSelected,
+            "Overall load is the default where the window holds both domains"
+        )
     }
 
-    /// The picker moves when it is tapped, so the run that follows is the one
-    /// the user asked for.
+    /// Picking a segment moves the selection off the preselected one, so the
+    /// run that follows is about what the user asked for rather than about the
+    /// default.
     @MainActor
-    func testAProfileCanBePicked() {
+    func testPickingAProfileReleasesThePreselectedOne() {
         let sut = SeededApp(profile: LaunchArgument.Profile.mixed).launch()
 
         openIntro(in: sut)
         sut.assertAppears(sut.analysisProfilePicker)
-        sut.select(sut.analysisProfilePicker.buttons["Endurance"])
+        // `select` retries the tap and asserts that the new segment took. What
+        // it cannot say is that the old one let go — the half that makes this
+        // one selection rather than two.
+        sut.select(sut.analysisProfileSegment("Endurance"))
 
-        XCTAssertTrue(sut.analysisProfilePicker.buttons["Endurance"].isSelected)
+        XCTAssertFalse(sut.analysisProfileSegment("Overall load").isSelected)
     }
 
     /// One kind of training in the window is not a choice: a segmented control
-    /// with a single segment is a label, so the runner gets none and the run
-    /// is implicitly an endurance analysis (US-15 AC1).
+    /// with a single segment is a label, so the runner gets none and the run is
+    /// implicitly an endurance analysis (US-15 AC1).
+    ///
+    /// Waited out rather than asserted on the spot. The intro renders before
+    /// `prepareProfileSelection()` has read the cache, so a bare `exists` is
+    /// false at that moment whatever the window holds — the test would pass
+    /// over a cache that *does* offer a choice and prove nothing (#188 review).
+    /// The wait costs its full budget on a green run; that is what an assertion
+    /// which can actually fail costs here.
     @MainActor
     func testTheRunnerProfileOffersNoChoice() {
         let sut = SeededApp(profile: LaunchArgument.Profile.runner).launch()
 
         openIntro(in: sut)
 
-        XCTAssertFalse(sut.analysisProfilePicker.exists, "An endurance-only window has nothing to choose")
+        XCTAssertFalse(
+            sut.analysisProfilePicker.waitForExistence(timeout: SeededApp.timeout),
+            "An endurance-only window has nothing to choose"
+        )
     }
 
     // MARK: - Helpers

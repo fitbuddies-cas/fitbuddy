@@ -127,9 +127,6 @@ enum AccessibilityID {
         /// The finished recommendation — report or prose, live or restored.
         static let result = "analysis.result"
         static let headline = "analysis.headline"
-        /// The segmented control on the intro screen — on screen only where
-        /// the window gives the user a choice (US-15 AC1, #185).
-        static let profilePicker = "analysis.profilePicker"
         /// The data-basis line over the result: sources, period, profile and
         /// the thin-data warning (US-6, US-15 AC4).
         static let context = "analysis.context"
