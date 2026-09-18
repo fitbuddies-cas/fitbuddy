@@ -139,15 +139,21 @@ enum AnalysisReportSchema {
     }
 
     /// The unit of a metric card, as an `enum` of the raw values `MetricUnit`
-    /// decodes — the one place the schema constrains a value rather than a
-    /// type. Generated from `allCases`, so a unit added to the enum cannot be
-    /// left out of the schema.
+    /// decodes — one of the two places the schema constrains a value rather
+    /// than a type, next to `verdict`.
+    ///
+    /// Generated from `MetricUnit.modelStatableCases`, not from `allCases`: a
+    /// unit added to the enum cannot be left out of the schema by accident,
+    /// and `beatsPerMinute` is left out **on purpose**. A metric card states a
+    /// figure and a target for it, so offering that unit would be offering the
+    /// model a way to prescribe a heart rate, which ground rule 7 forbids —
+    /// see `MetricUnit.isStatableByTheModel`.
     private static let unitField = JSONValue.Member(
         key: AnalysisCard.CodingKeys.unit.rawValue,
         value: [
             "type": "string",
-            "enum": .array(MetricUnit.allCases.map { .string($0.rawValue) }),
-            "description": "The unit of both figures. kilograms for a weight or a weekly volume, kilometers for a distance, minutesPerKilometer for a pace (5.5 means 5:30 per km), beatsPerMinute for a heart rate, hours for a duration (4.5 means 4 h 30 min)."
+            "enum": .array(MetricUnit.modelStatableCases.map { .string($0.rawValue) }),
+            "description": "The unit of both figures. kilograms for a weight or a weekly volume, kilometers for a distance, minutesPerKilometer for a pace (5.5 means 5:30 per km), hours for a duration (4.5 means 4 h 30 min)."
         ]
     )
 

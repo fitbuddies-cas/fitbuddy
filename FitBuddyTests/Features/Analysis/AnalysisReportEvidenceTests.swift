@@ -244,12 +244,97 @@ final class AnalysisReportEvidenceTests: XCTestCase {
         XCTAssertEqual(evidence.interference.overlapDays, 1)
     }
 
+    /// Review finding 2: one run and one ride in the same week used to divide
+    /// 38 km by 100 min and call it a pace — 2:38 /km, which neither of them
+    /// ran. The anchor now covers only the sports read in minutes per
+    /// kilometre, which leaves the run's own 5:00.
+    func testThePaceIgnoresSportsThatAreNotReadPerKilometre() throws {
+        let evidence = makeEvidence(summaries: [run(daysAgo: 1, id: "s0"), ride(daysAgo: 2, id: "s1")])
+
+        XCTAssertEqual(try XCTUnwrap(evidence.weeklyMetrics[.minutesPerKilometer]), 5, accuracy: 0.0001)
+        // The distance and time anchors still cover the whole week: they are
+        // sums, and a sum over both sports is true.
+        XCTAssertEqual(try XCTUnwrap(evidence.weeklyMetrics[.kilometers]), 38, accuracy: 0.0001)
+    }
+
+    /// A week of rides alone has no pace anchor at all, so a pace card over it
+    /// is downgraded rather than checked against a figure nobody ran.
+    func testAWeekOfRidesHasNoPaceAnchor() {
+        XCTAssertNil(makeEvidence(summaries: [ride(daysAgo: 1, id: "s0")]).weeklyMetrics[.minutesPerKilometer])
+    }
+
+    // MARK: - Profile-covered anchors (#186 review finding 4)
+
+    /// An anchor may only come from training this analysis looked at. Under
+    /// "Strength" the runs are excluded, so the hours and the heart rate of a
+    /// mixed week cannot be printed on a screen that says the running was left
+    /// out.
+    func testTheAnchorsCoverOnlyTheDomainsTheProfileAnalyses() {
+        let chest = MuscleLoad(group: .chest, volumeKg: 1_000, setCount: 3)
+        let summaries = [
+            summary(daysAgo: 1, id: "h0", loads: [chest]),
+            run(daysAgo: 2, id: "s0", heartRate: 150),
+        ]
+
+        let strength = makeEvidence(summaries: summaries, analysisProfile: .strength)
+
+        XCTAssertEqual(strength.weeklyMetrics[.kilograms], 1_000)
+        XCTAssertNil(strength.weeklyMetrics[.kilometers], "the run's distance is not this analysis's")
+        XCTAssertNil(strength.weeklyMetrics[.hours], "a barbell session records no set duration")
+        XCTAssertNil(strength.weeklyMetrics[.beatsPerMinute], "the only heart rate came from the run")
+        XCTAssertNil(strength.weeklyMetrics[.minutesPerKilometer])
+    }
+
+    /// The mirror image, and the case that shows the filter is on the sessions
+    /// rather than on the unit: under "Endurance" the volume is gone and the
+    /// endurance figures remain.
+    func testTheEnduranceProfileKeepsOnlyTheEnduranceAnchors() throws {
+        let chest = MuscleLoad(group: .chest, volumeKg: 1_000, setCount: 3)
+        let summaries = [
+            summary(daysAgo: 1, id: "h0", loads: [chest]),
+            run(daysAgo: 2, id: "s0", heartRate: 150),
+        ]
+
+        let endurance = makeEvidence(summaries: summaries, analysisProfile: .endurance)
+
+        XCTAssertNil(endurance.weeklyMetrics[.kilograms])
+        XCTAssertEqual(try XCTUnwrap(endurance.weeklyMetrics[.kilometers]), 8, accuracy: 0.0001)
+        XCTAssertEqual(try XCTUnwrap(endurance.weeklyMetrics[.hours]), 40.0 / 60, accuracy: 0.0001)
+        XCTAssertEqual(endurance.weeklyMetrics[.beatsPerMinute], 150)
+    }
+
+    /// "Overall load" covers both, i.e. the behaviour before the filter.
+    func testOverallLoadAnchorsOnTheWholeWeek() {
+        let chest = MuscleLoad(group: .chest, volumeKg: 1_000, setCount: 3)
+        let evidence = makeEvidence(summaries: [
+            summary(daysAgo: 1, id: "h0", loads: [chest]),
+            run(daysAgo: 2, id: "s0", heartRate: 150),
+        ])
+
+        XCTAssertEqual(evidence.weeklyMetrics[.kilograms], 1_000)
+        XCTAssertNotNil(evidence.weeklyMetrics[.kilometers])
+        XCTAssertEqual(evidence.weeklyMetrics[.beatsPerMinute], 150)
+    }
+
+    /// `hours` is the time the sessions **recorded**, not the time they
+    /// lasted: `WorkoutSummary.durationSeconds` sums the counted sets, so an
+    /// ordinary barbell week has no figure in the unit at all (review
+    /// finding 6).
+    func testTheHoursAnchorIsTheRecordedTimeNotTheSessionLength() {
+        let chest = MuscleLoad(group: .chest, volumeKg: 1_000, setCount: 3)
+        let evidence = makeEvidence(summaries: [summary(daysAgo: 1, id: "h0", loads: [chest])])
+
+        XCTAssertEqual(evidence.weeklyMetrics[.kilograms], 1_000)
+        XCTAssertNil(evidence.weeklyMetrics[.hours])
+    }
+
     // MARK: - Helpers
 
     private func makeEvidence(
         summaries: [WorkoutSummary],
         exercises: [ExerciseSummary] = [],
-        progressions: [String: ExerciseProgression] = [:]
+        progressions: [String: ExerciseProgression] = [:],
+        analysisProfile: AnalysisProfile = .overallLoad
     ) -> AnalysisReportEvidence {
         AnalysisReportEvidence(
             summaries: summaries,
@@ -258,7 +343,23 @@ final class AnalysisReportEvidenceTests: XCTestCase {
             details: [],
             window: .default,
             now: reference,
-            calendar: calendar
+            calendar: calendar,
+            analysisProfile: analysisProfile
+        )
+    }
+
+    private func ride(daysAgo: Int, id: String) -> WorkoutSummary {
+        WorkoutSummary(
+            id: id,
+            title: "Evening Ride",
+            startTime: start(daysAgo: daysAgo),
+            source: .strava,
+            kind: .ride,
+            volumeKg: 0,
+            exerciseCount: 1,
+            countedSetCount: 1,
+            distanceMeters: 30_000,
+            durationSeconds: 3_600
         )
     }
 

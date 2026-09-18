@@ -252,13 +252,21 @@ enum AnalysisPromptBuilder {
     /// training principles are allowed and named as such, while population
     /// comparisons and norm values stay forbidden (US-3 AC3, US-15 AC6).
     ///
-    /// The `cards:` paragraph was tightened by about 70 words in #187, where
+    /// The `cards:` paragraph was tightened by about 60 words in #187, where
     /// the two card kinds of #186 had grown it: the per-kind sentences became
-    /// a list of `"kind": what it is` clauses and the reasoning requirement
-    /// moved to the front, where it now covers every kind rather than only
-    /// `progression`. Nothing was dropped — the schema carries the field
-    /// descriptions, and rules 1 to 8 are untouched, including their numbers,
-    /// which `AnalysisReportValidator` refers to by number.
+    /// a list of `"kind": what it is` clauses. Rules 1 to 8 are untouched,
+    /// including their numbers, which `AnalysisReportValidator` refers to by
+    /// number.
+    ///
+    /// **The reasoning requirement stays per kind**, in one closing sentence
+    /// rather than five repetitions. A first attempt front-loaded it as "each
+    /// card with its reasoning in one sentence", which the schema contradicts
+    /// twice over: `note` has no `reasoning` field at all — it carries a
+    /// `title` and a `text`, and every card object is `additionalProperties:
+    /// false` with all fields required — and `recovery`'s is documented as one
+    /// or two sentences, which is what the app's own inserted reasoning is.
+    /// The closing sentence names the four kinds the one-sentence rule applies
+    /// to and leaves recovery at one or two.
     static let systemPrompt = """
     You are FitBuddy's training assistant. You analyse one person's own \
     training history — strength work, endurance work, or both — and give them \
@@ -353,24 +361,27 @@ enum AnalysisPromptBuilder {
     without the cards: first what stands out in the data, then a concrete \
     recommendation for the next block.
     - cards: zero to four cards, most important first, each following the \
-    ground rules above and each with its reasoning in one sentence; a \
-    recommendation you cannot ground in the data does not become a card, and \
-    when the data is too thin for any, return an empty array — the lead and \
-    the summary carry the answer. "progression": a load increase on one \
-    exercise, fromKg the weight listed for its most recent session, toKg the \
-    new weight. "recovery": rest before any progression, with the rest you \
-    recommend in suggestedRestHours. "imbalance": two muscle groups trained \
-    at clearly different frequencies, each group and its sessions per week \
-    exactly as the Muscle groups section lists them. "metric": a figure of \
-    the week as a whole rather than of one exercise — weekly distance, long \
-    run, weekly volume, mean heart rate, weekly training time — with label \
-    naming the figure, unit the unit both numbers are in, from that figure as \
-    the last 7 days report it, to the figure you recommend and within a fifth \
-    of from, and source a short header label such as Run, Ride or Strength, \
-    or an empty string when none fits. "interference": strength and endurance \
-    sessions shared days in the last 7, with the three day counts taken from \
-    the Week structure section. "note": anything else worth saying, including \
-    a rep progression without a weight change.
+    ground rules above; a recommendation you cannot ground in the data does \
+    not become a card, and when the data is too thin for any, return an empty \
+    array — the lead and the summary carry the answer. "progression": a load \
+    increase on one exercise, fromKg the weight listed for its most recent \
+    session, toKg the new weight. "recovery": rest before any progression, \
+    with the rest you recommend in suggestedRestHours. "imbalance": two \
+    muscle groups trained at clearly different frequencies, each group and \
+    its sessions per week exactly as the Muscle groups section lists them. \
+    "metric": a figure of the week as a whole rather than of one exercise — \
+    weekly distance, long run, weekly volume, weekly training time — with \
+    label naming the figure, unit the unit both numbers are in, from that \
+    figure written exactly as the last 7 days report it, to the figure you \
+    recommend and within a fifth of from, and source a short header label \
+    such as Run, Ride or Strength, or an empty string when none fits. There \
+    is no unit for a heart rate: rule 7 stands, and a card is a target, so a \
+    heart rate is not something to recommend a new value for. "interference": \
+    strength and endurance sessions shared days in the last 7, with the three \
+    day counts taken from the Week structure section. "note": anything else \
+    worth saying, including a rep progression without a weight change, as \
+    title and text. Write the reasoning of a progression, imbalance, metric \
+    or interference card in one sentence, a recovery card's in one or two.
 
     Write the fields in this order.
 
