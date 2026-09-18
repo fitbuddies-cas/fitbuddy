@@ -127,13 +127,10 @@ actor AnalysisResultStore {
     /// The data basis of a stored row (#36, #87, #182).
     ///
     /// A row without a domain breakdown takes the initializer that derives one
-    /// from the sources — that is what a run counted before #182 meant, and
-    /// making the fallback explicit here keeps the two readings apart.
+    /// from the sources — that is what a run counted before #182 meant — and a
+    /// row whose breakdown could not be read keeps its bare total. Making all
+    /// three readings explicit here keeps them apart.
     private static func context(of result: AnalysisResult) -> AnalysisContext {
-        let counts = SessionCountFormat.decode(
-            result.sessionCountsJSON,
-            fallbackSessionCount: result.sessionCount
-        )
         // `flatMap` rather than a crash on a value this build no longer knows:
         // a goal renamed in a later version leaves the row readable, minus that
         // one line.
@@ -142,15 +139,28 @@ actor AnalysisResultStore {
             experience: result.experience.flatMap(TrainingExperience.init(rawValue:))
         )
         let window = AnalysisWindow(weeks: result.windowWeeks)
-        guard let domains = counts.domains else {
-            return AnalysisContext(sessionCounts: counts.sources, window: window, profile: profile)
+        switch SessionCountFormat.decode(
+            result.sessionCountsJSON,
+            fallbackSessionCount: result.sessionCount
+        ) {
+        case .unattributed(let total):
+            return AnalysisContext(
+                unattributedSessionCount: total,
+                window: window,
+                profile: profile
+            )
+        case .breakdown(let sources, let domains, let analysed):
+            guard let domains else {
+                return AnalysisContext(sessionCounts: sources, window: window, profile: profile)
+            }
+            return AnalysisContext(
+                sessionCounts: sources,
+                domainCounts: domains,
+                analysedCounts: analysed,
+                window: window,
+                profile: profile
+            )
         }
-        return AnalysisContext(
-            sessionCounts: counts.sources,
-            domainCounts: domains,
-            window: window,
-            profile: profile
-        )
     }
 
     /// Saves, discarding the pending changes if the save fails — without the
