@@ -573,12 +573,21 @@ final class AnalysisViewModel: ObservableObject {
     /// as does a session a sync has removed since the summaries were read.
     /// A mean over the part of the week that happened to be readable would
     /// read as the week's.
+    ///
+    /// The **strength** sessions of the week, deliberately, although #184 counts
+    /// every session towards the training days: only a strength set can carry
+    /// an RPE, so reading a run's detail would cost a round trip for nothing —
+    /// and, worse, an unreadable run would drop the RPE of the whole week.
     private func readRecentDetails(
         in summaries: [WorkoutSummary],
         now reference: Date
     ) async -> [WorkoutDetail]? {
         guard let detailCache else { return nil }
-        let sessions = RecoveryMetrics.lastSevenDaysSessions(in: summaries, now: reference, calendar: calendar)
+        let sessions = RecoveryMetrics.lastSevenDaysStrengthSessions(
+            in: summaries,
+            now: reference,
+            calendar: calendar
+        )
         var details: [WorkoutDetail] = []
         do {
             for session in sessions {

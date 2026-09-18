@@ -38,6 +38,9 @@ enum AnalysisReportValidator {
     /// The lead of a report the app turned into a recovery verdict (US-14 AC4,
     /// #170). Replaces the model's, which was written for the verdict the app
     /// overruled and would contradict the headline right above it.
+    ///
+    /// `trainingDays` counts strength and endurance together since #184, and
+    /// the sentence names no domain, so it stays true of a running week.
     static func recoveryLead(trainingDays: Int) -> String {
         "You trained on \(trainingDays) of the last 7 days. Take the suggested rest before adding load."
     }
@@ -76,11 +79,14 @@ enum AnalysisReportValidator {
         var headline = report.headline
         var lead = report.lead
 
-        // US-3 AC6 / US-14 AC4: at 6 of 7 days no progression is shown without
-        // the recovery hint, and the headline says so. A model recovery card
-        // always survives at that count, so a missing one means the model left
-        // it out. An overruled verdict takes the model's lead with it: that
-        // lead argues for the verdict the app just replaced (#170).
+        // US-3 AC6 / US-14 AC4 / US-15 AC3: at 6 of 7 days no progression is
+        // shown without the recovery hint, and the headline says so. The count
+        // spans every source and both domains since #184, so four strength
+        // sessions and two runs on six days trigger the hint just as six
+        // strength sessions do. A model recovery card always survives at that
+        // count, so a missing one means the model left it out. An overruled
+        // verdict takes the model's lead with it: that lead argues for the
+        // verdict the app just replaced (#170).
         if evidence.recovery.needsRecovery {
             if !cards.contains(where: { $0.kind == .recovery }) {
                 cards.insert(
