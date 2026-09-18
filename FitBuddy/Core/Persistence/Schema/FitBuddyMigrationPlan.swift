@@ -23,15 +23,30 @@ import SwiftData
 /// recorded the provider. The row's `text` is untouched, so it renders as
 /// before (US-14 AC6).
 ///
+/// V4 → V5 is lightweight as well (#180): `Workout` gains `kindRawValue` and
+/// ten flat cardio columns, all optional. `nil` is the truth for an existing
+/// row — no build before this version read heart rate, elevation, speed or
+/// effort off a payload, and the sport was never recorded as anything but the
+/// session title. `Workout.kind` resolves the missing sport from the row's
+/// source rather than guessing `strength` for a cached run, and the next sync
+/// replaces the window and fills both for real.
+///
 /// A store from an older version runs the stages in turn; the migration tests
-/// write a V1, a V2 and a V3 store and open each under the current version.
+/// write a V1, a V2, a V3 and a V4 store and open each under the current
+/// version.
 enum FitBuddyMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [FitBuddySchemaV1.self, FitBuddySchemaV2.self, FitBuddySchemaV3.self, FitBuddySchemaV4.self]
+        [
+            FitBuddySchemaV1.self,
+            FitBuddySchemaV2.self,
+            FitBuddySchemaV3.self,
+            FitBuddySchemaV4.self,
+            FitBuddySchemaV5.self,
+        ]
     }
 
     static var stages: [MigrationStage] {
-        [migrateV1toV2, migrateV2toV3, migrateV3toV4]
+        [migrateV1toV2, migrateV2toV3, migrateV3toV4, migrateV4toV5]
     }
 
     private static let migrateV1toV2 = MigrationStage.lightweight(
@@ -47,5 +62,10 @@ enum FitBuddyMigrationPlan: SchemaMigrationPlan {
     private static let migrateV3toV4 = MigrationStage.lightweight(
         fromVersion: FitBuddySchemaV3.self,
         toVersion: FitBuddySchemaV4.self
+    )
+
+    private static let migrateV4toV5 = MigrationStage.lightweight(
+        fromVersion: FitBuddySchemaV4.self,
+        toVersion: FitBuddySchemaV5.self
     )
 }

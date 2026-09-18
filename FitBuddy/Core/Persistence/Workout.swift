@@ -1,10 +1,10 @@
 import Foundation
 import SwiftData
 
-/// The current `Workout` model — see `FitBuddySchemaV4`.
-typealias Workout = FitBuddySchemaV4.Workout
+/// The current `Workout` model — see `FitBuddySchemaV5`.
+typealias Workout = FitBuddySchemaV5.Workout
 
-extension FitBuddySchemaV4 {
+extension FitBuddySchemaV5 {
     /// A cached training session — the root of the `Workout → Exercise →
     /// ExerciseSet` hierarchy that backs the offline dashboard (US-2 AC2).
     ///
@@ -33,6 +33,30 @@ extension FitBuddySchemaV4 {
         /// literal rather than `ConnectorSource.hevy.rawValue` so the schema's
         /// default does not depend on evaluating another type.
         var sourceRawValue: String = "hevy"
+        /// `ActivityKind.rawValue` of the sport this session was (#180) —
+        /// read it through `kind`.
+        ///
+        /// Optional rather than defaulted, because "not recorded" is what the
+        /// V4 → V5 stage truthfully fills existing rows with: a store written
+        /// before this version holds Strava and Polar sessions too, and
+        /// defaulting those to `strength` would file a cached run under the
+        /// wrong domain. `kind` resolves the gap from the source instead; the
+        /// next sync replaces the window and fills the column for real.
+        var kindRawValue: String?
+
+        /// Session-level endurance metrics, flat — SwiftData stores scalars,
+        /// not a nested `CardioMetrics` (#180). Read them through `cardio`,
+        /// which is also the only thing that writes them.
+        var cardioAverageHeartRate: Int?
+        var cardioMaxHeartRate: Int?
+        var cardioElevationGainMeters: Double?
+        var cardioAverageSpeedMetersPerSecond: Double?
+        var cardioEnergyKilojoules: Double?
+        var cardioPerceivedEffort: Double?
+        var cardioActiveCalories: Int?
+        var cardioDistanceMeters: Double?
+        var cardioDurationSeconds: Int?
+        var cardioTrainingLoad: Double?
 
         /// Deleting a workout deletes its exercises (and, transitively, their sets).
         @Relationship(deleteRule: .cascade, inverse: \Exercise.workout)
@@ -44,6 +68,34 @@ extension FitBuddySchemaV4 {
             ConnectorSource(rawValue: sourceRawValue) ?? .hevy
         }
 
+        /// Typed view of `kindRawValue`. A row with none — written before V5
+        /// — falls back to what its source can still tell us: a Hevy workout
+        /// is strength training, an endurance source's session is `.other`,
+        /// because which discipline it was is exactly what was not recorded.
+        /// An unknown raw value, from a store written by a newer build, reads
+        /// the same way.
+        var kind: ActivityKind {
+            if let kindRawValue, let kind = ActivityKind(rawValue: kindRawValue) { return kind }
+            return source.isEnduranceSource ? .other : .strength
+        }
+
+        /// Typed view of the flat cardio columns; `nil` when the session
+        /// recorded none, so "is there cardio data?" stays one check.
+        var cardio: CardioMetrics? {
+            CardioMetrics(
+                averageHeartRate: cardioAverageHeartRate,
+                maxHeartRate: cardioMaxHeartRate,
+                elevationGainMeters: cardioElevationGainMeters,
+                averageSpeedMetersPerSecond: cardioAverageSpeedMetersPerSecond,
+                energyKilojoules: cardioEnergyKilojoules,
+                perceivedEffort: cardioPerceivedEffort,
+                activeCalories: cardioActiveCalories,
+                distanceMeters: cardioDistanceMeters,
+                durationSeconds: cardioDurationSeconds,
+                trainingLoad: cardioTrainingLoad
+            ).nonEmpty
+        }
+
         init(
             id: String,
             title: String,
@@ -52,7 +104,9 @@ extension FitBuddySchemaV4 {
             endTime: Date? = nil,
             updatedAt: Date? = nil,
             source: ConnectorSource = .hevy,
-            exercises: [Exercise] = []
+            kind: ActivityKind = .strength,
+            exercises: [Exercise] = [],
+            cardio: CardioMetrics? = nil
         ) {
             self.id = id
             self.title = title
@@ -61,7 +115,18 @@ extension FitBuddySchemaV4 {
             self.endTime = endTime
             self.updatedAt = updatedAt
             self.sourceRawValue = source.rawValue
+            self.kindRawValue = kind.rawValue
             self.exercises = exercises
+            self.cardioAverageHeartRate = cardio?.averageHeartRate
+            self.cardioMaxHeartRate = cardio?.maxHeartRate
+            self.cardioElevationGainMeters = cardio?.elevationGainMeters
+            self.cardioAverageSpeedMetersPerSecond = cardio?.averageSpeedMetersPerSecond
+            self.cardioEnergyKilojoules = cardio?.energyKilojoules
+            self.cardioPerceivedEffort = cardio?.perceivedEffort
+            self.cardioActiveCalories = cardio?.activeCalories
+            self.cardioDistanceMeters = cardio?.distanceMeters
+            self.cardioDurationSeconds = cardio?.durationSeconds
+            self.cardioTrainingLoad = cardio?.trainingLoad
         }
     }
 }

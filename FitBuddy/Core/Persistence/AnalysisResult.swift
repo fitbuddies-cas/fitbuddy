@@ -1,10 +1,10 @@
 import Foundation
 import SwiftData
 
-/// The current `AnalysisResult` model — see `FitBuddySchemaV4`.
-typealias AnalysisResult = FitBuddySchemaV4.AnalysisResult
+/// The current `AnalysisResult` model — see `FitBuddySchemaV5`.
+typealias AnalysisResult = FitBuddySchemaV5.AnalysisResult
 
-extension FitBuddySchemaV4 {
+extension FitBuddySchemaV5 {
     /// One AI recommendation, kept so it survives an app restart and stays
     /// readable next to the ones before it (US-3 AC10/AC11, #97/#117).
     ///

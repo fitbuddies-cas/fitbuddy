@@ -18,6 +18,9 @@ struct WorkoutSummary: Hashable, Identifiable, Sendable {
     /// Which provider delivered the session (#141) — the dashboard labels
     /// Strava sessions next to Hevy ones (US-5 AC1).
     let source: ConnectorSource
+    /// The normalized sport (#180). `.strength` for a Hevy workout, and for a
+    /// cached session written before V5 whose sport nobody recorded.
+    let kind: ActivityKind
     /// Training volume in kg: Σ (weight × reps) over all counted sets.
     let volumeKg: Double
     let exerciseCount: Int
@@ -33,12 +36,17 @@ struct WorkoutSummary: Hashable, Identifiable, Sendable {
     /// Σ duration over the counted sets, in seconds, or `nil` when none logged
     /// one (#144).
     let durationSeconds: Int?
+    /// Session-level endurance metrics the source reported (#180) — heart
+    /// rate, elevation, speed, effort. `nil` for a strength session and for
+    /// any session cached before V5.
+    let cardio: CardioMetrics?
 
     /// - Parameters:
     ///   - source: Defaults to Hevy, so a fixture written before #141 still
     ///     describes what it always did.
     ///   - muscleLoads: Defaults to none, so a caller that only cares about
-    ///     the totals — a test fixture, a list row — stays unaffected.
+    ///     the totals — a test fixture, a list row — stays unaffected, as it
+    ///     does for `kind` and `cardio`.
     ///   - distanceMeters: Defaults to none, as does `durationSeconds`, for
     ///     the same reason.
     init(
@@ -46,23 +54,27 @@ struct WorkoutSummary: Hashable, Identifiable, Sendable {
         title: String,
         startTime: Date,
         source: ConnectorSource = .hevy,
+        kind: ActivityKind = .strength,
         volumeKg: Double,
         exerciseCount: Int,
         countedSetCount: Int,
         muscleLoads: [MuscleLoad] = [],
         distanceMeters: Double? = nil,
-        durationSeconds: Int? = nil
+        durationSeconds: Int? = nil,
+        cardio: CardioMetrics? = nil
     ) {
         self.id = id
         self.title = title
         self.startTime = startTime
         self.source = source
+        self.kind = kind
         self.volumeKg = volumeKg
         self.exerciseCount = exerciseCount
         self.countedSetCount = countedSetCount
         self.muscleLoads = muscleLoads
         self.distanceMeters = distanceMeters
         self.durationSeconds = durationSeconds
+        self.cardio = cardio
     }
 
     /// Whether the session is better described by distance and time than by
@@ -99,6 +111,7 @@ extension WorkoutSummary {
             title: workout.title,
             startTime: workout.startTime,
             source: workout.source,
+            kind: workout.kind,
             volumeKg: countedSets.trainingVolumeKg,
             exerciseCount: workout.exercises.count,
             countedSetCount: countedSets.count,
@@ -107,8 +120,12 @@ extension WorkoutSummary {
             // "Other · 1 set" would misrepresent both the run and the chart,
             // which stays what it was — Hevy's strength split.
             muscleLoads: workout.source.isEnduranceSource ? [] : MuscleLoad.merged(loads),
-            distanceMeters: distance > 0 ? distance : nil,
-            durationSeconds: duration > 0 ? duration : nil
+            // A source that reports no sets (Polar) carries its distance and
+            // duration in the cardio block instead, so the dashboard reads the
+            // same two figures whichever source wrote the session.
+            distanceMeters: distance > 0 ? distance : workout.cardio?.distanceMeters,
+            durationSeconds: duration > 0 ? duration : workout.cardio?.durationSeconds,
+            cardio: workout.cardio
         )
     }
 }
