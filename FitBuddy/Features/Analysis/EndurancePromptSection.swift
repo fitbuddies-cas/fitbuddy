@@ -75,9 +75,7 @@ enum EndurancePromptSection {
         if let heartRate = meanHeartRateLine(summaries) {
             lines.append(heartRate)
         }
-        if let longest = longestSessionLine(summaries, days: formatter) {
-            lines.append(longest)
-        }
+        lines.append(contentsOf: longestSessionLines(summaries, days: formatter))
         let sports = sportRows(summaries)
         if !sports.isEmpty {
             lines.append("By sport:")
@@ -101,23 +99,42 @@ enum EndurancePromptSection {
         return "Mean heart rate: \(text) (over the \(counted) that recorded one)"
     }
 
-    /// The single longest session of the window, by distance where any was
-    /// recorded and by time otherwise — the one figure the totals cannot
+    /// The longest session of the window — the one figure the totals cannot
     /// carry, and the one a long-run recommendation starts from.
-    private static func longestSessionLine(
+    ///
+    /// Two lines where the longest by distance and the longest by time are
+    /// different sessions, one where they are the same. Ranking by distance
+    /// alone hid every duration-only session as soon as a single session
+    /// carried a distance: a 2 h indoor ride next to a 10 km run is the longer
+    /// effort of the two and simply disappeared from the prompt.
+    private static func longestSessionLines(
         _ summaries: [WorkoutSummary],
         days: PromptDayFormatter
-    ) -> String? {
-        let byDistance = summaries.filter { ($0.distanceMeters ?? 0) > 0 }
-        let candidate = byDistance.max { ($0.distanceMeters ?? 0) < ($1.distanceMeters ?? 0) }
-            ?? summaries.max { ($0.durationSeconds ?? 0) < ($1.durationSeconds ?? 0) }
-        guard let session = candidate else { return nil }
+    ) -> [String] {
+        let byDistance = summaries
+            .filter { ($0.distanceMeters ?? 0) > 0 }
+            .max { ($0.distanceMeters ?? 0) < ($1.distanceMeters ?? 0) }
+        let byTime = summaries
+            .filter { ($0.durationSeconds ?? 0) > 0 }
+            .max { ($0.durationSeconds ?? 0) < ($1.durationSeconds ?? 0) }
+
+        if let byDistance, let byTime, byDistance.id != byTime.id {
+            return [
+                "Longest session by distance: \(describe(byDistance, days: days))",
+                "Longest session by time: \(describe(byTime, days: days))",
+            ]
+        }
+        guard let session = byDistance ?? byTime else { return [] }
+        return ["Longest session: \(describe(session, days: days))"]
+    }
+
+    /// One session as the figures it recorded, its date and its title.
+    private static func describe(_ session: WorkoutSummary, days: PromptDayFormatter) -> String {
         let figures = [
             session.distanceMeters.flatMap(PromptFigures.distance),
             session.durationSeconds.flatMap(PromptFigures.duration),
         ].compactMap { $0 }
-        guard !figures.isEmpty else { return nil }
-        return "Longest session: \(figures.joined(separator: ", ")) "
+        return "\(figures.joined(separator: ", ")) "
             + "on \(days.string(session.startTime)) (\(session.title))"
     }
 
@@ -141,7 +158,7 @@ enum EndurancePromptSection {
             var parts = [CountFormatter.labelled(inSport.count, singular: "session")]
             if let distance = PromptFigures.distance(meters) { parts.append(distance) }
             if let time = PromptFigures.duration(seconds) { parts.append(time) }
-            if let speed = meanSpeed(of: inSport, meters: meters, seconds: seconds) {
+            if let speed = meanSpeed(of: inSport) {
                 let text = sport == .ride
                     ? PromptFigures.speed(metersPerSecond: speed).map { "mean speed \($0)" }
                     : PromptFigures.pace(metersPerSecond: speed).map { "mean pace \($0)" }
@@ -162,14 +179,25 @@ enum EndurancePromptSection {
         return Int((Double(rates.reduce(0, +)) / Double(rates.count)).rounded())
     }
 
-    /// The sport's mean speed in m/s: its own distance over its own time where
-    /// both were recorded, falling back to the mean of the speeds the source
-    /// reported.
+    /// The sport's mean speed in m/s: distance over time across the sessions
+    /// that recorded **both**, falling back to the mean of the speeds the
+    /// source reported.
     ///
-    /// Distance over time first, because that is the figure the two lines
-    /// above it state — a pace derived from something else would contradict
-    /// them in a prompt that has no room to explain why.
-    private static func meanSpeed(of summaries: [WorkoutSummary], meters: Double, seconds: Int) -> Double? {
+    /// Only the sessions that recorded both, because the row's own totals are
+    /// no safe numerator and denominator: a 10 km run in 50 min next to a
+    /// 60 min treadmill session with no distance would divide 10 km by 110 min
+    /// and state a mean pace of 11:00 min/km for a runner holding 5:00. The
+    /// totals still describe the sport truthfully; the ratio between them does
+    /// not.
+    ///
+    /// Distance over time is preferred over the reported speeds because it is
+    /// the figure the two lines before it state — a pace derived from
+    /// something else would contradict them in a prompt that has no room to
+    /// explain why.
+    private static func meanSpeed(of summaries: [WorkoutSummary]) -> Double? {
+        let paired = summaries.filter { ($0.distanceMeters ?? 0) > 0 && ($0.durationSeconds ?? 0) > 0 }
+        let meters = PromptFigures.distance(of: paired)
+        let seconds = PromptFigures.duration(of: paired)
         if meters > 0, seconds > 0 { return meters / Double(seconds) }
         let speeds = summaries
             .compactMap { $0.cardio?.averageSpeedMetersPerSecond }
