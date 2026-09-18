@@ -20,8 +20,10 @@ extension AnalysisReportEvidence {
     ///
     /// - Parameters:
     ///   - summaries: Cached workouts, in any order — the read the prompt was
-    ///     built from. Endurance sessions and sessions outside the window are
-    ///     ignored, as in the prompt.
+    ///     built from. Sessions outside the window are ignored, as are
+    ///     endurance sessions: what is validated here are the strength
+    ///     figures — muscle-group frequency and the recovery metrics — and
+    ///     #184 takes recovery across the domains.
     ///   - exercises: The movements of the analysed window, as passed to
     ///     `AnalysisPromptBuilder.make`.
     ///   - progressions: The progressions passed to `AnalysisPromptBuilder.make`.

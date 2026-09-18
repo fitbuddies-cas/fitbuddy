@@ -62,6 +62,11 @@ extension RecoveryMetrics {
     ///
     /// Public to the feature so a caller knows which workouts to read the sets
     /// of before building the metrics.
+    ///
+    /// "Strength" is the normalized sport since #183, not the source: a Strava
+    /// `WeightTraining` session is a strength session here, and a Hevy
+    /// treadmill session is not. Counting endurance sessions towards the
+    /// recovery figures is #184's scope, not this change's.
     static func lastSevenDaysSessions(
         in summaries: [WorkoutSummary],
         now: Date,
@@ -69,7 +74,7 @@ extension RecoveryMetrics {
     ) -> [WorkoutSummary] {
         let start = AnalysisWindow.weekStart(0, endingAt: now, calendar: calendar)
         let end = calendar.date(byAdding: .day, value: 7, to: start) ?? start
-        return AnalysisPromptBuilder.strengthSessions(in: summaries)
+        return AnalysisPromptBuilder.sessions(in: summaries, for: .strength)
             .filter { $0.startTime >= start && $0.startTime < end }
     }
 

@@ -82,8 +82,8 @@ enum SessionCountFormat {
     /// Three outcomes, and the difference between them matters:
     ///
     /// - **No blob.** Every analysis before #182 was built from Hevy sessions
-    ///   alone — `AnalysisPromptBuilder.strengthSessions(in:)` dropped
-    ///   everything else — so the total belongs to Hevy, and the row renders
+    ///   alone — the prompt builder dropped every endurance source until
+    ///   #183 — so the total belongs to Hevy, and the row renders
     ///   exactly the line it was shown with.
     /// - **A blob this build can read.** Taken as stored; a map the row did
     ///   not record is left to the caller to derive.
