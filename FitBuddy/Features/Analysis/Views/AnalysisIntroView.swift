@@ -35,8 +35,6 @@ struct AnalysisIntroView: View {
             Button("Analyze with AI", action: onStart)
                 .buttonStyle(.fb(.accent))
                 .disabled(!canStart)
-
-            AnalysisPrivacyNote()
         }
     }
 }
