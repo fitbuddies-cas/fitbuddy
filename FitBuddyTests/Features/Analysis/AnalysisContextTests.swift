@@ -89,6 +89,81 @@ final class AnalysisContextTests: XCTestCase {
         XCTAssertEqual(sut.domainCounts, [.strength: 14, .endurance: 9])
     }
 
+    /// The regression the review caught: three Hevy and three Strava strength
+    /// sessions are six on the line, but `strengthSessions(in:)` hands the
+    /// model three, and US-6 AC2 is about what the model saw.
+    func testADomainIsThinOnWhatReachedThePromptAndNotOnTheWholeWindow() {
+        let sut = AnalysisContext(
+            sessionCounts: [.hevy: 3, .strava: 3],
+            domainCounts: [.strength: 6],
+            analysedCounts: [.strength: 3],
+            window: .default
+        )
+
+        XCTAssertEqual(sut.basisDescription, "3 Hevy · 3 Strava sessions")
+        XCTAssertTrue(sut.isThin)
+        XCTAssertEqual(
+            sut.thinDataWarning,
+            "Thin strength data — 3 sessions. Treat the recommendation as a starting point."
+        )
+    }
+
+    /// The other half of that rule: a single run next to fourteen lifts must
+    /// not put a thin-endurance warning on a recommendation with no endurance
+    /// content in it — the analysis never covered endurance.
+    func testADomainTheAnalysisDidNotCoverIsNotWarnedAbout() {
+        let sut = AnalysisContext(
+            sessionCounts: [.hevy: 14, .strava: 1],
+            domainCounts: [.strength: 14, .endurance: 1],
+            analysedCounts: [.strength: 14],
+            window: .default
+        )
+
+        XCTAssertEqual(sut.basisDescription, "14 Hevy · 1 Strava sessions")
+        XCTAssertEqual(sut.analysedDomains, [.strength])
+        XCTAssertFalse(sut.isThin)
+        XCTAssertNil(sut.thinDataWarning)
+    }
+
+    /// A basis whose breakdown did not survive keeps its total and is judged
+    /// on it: twenty-three sessions are not thin, and there is no domain the
+    /// warning could honestly name.
+    func testAnUnattributedBasisIsJudgedOnItsTotal() {
+        let sut = AnalysisContext(unattributedSessionCount: 23, window: .default)
+
+        XCTAssertEqual(sut.basisDescription, "23 sessions")
+        XCTAssertEqual(sut.countedSources, [])
+        XCTAssertFalse(sut.isThin)
+        XCTAssertTrue(AnalysisContext(unattributedSessionCount: 3, window: .default).isThin)
+    }
+
+    // MARK: - Widened window (#87)
+
+    /// The note has to stay true next to a line that counts every source: one
+    /// old lift and twelve recent runs widen the window to 8 weeks, and it is
+    /// *strength* sessions the most recent four were short of.
+    func testTheWidenedWindowNoteIsAboutStrengthSessions() {
+        let sut = AnalysisContext(
+            sessionCounts: [.hevy: 1, .strava: 12],
+            domainCounts: [.strength: 1, .endurance: 12],
+            analysedCounts: [.strength: 1],
+            window: AnalysisWindow(weeks: 8)
+        )
+
+        XCTAssertEqual(sut.basisDescription, "1 Hevy · 12 Strava sessions")
+        XCTAssertEqual(
+            sut.widenedWindowNote,
+            "This analysis covered 8 weeks — its most recent 4 held no strength sessions."
+        )
+    }
+
+    /// The default window needs no explaining.
+    func testTheDefaultWindowHasNoNote() {
+        XCTAssertNil(context(sessions: 12).widenedWindowNote)
+    }
+
+    // MARK: - Thin data wording
+
     /// AC4: the warning says which half of the training it is about, so the
     /// user knows what to read the recommendation cautiously about.
     func testThinDataWarningNamesTheThinDomain() {

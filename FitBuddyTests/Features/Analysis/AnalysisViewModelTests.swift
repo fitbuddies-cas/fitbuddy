@@ -661,24 +661,60 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(sut.context?.sessionCounts, [.hevy: 1, .strava: 1])
     }
 
-    /// AC4's warning, end to end: fourteen lifts next to two runs is a solid
-    /// total over a thin endurance base, and the line has to say which half.
-    func testContextWarnsAboutTheThinDomainOnly() async {
-        cache.summaries = (1...14).map { Self.workout(daysAgo: $0) }
-            + [
-                // Days of their own: the fixture keys its id off `daysAgo`.
-                Self.workout(daysAgo: 15, title: "Morning Run", source: .strava),
-                Self.workout(daysAgo: 16, title: "Evening Ride", source: .strava),
-            ]
+    /// The regression the review of #182 caught, end to end: three Hevy and
+    /// three Strava strength sessions are six on the line, but
+    /// `strengthSessions(in:)` hands the model three — and US-6 AC2 is about
+    /// what the model saw.
+    func testTheThinWarningJudgesWhatReachedThePromptAndNotTheWholeWindow() async {
+        cache.summaries = (1...3).map { Self.workout(daysAgo: $0) }
+            + (4...6).map { Self.workout(daysAgo: $0, title: "Gym", source: .strava, kind: .strength) }
         await streamer.setText("ok")
         let sut = makeSUT()
 
         await sut.start()
 
-        XCTAssertEqual(sut.context?.thinDomains, [.endurance])
+        XCTAssertEqual(sut.context?.basisDescription, "3 Hevy · 3 Strava sessions")
+        XCTAssertEqual(sut.context?.domainCounts, [.strength: 6])
+        XCTAssertEqual(sut.context?.analysedCounts, [.strength: 3])
         XCTAssertEqual(
             sut.context?.thinDataWarning,
-            "Thin endurance data — 2 sessions. Treat the recommendation as a starting point."
+            "Thin strength data — 3 sessions. Treat the recommendation as a starting point."
+        )
+    }
+
+    /// The other half of the rule: one run next to fourteen lifts leaves the
+    /// analysis covering strength alone, so there is no endurance verdict to
+    /// put on a recommendation with no endurance content.
+    func testASingleRunDoesNotWarnAboutThinEnduranceData() async {
+        cache.summaries = (1...14).map { Self.workout(daysAgo: $0) }
+            + [Self.workout(daysAgo: 15, title: "Morning Run", source: .strava)]
+        await streamer.setText("ok")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.basisDescription, "14 Hevy · 1 Strava sessions")
+        XCTAssertEqual(sut.context?.analysedDomains, [.strength])
+        XCTAssertEqual(sut.context?.isThin, false)
+        XCTAssertNil(sut.context?.thinDataWarning)
+    }
+
+    /// The widened-window note has to stay true next to a line that counts
+    /// every source: the ladder moved because the recent weeks held no
+    /// *strength* sessions, and twelve runs sit in them (#87, #182).
+    func testTheWidenedWindowNoteNamesStrengthWhenRunsFillTheRecentWeeks() async {
+        cache.summaries = [Self.workout(daysAgo: 40)]
+            + (1...12).map { Self.workout(daysAgo: $0, title: "Morning Run", source: .strava) }
+        await streamer.setText("ok")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.window.weeks, 8)
+        XCTAssertEqual(sut.context?.basisDescription, "1 Hevy · 12 Strava sessions")
+        XCTAssertEqual(
+            sut.context?.widenedWindowNote,
+            "This analysis covered 8 weeks — its most recent 4 held no strength sessions."
         )
     }
 

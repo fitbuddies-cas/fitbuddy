@@ -392,15 +392,42 @@ final class AnalysisResultStoreTests: XCTestCase {
         XCTAssertEqual(stored.context.domainCounts, [.strength: 12])
     }
 
-    /// A map this build cannot read falls back the same way, so the history
-    /// stays open on a row whose bytes went bad.
-    func testARowWithUnreadableCountsFallsBackToItsTotal() async throws {
+    /// A blob this build cannot read leaves the history open on the total the
+    /// row still knows — and on no source at all, because attributing twelve
+    /// sessions to Hevy would be a guess the row does not support.
+    func testARowWithUnreadableCountsKeepsItsTotalWithoutASource() async throws {
         try insertRow(text: "Older recommendation.", sessionCountsJSON: Data("nonsense".utf8))
 
         let latest = try await sut.latest()
         let stored = try XCTUnwrap(latest)
 
-        XCTAssertEqual(stored.context.sessionCounts, [.hevy: 12])
+        XCTAssertEqual(stored.context.sessionCounts, [:])
+        XCTAssertEqual(stored.context.sessionCount, 12)
+        XCTAssertEqual(stored.context.basisDescription, "12 sessions")
+        // Twelve sessions are not thin, and there is no domain to name.
+        XCTAssertFalse(stored.context.isThin)
+    }
+
+    /// The analysed breakdown is stored too: a history row has to repeat the
+    /// warning the live run showed, and that verdict is about the part of the
+    /// basis the model was actually given.
+    func testTheAnalysedBreakdownIsReadBackWithTheRecommendation() async throws {
+        let context = AnalysisContext(
+            sessionCounts: [.hevy: 3, .strava: 3],
+            domainCounts: [.strength: 6],
+            analysedCounts: [.strength: 3],
+            window: .default
+        )
+        try await sut.save(text: "Careful.", generatedAt: Self.reference, context: context)
+
+        let latest = try await sut.latest()
+        let stored = try XCTUnwrap(latest)
+
+        XCTAssertEqual(stored.context, context)
+        XCTAssertEqual(
+            stored.context.thinDataWarning,
+            "Thin strength data — 3 sessions. Treat the recommendation as a starting point."
+        )
     }
 
     // MARK: - Helpers
