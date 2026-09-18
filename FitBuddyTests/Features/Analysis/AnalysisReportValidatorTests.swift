@@ -698,6 +698,114 @@ final class AnalysisReportValidatorTests: XCTestCase {
         )
     }
 
+    // MARK: - Analysis profile (US-15 AC1, #185)
+
+    /// The reviewer's scenario. Under "Endurance" the prompt carries no
+    /// Exercises section, so a progression card cannot exist — and reading its
+    /// absence as "the cards do not back the verdict" put "Hold steady this
+    /// week." over the model's own argument for progressing, on every
+    /// endurance run there was.
+    func testAnEnduranceProgressVerdictSurvivesWithoutAProgressionCard() {
+        let report = AnalysisReport(
+            headline: "You're ready to progress.",
+            verdict: .progress,
+            lead: "Your easy weeks are paying off — add a fourth run.",
+            cards: [.note(title: "Volume", text: "Weekly distance rose for three weeks.")],
+            summary: "Summary"
+        )
+
+        let validated = AnalysisReportValidator.validate(
+            report,
+            against: evidence(exercises: [], analysisProfile: .endurance)
+        )
+
+        XCTAssertEqual(validated.verdict, .progress)
+        XCTAssertEqual(validated.headline, "You're ready to progress.")
+        XCTAssertEqual(validated.lead, "Your easy weeks are paying off — add a fourth run.")
+    }
+
+    /// The rule is unchanged where the run did cover strength: no progression
+    /// card, no progress verdict (#177).
+    func testAStrengthProgressVerdictWithoutAProgressionCardStillHolds() {
+        let report = AnalysisReport(
+            headline: "You're ready to progress.",
+            verdict: .progress,
+            lead: "Add load.",
+            cards: [.note(title: "Volume", text: "Volume rose.")],
+            summary: "Summary"
+        )
+
+        let validated = AnalysisReportValidator.validate(
+            report,
+            against: evidence(analysisProfile: .strength)
+        )
+
+        XCTAssertEqual(validated.verdict, .hold)
+        XCTAssertEqual(validated.headline, AnalysisReportValidator.holdHeadline)
+    }
+
+    /// "Overall load" covers strength, so it is judged like any strength run —
+    /// the default, and what every build before #185 did.
+    func testOverallLoadKeepsTheProgressToHoldRule() {
+        let report = AnalysisReport(
+            headline: "You're ready to progress.",
+            verdict: .progress,
+            lead: "Add load.",
+            cards: [.note(title: "Volume", text: "Volume rose.")],
+            summary: "Summary"
+        )
+
+        let validated = AnalysisReportValidator.validate(report, against: evidence())
+
+        XCTAssertEqual(validated.verdict, .hold)
+    }
+
+    /// The card's figures span every session whatever the profile (one body,
+    /// one recovery), so where the analysis left training out the reasoning
+    /// says which count the user is looking at.
+    func testTheInsertedRecoveryReasoningNamesTheTrainingItCounted() {
+        let report = AnalysisReport(
+            headline: "You're ready to progress.",
+            verdict: .progress,
+            lead: "Add load.",
+            cards: [],
+            summary: "Summary"
+        )
+
+        let validated = AnalysisReportValidator.validate(
+            report,
+            against: evidence(
+                recovery: RecoveryMetrics(sessions: 7, trainingDays: 6, averageRPE: nil),
+                analysisProfile: .strength,
+                countsUnanalysedTraining: true
+            )
+        )
+
+        XCTAssertEqual(
+            validated.cards.first,
+            .recovery(
+                reasoning: AnalysisReportValidator.insertedRecoveryReasoning(
+                    countingUnanalysedTraining: true
+                ),
+                metrics: RecoveryMetrics(sessions: 7, trainingDays: 6, averageRPE: nil)
+            )
+        )
+        XCTAssertTrue(
+            AnalysisReportValidator
+                .insertedRecoveryReasoning(countingUnanalysedTraining: true)
+                .hasSuffix("including the training this analysis left out.")
+        )
+    }
+
+    /// A Hevy-only window resolves to "Strength" and has left nothing out, so
+    /// the sentence stays off — it would name training that does not exist.
+    func testTheRecoveryReasoningIsUnchangedWhenNothingWasLeftOut() {
+        XCTAssertEqual(
+            AnalysisReportValidator.insertedRecoveryReasoning(countingUnanalysedTraining: false),
+            AnalysisReportValidator.insertedRecoveryReasoning
+        )
+    }
+
     private func evidence(
         exercises: [ListedExercise] = [
             ListedExercise(
@@ -708,9 +816,17 @@ final class AnalysisReportValidatorTests: XCTestCase {
             ),
         ],
         perWeek: [MuscleGroup: Double] = [.chest: 3, .legs: 1],
-        recovery: RecoveryMetrics = RecoveryMetrics(sessions: 3, trainingDays: 3, averageRPE: nil)
+        recovery: RecoveryMetrics = RecoveryMetrics(sessions: 3, trainingDays: 3, averageRPE: nil),
+        analysisProfile: AnalysisProfile = .overallLoad,
+        countsUnanalysedTraining: Bool = false
     ) -> AnalysisReportEvidence {
-        AnalysisReportEvidence(exercises: exercises, muscleGroupsPerWeek: perWeek, recovery: recovery)
+        AnalysisReportEvidence(
+            exercises: exercises,
+            muscleGroupsPerWeek: perWeek,
+            recovery: recovery,
+            analysisProfile: analysisProfile,
+            recoveryCountsUnanalysedTraining: countsUnanalysedTraining
+        )
     }
 
     private func progression(_ exercise: String, from: Double, to: Double) -> AnalysisCard {

@@ -890,6 +890,48 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(restored.context?.analysisProfile, .strength)
     }
 
+    /// The race the review found: a tap landing while the cache read is in
+    /// flight must not be undone by the value that was current before it. The
+    /// segmented control would snap back under the finger, and the run would
+    /// use the profile the user had just moved away from.
+    func testATapDuringTheCacheReadIsNotRevertedByTheRefresh() async {
+        cache.summaries = (1...6).map { Self.workout(daysAgo: $0) }
+            + (7...9).map { Self.workout(daysAgo: $0, title: "Run", source: .strava, kind: .run) }
+        let sut = makeSUT()
+        // The options have to be there before a tap can be accepted — `select`
+        // ignores a profile the picker does not offer.
+        await sut.prepareProfileSelection()
+        XCTAssertEqual(sut.selectedProfile, .overallLoad)
+
+        cache.gatesFirstCall = true
+        let refresh = Task { await sut.prepareProfileSelection() }
+        await cache.waitForFirstCall()
+        await sut.select(.strength)
+        cache.releaseFirstCall()
+        await refresh.value
+
+        XCTAssertEqual(sut.selectedProfile, .strength)
+        XCTAssertEqual(sut.profileOptions.available, [.strength, .endurance, .overallLoad])
+    }
+
+    /// The domain reading of the default, stated as the behaviour it actually
+    /// produces: a Hevy-only account that logs treadmill work in Hevy has two
+    /// kinds of training in the window and does get the choice.
+    ///
+    /// AC1's "only Hevy → no choice" is about sources, and since ADR-012 the
+    /// sport is what decides. The wording of #185 and #171 should move from
+    /// "sources" to "kinds of training in the window" — see the handover file.
+    func testAHevyOnlyCacheWithATreadmillSessionStillOffersTheChoice() async {
+        cache.summaries = (1...6).map { Self.workout(daysAgo: $0) }
+            + [Self.workout(daysAgo: 7, title: "Treadmill", source: .hevy, kind: .run)]
+        let sut = makeSUT()
+
+        await sut.prepareProfileSelection()
+
+        XCTAssertEqual(sut.profileOptions.available, [.strength, .endurance, .overallLoad])
+        XCTAssertEqual(sut.selectedProfile, .overallLoad)
+    }
+
     /// A cache the profiles cannot be resolved from leaves the picker as it
     /// was — the run itself is what reports a cache it cannot read.
     func testAFailingCacheReadLeavesTheOptionsAlone() async {
