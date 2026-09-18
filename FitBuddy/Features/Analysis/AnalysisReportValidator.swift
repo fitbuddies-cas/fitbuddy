@@ -34,23 +34,24 @@ enum AnalysisReportValidator {
     /// Title of a downgraded interference card.
     static let interferenceNoteTitle = "Training load"
 
-    /// How far a metric card's `from` may sit from the app's own figure for
-    /// that week, as a share of it (#186): the model rounds, and it states the
-    /// figure in a unit the prompt wrote with one decimal at most.
-    ///
-    /// Relative rather than absolute, because the same card carries 12 400 kg
-    /// and 5.5 min/km.
-    static let metricToleranceShare = 0.05
-
     /// How far a metric card's `to` may sit from the app's figure, as a share
     /// of it.
     ///
     /// A fifth of the week's own figure. Past that the card is a number rather
-    /// than a recommendation — no week's distance doubles on advice, and a
-    /// heart rate a fifth below this week's is not something the data backs.
-    /// The same bound in both directions, for the same reason prompt rule 6
-    /// caps a barbell step: the app has to be able to say why the figure is
-    /// the one it prints.
+    /// than a recommendation — no week's distance doubles on advice. The same
+    /// bound in both directions, for the same reason prompt rule 6 caps a
+    /// barbell step: the app has to be able to say why the figure is the one
+    /// it prints.
+    ///
+    /// **`from` has no tolerance at all.** It used to allow 5 % — 620 kg of
+    /// slack at a weekly volume of 12 400 kg, which let the card print one
+    /// number while its own reasoning sentence argued from another. It is now
+    /// an equality, at the precision the prompt printed the figure with
+    /// (`MetricUnit.statesTheSameFigure(_:as:)`), which is the rule the
+    /// imbalance card already follows: the model is quoting a figure it was
+    /// given, so it must quote it. Where it does not, the card is downgraded
+    /// to a note and its sentence still reaches the screen — the conservative
+    /// failure, not a wrong measurement.
     static let metricStepShare = 0.2
 
     /// The headline of a report the app turned into a recovery verdict
@@ -166,13 +167,19 @@ enum AnalysisReportValidator {
         // endurance report puts a progress verdict on, and reading only
         // progressions would rewrite it.
         //
-        // Still only where the run covered strength (#185). Under "Endurance"
-        // there is no Exercises section, so a progression card is impossible by
-        // construction; a metric card is not, but the model may equally have
-        // argued for progress in prose the app has no card slot for, and #185
-        // settled that the app does not overrule it there.
+        // Rewritten only where the app *had* a card type that could have
+        // backed the verdict, so that an absence means something (#185, #186).
+        //
+        // Under "Endurance" there is no Exercises section and a progression
+        // card is impossible by construction; reading its absence as "the
+        // cards do not back the verdict" would rewrite every endurance
+        // progress verdict over the model's own argument, which is what #185
+        // fixed. But #186 gave that profile a card that *can* back it — so as
+        // soon as a metric card survived, its failure to argue for more is
+        // evidence again, and a deload metric card under "You're ready to
+        // progress." is exactly the contradiction this rule exists to stop.
         if verdict == .progress,
-           evidence.analysisProfile.covers(.strength),
+           evidence.analysisProfile.covers(.strength) || kept.contains(where: { $0.kind == .metric }),
            !kept.contains(where: \.backsProgress) {
             verdict = .hold
             headline = holdHeadline
@@ -267,7 +274,17 @@ enum AnalysisReportValidator {
             // shows what it counted. What the model is checked on is whether
             // there was an interference to write about at all — a week with no
             // endurance session in it has none, whatever the card claims.
-            guard !isBlank(reasoning), evidence.interference.hasBothDomains else {
+            //
+            // And whether *this* analysis may talk about it: the card is a
+            // statement about both domains at once, so a single-domain profile
+            // has no card here. Under "Strength" it would put four running
+            // days on a screen that says the running was left out, with no
+            // sentence to explain them — the leak the recovery card avoids by
+            // saying so in its own reasoning (#185).
+            guard !isBlank(reasoning),
+                  evidence.analysisProfile.coversBothDomains,
+                  evidence.interference.hasBothDomains
+            else {
                 return note(title: interferenceNoteTitle, text: reasoning)
             }
             return .interference(metrics: evidence.interference, reasoning: reasoning)
@@ -283,14 +300,18 @@ enum AnalysisReportValidator {
     /// The metric card with the app's own current figure, or `nil` when the
     /// week does not back it:
     ///
+    /// - the model is allowed to state the unit at all
+    ///   (`MetricUnit.isStatableByTheModel`) — a heart rate is not a figure it
+    ///   may set a target for, whatever schema a provider actually honoured,
     /// - the unit belongs to a domain this analysis covers — no kilograms
     ///   under "Endurance", no kilometres under "Strength" (US-15 AC5). A unit
-    ///   both domains record (a heart rate, a duration) passes under any
-    ///   profile,
+    ///   both domains record passes under any profile, and its *anchor* is
+    ///   already restricted to the covered sessions,
     /// - the app has a figure for that unit in the last seven days. Without
     ///   one there is nothing to check the card against, and a "from" nobody
     ///   measured is the invented measurement #175 exists to catch,
-    /// - `from` is within `metricToleranceShare` of that figure,
+    /// - `from` is **the same figure** as the app's, at the precision the
+    ///   prompt printed it (`MetricUnit.statesTheSameFigure(_:as:)`),
     /// - `to` is a figure the unit can state, differs from the app's, and sits
     ///   within `metricStepShare` of it,
     /// - both figures, and the step between them, have a reading in the unit —
@@ -309,10 +330,10 @@ enum AnalysisReportValidator {
         evidence: AnalysisReportEvidence
     ) -> AnalysisReportCard? {
         let title = trimmed(label)
-        guard !title.isEmpty else { return nil }
+        guard !title.isEmpty, unit.isStatableByTheModel else { return nil }
         if let domain = unit.domain, !evidence.analysisProfile.covers(domain) { return nil }
         guard let app = evidence.weeklyMetrics[unit], app > 0, app.isFinite else { return nil }
-        guard from.isFinite, abs(from - app) <= app * metricToleranceShare + epsilon else { return nil }
+        guard unit.statesTheSameFigure(from, as: app) else { return nil }
         guard to.isFinite, to > 0 else { return nil }
         let step = to - app
         guard abs(step) > epsilon, abs(step) <= app * metricStepShare + epsilon else { return nil }
