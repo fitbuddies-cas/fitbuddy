@@ -78,14 +78,17 @@ enum MockDataSeeder {
     ) async {
         guard let profile = requestedProfile(in: launchArguments) else { return }
         do {
+            // Re-anchored on the clock the sync is dated with, not on the
+            // system one: a caller that seeds at a fixed instant and then reads
+            // the cache as of that instant has to see the window it asked for.
+            let loader = MockWorkoutLoader(now: now)
+            let store = WorkoutStore(modelContainer: container)
+            var seeded = 0
             // One call per source, because that is how a sync writes: the store
             // replaces one source's window and leaves the others alone, so a
             // mixed profile has to hand it its Hevy half and its Strava half
             // separately — seeding both under `.hevy` would label the runs as
             // Hevy sessions and break the context line they exist for (#188).
-            let loader = MockWorkoutLoader()
-            let store = WorkoutStore(modelContainer: container)
-            var seeded = 0
             for payload in profile.payloads {
                 let activities = try loader.activities(for: profile, from: payload.source)
                 try await store.replaceCachedWorkouts(from: payload.source, with: activities)

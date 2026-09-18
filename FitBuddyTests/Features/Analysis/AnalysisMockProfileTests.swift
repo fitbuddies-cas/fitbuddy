@@ -5,14 +5,17 @@ import XCTest
 // The mock profiles are DEBUG-only, like the loader that reads them.
 #if DEBUG
 
-/// The two analysis mock profiles run through the real pipeline (#179): the
-/// bundled payload is cached through `WorkoutStore`, `AnalysisViewModel` reads
-/// it and builds the prompt, a model answer from `AnalysisReportFactory` comes
-/// back, and the validator turns it into the cards the screen shows.
+/// The analysis mock profiles run through the real pipeline (#179, #188): the
+/// bundled payloads are cached through `WorkoutStore`, `AnalysisViewModel`
+/// reads them and builds the prompt, a model answer from
+/// `AnalysisReportFactory` comes back, and the validator turns it into the
+/// cards the screen shows.
 ///
 /// What the unit tests of each step cannot show on their own: that the cache
 /// reads, the prompt and the validator agree on the same recorded history —
-/// US-14 AC2 for `progression-ready`, AC4 for `overreached`.
+/// US-14 AC2 for `progression-ready`, AC4 for `overreached`, and US-15 AC1 to
+/// AC5 for the three cross-source profiles, whose sessions reach the cache
+/// through Strava's and Polar's own DTOs rather than as fixtures.
 @MainActor
 final class AnalysisMockProfileTests: XCTestCase {
     /// 10:40 UTC. The loader moves each profile's newest session into the 24
@@ -32,15 +35,21 @@ final class AnalysisMockProfileTests: XCTestCase {
     private var container: ModelContainer!
     private var store: WorkoutStore!
     private var streamer: StubAnalysisStreamer!
+    private var defaults: UserDefaults!
+    private var suiteName: String!
 
     override func setUp() async throws {
         try await super.setUp()
         container = try ModelContainerFactory.makeInMemory()
         store = WorkoutStore(modelContainer: container)
         streamer = StubAnalysisStreamer()
+        suiteName = "fitbuddy.tests.\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
     }
 
     override func tearDown() async throws {
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults = nil
         streamer = nil
         store = nil
         container = nil
@@ -162,6 +171,273 @@ final class AnalysisMockProfileTests: XCTestCase {
         XCTAssertTrue(AnalysisFullAnalysis.startsExpanded(for: report.cards))
     }
 
+    // MARK: - runner · endurance only (US-15 AC1, AC2, AC5)
+
+    /// A window of nothing but running offers no choice and runs as
+    /// "Endurance" — the implicit profile of US-15 AC1, with no picker on
+    /// screen.
+    func testTheRunnerOffersNoChoiceAndRunsAsEndurance() async throws {
+        try await seed(.runner, now: Self.morning)
+        let kilometers = try await weeklyFigure(.kilometers)
+
+        let run = try await analyse(answer: AnalysisReportFactory.runner(weeklyKilometers: kilometers))
+
+        XCTAssertEqual(run.options.available, [.endurance])
+        XCTAssertFalse(run.options.isChoice)
+        XCTAssertEqual(run.options.preselected, .endurance)
+        XCTAssertEqual(run.context?.analysisProfile, .endurance)
+    }
+
+    /// The endurance section of US-15 AC2, over a real cache: weekly distance
+    /// and time, a mean heart rate that says how many sessions recorded one,
+    /// the per-week table and the comparison with the four weeks before.
+    func testTheRunnerPromptCarriesTheEnduranceSections() async throws {
+        try await seed(.runner, now: Self.morning)
+        let kilometers = try await weeklyFigure(.kilometers)
+
+        let prompt = try await analyse(
+            answer: AnalysisReportFactory.runner(weeklyKilometers: kilometers)
+        ).prompt
+
+        XCTAssertTrue(prompt.contains("## Endurance, last 4 weeks ("), prompt)
+        XCTAssertTrue(prompt.contains("## Endurance per week"), prompt)
+        XCTAssertTrue(prompt.contains("## Previous 4 weeks "), prompt)
+        XCTAssertTrue(prompt.contains("Total distance: "), prompt)
+        XCTAssertTrue(prompt.contains("Total time: "), prompt)
+        XCTAssertTrue(prompt.contains("Longest session"), prompt)
+        XCTAssertTrue(prompt.contains("By sport:"), prompt)
+        // Four of the sixteen runs wore no strap, so the mean has to say what
+        // it rests on (US-15 AC7).
+        XCTAssertTrue(prompt.contains("sessions that recorded one)"), prompt)
+    }
+
+    /// No strength section, and therefore no kilogram, on a window that holds
+    /// no lifting — the mirror image of AC5 on the prompt side.
+    func testTheRunnerPromptNamesNoStrengthWork() async throws {
+        try await seed(.runner, now: Self.morning)
+        let kilometers = try await weeklyFigure(.kilometers)
+
+        let prompt = try await analyse(
+            answer: AnalysisReportFactory.runner(weeklyKilometers: kilometers)
+        ).prompt
+
+        XCTAssertFalse(prompt.contains("## Volume per week"), prompt)
+        XCTAssertFalse(prompt.contains("## Exercises ("), prompt)
+        XCTAssertFalse(prompt.contains("## Muscle groups"), prompt)
+        XCTAssertFalse(prompt.contains(" kg"), prompt)
+    }
+
+    /// US-15 AC5: the result is a metric card in kilometres, anchored on the
+    /// week the cache holds, and nothing on it is a weight.
+    func testTheRunnerResultIsAMetricCardInEnduranceUnits() async throws {
+        try await seed(.runner, now: Self.morning)
+        let kilometers = try await weeklyFigure(.kilometers)
+
+        let outcome = try await analyse(
+            answer: AnalysisReportFactory.runner(weeklyKilometers: kilometers)
+        ).outcome
+
+        let report = try XCTUnwrap(outcome?.report)
+        XCTAssertEqual(report.verdict, .progress)
+        XCTAssertEqual(report.cards.count, 1)
+        XCTAssertEqual(report.cards.first?.kind, .metric)
+        guard case let .metric(_, from, to, unit, _, source)? = report.cards.first else {
+            return XCTFail("The endurance answer did not survive as a metric card")
+        }
+        XCTAssertEqual(unit, .kilometers)
+        XCTAssertEqual(from, kilometers, accuracy: 0.0001)
+        XCTAssertEqual(to, AnalysisReportFactory.metricStep(from: kilometers), accuracy: 0.0001)
+        XCTAssertEqual(source, "Run")
+    }
+
+    /// The context line of a single endurance source, and no thin-data
+    /// warning: sixteen runs in the window is a basis (US-15 AC4).
+    func testTheRunnerBasisNamesStravaAlone() async throws {
+        try await seed(.runner, now: Self.morning)
+        let kilometers = try await weeklyFigure(.kilometers)
+
+        let run = try await analyse(answer: AnalysisReportFactory.runner(weeklyKilometers: kilometers))
+        let context = try XCTUnwrap(run.context)
+
+        XCTAssertEqual(context.countedSources, [.strava])
+        XCTAssertEqual(context.sessionCount(from: .strava), 16)
+        XCTAssertEqual(context.basisDescription, "16 Strava sessions")
+        XCTAssertEqual(context.analysedCounts, [.endurance: 16])
+        XCTAssertFalse(context.isThin)
+        XCTAssertNil(context.thinDataWarning)
+    }
+
+    // MARK: - mixed · both domains (US-15 AC1, AC2, AC4)
+
+    /// Two domains in the window, so all three profiles are offered and
+    /// "Overall load" is the default (US-15 AC1).
+    func testTheMixedWindowOffersAllThreeProfiles() async throws {
+        try await seed(.mixed, now: Self.morning)
+        let kilometers = try await weeklyFigure(.kilometers)
+
+        let run = try await analyse(
+            answer: AnalysisReportFactory.mixedOverallLoad(weeklyKilometers: kilometers)
+        )
+
+        XCTAssertEqual(run.options.available, [.strength, .endurance, .overallLoad])
+        XCTAssertTrue(run.options.isChoice)
+        XCTAssertEqual(run.options.preselected, .overallLoad)
+        XCTAssertEqual(run.context?.analysisProfile, .overallLoad)
+    }
+
+    /// US-15 AC2 end to end: a strength section, an endurance section and a
+    /// week-structure section naming the two overlap days the fixture was
+    /// built around.
+    func testTheMixedPromptCarriesAllThreeSections() async throws {
+        try await seed(.mixed, now: Self.morning)
+        let kilometers = try await weeklyFigure(.kilometers)
+
+        let prompt = try await analyse(
+            answer: AnalysisReportFactory.mixedOverallLoad(weeklyKilometers: kilometers)
+        ).prompt
+
+        XCTAssertTrue(prompt.contains("## Volume per week"), prompt)
+        XCTAssertTrue(prompt.contains("## Exercises (last 4 weeks)"), prompt)
+        XCTAssertTrue(prompt.contains("## Endurance, last 4 weeks ("), prompt)
+        XCTAssertTrue(prompt.contains("## Week structure (last 4 weeks)"), prompt)
+        XCTAssertTrue(prompt.contains("Days with both: 8"), prompt)
+        XCTAssertTrue(prompt.contains("Days with strength only: 4"), prompt)
+        XCTAssertTrue(prompt.contains("Days with endurance only: 4"), prompt)
+        XCTAssertTrue(prompt.contains("Last 7 days: "), prompt)
+    }
+
+    /// US-15 AC4: the line counts per source, and a window with twelve of
+    /// each is not thin in either domain.
+    func testTheMixedBasisCountsBothSources() async throws {
+        try await seed(.mixed, now: Self.morning)
+        let kilometers = try await weeklyFigure(.kilometers)
+
+        let run = try await analyse(
+            answer: AnalysisReportFactory.mixedOverallLoad(weeklyKilometers: kilometers)
+        )
+        let context = try XCTUnwrap(run.context)
+
+        XCTAssertEqual(context.basisDescription, "12 Hevy · 12 Strava sessions")
+        XCTAssertEqual(context.domainCounts, [.strength: 12, .endurance: 12])
+        XCTAssertEqual(context.analysedCounts, [.strength: 12, .endurance: 12])
+        XCTAssertFalse(context.isThin)
+    }
+
+    /// Design 3.4d over a real cache: the interference card carries the app's
+    /// own day counts, not the ones the model guessed, and the metric card
+    /// under it is anchored on the app's week (#186).
+    func testTheMixedResultLeadsWithTheInterferenceCard() async throws {
+        try await seed(.mixed, now: Self.morning)
+        let kilometers = try await weeklyFigure(.kilometers)
+
+        let outcome = try await analyse(
+            answer: AnalysisReportFactory.mixedOverallLoad(weeklyKilometers: kilometers)
+        ).outcome
+
+        let report = try XCTUnwrap(outcome?.report)
+        XCTAssertEqual(report.cards.map(\.kind), [.interference, .metric])
+        guard case let .interference(metrics, _)? = report.cards.first else {
+            return XCTFail("The interference card did not survive")
+        }
+        XCTAssertEqual(metrics, InterferenceMetrics(strengthDays: 3, cardioDays: 3, overlapDays: 2))
+    }
+
+    /// Under "Strength" the endurance sessions are counted on the line — the
+    /// user logged them — and deliberately left out of the analysis. The
+    /// prompt says so, and the thin-data rule stays silent about a domain this
+    /// run was never about (US-15 AC4, #185).
+    func testTheMixedWindowUnderStrengthStatesWhatItLeftOut() async throws {
+        try await seed(.mixed, now: Self.morning)
+        // The week's distance as the *whole* week recorded it — under
+        // "Strength" the app has no such figure at all, which is exactly why
+        // the card built on it must not survive.
+        let kilometers = try await weeklyFigure(.kilometers)
+
+        let run = try await analyse(
+            answer: AnalysisReportFactory.runner(weeklyKilometers: kilometers),
+            choosing: .strength
+        )
+
+        XCTAssertTrue(run.prompt.contains("Analyse my strength training only"), run.prompt)
+        XCTAssertTrue(run.prompt.contains("I asked about my strength training only"), run.prompt)
+        XCTAssertFalse(run.prompt.contains("## Endurance, last 4 weeks ("), run.prompt)
+
+        let context = try XCTUnwrap(run.context)
+        XCTAssertEqual(context.analysisProfile, .strength)
+        XCTAssertEqual(context.basisDescription, "12 Hevy · 12 Strava sessions")
+        XCTAssertEqual(context.analysedCounts, [.strength: 12])
+        XCTAssertTrue(context.thinDomains.isEmpty)
+
+        // A card in kilometres has no place under "Strength" (US-15 AC5): it
+        // is downgraded rather than shown.
+        let report = try XCTUnwrap(run.outcome?.report)
+        XCTAssertFalse(report.cards.contains { $0.kind == .metric })
+    }
+
+    /// The per-domain thin-data warning of US-15 AC4: a full lifting window
+    /// next to an endurance half that has only just started warns about the
+    /// endurance half by name, and says nothing about the strength one.
+    func testAMixedWindowWithAThinEnduranceHalfWarnsAboutThatHalf() async throws {
+        try await seed(.mixed, now: Self.morning, enduranceSessions: 3)
+        let kilometers = try await weeklyFigure(.kilometers)
+
+        let run = try await analyse(
+            answer: AnalysisReportFactory.mixedOverallLoad(weeklyKilometers: kilometers)
+        )
+        let context = try XCTUnwrap(run.context)
+
+        XCTAssertEqual(context.basisDescription, "12 Hevy · 3 Strava sessions")
+        XCTAssertEqual(context.analysedCounts, [.strength: 12, .endurance: 3])
+        XCTAssertTrue(context.isThin)
+        XCTAssertEqual(context.thinDomains, [.endurance])
+        XCTAssertEqual(
+            context.thinDataWarning,
+            "Thin endurance data — 3 sessions. Treat the recommendation as a starting point."
+        )
+    }
+
+    // MARK: - overreached-mixed · recovery across sources (US-15 AC3)
+
+    /// US-15 AC3: six of the last seven days, spread over three sources, force
+    /// the recovery card and the verdict — although no single source reaches
+    /// the threshold and the model's answer carried no card at all.
+    func testTheOverreachedMixedWeekForcesTheRecoveryCard() async throws {
+        let outcome = try await run(.overreachedMixed, answer: AnalysisReportFactory.thin).outcome
+
+        let report = try XCTUnwrap(outcome?.report)
+        XCTAssertEqual(report.verdict, .recover)
+        XCTAssertEqual(report.headline, AnalysisReportValidator.recoveryHeadline)
+        XCTAssertEqual(report.lead, AnalysisReportValidator.recoveryLead(trainingDays: 6))
+        XCTAssertEqual(report.cards.count, 1)
+        guard case let .recovery(_, metrics)? = report.cards.first else {
+            return XCTFail("No recovery card was inserted")
+        }
+        XCTAssertEqual(metrics.trainingDays, 6)
+        XCTAssertEqual(metrics.sessions, 6)
+        XCTAssertEqual(metrics.suggestedRestHours, 48)
+        XCTAssertEqual(try XCTUnwrap(metrics.averageRPE), 8.5, accuracy: 0.0001)
+        XCTAssertNotNil(metrics.averageHeartRate)
+    }
+
+    /// The same week's prompt states the cross-source day count the app then
+    /// overrules the model on (#184).
+    func testTheOverreachedMixedPromptStatesTheSixDayWeek() async throws {
+        let prompt = try await run(.overreachedMixed, answer: AnalysisReportFactory.thin).prompt
+
+        XCTAssertTrue(prompt.contains("## Week structure (last 4 weeks)"), prompt)
+        XCTAssertTrue(prompt.contains("Last 7 days: 6 training days"), prompt)
+    }
+
+    /// Three sources on one line, in a fixed order (US-15 AC4).
+    func testTheOverreachedMixedBasisNamesThreeSources() async throws {
+        let finished = try await run(.overreachedMixed, answer: AnalysisReportFactory.thin)
+        let context = try XCTUnwrap(finished.context)
+
+        XCTAssertEqual(context.countedSources, [.hevy, .strava, .polar])
+        XCTAssertEqual(context.basisDescription, "11 Hevy · 5 Strava · 3 Polar sessions")
+        XCTAssertFalse(context.isThin)
+    }
+
     // MARK: - Helpers
 
     /// Caches `profile` as of `now` and runs one analysis that `answer`
@@ -170,23 +446,75 @@ final class AnalysisMockProfileTests: XCTestCase {
         _ profile: MockWorkoutProfile,
         answer: AnalysisReport,
         now: Date = AnalysisMockProfileTests.morning
-    ) async throws -> (prompt: String, outcome: AnalysisOutcome?) {
+    ) async throws -> Run {
         try await seed(profile, now: now)
+        return try await analyse(answer: answer, now: now)
+    }
+
+    /// One analysis over whatever is already cached, the way the screen runs
+    /// it: the intro's profile read, an optional tap on the picker, then the
+    /// run (#188).
+    ///
+    /// Separate from `run(_:answer:now:)` because a metric card has to be
+    /// anchored on the app's own weekly figure, which is only knowable once
+    /// the cache holds the window — the answer is therefore built between the
+    /// seeding and the run.
+    private func analyse(
+        answer: AnalysisReport,
+        choosing analysisProfile: AnalysisProfile? = nil,
+        now: Date = AnalysisMockProfileTests.morning
+    ) async throws -> Run {
         await streamer.setReport(answer)
         let sut = AnalysisViewModel(
             cache: store,
             exerciseCache: store,
             detailCache: store,
             inference: streamer,
+            analysisProfiles: AnalysisProfileStore(defaults: defaults),
             calendar: Self.calendar,
             now: { now }
         )
 
+        await sut.prepareProfileSelection()
+        if let analysisProfile {
+            await sut.select(analysisProfile)
+        }
         await sut.start()
 
         let userPrompt = await streamer.userPrompt
         let prompt = try XCTUnwrap(userPrompt, "The analysis never reached the provider")
-        return (prompt, sut.state.outcome)
+        return Run(
+            prompt: prompt,
+            outcome: sut.state.outcome,
+            context: sut.context,
+            options: sut.profileOptions
+        )
+    }
+
+    /// What one analysis produced — the prompt that went out, the cards that
+    /// came back, the basis the screen names and the picker the intro showed.
+    private struct Run {
+        let prompt: String
+        let outcome: AnalysisOutcome?
+        let context: AnalysisContext?
+        let options: AnalysisProfileOptions
+    }
+
+    /// The app's own weekly figure for `unit` over the cached week — what a
+    /// metric card's `from` has to be (#186).
+    private func weeklyFigure(
+        _ unit: MetricUnit,
+        now: Date = AnalysisMockProfileTests.morning,
+        analysisProfile: AnalysisProfile = .overallLoad
+    ) async throws -> Double {
+        let summaries = try await store.workoutSummaries(since: .distantPast)
+        let metrics = AnalysisReportEvidence.weeklyMetrics(
+            in: summaries,
+            now: now,
+            calendar: Self.calendar,
+            analysisProfile: analysisProfile
+        )
+        return try XCTUnwrap(metrics[unit], "The week recorded no \(unit.rawValue)")
     }
 
     /// The recovery figures read from the cache the way `AnalysisViewModel`
@@ -202,9 +530,27 @@ final class AnalysisMockProfileTests: XCTestCase {
         return RecoveryMetrics(summaries: summaries, details: details, now: now, calendar: Self.calendar)
     }
 
-    private func seed(_ profile: MockWorkoutProfile, now: Date) async throws {
-        let activities = try MockWorkoutLoader(now: { now }).activities(for: profile)
-        try await store.replaceCachedWorkouts(from: .hevy, with: activities)
+    /// Caches the profile the way `MockDataSeeder` does: one source at a time,
+    /// through the real mapping.
+    ///
+    /// - Parameter enduranceSessions: Caps how many sessions each endurance
+    ///   source contributes, newest first. For the one case the fixtures
+    ///   cannot hold on their own — a mixed week whose endurance half has only
+    ///   just started, which is what the per-domain thin-data warning of
+    ///   US-15 AC4 is about.
+    private func seed(
+        _ profile: MockWorkoutProfile,
+        now: Date,
+        enduranceSessions: Int? = nil
+    ) async throws {
+        let loader = MockWorkoutLoader(now: { now })
+        for payload in profile.payloads {
+            var activities = try loader.activities(for: profile, from: payload.source)
+            if let enduranceSessions, payload.source.isEnduranceSource {
+                activities = Array(activities.prefix(enduranceSessions))
+            }
+            try await store.replaceCachedWorkouts(from: payload.source, with: activities)
+        }
     }
 
     private func row(startingWith prefix: String, in prompt: String) throws -> String {

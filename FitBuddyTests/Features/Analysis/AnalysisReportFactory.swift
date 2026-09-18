@@ -287,4 +287,70 @@ enum AnalysisReportFactory {
         ],
         summary: "Bench press moved to 70 kg. Add 2.5 kg next session."
     )
+
+    // MARK: - Cross-source mock profiles (#188)
+
+    /// The step a metric card proposes on a weekly figure: a tenth more,
+    /// rounded to what the unit prints.
+    ///
+    /// Taken from the app's own figure rather than written down, because
+    /// `AnalysisReportValidator` requires a card's `from` to *be* the app's
+    /// figure at the prompt's precision (#186). A fixture that spelled a
+    /// number would validate only until somebody touched the payload.
+    static func metricStep(from figure: Double) -> Double {
+        (figure * 1.1).rounded()
+    }
+
+    /// What a model answers for `MockWorkoutProfile.runner`: one metric card
+    /// on the weekly distance, anchored on the week's own figure.
+    ///
+    /// Everything on it is endurance — kilometres, a run as the source, not a
+    /// kilogram anywhere (US-15 AC5).
+    static func runner(weeklyKilometers: Double) -> AnalysisReport {
+        AnalysisReport(
+            headline: "You're ready to progress.",
+            verdict: .progress,
+            lead: "The weekly distance has been steady at an easy heart rate — it can grow.",
+            cards: [
+                .metric(
+                    label: "Weekly distance",
+                    from: weeklyKilometers,
+                    to: metricStep(from: weeklyKilometers),
+                    unit: .kilometers,
+                    reasoning: "Three weeks at the same distance with an unchanged easy heart rate.",
+                    source: "Run"
+                ),
+            ],
+            summary: "Four runs a week at a steady heart rate. Add a few kilometres to the long run."
+        )
+    }
+
+    /// What a model answers for `MockWorkoutProfile.mixed` under "Overall
+    /// load": the interference card of design 3.4d with a metric card under
+    /// it. The day counts are the model's guess — the app replaces them with
+    /// its own (#186).
+    static func mixedOverallLoad(weeklyKilometers: Double) -> AnalysisReport {
+        AnalysisReport(
+            headline: "Hold steady this week.",
+            verdict: .hold,
+            lead: "Two of the three endurance sessions sit on a lifting day.",
+            cards: [
+                .interference(
+                    strengthDays: 3,
+                    cardioDays: 3,
+                    overlapDays: 2,
+                    reasoning: "Move the easy run onto a day without lifting."
+                ),
+                .metric(
+                    label: "Weekly distance",
+                    from: weeklyKilometers,
+                    to: metricStep(from: weeklyKilometers),
+                    unit: .kilometers,
+                    reasoning: "The distance has been level while the lifting week grew.",
+                    source: "Run"
+                ),
+            ],
+            summary: "Keep the week as it is and move one run off a lifting day."
+        )
+    }
 }
