@@ -13,15 +13,21 @@ import Foundation
 /// Only rendered when the window holds **both** domains. With one domain the
 /// section would restate the "Training days" line of that domain's own header
 /// and nothing else — and a Hevy-only cache has to produce exactly the prompt
-/// it produced before the split (#183 AC1). #184 revisits this as it takes
-/// recovery across all sources.
+/// it produced before the split (#183 AC1). #184 kept that gate and added the
+/// last-seven-days line inside it: a single-domain window already states its
+/// own training days, and the recovery hint is enforced by the app from
+/// `RecoveryMetrics` whatever the prompt says (US-3 AC6).
 enum LoadPromptSection {
     /// The week-structure section, or `nil` when one of the two domains is
     /// empty.
+    ///
+    /// - Parameter now: The reference the window ends at, for the
+    ///   last-seven-days line (#184).
     static func section(
         strength: [WorkoutSummary],
         endurance: [WorkoutSummary],
         window: AnalysisWindow,
+        now: Date,
         calendar: Calendar,
         days formatter: PromptDayFormatter
     ) -> String? {
@@ -44,7 +50,44 @@ enum LoadPromptSection {
         if let streak = longestStreakLine(trainingDays, calendar: calendar, days: formatter) {
             lines.append(streak)
         }
+        lines.append(
+            lastSevenDaysLine(strength: strength, endurance: endurance, now: now, calendar: calendar)
+        )
         return lines.joined(separator: "\n")
+    }
+
+    /// The last seven days over both domains — the span US-3 AC6 judges
+    /// recovery on (#184).
+    ///
+    /// The section's other lines cover the whole window, in which six training
+    /// days say nothing about whether they were this week or spread over four.
+    /// Without this line the model would have to guess at the very week the app
+    /// then overrules it on: `AnalysisReportValidator` forces a recovery card at
+    /// six of seven days whatever the model wrote, and a reason written against
+    /// the wrong week reads as an invention.
+    ///
+    /// The session split is stated so the reason can name what filled the week,
+    /// but the day count — the figure the rule turns on — is the union: one day
+    /// carrying a run and a squat session is one training day.
+    private static func lastSevenDaysLine(
+        strength: [WorkoutSummary],
+        endurance: [WorkoutSummary],
+        now: Date,
+        calendar: Calendar
+    ) -> String {
+        let start = AnalysisWindow.weekStart(0, endingAt: now, calendar: calendar)
+        let end = calendar.date(byAdding: .day, value: 7, to: start) ?? start
+        func inWeek(_ summaries: [WorkoutSummary]) -> [WorkoutSummary] {
+            summaries.filter { $0.startTime >= start && $0.startTime < end }
+        }
+
+        let recentStrength = inWeek(strength)
+        let recentEndurance = inWeek(endurance)
+        let days = PromptFigures.trainingDayStarts(recentStrength, calendar: calendar)
+            .union(PromptFigures.trainingDayStarts(recentEndurance, calendar: calendar))
+        return "Last 7 days: \(CountFormatter.labelled(days.count, singular: "training day")) "
+            + "(\(CountFormatter.labelled(recentStrength.count, singular: "strength session")), "
+            + "\(CountFormatter.labelled(recentEndurance.count, singular: "endurance session")))"
     }
 
     /// The longest run of consecutive training days in the window, with the

@@ -253,7 +253,9 @@ enum AnalysisPromptBuilder {
     8. The Week structure section is about both domains at once: strength and \
     endurance draw on the same recovery, so training days, days carrying \
     both, and consecutive training days are judged over them together rather \
-    than per domain.
+    than per domain. Its "Last 7 days" line counts a day on which any \
+    training was recorded, a run as much as a squat session; six or seven \
+    such days are a week without enough rest, whichever domain filled them.
 
     Answer in English, as one JSON object that follows the response schema:
 
@@ -363,6 +365,7 @@ enum AnalysisPromptBuilder {
             strength: recentStrength,
             endurance: recentEndurance,
             window: window,
+            now: now,
             calendar: calendar,
             days: days
         ) {
