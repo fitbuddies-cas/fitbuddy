@@ -158,14 +158,17 @@ final class MockWorkoutLoaderTests: XCTestCase {
     }
 
     /// US-14 AC4: the app's own recovery figures find six training days in the
-    /// last seven, whatever the time of day the loader re-anchors at — the
-    /// reference day or the day before can hold the newest session.
-    func testOverreachedCallsForRecoveryAtAnyHour() throws {
-        for hour in [0, 6, 12, 18, 23] {
-            let metrics = try recoveryMetrics(of: .overreached, atHour: hour)
+    /// last seven, whatever the time of day the loader re-anchors at and
+    /// wherever the device is — the reference day or the day before can hold
+    /// the newest session, and the local date line can fall either side of it.
+    func testOverreachedCallsForRecoveryAtAnyHourInAnyZone() throws {
+        for zone in Self.zones {
+            for hour in [0, 6, 12, 18, 23] {
+                let metrics = try recoveryMetrics(of: .overreached, atHour: hour, in: zone)
 
-            XCTAssertEqual(metrics.trainingDays, 6, "at \(hour):01 UTC")
-            XCTAssertTrue(metrics.needsRecovery, "at \(hour):01 UTC")
+                XCTAssertEqual(metrics.trainingDays, 6, "at \(hour):01 in \(zone)")
+                XCTAssertTrue(metrics.needsRecovery, "at \(hour):01 in \(zone)")
+            }
         }
     }
 
@@ -408,32 +411,49 @@ final class MockWorkoutLoaderTests: XCTestCase {
 
     /// Four runs a week, never six days in seven — the runner is a dense week,
     /// not a recovery week. The week's offsets all sit inside the five days a
-    /// seven-day span holds however the re-anchoring falls, so the count is
-    /// four at any hour rather than sliding between three and four.
-    func testTheRunnerTrainsFourDaysAWeekAtAnyHour() throws {
-        for hour in [0, 6, 12, 18, 23] {
-            let metrics = try recoveryMetrics(of: .runner, atHour: hour)
+    /// seven-day span holds however the re-anchoring falls, and every run
+    /// starts at the same wall clock, so the count is four at any hour in any
+    /// zone rather than sliding between three and four (#188 review).
+    func testTheRunnerTrainsFourDaysAWeekAtAnyHourInAnyZone() throws {
+        for zone in Self.zones {
+            for hour in [0, 6, 12, 18, 23] {
+                let metrics = try recoveryMetrics(of: .runner, atHour: hour, in: zone)
 
-            XCTAssertEqual(metrics.trainingDays, 4, "at \(hour):01 UTC")
-            XCTAssertFalse(metrics.needsRecovery, "at \(hour):01 UTC")
-            XCTAssertNil(metrics.averageRPE, "a run logs no RPE")
-            XCTAssertNotNil(metrics.averageHeartRate)
+                XCTAssertEqual(metrics.trainingDays, 4, "at \(hour):01 in \(zone)")
+                XCTAssertFalse(metrics.needsRecovery, "at \(hour):01 in \(zone)")
+                XCTAssertNil(metrics.averageRPE, "a run logs no RPE")
+                XCTAssertNotNil(metrics.averageHeartRate)
+            }
         }
     }
 
     /// The mixed week is what US-15 AC2 is written about: three lifts, three
     /// endurance sessions, and two days that carried both.
-    func testTheMixedProfileOverlapsTwoDaysAWeek() throws {
-        let summaries = try summaries(of: .mixed)
-        let week = RecoveryMetrics.lastSevenDaysSessions(in: summaries, now: now, calendar: Self.utc)
-        let strength = Set(week.filter { !$0.isCardio }.map { Self.utc.startOfDay(for: $0.startTime) })
-        let endurance = Set(week.filter(\.isCardio).map { Self.utc.startOfDay(for: $0.startTime) })
+    ///
+    /// In every zone, because an overlap day is the one figure a zone shift
+    /// could take apart: a lift and a run land on one local day only as long
+    /// as the shift moves both of them (#188 review).
+    func testTheMixedProfileOverlapsTwoDaysAWeekInAnyZone() throws {
+        for zone in Self.zones {
+            let calendar = Self.calendar(in: zone)
+            let reference = calendar.startOfDay(for: now).addingTimeInterval(13 * 3_600)
+            let workouts = try MockWorkoutLoader(bundle: Bundle(for: Workout.self), now: { reference })
+                .workouts(for: .mixed)
+            let summaries = workouts.map(WorkoutSummary.init(workout:))
+            let week = RecoveryMetrics.lastSevenDaysSessions(
+                in: summaries,
+                now: reference,
+                calendar: calendar
+            )
+            let strength = Set(week.filter { !$0.isCardio }.map { calendar.startOfDay(for: $0.startTime) })
+            let endurance = Set(week.filter(\.isCardio).map { calendar.startOfDay(for: $0.startTime) })
 
-        XCTAssertEqual(strength.count, 3)
-        XCTAssertEqual(endurance.count, 3)
-        XCTAssertEqual(strength.intersection(endurance).count, 2)
-        XCTAssertEqual(strength.union(endurance).count, 4, "four training days, so no recovery week")
-        XCTAssertEqual(Set(summaries.map(\.source)), [.hevy, .strava])
+            XCTAssertEqual(strength.count, 3, zone)
+            XCTAssertEqual(endurance.count, 3, zone)
+            XCTAssertEqual(strength.intersection(endurance).count, 2, zone)
+            XCTAssertEqual(strength.union(endurance).count, 4, "four training days, no recovery week — \(zone)")
+            XCTAssertEqual(Set(summaries.map(\.source)), [.hevy, .strava], zone)
+        }
     }
 
     /// The whole profile moves by one offset. Anchored per file, the Hevy and
@@ -459,15 +479,17 @@ final class MockWorkoutLoaderTests: XCTestCase {
     /// three lifts, two runs and one ride. This is the case the recovery rule
     /// only catches because #184 counts across sources.
     func testTheOverreachedMixedWeekIsSixDaysAcrossThreeSources() throws {
-        for hour in [0, 6, 12, 18, 23] {
-            let metrics = try recoveryMetrics(of: .overreachedMixed, atHour: hour)
+        for zone in Self.zones {
+            for hour in [0, 6, 12, 18, 23] {
+                let metrics = try recoveryMetrics(of: .overreachedMixed, atHour: hour, in: zone)
 
-            XCTAssertEqual(metrics.trainingDays, 6, "at \(hour):01 UTC")
-            XCTAssertEqual(metrics.sessions, 6, "at \(hour):01 UTC")
-            XCTAssertTrue(metrics.needsRecovery, "at \(hour):01 UTC")
-            XCTAssertEqual(metrics.suggestedRestHours, 48)
-            XCTAssertEqual(try XCTUnwrap(metrics.averageRPE), 8.5, accuracy: 0.0001)
-            XCTAssertNotNil(metrics.averageHeartRate, "the runs and the ride wore a strap")
+                XCTAssertEqual(metrics.trainingDays, 6, "at \(hour):01 in \(zone)")
+                XCTAssertEqual(metrics.sessions, 6, "at \(hour):01 in \(zone)")
+                XCTAssertTrue(metrics.needsRecovery, "at \(hour):01 in \(zone)")
+                XCTAssertEqual(metrics.suggestedRestHours, 48)
+                XCTAssertEqual(try XCTUnwrap(metrics.averageRPE), 8.5, accuracy: 0.0001)
+                XCTAssertNotNil(metrics.averageHeartRate, "the runs and the ride wore a strap")
+            }
         }
     }
 
@@ -484,6 +506,39 @@ final class MockWorkoutLoaderTests: XCTestCase {
                 .map { Self.utc.startOfDay(for: $0.startTime) })
             XCTAssertLessThan(days.count, RecoveryMetrics.recoveryTrainingDays, source.rawValue)
         }
+    }
+
+    /// The property the zone-proof day counts rest on: every session of the
+    /// three cross-source profiles starts at the same wall clock, so a zone
+    /// shift moves all of them across the local date line together or none of
+    /// them (#188 review).
+    ///
+    /// Asserted on the payloads rather than trusted, because it is invisible:
+    /// a fixture edited to a "more realistic" evening ride would still load,
+    /// still decode and still read correctly near UTC, and would only fail
+    /// somewhere in the Pacific.
+    func testTheCrossSourceProfilesShareOneWallClock() throws {
+        for profile in [MockWorkoutProfile.runner, .mixed, .overreachedMixed] {
+            let clocks = Set(try loader.workouts(for: profile).map {
+                Self.utc.dateComponents([.hour, .minute, .second], from: $0.startTime)
+            })
+            XCTAssertEqual(clocks.count, 1, "\(profile.rawValue) spreads over \(clocks.count) times of day")
+        }
+    }
+
+    /// One Polar ride is recorded two hours east of UTC, so the loader's
+    /// wall-clock path — resolve the local time by its offset, move the local
+    /// string by whole days, keep the offset — is actually run rather than
+    /// being a no-op over a payload of zeroes (#188 review).
+    func testAPolarRideCarriesANonZeroUTCOffset() throws {
+        let payload = try XCTUnwrap(
+            MockWorkoutProfile.overreachedMixed.payloads.first { $0.source == .polar }
+        )
+        let entries = try XCTUnwrap(json(of: payload) as? [[String: Any]])
+        let offsets = entries.map { $0["start_time_utc_offset"] as? Int }
+
+        XCTAssertEqual(offsets.compactMap { $0 }.count, entries.count, "an entry records no offset")
+        XCTAssertTrue(offsets.contains { ($0 ?? 0) != 0 }, "no entry exercises the offset path")
     }
 
     /// Polar reports no sets at all: its distance and duration travel in the
@@ -504,11 +559,7 @@ final class MockWorkoutLoaderTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private static let utc: Calendar = {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC") ?? .gmt
-        return calendar
-    }()
+    private static let utc = calendar(in: "UTC")
 
     /// The working sets of every bench press session, oldest first.
     private func benchSessions(of profile: MockWorkoutProfile) throws -> [[ExerciseSet]] {
@@ -519,23 +570,50 @@ final class MockWorkoutLoaderTests: XCTestCase {
             .map { $0.sets.filter { $0.type.countsTowardsVolume } }
     }
 
+    /// Time zones the day counts have to survive, as the whole span a device
+    /// can be in: a day behind UTC, on it, and most of a day ahead of it.
+    ///
+    /// Not decoration. Every figure these profiles exist to prove is a count of
+    /// *local* days, and a profile whose sources sit at different times of day
+    /// only holds near UTC — shift far enough and one source crosses the local
+    /// date line while the others do not (#188 review). The sessions therefore
+    /// share one wall clock, and this is what pins it.
+    private static let zones = [
+        "Pacific/Honolulu",   // UTC−10
+        "America/Los_Angeles", // UTC−8/−7
+        "UTC",
+        "Europe/Zurich",      // UTC+1/+2 — the team's own
+        "Pacific/Kiritimati", // UTC+14, the far end
+    ]
+
     /// `RecoveryMetrics` over the profile as a loader re-anchored at
-    /// `hour`:01 UTC on the reference day would cache it — the rule the
+    /// `hour`:01 on the reference day, in `zone`, would cache it — the rule the
     /// analysis applies, not a copy of it.
     ///
     /// The details are handed over as well since #188, so the mean RPE of a
     /// cross-source week is the figure the recovery card would carry rather
     /// than a `nil` the helper produced.
-    private func recoveryMetrics(of profile: MockWorkoutProfile, atHour hour: Int) throws -> RecoveryMetrics {
-        let reference = Self.utc.startOfDay(for: now).addingTimeInterval(Double(hour) * 3_600 + 60)
+    private func recoveryMetrics(
+        of profile: MockWorkoutProfile,
+        atHour hour: Int,
+        in zone: String = "UTC"
+    ) throws -> RecoveryMetrics {
+        let calendar = Self.calendar(in: zone)
+        let reference = calendar.startOfDay(for: now).addingTimeInterval(Double(hour) * 3_600 + 60)
         let workouts = try MockWorkoutLoader(bundle: Bundle(for: Workout.self), now: { reference })
             .workouts(for: profile)
         return RecoveryMetrics(
             summaries: workouts.map(WorkoutSummary.init(workout:)),
             details: workouts.map(WorkoutDetail.init(workout:)),
             now: reference,
-            calendar: Self.utc
+            calendar: calendar
         )
+    }
+
+    private static func calendar(in zone: String) -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: zone) ?? .gmt
+        return calendar
     }
 
     /// The profiles that record strength training — everything asserted about

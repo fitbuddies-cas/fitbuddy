@@ -31,7 +31,10 @@ import Foundation
 /// time of day. The shift is computed **once per profile, over all its payloads
 /// together**: a mixed profile whose Hevy and Strava halves were anchored
 /// separately would move its lifts and its runs against each other and lose
-/// exactly the overlap days it exists to show.
+/// exactly the overlap days it exists to show. Whole days and one offset is
+/// also what lets a profile keep its day counts in every time zone — see the
+/// note on `MockWorkoutProfile` for the other half of that, which is a property
+/// of the payloads rather than of this loader.
 ///
 /// ```swift
 /// // Preview / debug seeding:

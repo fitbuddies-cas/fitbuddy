@@ -1,7 +1,7 @@
 [
   {
     "id": "2609999",
-    "start_time": "2026-09-12T16:00:00",
+    "start_time": "2026-09-12T12:00:00",
     "start_time_utc_offset": 0,
     "duration": "PT1H15M0S",
     "distance": 38000.0,
@@ -16,8 +16,8 @@
   },
   {
     "id": "2600001",
-    "start_time": "2026-09-02T16:00:00",
-    "start_time_utc_offset": 0,
+    "start_time": "2026-09-02T14:00:00",
+    "start_time_utc_offset": 120,
     "duration": "PT1H0M0S",
     "distance": 29400.0,
     "heart_rate": {
@@ -31,7 +31,7 @@
   },
   {
     "id": "2600002",
-    "start_time": "2026-08-26T16:00:00",
+    "start_time": "2026-08-26T12:00:00",
     "start_time_utc_offset": 0,
     "duration": "PT1H0M0S",
     "distance": 28800.0,
@@ -46,7 +46,7 @@
   },
   {
     "id": "2600003",
-    "start_time": "2026-08-19T16:00:00",
+    "start_time": "2026-08-19T12:00:00",
     "start_time_utc_offset": 0,
     "duration": "PT1H0M0S",
     "distance": 28200.0,
@@ -61,7 +61,7 @@
   },
   {
     "id": "2600004",
-    "start_time": "2026-08-12T16:00:00",
+    "start_time": "2026-08-12T12:00:00",
     "start_time_utc_offset": 0,
     "duration": "PT1H0M0S",
     "distance": 27600.0,
@@ -76,7 +76,7 @@
   },
   {
     "id": "2600005",
-    "start_time": "2026-08-05T16:00:00",
+    "start_time": "2026-08-05T12:00:00",
     "start_time_utc_offset": 0,
     "duration": "PT1H0M0S",
     "distance": 27000.0,
@@ -91,7 +91,7 @@
   },
   {
     "id": "2600006",
-    "start_time": "2026-07-29T16:00:00",
+    "start_time": "2026-07-29T12:00:00",
     "start_time_utc_offset": 0,
     "duration": "PT1H0M0S",
     "distance": 26400.0,
@@ -106,7 +106,7 @@
   },
   {
     "id": "2600007",
-    "start_time": "2026-07-22T16:00:00",
+    "start_time": "2026-07-22T12:00:00",
     "start_time_utc_offset": 0,
     "duration": "PT1H0M0S",
     "distance": 25800.0,
@@ -121,7 +121,7 @@
   },
   {
     "id": "2600008",
-    "start_time": "2026-07-15T16:00:00",
+    "start_time": "2026-07-15T12:00:00",
     "start_time_utc_offset": 0,
     "duration": "PT1H0M0S",
     "distance": 25200.0,

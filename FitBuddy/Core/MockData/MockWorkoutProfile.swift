@@ -16,6 +16,15 @@ import Foundation
 /// same for US-15 — one window of nothing but endurance, one of both
 /// disciplines side by side, and one whose overall load calls for recovery
 /// although no single source shows it.
+///
+/// **Every session of the three cross-source profiles starts at 12:00 UTC**,
+/// whichever source recorded it, as every session of `overreached` starts at
+/// the same time of day. A profile whose sources sit at different hours is
+/// only stable near UTC: shift the time zone far enough and one source crosses
+/// the local date line while the others do not, which moves overlap days and
+/// training-day counts without moving a single date. One wall clock makes the
+/// shift uniform, so the counts these profiles exist to prove hold in every
+/// zone — `MockWorkoutLoaderTests` pins that across zones as well as hours.
 enum MockWorkoutProfile: String, CaseIterable, Sendable {
     /// Trains five times a week — push/pull/legs plus an upper-body volume and
     /// a conditioning session, heavy loads. Twelve whole weeks of the same five
@@ -40,13 +49,19 @@ enum MockWorkoutProfile: String, CaseIterable, Sendable {
     /// keeps the count at six whatever the time of day.
     case overreached = "overreached"
     /// Strava only: four runs a week for eight weeks — an easy run, a tempo
-    /// session, a shake-out run and a long trail run, every other day. The
-    /// shake-out run is the one without a heart rate, so the endurance section
-    /// has to say how many sessions its mean rests on (US-15 AC7).
+    /// session, a shake-out run and a long trail run, on four of the seven
+    /// days. The shake-out run is the one without a heart rate, so the
+    /// endurance section has to say how many sessions its mean rests on
+    /// (US-15 AC7).
     ///
     /// An endurance-only window: the analysis offers no profile choice and
     /// runs as "Endurance" (US-15 AC1), and every figure it reports is in km,
     /// min/km and bpm (AC5).
+    ///
+    /// The week's four days sit within five of each other, so the seven-day
+    /// span holds all of them whichever day the re-anchoring lands the newest
+    /// run on — see the note on `overreachedMixed` for the other half of that
+    /// property.
     case runner
     /// Hevy and Strava: three push/pull/legs sessions and three endurance
     /// sessions a week for eight weeks, two of the endurance sessions on a day
@@ -55,7 +70,7 @@ enum MockWorkoutProfile: String, CaseIterable, Sendable {
     /// context line of US-15 AC4 and the week-structure section of AC2.
     case mixed
     /// Hevy, Strava and Polar: six days in a row across all three sources,
-    /// then two rest days, on top of seven weeks of three lifts and two
+    /// then two rest days, on top of eight weeks of three lifts and two
     /// endurance sessions a week.
     ///
     /// No single source shows a recovery week — three lifts, two runs and one
