@@ -66,8 +66,11 @@ enum AnalysisPromptBudget {
     /// tokeniser: none of the three providers has one that runs on device, a
     /// token-count endpoint would be a network round trip before every
     /// analysis, and the three tokenise differently anyway. What the budget
-    /// needs is a cheap, deterministic upper-bound estimate — the safety
-    /// margin in `maxPromptTokens` is what pays for its imprecision.
+    /// needs is a cheap, deterministic **rough estimate, and this one
+    /// undercounts dense and non-ASCII text**: a line of dates, figures and
+    /// units tokenises at well under four characters per token, and a title in
+    /// umlauts, Kanji or emoji costs more still. It is not an upper bound —
+    /// the safety margin in `maxPromptTokens` is what pays for that.
     static let charactersPerEstimatedToken = 4
 
     /// The estimated token count of a piece of prompt text.

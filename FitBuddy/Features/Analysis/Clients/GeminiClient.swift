@@ -16,6 +16,12 @@ struct GeminiClient: LLMProviderClient {
     /// demand» — ten out of ten over twenty minutes — so no Gemini run ever
     /// completed. 3.6 is the model Google's own error text names as the
     /// replacement for retired ones, and it answers.
+    ///
+    /// Context window: 1 M tokens. The prompt is sized against the
+    /// *smallest* window of the three providers, not this one — see
+    /// `AnalysisPromptBudget.smallestContextWindowTokens`, which has to be
+    /// revisited if this model is ever swapped for one with a smaller
+    /// window than Mistral's.
     static let model = "gemini-3.6-flash"
     /// Room for the report — a sub-200-word summary plus up to four cards —
     /// and the thinking tokens that share this budget. A JSON answer cut off
