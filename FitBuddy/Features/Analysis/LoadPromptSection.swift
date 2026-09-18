@@ -10,28 +10,63 @@ import Foundation
 /// hard days sit next to each other. Strength and endurance draw on the same
 /// recovery, so that has to be stated once, over both.
 ///
-/// Only rendered when the window holds **both** domains. With one domain the
+/// Only rendered when the **window** holds both domains. With one domain the
 /// section would restate the "Training days" line of that domain's own header
 /// and nothing else — and a Hevy-only cache has to produce exactly the prompt
-/// it produced before the split (#183 AC1). #184 kept that gate and added the
-/// last-seven-days line inside it: a single-domain window already states its
-/// own training days, and the recovery hint is enforced by the app from
-/// `RecoveryMetrics` whatever the prompt says (US-3 AC6).
+/// it produced before the split (#183 AC1). #184 added the last-seven-days
+/// line inside that gate.
+///
+/// Since #185 the *profile* decides which of two forms the section takes,
+/// while the window keeps deciding whether there is one at all:
+///
+/// - **Overall load** — the full structure: the days each domain filled, the
+///   days carrying both, the longest streak and the last seven days.
+/// - **Strength or Endurance, with the other domain in the window** — the
+///   last seven days and nothing else, prefaced by the reason.
+/// - **A single-domain window** — `nil`, as before: nothing was left out, and
+///   that domain's own header already states its training days.
+///
+/// **The orchestrator's decision (#184's open question, settled here): a run
+/// still counts as a training day for the recovery rule under the "Strength"
+/// profile.** One body has one recovery, and FitBuddy records no intensity by
+/// which a run could be ranked below a squat session — so leaving endurance
+/// out of the analysis is a choice about what to advise on, never a claim that
+/// the week was emptier than it was. `RecoveryMetrics` counts every session
+/// whatever the profile, `AnalysisReportValidator` enforces the card on that
+/// count (US-3 AC6 / US-15 AC3), and a prompt that stayed silent would have
+/// the model reason about a week the app then overrules it on.
 enum LoadPromptSection {
-    /// The week-structure section, or `nil` when one of the two domains is
-    /// empty.
+    /// The week-structure section, or `nil` when the window holds only one
+    /// domain.
     ///
-    /// - Parameter now: The reference the window ends at, for the
-    ///   last-seven-days line (#184).
+    /// - Parameters:
+    ///   - strength: Every strength session of the window, whatever the
+    ///     profile covers — recovery is judged over all of it (#185).
+    ///   - endurance: Every endurance session of the window, likewise.
+    ///   - profile: What the user asked this analysis to be about. Decides
+    ///     which of the two forms above is rendered.
+    ///   - now: The reference the window ends at, for the last-seven-days line
+    ///     (#184).
     static func section(
         strength: [WorkoutSummary],
         endurance: [WorkoutSummary],
+        profile: AnalysisProfile = .overallLoad,
         window: AnalysisWindow,
         now: Date,
         calendar: Calendar,
         days formatter: PromptDayFormatter
     ) -> String? {
         guard !strength.isEmpty, !endurance.isEmpty else { return nil }
+        guard profile.coversBothDomains else {
+            return recoverySection(
+                strength: strength,
+                endurance: endurance,
+                profile: profile,
+                window: window,
+                now: now,
+                calendar: calendar
+            )
+        }
 
         let strengthDays = PromptFigures.trainingDayStarts(strength, calendar: calendar)
         let enduranceDays = PromptFigures.trainingDayStarts(endurance, calendar: calendar)
@@ -54,6 +89,39 @@ enum LoadPromptSection {
             lastSevenDaysLine(strength: strength, endurance: endurance, now: now, calendar: calendar)
         )
         return lines.joined(separator: "\n")
+    }
+
+    /// The week structure reduced to what a single-domain profile still has
+    /// to be told: the week the recovery rule is judged on (#185).
+    ///
+    /// The other domain's sessions are described nowhere else in this prompt,
+    /// so the day count below would look like an error without the sentence
+    /// that explains it — the model, told six training days and shown three
+    /// strength sessions, would otherwise assume a figure had gone wrong.
+    private static func recoverySection(
+        strength: [WorkoutSummary],
+        endurance: [WorkoutSummary],
+        profile: AnalysisProfile,
+        window: AnalysisWindow,
+        now: Date,
+        calendar: Calendar
+    ) -> String {
+        let left = AnalysisDomain.allCases
+            .filter { !profile.covers($0) }
+            .map(\.displayName)
+            .joined(separator: " and ")
+        return [
+            "## Week structure (last \(window.weeks) weeks)",
+            "I asked about my \(profile.displayName.lowercased()) training only, so my "
+                + "\(left) sessions are not described above. They happened in the same "
+                + "weeks and cost the same recovery, so the day count below counts them too.",
+            lastSevenDaysLine(
+                strength: strength,
+                endurance: endurance,
+                now: now,
+                calendar: calendar
+            ),
+        ].joined(separator: "\n")
     }
 
     /// The last seven days over both domains — the span US-3 AC6 judges

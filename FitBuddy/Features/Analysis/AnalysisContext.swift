@@ -36,14 +36,12 @@ struct AnalysisContext: Equatable, Sendable {
     /// Of those sessions, the ones that actually reached the prompt, per
     /// domain — the basis the thin-data rule is judged on.
     ///
-    /// Equal to `domainCounts` as of #183, which sections the prompt by domain
-    /// instead of dropping the endurance sources: every session the window
-    /// holds now reaches the model. The distinction is kept rather than
-    /// removed because #185 reopens it from the other side — under the
-    /// "Strength" profile the endurance sessions are counted on the line and
-    /// deliberately not analysed, which is the same shape #182 needed when
-    /// three Hevy and three Strava strength sessions were six on the line and
-    /// three in the model's hands.
+    /// Since #183 every session of the window reaches the model, so the two
+    /// differ only where the user's profile says they should: under
+    /// "Strength" the endurance sessions are counted on the line — the user
+    /// logged them — and deliberately left out of the analysis (#185). That is
+    /// the same shape #182 needed when three Hevy and three Strava strength
+    /// sessions were six on the line and three in the model's hands.
     ///
     /// Its keys are therefore the domains the analysis *covers*: a domain that
     /// is absent was not judged at all, and a domain mapped to zero was
@@ -60,6 +58,16 @@ struct AnalysisContext: Equatable, Sendable {
     let unattributedSessionCount: Int
     /// The period actually analysed.
     let window: AnalysisWindow
+    /// Which profile the run was made under (US-15 AC1, #185) — `nil` for a
+    /// stored row from before the choice existed, and for a fixture that does
+    /// not care.
+    ///
+    /// Part of the basis for the same reason the window is: the profile
+    /// decided which domains reached the prompt, so two recommendations drawn
+    /// from the same week can differ with nothing on screen to explain it.
+    /// `AnalysisContextView` names it, and the history row carries it as a
+    /// chip.
+    let analysisProfile: AnalysisProfile?
     /// What the user told the analysis about themselves (US-13 AC4, #192).
     /// Part of the basis for the same reason the session count is: it went
     /// into the prompt, so a line that listed everything else and not this
@@ -80,11 +88,15 @@ struct AnalysisContext: Equatable, Sendable {
     ///     `nil` where the two are the same. Zero entries survive here, unlike
     ///     in the other two maps: "covered, and empty" is a statement, while a
     ///     source that delivered nothing is simply not part of the basis.
+    ///   - analysisProfile: The profile the run was made under (#185). `nil`
+    ///     leaves the line without one, which is what a fixture and a row from
+    ///     before the choice mean.
     init(
         sessionCounts: [ConnectorSource: Int],
         domainCounts: [AnalysisDomain: Int],
         analysedCounts: [AnalysisDomain: Int]? = nil,
         window: AnalysisWindow,
+        analysisProfile: AnalysisProfile? = nil,
         profile: TrainingProfile = TrainingProfile()
     ) {
         let domains = domainCounts.filter { $0.value > 0 }
@@ -93,6 +105,7 @@ struct AnalysisContext: Equatable, Sendable {
         self.analysedCounts = analysedCounts ?? domains
         self.unattributedSessionCount = 0
         self.window = window
+        self.analysisProfile = analysisProfile
         self.profile = profile
     }
 
@@ -102,6 +115,7 @@ struct AnalysisContext: Equatable, Sendable {
     init(
         sessionCounts: [ConnectorSource: Int],
         window: AnalysisWindow,
+        analysisProfile: AnalysisProfile? = nil,
         profile: TrainingProfile = TrainingProfile()
     ) {
         let domains = sessionCounts.reduce(into: [AnalysisDomain: Int]()) { counts, entry in
@@ -111,6 +125,7 @@ struct AnalysisContext: Equatable, Sendable {
             sessionCounts: sessionCounts,
             domainCounts: domains,
             window: window,
+            analysisProfile: analysisProfile,
             profile: profile
         )
     }
@@ -121,9 +136,15 @@ struct AnalysisContext: Equatable, Sendable {
     init(
         sessionCount: Int,
         window: AnalysisWindow,
+        analysisProfile: AnalysisProfile? = nil,
         profile: TrainingProfile = TrainingProfile()
     ) {
-        self.init(sessionCounts: [.hevy: sessionCount], window: window, profile: profile)
+        self.init(
+            sessionCounts: [.hevy: sessionCount],
+            window: window,
+            analysisProfile: analysisProfile,
+            profile: profile
+        )
     }
 
     /// A basis whose breakdown could not be read back: how many sessions the
@@ -136,6 +157,7 @@ struct AnalysisContext: Equatable, Sendable {
     init(
         unattributedSessionCount: Int,
         window: AnalysisWindow,
+        analysisProfile: AnalysisProfile? = nil,
         profile: TrainingProfile = TrainingProfile()
     ) {
         self.sessionCounts = [:]
@@ -143,6 +165,7 @@ struct AnalysisContext: Equatable, Sendable {
         self.analysedCounts = [:]
         self.unattributedSessionCount = max(0, unattributedSessionCount)
         self.window = window
+        self.analysisProfile = analysisProfile
         self.profile = profile
     }
 
@@ -164,9 +187,10 @@ struct AnalysisContext: Equatable, Sendable {
     /// The domains this analysis covered at all — the ones the thin-data rule
     /// has anything to say about.
     ///
-    /// #185 turns this into the user's choice: under the "Strength" profile
-    /// the analysis covers strength whatever else the window held, and a thin
-    /// endurance base is not its problem. Until then it is read off the
+    /// The user's choice since #185: `AnalysisViewModel` fills `analysedCounts`
+    /// with the domains `analysisProfile` covers, so under "Strength" a thin
+    /// endurance base is not this analysis's problem — it was never its
+    /// subject. Where no profile was recorded it is still read off the
     /// sessions that reached the prompt.
     var analysedDomains: Set<AnalysisDomain> { Set(analysedCounts.keys) }
 
@@ -271,9 +295,10 @@ struct AnalysisContext: Equatable, Sendable {
     ///   line and three in the prompt, and it is the three the warning is
     ///   about.
     ///
-    /// #185 moves the choice of covered domains to the user's profile —
-    /// under "Strength" a thin endurance base is not the analysis's problem.
-    /// Until then it is read off the sessions that reached the prompt.
+    /// - A domain the *profile* left out is absent for the same reason
+    ///   (#185). Fourteen Hevy sessions and one run under "Strength" warn
+    ///   about nothing: the run was counted on the line, because the user
+    ///   logged it, and deliberately not analysed.
     var thinDomains: [AnalysisDomain] {
         AnalysisDomain.allCases.filter { domain in
             guard analysedDomains.contains(domain) else { return false }

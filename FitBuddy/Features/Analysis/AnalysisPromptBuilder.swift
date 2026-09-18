@@ -14,6 +14,12 @@ import Foundation
 /// Which section a session lands in is decided by `AnalysisDomain`, i.e. by
 /// the normalized sport of ADR-012 — a Strava `WeightTraining` session is
 /// strength work, and a Hevy session of treadmill sets is not.
+///
+/// Since #185 the user's `AnalysisProfile` decides which of those sections are
+/// built at all. `.overallLoad` builds everything the window holds, which is
+/// the prompt as #183 and #184 left it; the two single-domain profiles keep
+/// the other half out of the figures and say so, so the model never reads a
+/// deliberate omission as an absence of training.
 enum AnalysisPromptBuilder {
     /// Sessions listed individually. Four weeks of training fits comfortably,
     /// and even a widened 13-week window rarely fills it; the cap only guards
@@ -73,6 +79,10 @@ enum AnalysisPromptBuilder {
     ///   - profile: What the user said they train for (US-13). An empty
     ///     profile — the default, and every install that never answered —
     ///     leaves the prompt byte-for-byte as it was without one.
+    ///   - analysisProfile: What this run is about (US-15 AC1, #185). Decides
+    ///     which domain sections are built at all. `.overallLoad` — the
+    ///     default — is "everything the window holds", i.e. exactly the prompt
+    ///     of #183 and #184, so no call site that does not care has to say so.
     static func make(
         summaries: [WorkoutSummary],
         exercises: [ExerciseSummary] = [],
@@ -80,7 +90,8 @@ enum AnalysisPromptBuilder {
         window: AnalysisWindow = .default,
         now: Date = Date(),
         calendar: Calendar = .current,
-        profile: TrainingProfile = TrainingProfile()
+        profile: TrainingProfile = TrainingProfile(),
+        analysisProfile: AnalysisProfile = .overallLoad
     ) -> AnalysisPrompt {
         AnalysisPrompt(
             system: systemPrompt,
@@ -91,7 +102,8 @@ enum AnalysisPromptBuilder {
                 window: window,
                 now: now,
                 calendar: calendar,
-                profile: profile
+                profile: profile,
+                analysisProfile: analysisProfile
             )
         )
     }
@@ -111,9 +123,14 @@ enum AnalysisPromptBuilder {
     /// answered here rather than left to rule 3. Since #183 the prompt can
     /// carry endurance work, so the line says which domains are in it instead
     /// of claiming strength only.
+    ///
+    /// - Parameter domains: The domains the prompt actually carries a section
+    ///   for — what the profile covers, narrowed to what the window holds
+    ///   (#185). An empty window reads as strength-only, which is what it said
+    ///   before there was anything else to say.
     static func profileSection(
         _ profile: TrainingProfile,
-        includesEndurance: Bool = false
+        covering domains: [AnalysisDomain] = [.strength]
     ) -> String? {
         var lines: [String] = []
         if let goal = profile.goal {
@@ -123,7 +140,14 @@ enum AnalysisPromptBuilder {
             lines.append("Strength training experience: \(experience.displayName.lowercased())")
         }
         guard !lines.isEmpty else { return nil }
-        let covered = includesEndurance ? "my strength and endurance sessions" : "my strength sessions only"
+        let covered: String
+        if domains.contains(.strength) && domains.contains(.endurance) {
+            covered = "my strength and endurance sessions"
+        } else if domains == [.endurance] {
+            covered = "my endurance sessions only"
+        } else {
+            covered = "my strength sessions only"
+        }
         lines.append(
             "The data below covers \(covered); do not assume anything "
                 + "about other training I may do."
@@ -142,8 +166,11 @@ enum AnalysisPromptBuilder {
     /// existed to prevent. The sport is what the two sections are about, so
     /// the sport is what selects them.
     ///
-    /// #185 turns this into `sessions(in:for: AnalysisProfile)`, where the
-    /// user's choice decides which domains are covered at all.
+    /// Which of these sections the user's `AnalysisProfile` asks for is a
+    /// second, separate question, answered by `AnalysisProfile.covers(_:)`
+    /// where the sections are assembled (#185). Deliberately not a second
+    /// overload of this method: `sessions(in:for: .strength)` would then be
+    /// ambiguous at every call site that spells the case with a leading dot.
     static func sessions(in summaries: [WorkoutSummary], for domain: AnalysisDomain) -> [WorkoutSummary] {
         summaries.filter { AnalysisDomain(summary: $0) == domain }
     }
@@ -197,8 +224,9 @@ enum AnalysisPromptBuilder {
     a concrete recommendation for their next training block.
 
     The data comes in sections. A section you were not given covers training \
-    this person did not record in this window: do not reason about it and do \
-    not fill it in.
+    this person did not record in this window, or training they chose to \
+    leave out of this analysis: either way, do not reason about it and do not \
+    fill it in.
 
     Ground rules:
 
@@ -255,7 +283,12 @@ enum AnalysisPromptBuilder {
     both, and consecutive training days are judged over them together rather \
     than per domain. Its "Last 7 days" line counts a day on which any \
     training was recorded, a run as much as a squat session; six or seven \
-    such days are a week without enough rest, whichever domain filled them.
+    such days are a week without enough rest, whichever domain filled them. \
+    Where that section says a domain was left out of this analysis, its \
+    sessions still count towards those days and still cost recovery: give \
+    your recommendation for the domain that was asked about, and take the day \
+    count as it stands rather than recomputing it from the sessions you were \
+    shown.
 
     Answer in English, as one JSON object that follows the response schema:
 
@@ -299,18 +332,41 @@ enum AnalysisPromptBuilder {
         window: AnalysisWindow,
         now: Date,
         calendar: Calendar,
-        profile: TrainingProfile
+        profile: TrainingProfile,
+        analysisProfile: AnalysisProfile
     ) -> String {
         let recentStart = window.start(endingAt: now, calendar: calendar)
         let previousStart = window.previousStart(endingAt: now, calendar: calendar)
 
         let recent = summaries.filter { $0.startTime >= recentStart }
         let previous = summaries.filter { $0.startTime >= previousStart && $0.startTime < recentStart }
-        let recentStrength = sessions(in: recent, for: .strength)
-        let recentEndurance = sessions(in: recent, for: .endurance)
+        // The window's own split, before the profile is applied: the week
+        // structure judges recovery over everything that happened, whichever
+        // half the user asked about (#185).
+        let windowStrength = sessions(in: recent, for: .strength)
+        let windowEndurance = sessions(in: recent, for: .endurance)
+        // A profile that covers nothing this window holds falls back to
+        // "Overall load" — see `AnalysisProfile.resolved(for:)`.
+        let analysed = analysisProfile.resolved(for: recent)
+        let recentStrength = analysed.covers(.strength) ? windowStrength : []
+        let recentEndurance = analysed.covers(.endurance) ? windowEndurance : []
+        // What the profile left out although the window holds it. Stated, and
+        // not silently dropped: the system prompt tells the model that a
+        // missing section is training this person did not record, and under a
+        // single-domain profile that would be untrue.
+        let omitted = AnalysisDomain.allCases.filter { domain in
+            guard !analysed.covers(domain) else { return false }
+            return !sessions(in: recent, for: domain).isEmpty
+        }
 
         let days = PromptDayFormatter(calendar: calendar)
         var intro = "Here is my own training data. Analyse it and tell me what to do next."
+        if !omitted.isEmpty {
+            let left = omitted.map(\.displayName).joined(separator: " and ")
+            intro += " Analyse my \(analysed.displayName.lowercased()) training only — "
+                + "I also recorded \(left) sessions in this window and left them out of "
+                + "this analysis on purpose."
+        }
         // A widened window means the user did not train for at least the last
         // four weeks. Left unsaid, the model reads the window as a normal one
         // and recommends progression across a break it never noticed (#87).
@@ -325,9 +381,15 @@ enum AnalysisPromptBuilder {
         // window header itself. Saying it once, plainly, is shorter and truer.
         // Facts about the person come before facts about the data, and only
         // when there are any: `compactMap` drops the section, not its heading.
+        let covered = AnalysisDomain.allCases.filter { domain in
+            switch domain {
+            case .strength: return !recentStrength.isEmpty
+            case .endurance: return !recentEndurance.isEmpty
+            }
+        }
         let opening = [
             intro,
-            profileSection(profile, includesEndurance: !recentEndurance.isEmpty),
+            profileSection(profile, covering: covered.isEmpty ? [.strength] : covered),
         ].compactMap { $0 }
 
         guard !recent.isEmpty else {
@@ -362,8 +424,9 @@ enum AnalysisPromptBuilder {
             days: days
         )
         if let load = LoadPromptSection.section(
-            strength: recentStrength,
-            endurance: recentEndurance,
+            strength: windowStrength,
+            endurance: windowEndurance,
+            profile: analysed,
             window: window,
             now: now,
             calendar: calendar,

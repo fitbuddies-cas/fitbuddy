@@ -80,8 +80,16 @@ struct AnalysisView: View {
         case .idle:
             AnalysisIntroView(
                 canStart: viewModel.canStartAnalysis,
+                options: viewModel.profileOptions,
+                selection: viewModel.selectedProfile,
+                onSelect: { profile in Task { await viewModel.select(profile) } },
                 onStart: start
             )
+            // On the intro's own appearance rather than the screen's: which
+            // profiles are worth offering depends on what the cache holds, and
+            // a sync that landed during the last run has to reach the picker
+            // before the next one (US-15 AC1, #185).
+            .task { await viewModel.prepareProfileSelection() }
         case .running:
             AnalysisProgressView(
                 provider: viewModel.attribution?.provider,

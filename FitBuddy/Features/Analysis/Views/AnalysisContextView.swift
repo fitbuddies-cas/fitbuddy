@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Names the data basis the recommendation rests on: sources, period, session
-/// count — and warns when that basis is thin (US-6, #36).
+/// count, the profile it was run under — and warns when that basis is thin
+/// (US-6, #36; US-15 AC1/AC4).
 ///
 /// Replaces the narrower `AnalysisWindowNote` of #87, which named the period
 /// only when the fallback ladder had widened it. US-6 AC1 asks for the period
@@ -19,6 +20,13 @@ struct AnalysisContextView: View {
                     .frame(width: 6, height: 6)
                 basis
                     .font(.caption)
+            }
+            if let profile = context.analysisProfile {
+                Text("Profile: \(profile.displayName)")
+                    .font(.caption)
+                    // Indented under the sentence like the goal line below —
+                    // both are facts about the run, read after the basis.
+                    .padding(.leading, 14)
             }
             if let profileLine {
                 Text(profileLine)
@@ -59,7 +67,7 @@ struct AnalysisContextView: View {
             + Text(" · last \(context.window.weeks) weeks")
     }
 
-    /// The profile, as a second line under the basis when there is one
+    /// The *training* profile, as a line under the basis when there is one
     /// (US-13 AC4): "Goal: Build muscle · 1–3 years training", the form of
     /// `FBAnalysisContextLine` in `design/fb-screens.jsx` (#196). It went into
     /// the prompt, so a basis without it would be incomplete — and the user
@@ -105,7 +113,22 @@ struct AnalysisContextView: View {
         AnalysisContextView(context: AnalysisContext(sessionCount: 7, window: AnalysisWindow(weeks: 8)))
         AnalysisContextView(context: AnalysisContext(sessionCount: 1, window: AnalysisWindow(weeks: 13)))
         AnalysisContextView(
-            context: AnalysisContext(sessionCounts: [.hevy: 14, .strava: 9], window: .default)
+            context: AnalysisContext(
+                sessionCounts: [.hevy: 14, .strava: 9],
+                window: .default,
+                analysisProfile: .overallLoad
+            )
+        )
+        // "Strength" over a window that also held a run: the run is counted on
+        // the line and named by no warning (US-15 AC4, #185).
+        AnalysisContextView(
+            context: AnalysisContext(
+                sessionCounts: [.hevy: 14, .strava: 1],
+                domainCounts: [.strength: 14, .endurance: 1],
+                analysedCounts: [.strength: 14],
+                window: .default,
+                analysisProfile: .strength
+            )
         )
         AnalysisContextView(
             context: AnalysisContext(sessionCounts: [.hevy: 14, .strava: 2, .polar: 1], window: .default)
