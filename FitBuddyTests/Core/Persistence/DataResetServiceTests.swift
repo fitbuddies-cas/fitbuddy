@@ -128,9 +128,6 @@ final class DataResetServiceTests: XCTestCase {
         XCTAssertFalse(isSkipped)
     }
 
-    /// The first-launch marker records the installation, not the session.
-    /// Clearing it would only trigger a redundant Keychain purge on the next
-    /// launch.
     /// The remembered analysis profile goes with the training it was chosen
     /// for: the next run starts from the default its data suggests (#185).
     func testDeleteAllDataForgetsTheAnalysisProfile() async throws {
@@ -142,6 +139,9 @@ final class DataResetServiceTests: XCTestCase {
         XCTAssertNil(remembered)
     }
 
+    /// The first-launch marker records the installation, not the session.
+    /// Clearing it would only trigger a redundant Keychain purge on the next
+    /// launch.
     func testDeleteAllDataKeepsTheFirstLaunchMarker() async throws {
         defaults.set(true, forKey: "fitbuddy.firstLaunchReset.completed")
 

@@ -23,4 +23,12 @@ struct AnalysisRunReads: Sendable {
     let window: AnalysisWindow
     /// The reference the prompt was built with.
     let now: Date
+    /// The profile the run was made under (US-15 AC1, #185) — the resolved
+    /// one, i.e. what the prompt was actually built from.
+    ///
+    /// Travels with the reads for the same reason the window does: the report
+    /// that comes back has to be checked against what the model was shown, and
+    /// under a profile that left strength out it was shown no exercise to
+    /// progress.
+    var analysisProfile: AnalysisProfile = .overallLoad
 }

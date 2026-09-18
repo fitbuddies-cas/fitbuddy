@@ -16,6 +16,18 @@ final class AnalysisReportCardTests: XCTestCase {
                 ),
                 .progression(exercise: "Bench Press", muscleGroup: .chest, fromKg: 60, toKg: 62.5, reasoning: "Clean."),
                 .imbalance(groupA: .chest, perWeekA: 3, groupB: .legs, perWeekB: 0.8, reasoning: "Add legs."),
+                .metric(
+                    label: "Weekly distance",
+                    from: 32.4,
+                    to: 35,
+                    unit: .kilometers,
+                    reasoning: "Held for three weeks.",
+                    source: "Run"
+                ),
+                .interference(
+                    metrics: InterferenceMetrics(strengthDays: 4, cardioDays: 4, overlapDays: 3),
+                    reasoning: "Move one run."
+                ),
                 .note(title: "Pull-ups", text: "Add a rep."),
             ],
             summary: "Rest, then bench 62.5 kg."
@@ -93,6 +105,44 @@ final class AnalysisReportCardTests: XCTestCase {
         """)
 
         XCTAssertEqual(card, .imbalance(groupA: .chest, perWeekA: 3, groupB: .legs, perWeekB: 0.8, reasoning: "Add legs."))
+    }
+
+    func testDecodesAStoredMetricCard() throws {
+        let card = try decode("""
+        {"kind": "metric", "label": "Weekly distance", "from": 32.4, "to": 35,
+         "unit": "kilometers", "reasoning": "Held for three weeks.", "source": "Run"}
+        """)
+
+        XCTAssertEqual(card, .metric(
+            label: "Weekly distance",
+            from: 32.4,
+            to: 35,
+            unit: .kilometers,
+            reasoning: "Held for three weeks.",
+            source: "Run"
+        ))
+    }
+
+    func testDecodesAStoredInterferenceCard() throws {
+        let card = try decode("""
+        {"kind": "interference",
+         "interference": {"strengthDays": 4, "cardioDays": 4, "overlapDays": 3, "days": 7},
+         "reasoning": "Move one run."}
+        """)
+
+        XCTAssertEqual(card, .interference(
+            metrics: InterferenceMetrics(strengthDays: 4, cardioDays: 4, overlapDays: 3),
+            reasoning: "Move one run."
+        ))
+    }
+
+    /// A unit this build has no case for is not a card it can draw, and a row
+    /// carrying one falls back to prose rather than to a blank figure.
+    func testRejectsAStoredCardWithAnUnknownUnit() {
+        XCTAssertThrowsError(try decode("""
+        {"kind": "metric", "label": "Weekly distance", "from": 32, "to": 35,
+         "unit": "furlongs", "reasoning": "Held.", "source": "Run"}
+        """))
     }
 
     func testDecodesAStoredNoteCard() throws {

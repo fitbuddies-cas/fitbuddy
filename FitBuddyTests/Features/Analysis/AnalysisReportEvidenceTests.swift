@@ -166,6 +166,84 @@ final class AnalysisReportEvidenceTests: XCTestCase {
         XCTAssertEqual(evidence.muscleGroupsPerWeek, [.chest: 0.8])
     }
 
+    // MARK: - Weekly metrics and interference (#186)
+
+    /// The anchors a metric card's `from` is checked against: one figure per
+    /// unit, over the last seven days, whatever filled them.
+    func testTheWeeklyMetricsCoverEveryUnitTheWeekRecorded() {
+        let chest = MuscleLoad(group: .chest, volumeKg: 1_000, setCount: 3)
+        let evidence = makeEvidence(summaries: [
+            summary(daysAgo: 1, id: "h0", loads: [chest]),
+            summary(daysAgo: 2, id: "h1", loads: [chest]),
+            run(daysAgo: 1, id: "s0", heartRate: 150),
+            run(daysAgo: 3, id: "s1", heartRate: 160),
+        ])
+
+        // Two 1 000 kg sessions, two 8 km runs of 40 min each.
+        XCTAssertEqual(evidence.weeklyMetrics[.kilograms], 2_000)
+        XCTAssertEqual(try XCTUnwrap(evidence.weeklyMetrics[.kilometers]), 16, accuracy: 0.0001)
+        XCTAssertEqual(try XCTUnwrap(evidence.weeklyMetrics[.hours]), 80.0 / 60, accuracy: 0.0001)
+        XCTAssertEqual(evidence.weeklyMetrics[.beatsPerMinute], 155)
+        XCTAssertEqual(try XCTUnwrap(evidence.weeklyMetrics[.minutesPerKilometer]), 5, accuracy: 0.0001)
+    }
+
+    /// A unit nothing recorded is absent rather than zero: there is nothing to
+    /// check a card against, and the validator turns it into a note instead of
+    /// drawing a step from nowhere (US-15 AC7).
+    func testAUnitTheWeekDidNotRecordIsAbsent() {
+        let chest = MuscleLoad(group: .chest, volumeKg: 1_000, setCount: 3)
+        let evidence = makeEvidence(summaries: [summary(daysAgo: 1, id: "h0", loads: [chest])])
+
+        XCTAssertEqual(evidence.weeklyMetrics[.kilograms], 1_000)
+        XCTAssertNil(evidence.weeklyMetrics[.kilometers])
+        XCTAssertNil(evidence.weeklyMetrics[.minutesPerKilometer])
+        XCTAssertNil(evidence.weeklyMetrics[.beatsPerMinute])
+    }
+
+    /// The pace is taken over the sessions that recorded both a distance and a
+    /// time — the rule `EndurancePromptSection` settled on, for the same
+    /// reason: a treadmill session with no distance would otherwise slow the
+    /// whole week's pace down.
+    func testThePaceIgnoresSessionsWithoutBothFigures() throws {
+        let timeOnly = WorkoutSummary(
+            id: "treadmill",
+            title: "Treadmill",
+            startTime: start(daysAgo: 2),
+            source: .hevy,
+            kind: .strength,
+            volumeKg: 0,
+            exerciseCount: 1,
+            countedSetCount: 1,
+            durationSeconds: 3_600
+        )
+        let evidence = makeEvidence(summaries: [run(daysAgo: 1, id: "s0"), timeOnly])
+
+        XCTAssertEqual(try XCTUnwrap(evidence.weeklyMetrics[.minutesPerKilometer]), 5, accuracy: 0.0001)
+    }
+
+    /// Sessions the window holds but the week does not are not part of the
+    /// anchor: the card is about the last seven days.
+    func testTheWeeklyMetricsStopAtSevenDays() {
+        let evidence = makeEvidence(summaries: [run(daysAgo: 1, id: "s0"), run(daysAgo: 8, id: "s1")])
+
+        XCTAssertEqual(try XCTUnwrap(evidence.weeklyMetrics[.kilometers]), 8, accuracy: 0.0001)
+    }
+
+    /// The interference counts come from the same seven days, so the report
+    /// cannot cite two different weeks.
+    func testTheInterferenceCountsComeFromTheSameWeek() {
+        let chest = MuscleLoad(group: .chest, volumeKg: 1_000, setCount: 3)
+        let evidence = makeEvidence(summaries: [
+            summary(daysAgo: 1, id: "h0", loads: [chest]),
+            run(daysAgo: 1, id: "s0"),
+            run(daysAgo: 3, id: "s1"),
+        ])
+
+        XCTAssertEqual(evidence.interference.strengthDays, 1)
+        XCTAssertEqual(evidence.interference.cardioDays, 2)
+        XCTAssertEqual(evidence.interference.overlapDays, 1)
+    }
+
     // MARK: - Helpers
 
     private func makeEvidence(

@@ -90,16 +90,37 @@ final class AnalysisReportSchemaTests: XCTestCase {
         }
     }
 
-    /// Numbers stay numbers in the schema — the screen formats them.
+    /// Numbers stay numbers in the schema — the screen formats them. A day
+    /// count is an `integer`, because the card decodes it as one and 3.0 days
+    /// would fail to decode (#186).
     func testNumericCardFieldsAreNumbers() throws {
-        let numeric: Set<String> = ["fromKg", "toKg", "suggestedRestHours", "perWeekA", "perWeekB"]
+        let numeric: Set<String> = ["fromKg", "toKg", "suggestedRestHours", "perWeekA", "perWeekB", "from", "to"]
+        let integers: Set<String> = ["strengthDays", "cardioDays", "overlapDays"]
         for variant in try variants() {
             let properties = try XCTUnwrap(variant["properties"] as? [String: Any])
             for (key, value) in properties {
                 let type = (value as? [String: Any])?["type"] as? String
-                XCTAssertEqual(type, numeric.contains(key) ? "number" : "string", key)
+                let expected = numeric.contains(key) ? "number" : integers.contains(key) ? "integer" : "string"
+                XCTAssertEqual(type, expected, key)
             }
         }
+    }
+
+    /// The unit of a metric card is the schema's only enum-valued property,
+    /// and it lists every `MetricUnit` — a case added to the enum and left out
+    /// of the schema would be one the model can never state (#186).
+    func testTheUnitEnumListsEveryMetricUnit() throws {
+        let variant = try XCTUnwrap(
+            try variants().first {
+                let properties = $0["properties"] as? [String: Any]
+                let kind = (properties?["kind"] as? [String: Any])?["enum"] as? [String]
+                return kind == ["metric"]
+            }
+        )
+        let properties = try XCTUnwrap(variant["properties"] as? [String: Any])
+        let unit = try XCTUnwrap(properties["unit"] as? [String: Any])
+
+        XCTAssertEqual(unit["enum"] as? [String], MetricUnit.allCases.map(\.rawValue))
     }
 
     // MARK: - Dialect

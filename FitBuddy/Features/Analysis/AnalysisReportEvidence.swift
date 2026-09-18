@@ -13,36 +13,43 @@ struct AnalysisReportEvidence: Equatable, Sendable {
     let muscleGroupsPerWeek: [MuscleGroup: Double]
     /// The last seven days, across every source and both domains (#184).
     let recovery: RecoveryMetrics
+    /// The profile this run was made under (US-15 AC1, #185).
+    ///
+    /// The validator needs it because two of its rules are about strength and
+    /// nothing else: a progression card is a load increase on a listed
+    /// exercise, and the `progress → hold` rewrite of #177 reads the absence
+    /// of one as "the cards do not back the verdict". Under a profile that
+    /// does not cover strength there are no listed exercises and a progression
+    /// card is impossible by construction, so that absence is evidence of
+    /// nothing — and rewriting the verdict would put "Hold steady this week."
+    /// over the model's own argument for progressing an endurance block.
+    ///
+    /// Since #186 it decides one more thing: which units a card may state its
+    /// figures in. No kilograms under "Endurance", no kilometres under
+    /// "Strength" (US-15 AC5) — see `MetricUnit.domain`.
+    ///
+    /// Defaults to `.overallLoad`, which covers everything and therefore
+    /// leaves every rule exactly as #175/#177 wrote it.
+    var analysisProfile: AnalysisProfile = .overallLoad
+    /// Whether the recovery week holds training this analysis did not cover.
+    ///
+    /// Not the same question as "is the profile single-domain": a Hevy-only
+    /// window resolves to "Strength" and has left nothing out (#185). Only
+    /// where both are true does the recovery card count sessions the rest of
+    /// the screen says nothing about, and only then does its reasoning have to
+    /// say so.
+    var recoveryCountsUnanalysedTraining = false
     /// How strength and endurance sat in the same seven days — what an
     /// interference card is checked against and built from (#186).
-    let interference: InterferenceMetrics
+    ///
+    /// An empty week by default, i.e. "no interference to write about", so a
+    /// fixture that predates #186 turns such a card into a note rather than
+    /// validating it against figures nobody counted.
+    var interference = InterferenceMetrics(strengthDays: 0, cardioDays: 0, overlapDays: 0)
     /// The app's own figure for each unit a metric card can be stated in, over
     /// the last seven days (#186). A unit missing here has no figure to check
     /// a card against, and a card in it is not validated.
-    let weeklyMetrics: [MetricUnit: Double]
-    /// What the user asked this analysis to be about (#185). Decides which
-    /// units a card may be stated in: no kilograms under "Endurance", no
-    /// kilometres under "Strength" (US-15 AC5).
-    let analysisProfile: AnalysisProfile
-
-    /// The three new members default to "nothing to check against, everything
-    /// covered", so a caller that predates #186 — a fixture, a preview —
-    /// compiles and validates exactly as it did.
-    init(
-        exercises: [ListedExercise],
-        muscleGroupsPerWeek: [MuscleGroup: Double],
-        recovery: RecoveryMetrics,
-        interference: InterferenceMetrics = InterferenceMetrics(strengthDays: 0, cardioDays: 0, overlapDays: 0),
-        weeklyMetrics: [MetricUnit: Double] = [:],
-        analysisProfile: AnalysisProfile = .overallLoad
-    ) {
-        self.exercises = exercises
-        self.muscleGroupsPerWeek = muscleGroupsPerWeek
-        self.recovery = recovery
-        self.interference = interference
-        self.weeklyMetrics = weeklyMetrics
-        self.analysisProfile = analysisProfile
-    }
+    var weeklyMetrics: [MetricUnit: Double] = [:]
 }
 
 extension AnalysisReportEvidence {
@@ -63,8 +70,10 @@ extension AnalysisReportEvidence {
     ///     Handing over the endurance ones as well changes nothing.
     ///   - window: The window analysed.
     ///   - now: The reference the prompt was built with.
-    ///   - analysisProfile: What the analysis was asked to be about (#185, #186).
     ///   - calendar: Decides where a day starts.
+    ///   - analysisProfile: The profile the run was made under (#185, #186).
+    ///     The default covers both domains, i.e. the behaviour of every build
+    ///     before the choice existed.
     init(
         summaries: [WorkoutSummary],
         exercises: [ExerciseSummary],
@@ -72,10 +81,13 @@ extension AnalysisReportEvidence {
         details: [WorkoutDetail],
         window: AnalysisWindow,
         now: Date,
-        analysisProfile: AnalysisProfile = .overallLoad,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        analysisProfile: AnalysisProfile = .overallLoad
     ) {
         let recovery = RecoveryMetrics(summaries: summaries, details: details, now: now, calendar: calendar)
+        let unanalysed = RecoveryMetrics
+            .lastSevenDaysSessions(in: summaries, now: now, calendar: calendar)
+            .contains { !analysisProfile.covers(AnalysisDomain(summary: $0)) }
         self.init(
             exercises: AnalysisPromptBuilder.listedExercises(
                 exercises: exercises,
@@ -94,9 +106,10 @@ extension AnalysisReportEvidence {
                 window: window
             ),
             recovery: recovery,
+            analysisProfile: analysisProfile,
+            recoveryCountsUnanalysedTraining: unanalysed,
             interference: InterferenceMetrics.metrics(in: summaries, now: now, calendar: calendar),
-            weeklyMetrics: Self.weeklyMetrics(in: summaries, recovery: recovery, now: now, calendar: calendar),
-            analysisProfile: analysisProfile
+            weeklyMetrics: Self.weeklyMetrics(in: summaries, recovery: recovery, now: now, calendar: calendar)
         )
     }
 

@@ -89,6 +89,21 @@ enum AnalysisReportValidator {
     static let insertedRecoveryReasoning =
         "Recovery comes before progression: take the suggested rest before your next hard session."
 
+    /// The same reasoning, with the sentence a single-domain profile needs
+    /// (#185).
+    ///
+    /// The card's figures are profile-blind on purpose — one body has one
+    /// recovery — so under "Strength" it can read "Sessions / 7d: 7" on a week
+    /// that held two runs, next to a screen that mentions no running at all.
+    /// Without this sentence that figure looks like a mistake; with it, it is
+    /// the point.
+    static func insertedRecoveryReasoning(countingUnanalysedTraining: Bool) -> String {
+        guard countingUnanalysedTraining else { return insertedRecoveryReasoning }
+        return insertedRecoveryReasoning
+            + " These figures count every session of the week, including the training "
+            + "this analysis left out."
+    }
+
     /// Validates every card and enforces the recovery hint.
     ///
     /// - Parameters:
@@ -119,7 +134,12 @@ enum AnalysisReportValidator {
         if evidence.recovery.needsRecovery {
             if !cards.contains(where: { $0.kind == .recovery }) {
                 cards.insert(
-                    .recovery(reasoning: insertedRecoveryReasoning, metrics: evidence.recovery),
+                    .recovery(
+                        reasoning: insertedRecoveryReasoning(
+                            countingUnanalysedTraining: evidence.recoveryCountsUnanalysedTraining
+                        ),
+                        metrics: evidence.recovery
+                    ),
                     at: 0
                 )
             }
@@ -135,14 +155,25 @@ enum AnalysisReportValidator {
 
         // "You're ready to progress." over cards that name no step forward
         // would contradict the screen it heads (#177), so the verdict the cards
-        // support is to hold. Since #186 a metric card that adds load counts as
-        // such a step — otherwise the "Endurance" profile, which produces no
-        // progression cards at all, could never reach a progress verdict. A recovery verdict forced above is never touched.
-        // The lead is replaced only when the app took a progression away — a
+        // support is to hold. A recovery verdict forced above is never touched.
+        // The lead is replaced only when the app took such a card away — a
         // downgrade or the cap — because only then did the model's lead argue
-        // for a load increase no card backs (#170). A progress verdict over
-        // notes alone keeps the model's lead: the app overruled nothing in it.
-        if verdict == .progress, !kept.contains(where: \.backsProgress) {
+        // for a step no card backs (#170). A progress verdict over notes alone
+        // keeps the model's lead: the app overruled nothing in it.
+        //
+        // "A step forward" is `backsProgress` since #186, not "a progression
+        // card": a metric card that adds kilometres is exactly the card an
+        // endurance report puts a progress verdict on, and reading only
+        // progressions would rewrite it.
+        //
+        // Still only where the run covered strength (#185). Under "Endurance"
+        // there is no Exercises section, so a progression card is impossible by
+        // construction; a metric card is not, but the model may equally have
+        // argued for progress in prose the app has no card slot for, and #185
+        // settled that the app does not overrule it there.
+        if verdict == .progress,
+           evidence.analysisProfile.covers(.strength),
+           !kept.contains(where: \.backsProgress) {
             verdict = .hold
             headline = holdHeadline
             if rejectedProgressions + cutProgressions > 0 {
@@ -193,7 +224,11 @@ enum AnalysisReportValidator {
                 return note(title: recoveryNoteTitle, text: reasoning)
             }
             return .recovery(
-                reasoning: isBlank(reasoning) ? insertedRecoveryReasoning : reasoning,
+                reasoning: isBlank(reasoning)
+                    ? insertedRecoveryReasoning(
+                        countingUnanalysedTraining: evidence.recoveryCountsUnanalysedTraining
+                    )
+                    : reasoning,
                 metrics: evidence.recovery
             )
 

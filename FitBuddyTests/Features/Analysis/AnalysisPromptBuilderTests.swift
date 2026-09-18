@@ -1440,8 +1440,9 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         let overall = make(summaries, analysisProfile: .overallLoad).user
         XCTAssertEqual(make(summaries, analysisProfile: .strength).user, overall)
         // "Endurance" cannot be chosen here — the picker does not offer it —
-        // and a stale choice resolves back to "Overall load" rather than
-        // building an empty prompt.
+        // and a stale choice widens to what this window actually holds, which
+        // over a cache of lifts alone is "Strength" (#185). Either way the
+        // user turn is the one every build before the profile produced.
         XCTAssertEqual(make(summaries, analysisProfile: .endurance).user, overall)
     }
 

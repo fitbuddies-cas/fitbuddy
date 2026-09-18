@@ -48,6 +48,22 @@ enum AnalysisReportFactory {
           "reasoning": "Add a second leg session this week."
         },
         {
+          "kind": "metric",
+          "label": "Weekly distance",
+          "from": 32,
+          "to": 35,
+          "unit": "kilometers",
+          "reasoning": "32 km held for three weeks at an unchanged easy heart rate.",
+          "source": "Run"
+        },
+        {
+          "kind": "interference",
+          "strengthDays": 4,
+          "cardioDays": 4,
+          "overlapDays": 3,
+          "reasoning": "Move one run onto a day without lifting."
+        },
+        {
           "kind": "note",
           "title": "Pull-ups",
           "text": "Add one rep per set before adding weight."

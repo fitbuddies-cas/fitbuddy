@@ -132,17 +132,42 @@ enum MetricUnit: String, Codable, CaseIterable, Sendable {
     /// A pace difference is written in **seconds** per kilometre rather than
     /// as a clock: `"−0:20 /km"` reads like a pace of twenty seconds, and
     /// twenty seconds per kilometre is how a runner states the step anyway.
+    ///
+    /// Written per case rather than by handing the difference back to
+    /// `display`: a step is rounded at the precision its unit prints, so
+    /// `148 → 148.2 bpm` is no step at all rather than `"+0 bpm"`, and a step
+    /// of 300 m reads `"+0.3 km"` beside two figures in kilometres instead of
+    /// switching units halfway across the row.
     func delta(from: Double, to: Double, locale: Locale = .current) -> String? {
         guard from.isFinite, to.isFinite else { return nil }
         let step = to - from
         let sign = step < 0 ? "\u{2212}" : "+"
-        if self == .minutesPerKilometer {
-            let seconds = (abs(step) * 60).rounded()
+        let magnitude = abs(step)
+        switch self {
+        case .kilograms:
+            let rounded = PlainWeightFormatter.rounded(magnitude)
+            guard rounded > 0 else { return nil }
+            return sign + AnalysisCardFormatter.weight(rounded, locale: locale)
+        case .kilometers:
+            let rounded = PlainWeightFormatter.rounded(magnitude, decimals: 1)
+            guard rounded > 0 else { return nil }
+            let figure = rounded.formatted(.number.precision(.fractionLength(0...1)).locale(locale))
+            return sign + figure + " km"
+        case .minutesPerKilometer:
+            let seconds = (magnitude * 60).rounded()
             guard seconds >= 1 else { return nil }
             return sign + "\(Int(seconds)) s/km"
+        case .beatsPerMinute:
+            let rounded = PlainWeightFormatter.rounded(magnitude, decimals: 0)
+            guard rounded > 0 else { return nil }
+            return sign + HeartRateFormatter.display(rounded, locale: locale)
+        case .hours:
+            let minutes = (magnitude * 60).rounded()
+            guard minutes >= 1, let text = WorkoutDurationFormatter.seconds(minutes * 60) else {
+                return nil
+            }
+            return sign + text
         }
-        guard let magnitude = display(abs(step), locale: locale) else { return nil }
-        return sign + magnitude
     }
 
     /// Whether the step from `from` to `to` is an improvement in this unit —

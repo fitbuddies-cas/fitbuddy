@@ -49,6 +49,71 @@ final class AnalysisCardTests: XCTestCase {
         ))
     }
 
+    func testDecodesAMetricCard() throws {
+        let card = try decode("""
+        {"kind": "metric", "label": "Weekly distance", "from": 32, "to": 35,
+         "unit": "kilometers", "reasoning": "Held for three weeks.", "source": "Run"}
+        """)
+
+        XCTAssertEqual(card, .metric(
+            label: "Weekly distance",
+            from: 32,
+            to: 35,
+            unit: .kilometers,
+            reasoning: "Held for three weeks.",
+            source: "Run"
+        ))
+        XCTAssertEqual(card.kind, .metric)
+    }
+
+    /// Every unit the schema offers decodes to its case; an invented one does
+    /// not, so a card in a unit the app cannot format never reaches a view.
+    func testDecodesEveryMetricUnitAndRejectsAnUnknownOne() throws {
+        for unit in MetricUnit.allCases {
+            let card = try decode("""
+            {"kind": "metric", "label": "Figure", "from": 5, "to": 6,
+             "unit": "\(unit.rawValue)", "reasoning": "Because.", "source": ""}
+            """)
+            guard case let .metric(_, _, _, decoded, _, _) = card else {
+                return XCTFail("expected a metric card")
+            }
+            XCTAssertEqual(decoded, unit)
+        }
+
+        XCTAssertThrowsError(try decode("""
+        {"kind": "metric", "label": "Figure", "from": 5, "to": 6,
+         "unit": "furlongs", "reasoning": "Because.", "source": ""}
+        """))
+    }
+
+    /// The one optional key across every card: a model that leaves the header
+    /// label out sends a card without a source, not a broken one.
+    func testAMetricCardWithoutASourceDecodesWithAnEmptyOne() throws {
+        let card = try decode("""
+        {"kind": "metric", "label": "Weekly distance", "from": 32, "to": 35,
+         "unit": "kilometers", "reasoning": "Held for three weeks."}
+        """)
+
+        guard case let .metric(_, _, _, _, _, source) = card else {
+            return XCTFail("expected a metric card")
+        }
+        XCTAssertEqual(source, "")
+    }
+
+    func testDecodesAnInterferenceCard() throws {
+        let card = try decode("""
+        {"kind": "interference", "strengthDays": 4, "cardioDays": 4, "overlapDays": 3,
+         "reasoning": "Move one run."}
+        """)
+
+        XCTAssertEqual(card, .interference(
+            strengthDays: 4,
+            cardioDays: 4,
+            overlapDays: 3,
+            reasoning: "Move one run."
+        ))
+    }
+
     func testDecodesANoteCard() throws {
         let card = try decode("""
         {"kind": "note", "title": "Pull-ups", "text": "Add one rep per set first."}
