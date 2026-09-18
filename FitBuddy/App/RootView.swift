@@ -84,6 +84,7 @@ struct RootView: View {
             // would take the seeded sync timestamp with it.
             await MockDataSeeder.resetStateIfRequested()
             await MockDataSeeder.seedIfRequested(container: modelContext.container)
+            await MockAnalysisSeeder.seedIfRequested(container: modelContext.container)
             #endif
             // Connectors first: onboarding resolving to `.completed` is what
             // shows the tabs, and every screen behind them may ask the

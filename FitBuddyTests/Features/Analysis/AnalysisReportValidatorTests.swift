@@ -451,6 +451,85 @@ final class AnalysisReportValidatorTests: XCTestCase {
         XCTAssertEqual(validated.lead, "Lead")
     }
 
+    /// Every progression failed: the headline must not promise one (#177), and
+    /// the lead that argued for it goes too (#170).
+    func testProgressWithARejectedProgressionBecomesHoldWithTheAppLead() {
+        let validated = validate([benchPress(from: 99, to: 100), chestVersusLegs(3, 1)])
+
+        XCTAssertEqual(validated.cards.map(\.kind), [.note, .imbalance])
+        XCTAssertEqual(validated.verdict, .hold)
+        XCTAssertEqual(validated.headline, AnalysisReportValidator.holdHeadline)
+        XCTAssertEqual(validated.lead, AnalysisReportValidator.holdLead, "The model's progress lead goes with its verdict")
+    }
+
+    /// A progression dropped for a blank reason is rejected just the same.
+    func testProgressWithADroppedProgressionGetsTheAppLead() {
+        let blank = AnalysisCard.progression(
+            exercise: "Bench Press", muscleGroup: "Chest", fromKg: 99, toKg: 100, reasoning: " "
+        )
+        let validated = validate([blank, chestVersusLegs(3, 1)])
+
+        XCTAssertEqual(validated.cards.map(\.kind), [.imbalance])
+        XCTAssertEqual(validated.verdict, .hold)
+        XCTAssertEqual(validated.lead, AnalysisReportValidator.holdLead)
+    }
+
+    /// No progression was ever sent, so the app took nothing away: the verdict
+    /// still turns to hold, but the model's lead stays.
+    func testProgressWithOnlyANoteBecomesHoldButKeepsTheModelLead() {
+        let validated = validate([.note(title: "Sleep", text: "Sleep more.")])
+
+        XCTAssertEqual(validated.cards.map(\.kind), [.note])
+        XCTAssertEqual(validated.verdict, .hold)
+        XCTAssertEqual(validated.headline, AnalysisReportValidator.holdHeadline)
+        XCTAssertEqual(validated.lead, "Lead", "The app overruled no progression, so the model's lead stays")
+    }
+
+    func testProgressWithASurvivingProgressionStaysProgress() {
+        let validated = validate([benchPress(from: 99, to: 100), benchPress(from: 60, to: 62.5)])
+
+        XCTAssertEqual(validated.verdict, .progress)
+        XCTAssertEqual(validated.lead, "Lead")
+    }
+
+    /// Recovery wins over the hold downgrade, even without any progression.
+    func testForcedRecoveryIsNotTurnedIntoHold() {
+        let validated = validate(
+            [chestVersusLegs(3, 1)],
+            evidence: evidence(recovery: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: nil))
+        )
+
+        XCTAssertEqual(validated.verdict, .recover)
+        XCTAssertEqual(
+            validated.lead,
+            AnalysisReportValidator.recoveryLead(trainingDays: 6),
+            "The recovery lead, not the hold lead"
+        )
+    }
+
+    /// A rejected progression under a forced recovery still gets the recovery
+    /// lead, never the hold lead.
+    func testForcedRecoveryWithARejectedProgressionKeepsTheRecoveryLead() {
+        let validated = validate(
+            [benchPress(from: 99, to: 100)],
+            evidence: evidence(recovery: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: nil))
+        )
+
+        XCTAssertEqual(validated.verdict, .recover)
+        XCTAssertEqual(validated.headline, AnalysisReportValidator.recoveryHeadline)
+        XCTAssertEqual(validated.lead, AnalysisReportValidator.recoveryLead(trainingDays: 6))
+    }
+
+    /// A model hold verdict passes through, cards or not.
+    func testModelHoldVerdictIsKept() {
+        let report = AnalysisReport(headline: "Keep going.", verdict: .hold, lead: "Hold.", cards: [chestVersusLegs(3, 1)], summary: "Hold.")
+        let validated = AnalysisReportValidator.validate(report, against: evidence())
+
+        XCTAssertEqual(validated.verdict, .hold)
+        XCTAssertEqual(validated.headline, "Keep going.")
+        XCTAssertEqual(validated.lead, "Hold.")
+    }
+
     // MARK: - Card count
 
     /// Four model cards plus the inserted recovery card: the last note goes.

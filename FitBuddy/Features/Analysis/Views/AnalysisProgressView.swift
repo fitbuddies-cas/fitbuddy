@@ -22,9 +22,6 @@ struct AnalysisProgressView: View {
                 Button("Cancel analysis", action: onCancel)
                     .buttonStyle(.fb(.secondary))
             }
-            // Repeated from the intro on purpose: waiting is exactly when the
-            // user wonders what just left the phone.
-            AnalysisPrivacyNote()
         }
         .animation(.easeOut(duration: 0.2), value: isTakingLong)
     }

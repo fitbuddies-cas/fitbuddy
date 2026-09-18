@@ -289,7 +289,7 @@ final class AnalysisViewModel: ObservableObject {
 
         // The cards the user saw, when the row stored them (#176); prose for
         // every other row, including those written before V4.
-        state = .result(stored.report.map(AnalysisOutcome.report) ?? .prose(stored.text))
+        state = .result(AnalysisOutcome(stored: stored))
         // The provider that wrote it, when the row recorded one (#176) — so
         // the badge reads "AI · Gemini" after a restart too. No fallback chain
         // is stored, so a restored result never shows the switch notice.
@@ -440,7 +440,7 @@ final class AnalysisViewModel: ObservableObject {
             now: reads.now,
             calendar: calendar
         )
-        return .report(AnalysisReportValidator.validate(report, against: evidence))
+        return AnalysisOutcome(validated: AnalysisReportValidator.validate(report, against: evidence))
     }
 
     /// Reads the window and builds the prompt, or publishes the reason it

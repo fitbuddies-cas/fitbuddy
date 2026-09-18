@@ -169,6 +169,35 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(latest?.provider, .claude)
     }
 
+    /// Thin data: a report without cards is still a report — shown and
+    /// stored with its lead and summary, not downgraded to prose (#170). A
+    /// progress verdict without a progression card holds (#177), but keeps
+    /// the model's lead: the app rejected no progression it argued for.
+    func testAReportWithoutCardsIsShownAndStoredAsAReport() async throws {
+        await streamer.setReport(AnalysisReport(
+            headline: "You're ready to progress.",
+            verdict: .progress,
+            lead: "Too little data for a change yet.",
+            cards: [],
+            summary: "Keep training as you do."
+        ))
+        let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache())
+
+        await sut.start()
+
+        let expected = ValidatedAnalysisReport(
+            headline: AnalysisReportValidator.holdHeadline,
+            verdict: .hold,
+            lead: "Too little data for a change yet.",
+            cards: [],
+            summary: "Keep training as you do."
+        )
+        XCTAssertEqual(sut.state, .result(.report(expected)))
+        let latest = try await results.latest()
+        XCTAssertEqual(latest?.text, "Keep training as you do.")
+        XCTAssertEqual(latest?.report, expected)
+    }
+
     /// US-14 AC3: a progression on an exercise the prompt did not list is a
     /// note, one on a listed exercise with the cached working weight and a
     /// barbell step (rule 6) stays.

@@ -20,7 +20,7 @@ final class SettingsProfileUITests: XCTestCase {
         let sut = SeededApp().launch()
 
         sut.assertAppears(sut.dashboard)
-        sut.settingsTab.tap()
+        sut.select(sut.settingsTab)
         sut.assertAppears(sut.trainingProfileRow)
         // `-fbSkipOnboarding` walks past step 4 without answering it.
         sut.assertLabel(of: sut.trainingProfileRow, contains: "Not set")

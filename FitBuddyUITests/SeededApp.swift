@@ -15,9 +15,12 @@ struct SeededApp {
 
     let app: XCUIApplication
 
-    /// - Parameter profile: Which bundled history to seed — `person-a` trains
-    ///   five times a week, `person-b` twice.
-    init(profile: String = LaunchArgument.Profile.personA) {
+    /// - Parameters:
+    ///   - profile: Which bundled history to seed — `person-a` trains five
+    ///     times a week, `person-b` twice.
+    ///   - seedsAnalysis: Also stores an analysis with a progress report, so
+    ///     the analysis tab opens on its cards (#177).
+    init(profile: String = LaunchArgument.Profile.personA, seedsAnalysis: Bool = false) {
         app = XCUIApplication()
         app.launchArguments = [
             // Honoured on this path too since #148: the forced reset runs
@@ -31,6 +34,9 @@ struct SeededApp {
             LaunchArgument.stubHevy, LaunchArgument.Verdict.accepts,
             LaunchArgument.seedMockData, profile,
         ]
+        if seedsAnalysis {
+            app.launchArguments.append(LaunchArgument.seedAnalysis)
+        }
     }
 
     @discardableResult
@@ -102,6 +108,28 @@ struct SeededApp {
         app.descendants(matching: .any)[AccessibilityID.Progression.insufficientData]
     }
 
+    /// The analysis tab in the tab bar. Addressed by its title: a SwiftUI
+    /// `Tab` exposes no identifier of its own.
+    var analysisTab: XCUIElement {
+        app.tabBars.buttons["Analysis"]
+    }
+
+    var analysisResult: XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.Analysis.result]
+    }
+
+    var analysisHeadline: XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.Analysis.headline]
+    }
+
+    var progressionCards: XCUIElementQuery {
+        app.descendants(matching: .any).matching(identifier: AccessibilityID.Analysis.progressionCard)
+    }
+
+    var analysisProse: XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.Analysis.prose]
+    }
+
     /// The system back button of the pushed screen.
     var backButton: XCUIElement {
         app.navigationBars.buttons.firstMatch
@@ -160,31 +188,6 @@ struct SeededApp {
 
     // MARK: - Interactions
 
-    /// Selects a profile option and makes sure it took.
-    ///
-    /// Same verify-and-retry as `expand`: the first tap after a push can land
-    /// while the list is still settling, and a test that then waits on the
-    /// row summary fails 30 seconds later on the wrong screen.
-    func select(
-        _ option: XCUIElement,
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) {
-        assertAppears(option, file: file, line: line)
-        for _ in 0..<3 {
-            guard !option.isSelected else { return }
-            option.tap()
-            // A fresh expectation per attempt — one that was waited on and
-            // not fulfilled cannot be waited on again.
-            let selected = XCTNSPredicateExpectation(
-                predicate: NSPredicate(format: "isSelected == true"),
-                object: option
-            )
-            _ = XCTWaiter().wait(for: [selected], timeout: 2)
-        }
-        XCTAssertTrue(option.isSelected, "Option never became selected", file: file, line: line)
-    }
-
     /// Opens a collapsed session and makes sure it stayed open.
     ///
     /// A single tap is not enough right after the screen appears: the query
@@ -208,6 +211,43 @@ struct SeededApp {
             historySets.count,
             0,
             "The session did not open",
+            file: file,
+            line: line
+        )
+    }
+
+    /// Taps a selectable element — a tab bar button or a profile option — and
+    /// makes sure the selection took.
+    ///
+    /// Same lesson as `expand(_:)`: a single tap can be swallowed while the
+    /// screen is still settling. On a cold simulator the tab bar turns up
+    /// before the first launch has settled, and the bar still has the
+    /// dashboard selected (#179); right after a push the list is still laying
+    /// out, and the option tap lands where the row no longer is (#197). Either
+    /// way the test would fail 30 seconds later on the wrong screen with
+    /// nothing pointing at the dropped tap. Waits for the element's own
+    /// `isSelected` state, so a retry never undoes a selection that took.
+    func select(
+        _ element: XCUIElement,
+        attempts: Int = 3,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        assertAppears(element, file: file, line: line)
+        for _ in 0..<attempts {
+            guard !element.isSelected else { return }
+            element.tap()
+            // A fresh expectation per attempt — one that was waited on and
+            // not fulfilled cannot be waited on again.
+            let selected = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "isSelected == true"),
+                object: element
+            )
+            _ = XCTWaiter().wait(for: [selected], timeout: 3)
+        }
+        XCTAssertTrue(
+            element.isSelected,
+            "The tab or option never became selected",
             file: file,
             line: line
         )

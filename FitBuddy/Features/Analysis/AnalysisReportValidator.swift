@@ -22,7 +22,7 @@ enum AnalysisReportValidator {
     /// prompt's own constant, so the two cannot drift apart.
     static let minimumStepKg = AnalysisPromptBuilder.minimumStepKg
 
-    /// Cards the result screen shows at most (design 3.4/3.5: one to four).
+    /// Cards the result screen shows at most (design 3.4/3.4b/3.5: zero to four).
     static let maxCards = 4
 
     /// Title of a downgraded card that has no better one.
@@ -42,6 +42,16 @@ enum AnalysisReportValidator {
         "You trained on \(trainingDays) of the last 7 days. Take the suggested rest before adding load."
     }
 
+    /// The headline of a progress report the app turned into a hold verdict,
+    /// because no progression card is left to back it (#177).
+    static let holdHeadline = "Hold steady this week."
+
+    /// The lead of a progress report the app turned into a hold verdict after
+    /// taking away at least one of its progressions (#170). The model's lead
+    /// argued for a load increase no card backs.
+    static let holdLead =
+        "Your data doesn't back a specific load increase yet. Keep your current weights and read the full analysis below."
+
     /// The reasoning of a recovery card the app inserts when the model left it
     /// out, or sent it without a reason (US-14 AC4).
     static let insertedRecoveryReasoning =
@@ -56,6 +66,11 @@ enum AnalysisReportValidator {
         _ report: AnalysisReport,
         against evidence: AnalysisReportEvidence
     ) -> ValidatedAnalysisReport {
+        // Model progressions that did not come out of their own validation as
+        // a progression — downgraded to a note, or dropped for a blank reason.
+        let rejectedProgressions = report.cards.filter { card in
+            card.kind == .progression && validate(card, against: evidence)?.kind != .progression
+        }.count
         var cards = report.cards.compactMap { validate($0, against: evidence) }
         var verdict = report.verdict
         var headline = report.headline
@@ -80,11 +95,30 @@ enum AnalysisReportValidator {
             }
         }
 
+        let kept = capped(cards)
+        let cutProgressions = cards.filter { $0.kind == .progression }.count
+            - kept.filter { $0.kind == .progression }.count
+
+        // "You're ready to progress." over cards that name no progression
+        // would contradict the screen it heads (#177), so the verdict the cards
+        // support is to hold. A recovery verdict forced above is never touched.
+        // The lead is replaced only when the app took a progression away — a
+        // downgrade or the cap — because only then did the model's lead argue
+        // for a load increase no card backs (#170). A progress verdict over
+        // notes alone keeps the model's lead: the app overruled nothing in it.
+        if verdict == .progress, !kept.contains(where: { $0.kind == .progression }) {
+            verdict = .hold
+            headline = holdHeadline
+            if rejectedProgressions + cutProgressions > 0 {
+                lead = holdLead
+            }
+        }
+
         return ValidatedAnalysisReport(
             headline: headline,
             verdict: verdict,
             lead: lead,
-            cards: capped(cards),
+            cards: kept,
             summary: report.summary
         )
     }

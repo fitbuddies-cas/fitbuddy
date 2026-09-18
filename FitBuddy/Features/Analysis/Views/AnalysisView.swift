@@ -28,14 +28,6 @@ struct AnalysisView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    // Above the answer rather than under it: the basis the
-                    // recommendation rests on has to be known while reading it,
-                    // not after (#87, #36) — and the thin-data warning of US-6
-                    // AC2 is worth least at the bottom of a text the user has
-                    // already believed.
-                    if viewModel.state.outcome != nil, let context = viewModel.context {
-                        AnalysisContextView(context: context)
-                    }
                     content
                 }
                 .padding(.horizontal, 16)
@@ -97,10 +89,13 @@ struct AnalysisView: View {
                 onCancel: viewModel.cancel
             )
         case .result(let outcome):
-            // A report renders as its summary until the cards have their
-            // views (#177), which switch on `outcome` right here.
+            // The context line travels into the result rather than sitting
+            // above it: under a report it follows the verdict headline (US-14
+            // AC1), and in both cases it comes before the recommendation is
+            // read, not after (#87, #36).
             AnalysisResultView(
-                text: outcome.text,
+                outcome: outcome,
+                context: viewModel.context,
                 attribution: viewModel.attribution,
                 age: viewModel.resultAge,
                 // Always offered on a finished result: there is no cooldown,
