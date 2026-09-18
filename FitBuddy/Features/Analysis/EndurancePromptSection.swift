@@ -23,6 +23,11 @@ enum EndurancePromptSection {
     /// - Parameters:
     ///   - recent: Endurance sessions of the analysed window.
     ///   - previous: Endurance sessions of the equally long window before it.
+    ///   - detail: How long the lists may be (#187). This half has no session
+    ///     list to cap — #183 built it as an aggregate, which is what US-15
+    ///     AC8's "cardio as a weekly aggregate" asks for, so only the per-week
+    ///     rows can still be cut, and they are cut at the same week as the
+    ///     strength half's.
     static func sections(
         recent: [WorkoutSummary],
         previous: [WorkoutSummary],
@@ -31,12 +36,13 @@ enum EndurancePromptSection {
         previousStart: Date,
         now: Date,
         calendar: Calendar,
-        days: PromptDayFormatter
+        days: PromptDayFormatter,
+        detail: AnalysisPromptDetail = .full
     ) -> [String] {
         guard !recent.isEmpty else { return [] }
         return [
             windowSection(recent, window: window, from: recentStart, to: now, calendar: calendar, days: days),
-            weeklySection(recent, window: window, now: now, calendar: calendar, days: days),
+            weeklySection(recent, window: window, now: now, calendar: calendar, days: days, detail: detail),
             comparisonSection(
                 previous,
                 window: window,
@@ -216,9 +222,11 @@ enum EndurancePromptSection {
         window: AnalysisWindow,
         now: Date,
         calendar: Calendar,
-        days: PromptDayFormatter
+        days: PromptDayFormatter,
+        detail: AnalysisPromptDetail = .full
     ) -> String {
-        let weeks = (0..<window.weeks).map { index -> String in
+        let rows = detail.weekRows(in: window)
+        let weeks = rows.indices.map { index -> String in
             let start = AnalysisWindow.weekStart(index, endingAt: now, calendar: calendar)
             let end = calendar.date(byAdding: .day, value: 7, to: start) ?? start
             let inWeek = summaries.filter { $0.startTime >= start && $0.startTime < end }
@@ -232,7 +240,8 @@ enum EndurancePromptSection {
             }
             return "- Week starting \(days.string(start)) (\(label)): \(parts.joined(separator: ", "))"
         }
-        return (["## Endurance per week"] + weeks).joined(separator: "\n")
+        return (["## Endurance per week"] + weeks + [rows.footer].compactMap { $0 })
+            .joined(separator: "\n")
     }
 
     // MARK: - Comparison

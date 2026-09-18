@@ -24,6 +24,9 @@ enum StrengthPromptSection {
     ///   - previous: Strength sessions of the equally long window before it.
     ///   - exercises: The movements of the analysed window, rolled up.
     ///   - progressions: The progression of each listed movement.
+    ///   - detail: How long the lists may be (#187). The window totals, the
+    ///     muscle split and the comparison window are the same at every rung —
+    ///     only the three lists get shorter, and each says so.
     static func sections(
         recent: [WorkoutSummary],
         previous: [WorkoutSummary],
@@ -34,12 +37,13 @@ enum StrengthPromptSection {
         previousStart: Date,
         now: Date,
         calendar: Calendar,
-        days: PromptDayFormatter
+        days: PromptDayFormatter,
+        detail: AnalysisPromptDetail = .full
     ) -> [String] {
         guard !recent.isEmpty else { return [] }
         return [
             windowSection(recent, window: window, from: recentStart, to: now, calendar: calendar, days: days),
-            weeklySection(recent, window: window, now: now, calendar: calendar, days: days),
+            weeklySection(recent, window: window, now: now, calendar: calendar, days: days, detail: detail),
             muscleSection(recent, window: window),
             comparisonSection(
                 previous,
@@ -49,13 +53,14 @@ enum StrengthPromptSection {
                 calendar: calendar,
                 days: days
             ),
-            sessionSection(recent, days: days),
+            sessionSection(recent, days: days, detail: detail),
             exerciseSection(
                 exercises,
                 progressions: progressions,
                 window: window,
                 from: recentStart,
-                days: days
+                days: days,
+                detail: detail
             ),
         ]
     }
@@ -114,9 +119,11 @@ enum StrengthPromptSection {
         window: AnalysisWindow,
         now: Date,
         calendar: Calendar,
-        days: PromptDayFormatter
+        days: PromptDayFormatter,
+        detail: AnalysisPromptDetail = .full
     ) -> String {
-        let weeks = (0..<window.weeks).map { index -> String in
+        let rows = detail.weekRows(in: window)
+        let weeks = rows.indices.map { index -> String in
             let start = AnalysisWindow.weekStart(index, endingAt: now, calendar: calendar)
             let end = calendar.date(byAdding: .day, value: 7, to: start) ?? start
             let inWeek = summaries.filter { $0.startTime >= start && $0.startTime < end }
@@ -124,7 +131,7 @@ enum StrengthPromptSection {
             return "- Week starting \(days.string(start)) (\(label)): "
                 + "\(inWeek.count) sessions, \(PromptFigures.kg(PromptFigures.volume(of: inWeek)))"
         }
-        return (["## Volume per week"] + weeks).joined(separator: "\n")
+        return (["## Volume per week"] + weeks + [rows.footer].compactMap { $0 }).joined(separator: "\n")
     }
 
     /// Volume, sets and training frequency per group. The frequency is the
@@ -185,10 +192,11 @@ enum StrengthPromptSection {
 
     private static func sessionSection(
         _ summaries: [WorkoutSummary],
-        days: PromptDayFormatter
+        days: PromptDayFormatter,
+        detail: AnalysisPromptDetail = .full
     ) -> String {
         let sorted = summaries.sorted { $0.startTime > $1.startTime }
-        let listed = sorted.prefix(AnalysisPromptBuilder.maxListedSessions)
+        let listed = sorted.prefix(max(0, detail.listedSessions))
         let rows = listed.map { sessionRow($0, days: days) }
         let omitted = sorted.count - listed.count
         let footer = omitted > 0 ? ["(\(omitted) older sessions in this window omitted)"] : []
@@ -236,10 +244,12 @@ enum StrengthPromptSection {
         progressions: [String: ExerciseProgression],
         window: AnalysisWindow,
         from start: Date,
-        days: PromptDayFormatter
+        days: PromptDayFormatter,
+        detail: AnalysisPromptDetail = .full
     ) -> String {
         let header = "## Exercises (last \(window.weeks) weeks)"
-        let rows = AnalysisPromptBuilder.promptedExercises(from: exercises).compactMap { exercise -> String? in
+        let listed = AnalysisPromptBuilder.promptedExercises(from: exercises, limit: detail.listedExercises)
+        let rows = listed.compactMap { exercise -> String? in
             guard let progression = progressions[exercise.id],
                   let listing = AnalysisPromptBuilder.listing(progression, from: start)
             else { return nil }
@@ -257,7 +267,7 @@ enum StrengthPromptSection {
         // Counted against the cap, not against the rows: a listed exercise
         // skipped for want of a progression was not cut by the cap, and
         // calling it "omitted" would misstate why it is missing.
-        let omitted = max(0, exercises.count - AnalysisPromptBuilder.maxListedExercises)
+        let omitted = max(0, exercises.count - detail.listedExercises)
         let footer = omitted > 0
             ? ["(\(rows.count) exercises with the most volume listed; \(omitted) more in this window omitted)"]
             : []
