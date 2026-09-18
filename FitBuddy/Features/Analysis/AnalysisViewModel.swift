@@ -457,14 +457,11 @@ final class AnalysisViewModel: ObservableObject {
             let cached = try await cache.workoutSummaries(
                 since: AnalysisWindow.widest.previousStart(endingAt: reference, calendar: calendar)
             )
-            // Endurance sessions are dropped for the window ladder and the
-            // prompt, so both still describe one strength history — a cache
-            // holding nothing but runs is "no training data" for the analysis,
-            // not a window to widen. The context line counts from `cached`
-            // instead (US-15 AC4, #182): dropping a source from the basis is a
-            // statement about the data, and #183 sections the prompt so both
-            // domains reach the model.
-            let summaries = AnalysisPromptBuilder.strengthSessions(in: cached)
+            // The ladder, the prompt and the context line all see the same
+            // sessions since #183: the prompt is sectioned by domain, so an
+            // endurance session is analysed rather than dropped, and a cache
+            // holding nothing but runs is a window to widen instead of "no
+            // training data" (US-15 AC2/AC4).
             guard !Task.isCancelled else { return nil }
 
             // The comparison window may well be empty — that is a break, and
@@ -474,7 +471,7 @@ final class AnalysisViewModel: ObservableObject {
             // widest window at all is "no training data", and paying a provider
             // to say so would be waste.
             guard let window = AnalysisWindow.resolve(
-                for: summaries,
+                for: cached,
                 endingAt: reference,
                 calendar: calendar
             ) else {
@@ -487,7 +484,7 @@ final class AnalysisViewModel: ObservableObject {
             // screen.
             let exercises = try await readExercises(since: start)
             guard !Task.isCancelled else { return nil }
-            let details = await readRecentDetails(in: summaries, now: reference)
+            let details = await readRecentDetails(in: cached, now: reference)
             guard !Task.isCancelled else { return nil }
 
             // Read here, per run: what the user changed in Settings a minute
@@ -499,21 +496,21 @@ final class AnalysisViewModel: ObservableObject {
             // its comparison window, and reporting those sessions as the data
             // basis would overstate it by a factor of six.
             let counts = Self.sessionCounts(in: cached, from: start)
-            // The thin-data verdict is about what the model was shown, so the
-            // analysed breakdown is counted over `summaries` — the very array
-            // handed to the prompt builder below — and not over the window
-            // (US-6 AC2, #182). While `strengthSessions(in:)` filters by
-            // source the two genuinely differ, and the difference is the whole
-            // point: a basis half of which never reached the prompt is thin.
+            // The thin-data verdict is about what the model was shown, and
+            // since #183 that is every session of the window: the prompt is
+            // sectioned by domain rather than filtered by source, so the
+            // analysed breakdown *is* the domain breakdown and the default
+            // says so (US-6 AC2). #185 reopens the gap from the other side —
+            // under the "Strength" profile the endurance half is counted on
+            // the line and deliberately not analysed.
             context = AnalysisContext(
                 sessionCounts: counts.sources,
                 domainCounts: counts.domains,
-                analysedCounts: Self.sessionCounts(in: summaries, from: start).domains,
                 window: window,
                 profile: profile
             )
             let reads = AnalysisRunReads(
-                summaries: summaries,
+                summaries: cached,
                 exercises: exercises.summaries,
                 progressions: exercises.progressions,
                 details: details,
