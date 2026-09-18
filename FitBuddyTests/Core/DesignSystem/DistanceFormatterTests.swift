@@ -40,6 +40,39 @@ final class DistanceFormatterTests: XCTestCase {
         XCTAssertEqual(DistanceFormatter.display(-5, locale: english), "0 m")
     }
 
+    /// A value just below zero rounds to negative zero, which is not smaller
+    /// than zero — `"-0 m"` would leak through a guard that tested the rounded
+    /// figure instead of the input.
+    func testAValueRoundingToNegativeZeroReadsAsZeroMetres() {
+        XCTAssertEqual(DistanceFormatter.display(-0.2, locale: english), "0 m")
+        XCTAssertEqual(DistanceFormatter.plain(-0.4), "0 m")
+    }
+
+    /// Past 100 km the value is rounded once, at the precision it is printed
+    /// with — otherwise Foundation's half-even rule and
+    /// `PlainWeightFormatter`'s half-away-from-zero disagree about `100.5`.
+    func testDisplayAndPlainAgreePastAHundredKilometres() {
+        for meters in [100_450.0, 102_500, 104_500] {
+            XCTAssertEqual(
+                DistanceFormatter.display(meters, locale: english),
+                DistanceFormatter.plain(meters),
+                "display and plain disagree at \(meters) m"
+            )
+        }
+        XCTAssertEqual(DistanceFormatter.display(100_450, locale: english), "101 km")
+        XCTAssertEqual(DistanceFormatter.display(102_500, locale: english), "103 km")
+        XCTAssertEqual(DistanceFormatter.display(104_500, locale: english), "105 km")
+    }
+
+    /// A corrupted row can hold a value that is not a number; neither form
+    /// prints `"∞ km"` or `"inf km"`.
+    func testANonFiniteDistanceReadsAsZeroMetres() {
+        XCTAssertEqual(DistanceFormatter.display(.infinity, locale: english), "0 m")
+        XCTAssertEqual(DistanceFormatter.display(.nan, locale: english), "0 m")
+        XCTAssertEqual(DistanceFormatter.plain(.infinity), "0 m")
+        XCTAssertEqual(DistanceFormatter.plain(.nan), "0 m")
+    }
+
     func testGroupingFollowsTheLocale() {
         XCTAssertEqual(DistanceFormatter.display(1_240_000, locale: english), "1,240 km")
         XCTAssertEqual(DistanceFormatter.display(8_400, locale: german), "8,4 km")

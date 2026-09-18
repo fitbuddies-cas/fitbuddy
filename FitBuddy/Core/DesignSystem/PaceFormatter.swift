@@ -43,12 +43,18 @@ enum PaceFormatter {
     }
 
     /// `"5:12"` — minutes and seconds per kilometre, seconds always padded.
+    ///
+    /// The pace is bounded while it is still a `Double`: a speed of `1e-20`
+    /// m/s is larger than zero and finite, and its pace does not fit in an
+    /// `Int` — converting first would trap rather than return `nil`.
     private static func clock(metersPerSecond: Double) -> String? {
         guard metersPerSecond > 0, metersPerSecond.isFinite else { return nil }
-        let secondsPerKilometer = Int((1_000 / metersPerSecond).rounded())
-        guard secondsPerKilometer > 0, secondsPerKilometer <= slowestSecondsPerKilometer else {
+        let secondsPerKilometer = (1_000 / metersPerSecond).rounded()
+        guard secondsPerKilometer >= 1,
+              secondsPerKilometer <= Double(slowestSecondsPerKilometer) else {
             return nil
         }
-        return String(format: "%d:%02d", secondsPerKilometer / 60, secondsPerKilometer % 60)
+        let seconds = Int(secondsPerKilometer)
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 }

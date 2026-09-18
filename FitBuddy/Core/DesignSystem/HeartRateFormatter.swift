@@ -16,18 +16,26 @@ enum HeartRateFormatter {
     /// formatters, although a heart rate stays inside three digits and no
     /// locale will put a separator in it.
     ///
-    /// `0` and any negative value read `"0 bpm"`; a session without a heart
-    /// rate passes `nil` further up and shows no cell at all (US-15 AC7).
+    /// `0`, a negative value and a value that is not a finite number read
+    /// `"0 bpm"` — the rule `DistanceFormatter` and `ElevationFormatter`
+    /// follow for their own units. A session without a heart rate passes `nil`
+    /// further up and shows no cell at all (US-15 AC7).
     static func display(_ beatsPerMinute: Double, locale: Locale = .current) -> String {
-        let rounded = max(0, PlainWeightFormatter.rounded(beatsPerMinute, decimals: 0))
-        return rounded.formatted(.number.precision(.fractionLength(0)).locale(locale)) + " bpm"
+        beats(beatsPerMinute)
+            .formatted(.number.precision(.fractionLength(0)).locale(locale)) + " bpm"
     }
 
     /// The same heart rate as data rather than as display text: `"148 bpm"` on
     /// every device, no grouping separators — the rule
     /// `AnalysisPromptBuilder.kg(_:)` follows for weights.
     static func plain(_ beatsPerMinute: Double) -> String {
-        let rounded = max(0, PlainWeightFormatter.rounded(beatsPerMinute, decimals: 0))
-        return PlainWeightFormatter.string(rounded, decimals: 0) + " bpm"
+        PlainWeightFormatter.string(beats(beatsPerMinute), decimals: 0) + " bpm"
+    }
+
+    /// Whole beats per minute, never below zero and never a value a formatter
+    /// would print as `"∞"` or `"inf"`.
+    private static func beats(_ beatsPerMinute: Double) -> Double {
+        guard beatsPerMinute > 0, beatsPerMinute.isFinite else { return 0 }
+        return PlainWeightFormatter.rounded(beatsPerMinute, decimals: 0)
     }
 }

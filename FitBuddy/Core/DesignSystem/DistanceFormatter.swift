@@ -16,9 +16,11 @@ enum DistanceFormatter {
     /// run is read to a tenth of a kilometre, and past 100 km — a training
     /// week, not a session — that tenth is noise next to a three-digit figure.
     ///
-    /// `0` and any negative value (a corrupted row, never a real distance)
-    /// read `"0 m"`: whether to show a distance at all is the caller's
-    /// decision, not the formatter's.
+    /// `0`, a negative value and a value that is not a finite number (a
+    /// corrupted row, never a real distance) read `"0 m"` — the same rule
+    /// `ElevationFormatter` and `HeartRateFormatter` follow for their own
+    /// units. Whether to show a distance at all is the caller's decision, not
+    /// the formatter's.
     static func display(_ meters: Double, locale: Locale = .current) -> String {
         let parts = parts(meters)
         let value = parts.value.formatted(
@@ -47,11 +49,19 @@ enum DistanceFormatter {
     /// Metres are rounded before the kilometre threshold is tested: `999.6 m`
     /// is `"1.0 km"`, never `"1,000 m"`, which would print the threshold's own
     /// unit past it.
+    ///
+    /// The value is rounded once, at the precision it will be printed with:
+    /// past 100 km, handing `100.5` to both callers would leave Foundation's
+    /// half-even rule to print `"100 km"` while `PlainWeightFormatter` writes
+    /// `"101 km"` from the same distance.
     private static func parts(_ meters: Double) -> (value: Double, decimals: Int, unit: String) {
-        guard meters > 0 else { return (0, 0, "m") }
+        guard meters > 0, meters.isFinite else { return (0, 0, "m") }
         let wholeMeters = meters.rounded()
         guard wholeMeters >= 1_000 else { return (wholeMeters, 0, "m") }
         let kilometers = PlainWeightFormatter.rounded(meters / 1_000, decimals: 1)
-        return (kilometers, kilometers < 100 ? 1 : 0, "km")
+        guard kilometers < 100 else {
+            return (PlainWeightFormatter.rounded(kilometers, decimals: 0), 0, "km")
+        }
+        return (kilometers, 1, "km")
     }
 }

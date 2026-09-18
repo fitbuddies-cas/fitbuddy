@@ -36,6 +36,21 @@ final class PaceFormatterTests: XCTestCase {
         XCTAssertEqual(PaceFormatter.perKilometer(metersPerSecond: 0.5), "33:20 /km")
     }
 
+    /// The cap itself: the last pace still printed, and the first one dropped.
+    func testTheCapHoldsAtItsBoundary() {
+        XCTAssertEqual(PaceFormatter.perKilometer(metersPerSecond: 1_000 / 5_999), "99:59 /km")
+        XCTAssertNil(PaceFormatter.perKilometer(metersPerSecond: 1_000 / 6_000))
+    }
+
+    /// A speed this small is positive and finite, and its pace does not fit in
+    /// an `Int` — the bound has to hold while the pace is still a `Double`, or
+    /// the formatter traps instead of returning `nil`.
+    func testAVanishinglySmallSpeedDoesNotTrap() {
+        XCTAssertNil(PaceFormatter.perKilometer(metersPerSecond: 1e-20))
+        XCTAssertNil(PaceFormatter.plain(metersPerSecond: 1e-20))
+        XCTAssertNil(PaceFormatter.perKilometer(metersPerSecond: .leastNonzeroMagnitude))
+    }
+
     /// The prompt has no column header, so the unit is spelled out.
     func testThePlainFormNamesTheUnit() {
         XCTAssertEqual(PaceFormatter.plain(metersPerSecond: 2.5), "6:40 min/km")
