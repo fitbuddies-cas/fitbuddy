@@ -69,12 +69,41 @@ enum StrengthPromptSection {
         days formatter: PromptDayFormatter
     ) -> String {
         let days = PromptFigures.trainingDays(summaries, calendar: calendar)
-        return """
-        ## Last \(window.weeks) weeks (\(formatter.string(start)) to \(formatter.string(end)))
-        Sessions: \(summaries.count)
-        Training days: \(days) (\(PromptFigures.frequency(days, window: window)) per week)
-        Total volume: \(PromptFigures.kg(PromptFigures.volume(of: summaries)))
-        """
+        var lines = [
+            "## Last \(window.weeks) weeks (\(formatter.string(start)) to \(formatter.string(end)))",
+            "Sessions: \(summaries.count)",
+            "Training days: \(days) (\(PromptFigures.frequency(days, window: window)) per week)",
+            "Total volume: \(PromptFigures.kg(PromptFigures.volume(of: summaries)))",
+        ]
+        // Said next to the total it is missing from, not only in the session
+        // list: a strength session a source recorded without sets contributes
+        // nothing to the volume, and an unexplained gap between the session
+        // count and the volume reads as a light week (#183).
+        let setless = setlessSessions(summaries)
+        if !setless.isEmpty {
+            lines.append(
+                "Of these, \(CountFormatter.labelled(setless.count, singular: "session")) "
+                    + "logged no sets — their source records whole sessions, so their load is "
+                    + "not in the volume above."
+            )
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// Strength sessions whose source records whole efforts rather than sets.
+    ///
+    /// A Strava `WeightTraining` session is strength work — that is the point
+    /// of the #183 flip — but it arrives as one synthetic exercise with a
+    /// single cardio set and no weights at all. Rendered like a Hevy session
+    /// it would claim sets that were never logged and a 0 kg total that rule 5
+    /// invites the model to explain as bodyweight work.
+    ///
+    /// The source is the right test here, not the volume: `WorkoutSummary`
+    /// already blanks the muscle split for these sources for the same reason,
+    /// while a Hevy session at 0 kg is genuine bodyweight or timed work with
+    /// real sets behind it.
+    private static func setlessSessions(_ summaries: [WorkoutSummary]) -> [WorkoutSummary] {
+        summaries.filter(\.source.isEnduranceSource)
     }
 
     /// Per-week figures, newest first. The totals alone cannot show whether
@@ -160,14 +189,34 @@ enum StrengthPromptSection {
     ) -> String {
         let sorted = summaries.sorted { $0.startTime > $1.startTime }
         let listed = sorted.prefix(AnalysisPromptBuilder.maxListedSessions)
-        let rows = listed.map { summary in
-            "- \(days.string(summary.startTime)) \(summary.title): "
-                + "\(PromptFigures.kg(summary.volumeKg)), "
-                + "\(summary.exerciseCount) exercises, \(summary.countedSetCount) working sets"
-        }
+        let rows = listed.map { sessionRow($0, days: days) }
         let omitted = sorted.count - listed.count
         let footer = omitted > 0 ? ["(\(omitted) older sessions in this window omitted)"] : []
         return (["## Sessions (newest first)"] + rows + footer).joined(separator: "\n")
+    }
+
+    /// One session of the list: its volume and set counts, or — for a source
+    /// that logs no sets — what it did record.
+    ///
+    /// The honest row states the gap and then the figures the source actually
+    /// carries, so the session is neither invented into sets nor reduced to a
+    /// title: "no sets logged (Strava records whole sessions), 48 min, mean
+    /// heart rate 132 bpm". Anything the source left out is left out here,
+    /// like everywhere else in the prompt (US-15 AC7).
+    private static func sessionRow(_ summary: WorkoutSummary, days: PromptDayFormatter) -> String {
+        let prefix = "- \(days.string(summary.startTime)) \(summary.title): "
+        guard summary.source.isEnduranceSource else {
+            return prefix + "\(PromptFigures.kg(summary.volumeKg)), "
+                + "\(summary.exerciseCount) exercises, \(summary.countedSetCount) working sets"
+        }
+        var parts = ["no sets logged (\(summary.source.displayName) records whole sessions)"]
+        if let time = summary.durationSeconds.flatMap(PromptFigures.duration) {
+            parts.append(time)
+        }
+        if let rate = summary.cardio?.averageHeartRate, let text = PromptFigures.heartRate(rate) {
+            parts.append("mean heart rate \(text)")
+        }
+        return prefix + parts.joined(separator: ", ")
     }
 
     // MARK: - Exercises (#173)
