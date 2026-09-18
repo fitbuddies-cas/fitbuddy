@@ -10,16 +10,24 @@ import Foundation
 /// hard days sit next to each other. Strength and endurance draw on the same
 /// recovery, so that has to be stated once, over both.
 ///
-/// Only rendered when the window holds **both** domains. With one domain the
-/// section would restate the "Training days" line of that domain's own header
-/// and nothing else — and a Hevy-only cache has to produce exactly the prompt
-/// it produced before the split (#183 AC1). #184 kept that gate and added the
-/// last-seven-days line inside it: a single-domain window already states its
-/// own training days, and the recovery hint is enforced by the app from
-/// `RecoveryMetrics` whatever the prompt says (US-3 AC6).
+/// The gate is **endurance**, not both domains. A Hevy-only cache still gets no
+/// section at all, because it has to produce exactly the prompt it produced
+/// before the split (#183 AC1) — but a Strava- or Polar-only cache does get one,
+/// since #184 is what makes a week of six runs a recovery week and the model
+/// would otherwise never be told the day count the app then overrules it on.
+///
+/// What is rendered depends on what is there:
+///
+/// - **Both domains:** the full section — the cross-domain day counts, the
+///   streak and the last seven days.
+/// - **Endurance only:** the streak and the last seven days. The window's own
+///   training days are already in the endurance header, and "Days with strength
+///   only: 0" restates the absence of a section the model was told not to
+///   reason about.
+/// - **Strength only:** `nil`, unchanged (#183 AC1).
 enum LoadPromptSection {
-    /// The week-structure section, or `nil` when one of the two domains is
-    /// empty.
+    /// The week-structure section, or `nil` when the window holds no endurance
+    /// session.
     ///
     /// - Parameter now: The reference the window ends at, for the
     ///   last-seven-days line (#184).
@@ -31,7 +39,7 @@ enum LoadPromptSection {
         calendar: Calendar,
         days formatter: PromptDayFormatter
     ) -> String? {
-        guard !strength.isEmpty, !endurance.isEmpty else { return nil }
+        guard !endurance.isEmpty else { return nil }
 
         let strengthDays = PromptFigures.trainingDayStarts(strength, calendar: calendar)
         let enduranceDays = PromptFigures.trainingDayStarts(endurance, calendar: calendar)
@@ -43,15 +51,17 @@ enum LoadPromptSection {
         // cache and the window disagree about — would otherwise read as "29 of
         // 28 training days" and a negative number of rest days.
         let counted = min(trainingDays.count, window.days)
-        var lines = [
-            "## Week structure (last \(window.weeks) weeks)",
-            "Training days: \(counted) of \(window.days) "
-                + "(\(PromptFigures.frequency(counted, window: window)) per week)",
-            "Days with strength only: \(strengthDays.subtracting(enduranceDays).count)",
-            "Days with endurance only: \(enduranceDays.subtracting(strengthDays).count)",
-            "Days with both: \(both.count)",
-            "Rest days: \(window.days - counted)",
-        ]
+        var lines = ["## Week structure (last \(window.weeks) weeks)"]
+        if !strength.isEmpty {
+            lines += [
+                "Training days: \(counted) of \(window.days) "
+                    + "(\(PromptFigures.frequency(counted, window: window)) per week)",
+                "Days with strength only: \(strengthDays.subtracting(enduranceDays).count)",
+                "Days with endurance only: \(enduranceDays.subtracting(strengthDays).count)",
+                "Days with both: \(both.count)",
+                "Rest days: \(window.days - counted)",
+            ]
+        }
         if let streak = longestStreakLine(trainingDays, calendar: calendar, days: formatter) {
             lines.append(streak)
         }
@@ -74,6 +84,13 @@ enum LoadPromptSection {
     /// The session split is stated so the reason can name what filled the week,
     /// but the day count — the figure the rule turns on — is the union: one day
     /// carrying a run and a squat session is one training day.
+    ///
+    /// The mean heart rate is `RecoveryMetrics.meanHeartRate(in:)` over the same
+    /// seven days, i.e. **the figure the recovery card prints as "Avg HR"** —
+    /// not the endurance section's "Mean heart rate", which covers the whole
+    /// window and only the endurance half. Without it the model could cite the
+    /// window mean in a reason that appears directly above a label showing the
+    /// week's. Omitted where nothing in the week recorded one (US-15 AC7).
     private static func lastSevenDaysLine(
         strength: [WorkoutSummary],
         endurance: [WorkoutSummary],
@@ -90,9 +107,13 @@ enum LoadPromptSection {
         let recentEndurance = inWeek(endurance)
         let days = PromptFigures.trainingDayStarts(recentStrength, calendar: calendar)
             .union(PromptFigures.trainingDayStarts(recentEndurance, calendar: calendar))
-        return "Last 7 days: \(CountFormatter.labelled(days.count, singular: "training day")) "
+        var line = "Last 7 days: \(CountFormatter.labelled(days.count, singular: "training day")) "
             + "(\(CountFormatter.labelled(recentStrength.count, singular: "strength session")), "
             + "\(CountFormatter.labelled(recentEndurance.count, singular: "endurance session")))"
+        if let heartRate = RecoveryMetrics.meanHeartRate(in: recentStrength + recentEndurance) {
+            line += ", mean heart rate \(heartRate) bpm"
+        }
+        return line
     }
 
     /// The longest run of consecutive training days in the window, with the
