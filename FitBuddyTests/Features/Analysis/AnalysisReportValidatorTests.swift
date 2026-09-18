@@ -813,7 +813,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
     /// the figure it starts from.
     func testAMetricCardTakesItsCurrentFigureFromTheApp() {
         let validated = AnalysisReportValidator.validate(
-            metricCard(from: 31.5, to: 35),
+            metricCard(from: 32.4, to: 35),
             against: evidence(weeklyMetrics: [.kilometers: 32.4])
         )
 
@@ -827,19 +827,38 @@ final class AnalysisReportValidatorTests: XCTestCase {
         XCTAssertEqual(source, "Run")
     }
 
-    /// The tolerance of the issue: `from` within 5 % of the week's figure.
-    func testAFigureOutsideTheToleranceIsNotAMetricCard() {
-        let inside = AnalysisReportValidator.validate(
-            metricCard(from: 31, to: 34),
-            against: evidence(weeklyMetrics: [.kilometers: 32])
+    /// `from` has to be the figure the prompt printed, not merely near it
+    /// (#186 review). The 5 % tolerance it replaces allowed 620 kg of slack at
+    /// a weekly volume of 12 400 kg, so the card and its own reasoning
+    /// sentence could state different numbers.
+    ///
+    /// Replaces `testAFigureOutsideTheToleranceIsNotAMetricCard`.
+    func testFromMustBeTheFigureThePromptPrinted() {
+        // The prompt printed "32.4 km", so 32.4 is the figure — and 31 is not,
+        // although it is within the old 5 %.
+        let quoted = AnalysisReportValidator.validate(
+            metricCard(from: 32.4, to: 35),
+            against: evidence(weeklyMetrics: [.kilometers: 32.44])
         )
-        let outside = AnalysisReportValidator.validate(
-            metricCard(from: 24, to: 34),
-            against: evidence(weeklyMetrics: [.kilometers: 32])
+        let nearby = AnalysisReportValidator.validate(
+            metricCard(from: 31, to: 35),
+            against: evidence(weeklyMetrics: [.kilometers: 32.44])
         )
 
-        XCTAssertEqual(inside?.kind, .metric)
-        XCTAssertEqual(outside?.kind, .note)
+        XCTAssertEqual(quoted?.kind, .metric)
+        XCTAssertEqual(nearby?.kind, .note)
+    }
+
+    /// The equality is at the precision the **prompt** printed the figure
+    /// with, which for a volume is whole kilograms — the card shows two
+    /// decimals, but the model was never shown them.
+    func testAVolumeIsComparedAtWholeKilograms() {
+        let validated = AnalysisReportValidator.validate(
+            metricCard(from: 12_400, to: 13_000, unit: .kilograms, label: "Weekly volume"),
+            against: evidence(weeklyMetrics: [.kilograms: 12_400.4], analysisProfile: .strength)
+        )
+
+        XCTAssertEqual(validated?.kind, .metric)
     }
 
     /// A unit the app has no figure for in the last seven days cannot be
@@ -902,13 +921,33 @@ final class AnalysisReportValidatorTests: XCTestCase {
         XCTAssertEqual(validated?.kind, .note)
     }
 
-    /// A unit both domains record passes under either profile: a Polar
-    /// strength session carries a heart rate too.
-    func testAHeartRateCardPassesUnderEveryProfile() {
+    /// The blocker of #186's review. A metric card is a figure **and a target
+    /// for it**, so a heart-rate card is a prescribed heart rate — which
+    /// ground rule 7 forbids (US-3 AC3). The schema does not offer the unit;
+    /// this is the second door, for a provider that ignored the schema. It is
+    /// refused under every profile, even with the app's own anchor present and
+    /// every other rule satisfied.
+    ///
+    /// Replaces `testAHeartRateCardPassesUnderEveryProfile`, which asserted
+    /// exactly what the review reverses.
+    func testNoHeartRateCardFromTheModelIsEverValidated() {
         for profile in AnalysisProfile.allCases {
             let validated = AnalysisReportValidator.validate(
                 metricCard(from: 152, to: 148, unit: .beatsPerMinute, label: "Mean heart rate"),
                 against: evidence(weeklyMetrics: [.beatsPerMinute: 152], analysisProfile: profile)
+            )
+
+            XCTAssertEqual(validated?.kind, .note, "\(profile)")
+        }
+    }
+
+    /// A unit both domains record still passes under either profile — the rule
+    /// is about the heart rate, not about domain-free units.
+    func testADurationCardPassesUnderEveryProfile() {
+        for profile in AnalysisProfile.allCases {
+            let validated = AnalysisReportValidator.validate(
+                metricCard(from: 6.5, to: 7, unit: .hours, label: "Weekly training time"),
+                against: evidence(weeklyMetrics: [.hours: 6.5], analysisProfile: profile)
             )
 
             XCTAssertEqual(validated?.kind, .metric, "\(profile)")
@@ -967,6 +1006,48 @@ final class AnalysisReportValidatorTests: XCTestCase {
         XCTAssertEqual(validated.verdict, .hold)
     }
 
+    /// The stale guard #186 left behind (review finding 3). A metric card can
+    /// back progress under "Endurance" since #186, so its failure to do so is
+    /// evidence again — and "You're ready to progress." over a card asking for
+    /// a deload is the contradiction the rule exists to stop.
+    func testADeloadMetricCardUnderEnduranceHoldsTheVerdict() {
+        let report = AnalysisReport(
+            headline: "You're ready to progress.",
+            verdict: .progress,
+            lead: "Add a fourth run.",
+            cards: [metricCard(from: 32, to: 29)],
+            summary: "Summary"
+        )
+
+        let validated = AnalysisReportValidator.validate(
+            report,
+            against: evidence(weeklyMetrics: [.kilometers: 32], analysisProfile: .endurance)
+        )
+
+        XCTAssertEqual(validated.verdict, .hold)
+        XCTAssertEqual(validated.headline, AnalysisReportValidator.holdHeadline)
+    }
+
+    /// #185's finding is untouched: with no metric card either, the app had no
+    /// card type that could have backed the verdict, so its absence proves
+    /// nothing and the model's argument stands.
+    func testAnEnduranceProgressVerdictOverNotesAloneStillSurvives() {
+        let report = AnalysisReport(
+            headline: "You're ready to progress.",
+            verdict: .progress,
+            lead: "Add a fourth run.",
+            cards: [.note(title: "Volume", text: "Weekly distance rose for three weeks.")],
+            summary: "Summary"
+        )
+
+        let validated = AnalysisReportValidator.validate(
+            report,
+            against: evidence(exercises: [], analysisProfile: .endurance)
+        )
+
+        XCTAssertEqual(validated.verdict, .progress)
+    }
+
     // MARK: - Interference cards (US-15 AC2, #186)
 
     /// The three counts on the card are the app's, whatever the model wrote.
@@ -993,6 +1074,24 @@ final class AnalysisReportValidatorTests: XCTestCase {
         )
 
         XCTAssertEqual(validated?.kind, .note)
+    }
+
+    /// Review finding 4: the card is a statement about both domains at once,
+    /// so a single-domain profile has no card here — under "Strength" it would
+    /// put four running days on a screen that says the running was left out,
+    /// with no sentence to explain them.
+    func testNoInterferenceCardSurvivesASingleDomainProfile() {
+        for profile in [AnalysisProfile.strength, .endurance] {
+            let validated = AnalysisReportValidator.validate(
+                .interference(strengthDays: 4, cardioDays: 4, overlapDays: 3, reasoning: "Move one run."),
+                against: evidence(
+                    interference: InterferenceMetrics(strengthDays: 4, cardioDays: 4, overlapDays: 3),
+                    analysisProfile: profile
+                )
+            )
+
+            XCTAssertEqual(validated?.kind, .note, "\(profile)")
+        }
     }
 
     /// Both domains in the week but never on the same day is a finding of its

@@ -87,6 +87,62 @@ final class MetricUnitTests: XCTestCase {
         XCTAssertNil(MetricUnit.beatsPerMinute.delta(from: 148, to: 148.2, locale: english))
     }
 
+    /// Review finding 5: the three numbers on the row have to add up. The
+    /// delta is taken between the two figures **as printed**, so
+    /// `32.44 → 35.55` reads `"32.4 km"`, `"35.6 km"` and `"+3.2 km"` rather
+    /// than the raw difference of 3.11.
+    func testTheDeltaIsTakenBetweenThePrintedFigures() {
+        XCTAssertEqual(MetricUnit.kilometers.display(32.44, locale: english), "32.4 km")
+        XCTAssertEqual(MetricUnit.kilometers.display(35.55, locale: english), "35.6 km")
+        XCTAssertEqual(MetricUnit.kilometers.delta(from: 32.44, to: 35.55, locale: english), "+3.2 km")
+    }
+
+    /// Two values that print the same figure are no step, whatever they are
+    /// behind the digits (AC7).
+    func testTwoValuesThatPrintAlikeHaveNoDelta() {
+        XCTAssertNil(MetricUnit.kilometers.delta(from: 32.44, to: 32.43, locale: english))
+        XCTAssertNil(MetricUnit.hours.delta(from: 6.501, to: 6.505, locale: english))
+    }
+
+    // MARK: - What the model may state (#186 review finding 1)
+
+    /// A metric card is a figure *and a target for it*, so a heart-rate card
+    /// would be a prescribed heart rate — ground rule 7 forbids one. The case
+    /// stays for figures the app computes itself.
+    func testTheModelMayNotStateAHeartRate() {
+        XCTAssertFalse(MetricUnit.beatsPerMinute.isStatableByTheModel)
+        XCTAssertFalse(MetricUnit.modelStatableCases.contains(.beatsPerMinute))
+        XCTAssertEqual(
+            MetricUnit.modelStatableCases,
+            [.kilograms, .kilometers, .minutesPerKilometer, .hours]
+        )
+        // The unit still formats: the app's own figures go through it.
+        XCTAssertEqual(MetricUnit.beatsPerMinute.display(148, locale: english), "148 bpm")
+    }
+
+    // MARK: - Quoting the prompt's figure (#186 review finding 7)
+
+    /// The model is quoting a figure the prompt gave it, so it has to quote
+    /// it — equal once both are rounded the way the figure is printed.
+    func testAFigureMatchesAtThePrecisionItIsPrintedWith() {
+        XCTAssertTrue(MetricUnit.kilometers.statesTheSameFigure(32.4, as: 32.44))
+        XCTAssertFalse(MetricUnit.kilometers.statesTheSameFigure(32, as: 32.44))
+        XCTAssertFalse(MetricUnit.kilometers.statesTheSameFigure(31, as: 32))
+    }
+
+    /// A volume is compared at whole kilograms, because that is what
+    /// `PromptFigures.kg` printed — the card's two decimals were never shown
+    /// to the model.
+    func testAVolumeMatchesAtWholeKilograms() {
+        XCTAssertTrue(MetricUnit.kilograms.statesTheSameFigure(12_400, as: 12_400.4))
+        XCTAssertFalse(MetricUnit.kilograms.statesTheSameFigure(12_400, as: 12_402))
+    }
+
+    func testANonFiniteFigureMatchesNothing() {
+        XCTAssertFalse(MetricUnit.kilometers.statesTheSameFigure(.nan, as: 32))
+        XCTAssertFalse(MetricUnit.kilometers.statesTheSameFigure(32, as: .infinity))
+    }
+
     // MARK: - Domain and direction
 
     /// US-15 AC5 in one property: kilograms are strength, kilometres and a

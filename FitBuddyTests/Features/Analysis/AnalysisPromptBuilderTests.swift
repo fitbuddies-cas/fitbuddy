@@ -1684,6 +1684,21 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertTrue(system.contains("derived from population norms"))
     }
 
+    /// The blocker of #186's review, as a property of the system prompt: rule
+    /// 7 bans naming a target heart rate, so the metric card — which is a
+    /// figure **and a target for it** — must not offer a heart-rate unit for
+    /// the model to set one in (US-3 AC3, US-15).
+    func testTheMetricCardInstructionOffersNoHeartRate() {
+        let system = AnalysisPromptBuilder.systemPrompt
+
+        XCTAssertFalse(system.contains("mean heart rate, weekly"))
+        XCTAssertFalse(system.contains("beatsPerMinute"))
+        XCTAssertTrue(system.contains("There is no unit for a heart rate"))
+        // The metric instruction is still there and still names the units the
+        // model may use.
+        XCTAssertTrue(system.contains("weekly distance, long run, weekly volume, weekly training time"))
+    }
+
     /// The same ban as a property of the user turn: the prompt must not hand
     /// the model a zone to reason with either.
     func testAMixedPromptNamesNoHeartRateZoneOrTarget() {
