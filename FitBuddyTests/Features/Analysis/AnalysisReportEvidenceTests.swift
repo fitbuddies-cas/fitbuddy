@@ -142,6 +142,30 @@ final class AnalysisReportEvidenceTests: XCTestCase {
         XCTAssertEqual(evidence.recovery, RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: nil))
     }
 
+    /// The two halves of the evidence read different sets since #184: the
+    /// muscle-group frequency stays strength-only — a run loads no muscle group
+    /// the prompt states a frequency for — while the recovery metrics count
+    /// every session of the week (US-15 AC3).
+    func testRecoveryCountsCardioWhileTheMuscleFrequenciesDoNot() {
+        let chest = MuscleLoad(group: .chest, volumeKg: 1_000, setCount: 3)
+        let summaries = [
+            summary(daysAgo: 0, id: "h0", loads: [chest]),
+            summary(daysAgo: 1, id: "h1", loads: [chest]),
+            summary(daysAgo: 2, id: "h2", loads: [chest]),
+            run(daysAgo: 3, id: "s0", heartRate: 150),
+            run(daysAgo: 4, id: "s1", heartRate: 160),
+            run(daysAgo: 5, id: "s2"),
+        ]
+
+        let evidence = makeEvidence(summaries: summaries)
+
+        XCTAssertEqual(evidence.recovery.sessions, 6)
+        XCTAssertEqual(evidence.recovery.trainingDays, 6)
+        XCTAssertTrue(evidence.recovery.needsRecovery)
+        XCTAssertEqual(evidence.recovery.averageHeartRate, 155)
+        XCTAssertEqual(evidence.muscleGroupsPerWeek, [.chest: 0.8])
+    }
+
     // MARK: - Helpers
 
     private func makeEvidence(
@@ -162,6 +186,22 @@ final class AnalysisReportEvidenceTests: XCTestCase {
 
     private func start(daysAgo: Int) -> Date {
         calendar.startOfDay(for: reference).addingTimeInterval(Double(-daysAgo) * 86_400 + 43_200)
+    }
+
+    private func run(daysAgo: Int, id: String, heartRate: Int? = nil) -> WorkoutSummary {
+        WorkoutSummary(
+            id: id,
+            title: "Morning Run",
+            startTime: start(daysAgo: daysAgo),
+            source: .strava,
+            kind: .run,
+            volumeKg: 0,
+            exerciseCount: 1,
+            countedSetCount: 1,
+            distanceMeters: 8_000,
+            durationSeconds: 2_400,
+            cardio: heartRate.map { CardioMetrics(averageHeartRate: $0) }
+        )
     }
 
     private func summary(daysAgo: Int, id: String? = nil, loads: [MuscleLoad] = []) -> WorkoutSummary {

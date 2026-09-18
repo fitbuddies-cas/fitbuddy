@@ -32,6 +32,31 @@ final class AnalysisResultRenderingTests: XCTestCase {
         try assertRenders(AnalysisReportCardView(card: AnalysisReportSamples.recoveryCardWithoutRPE))
     }
 
+    /// A mixed week fills four columns (#184), one more than design 3.5 drew.
+    /// It still lays out, and no label wraps: the row is the height of the
+    /// three-cell one.
+    func testRecoveryCardRendersFourCellsForAMixedWeek() throws {
+        guard case let .recovery(reasoning, metrics) = AnalysisReportSamples.recoveryCardMixedWeek else {
+            return XCTFail("The sample must be a recovery card")
+        }
+        XCTAssertEqual(RecoveryMetricCell.cells(for: metrics).count, 4)
+
+        try assertRenders(AnalysisReportCardView(card: AnalysisReportSamples.recoveryCardMixedWeek))
+
+        let four = try render(
+            RecoveryCardView(reasoning: reasoning, metrics: metrics).padding(.horizontal, 16)
+        )
+        let three = try render(
+            RecoveryCardView(
+                reasoning: reasoning,
+                metrics: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: 8.2)
+            )
+            .padding(.horizontal, 16)
+        )
+
+        XCTAssertEqual(four.size.height, three.size.height, accuracy: 0.5)
+    }
+
     /// Three cells or two, the metrics row keeps one line of labels: a
     /// wrapped "SUGGESTED REST" would push its value down and make the card
     /// taller than the one without the RPE cell.

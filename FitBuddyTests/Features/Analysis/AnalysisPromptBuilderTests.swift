@@ -585,6 +585,62 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertTrue(structure.contains("Longest streak of consecutive training days: 1 day ("))
     }
 
+    // MARK: - Last 7 days across both domains (US-15 AC3, #184)
+
+    /// The issue's first acceptance criterion: 3 strength sessions and 4 runs
+    /// on 6 different days reach the model as 6 training days, where the prompt
+    /// used to report only the 3 strength days.
+    func testTheWeekStructureReportsSixTrainingDaysForThreeLiftsAndFourRuns() throws {
+        let prompt = make([
+            workout(daysAgo: 0, volume: 3_000, id: "h1"),
+            workout(daysAgo: 1, volume: 3_000, id: "h2"),
+            workout(daysAgo: 2, volume: 3_000, id: "h3"),
+            // Same day as the third lift: 7 sessions on 6 distinct days.
+            run(daysAgo: 2, id: "s1"),
+            run(daysAgo: 3, id: "s2"),
+            run(daysAgo: 4, id: "s3"),
+            run(daysAgo: 5, id: "s4"),
+        ])
+        let structure = try section(prompt, "## Week structure")
+
+        XCTAssertTrue(
+            structure.contains("Last 7 days: 6 training days (3 strength sessions, 4 endurance sessions)"),
+            structure
+        )
+    }
+
+    /// The line covers the last seven days, not the whole window: an older
+    /// session is in the window's own counts and out of this one.
+    func testTheLastSevenDaysLineIgnoresOlderSessions() throws {
+        let prompt = make([
+            workout(daysAgo: 1, volume: 3_000, id: "h1"),
+            workout(daysAgo: 12, volume: 3_000, id: "h2"),
+            run(daysAgo: 2, id: "s1"),
+            run(daysAgo: 20, id: "s2"),
+        ])
+        let structure = try section(prompt, "## Week structure")
+
+        XCTAssertTrue(structure.contains("Training days: 4 of 28"))
+        XCTAssertTrue(
+            structure.contains("Last 7 days: 2 training days (1 strength session, 1 endurance session)"),
+            structure
+        )
+    }
+
+    /// A day carrying both domains is one training day on this line as well.
+    func testTheLastSevenDaysLineCountsADayCarryingBothOnce() throws {
+        let prompt = make([
+            workout(daysAgo: 1, volume: 3_000, id: "h1"),
+            run(daysAgo: 1, id: "s1"),
+        ])
+        let structure = try section(prompt, "## Week structure")
+
+        XCTAssertTrue(
+            structure.contains("Last 7 days: 1 training day (1 strength session, 1 endurance session)"),
+            structure
+        )
+    }
+
     // MARK: - Exercises (#173)
 
     /// AC2 of #173: the mock profile "bench 60 kg x 5, three sessions" has
