@@ -1,6 +1,6 @@
 # ADR-10: Strava-OAuth2 im BYO-App-Modell — Client-Credentials des Nutzers statt Backend
 
-**Status:** Accepted
+**Status:** Accepted — die Verwerfung von Polar ist durch [[ADR-11]] revidiert (Polar ist seit ADR-11 dritte Quelle nach demselben BYO-App-Modell); der übrige Text bleibt als Protokoll unverändert
 **Datum:** 2026-09-10
 **Treiber-QA:** Security / Privacy (QA-1), Maintainability (QA-3)
 
