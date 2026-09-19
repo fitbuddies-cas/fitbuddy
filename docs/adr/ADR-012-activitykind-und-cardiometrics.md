@@ -1,18 +1,18 @@
-# ADR-12: `ActivityKind` und `CardioMetrics` — normalisierte Sportart und ein Kennzahlen-Block für alle Quellen
+# ADR-012: `ActivityKind` und `CardioMetrics` — normalisierte Sportart und ein Kennzahlen-Block für alle Quellen
 
 **Status:** Accepted
 **Datum:** 2026-09-18
-**Treiber-QA:** Maintainability (QA-3), Usability (QA-2)
+**Treiber-QA:** Maintainability (QA-3), Reliability (QA-2)
 
 ---
 
 ## Kontext
 
-Mit Hevy (#34), Strava ([[ADR-10]]) und Polar ([[ADR-11]]) stehen drei Quellen hinter dem `FitnessConnector`-Protocol ([[ADR-6]]). US-15 (#171) verlangt eine quellenübergreifende Analyse über Kraft **und** Ausdauer. Drei Punkte stehen dem im Weg:
+Mit Hevy (#34), Strava ([ADR-010](ADR-010-strava-oauth-byo-app.md)) und Polar ([ADR-011](ADR-011-polar-als-dritte-quelle.md)) stehen drei Quellen hinter dem `FitnessConnector`-Protocol ([ADR-006](ADR-006-fitness-connector-protocol.md)). US-15 (#171) verlangt eine quellenübergreifende Analyse über Kraft **und** Ausdauer. Drei Punkte stehen dem im Weg:
 
 1. **Die Sportart ist Freitext.** Strava liefert `sport_type` (`TrailRun`, `GravelRide`), Polar `sport` / `detailed_sport_info` (`TREADMILL_RUNNING`). Beides landete bisher nur im Session-Titel. Prompt-Builder und Karten müssten die Domäne aus dem Titel raten — derselbe Fehlermodus wie die Muskelgruppen-Heuristik.
-2. **Zwei konkurrierende Kennzahlen-Blöcke.** [[ADR-11]] führte `ActivityMetrics` ein, ausschliesslich von Polar befüllt. Der Strava-DTO warf seinerseits alles ausser Distanz und Bewegungszeit weg, obwohl die API `average_heartrate`, `total_elevation_gain`, `average_speed`, `kilojoules` und den Relative-Effort-Score mitliefert. Ein zweiter Block für Strava hätte die Herzfrequenz an zwei Stellen geführt — und die Frage «welchen liest der Prompt?» pro Quelle beantwortbar gemacht.
-3. **Nichts davon wird persistiert.** `ActivityMetrics` war ein offener Punkt aus [[ADR-11]]: Das SwiftData-Schema kennt die Ausdauer-Kennzahlen nicht, der Cache verliert sie bei jedem Sync.
+2. **Zwei konkurrierende Kennzahlen-Blöcke.** [ADR-011](ADR-011-polar-als-dritte-quelle.md) führte `ActivityMetrics` ein, ausschliesslich von Polar befüllt. Der Strava-DTO warf seinerseits alles ausser Distanz und Bewegungszeit weg, obwohl die API `average_heartrate`, `total_elevation_gain`, `average_speed`, `kilojoules` und den Relative-Effort-Score mitliefert. Ein zweiter Block für Strava hätte die Herzfrequenz an zwei Stellen geführt — und die Frage «welchen liest der Prompt?» pro Quelle beantwortbar gemacht.
+3. **Nichts davon wird persistiert.** `ActivityMetrics` war ein offener Punkt aus [ADR-011](ADR-011-polar-als-dritte-quelle.md): Das SwiftData-Schema kennt die Ausdauer-Kennzahlen nicht, der Cache verliert sie bei jedem Sync.
 
 ---
 
@@ -27,13 +27,13 @@ Jede Quelle übersetzt ihr eigenes Vokabular an **genau einer Stelle**, im jewei
 
 Unbekannt heisst immer `.other`, nie eine falsche Vermutung. Auch das Decoding ist entsprechend tolerant: Ein Rohwert, den erst ein neuerer Build kennt, liest als `.other`, statt die ganze `Activity` scheitern zu lassen.
 
-**2. `CardioMetrics` ersetzt `ActivityMetrics`.** Ein Block für alle Quellen, jedes Feld optional: `averageHeartRate`, `maxHeartRate`, `elevationGainMeters`, `averageSpeedMetersPerSecond`, `energyKilojoules`, `perceivedEffort` sowie die aus [[ADR-11]] übernommenen `activeCalories`, `distanceMeters`, `durationSeconds` und `trainingLoad`. `Activity.metrics` heisst neu `Activity.cardio`.
+**2. `CardioMetrics` ersetzt `ActivityMetrics`.** Ein Block für alle Quellen, jedes Feld optional: `averageHeartRate`, `maxHeartRate`, `elevationGainMeters`, `averageSpeedMetersPerSecond`, `energyKilojoules`, `perceivedEffort` sowie die aus [ADR-011](ADR-011-polar-als-dritte-quelle.md) übernommenen `activeCalories`, `distanceMeters`, `durationSeconds` und `trainingLoad`. `Activity.metrics` heisst neu `Activity.cardio`.
 
 Der Block bleibt ein eigener optionaler Typ statt loser Felder: Ein Hevy-Workout lässt ihn ganz `nil`, und «gibt es hier Ausdauer-Daten?» ist eine Prüfung statt zehn. Ist keine einzige Kennzahl erfasst, wird `nil` statt eines leeren Blocks ausgeliefert.
 
 Distanz und Dauer bleiben bei Hevy und Strava auf dem `ActivityExerciseSet`, wo das Dashboard sie bereits aggregiert; nur Polar, das keine Sets liefert, führt sie im Block. `averageSpeedMetersPerSecond` wird für Polar aus beiden Werten abgeleitet. Eine `0` gilt bei Strava durchgehend als «nicht erfasst» — die API sendet sie auch für das, was sie nie gemessen hat.
 
-**3. Schema V5 persistiert beides.** `Workout` erhält `kindRawValue` und zehn flache Cardio-Spalten; `Activity+Workout` und `WorkoutSummary` reichen sie durch. Damit ist der offene Punkt «SwiftData-Persistenz von `Activity.metrics`» aus [[ADR-11]] erledigt.
+**3. Schema V5 persistiert beides.** `Workout` erhält `kindRawValue` und zehn flache Cardio-Spalten; `Activity+Workout` und `WorkoutSummary` reichen sie durch. Damit ist der offene Punkt «SwiftData-Persistenz von `Activity.metrics`» aus [ADR-011](ADR-011-polar-als-dritte-quelle.md) erledigt.
 
 `kindRawValue` ist **optional**, nicht defaultet. Ein vor V5 geschriebener Store enthält auch Strava- und Polar-Sessions; ein Default `strength` würde einen gecachten Lauf in der falschen Domäne einsortieren. `Workout.kind` löst eine fehlende Sportart stattdessen über die Quelle auf: Hevy → `.strength`, eine Ausdauer-Quelle → `.other`, denn welche Disziplin es war, ist genau das, was nicht erfasst wurde. Der nächste Sync ersetzt das Fenster und füllt die Spalte real.
 
