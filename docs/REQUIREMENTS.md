@@ -131,6 +131,28 @@ Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 >
 > **Nummerierung:** US-13 ist an #189 «Trainingsprofil für gezieltere AI-Empfehlungen» vergeben (PR #193), deshalb US-14.
 
+### 1.2.6 US-15 · Quellenübergreifende AI-Analyse
+**Als** Power-User mit Hevy, Strava und Polar **möchte ich** eine AI-Analyse über meine Gesamtbelastung, **damit** Kraft- und Ausdauertraining zusammen beurteilt werden und die Empfehlung meine echte Wochenlast berücksichtigt.
+
+| # | Given | When | Then |
+|---|---|---|---|
+| AC1 | Im Analysefenster liegen Kraft- **und** Ausdauer-Sessions (massgeblich ist die gemappte Sportart nach ADR-012, nicht die Quelle) | User startet eine Analyse | User wählt ein Profil: «Strength», «Endurance» oder «Overall load»; Default ist «Overall load». Liegt nur eine Domäne im Fenster, entfällt die Auswahl und das Profil ist implizit «Strength» bzw. «Endurance» — zwei Quellen mit ausschliesslich Kraft ergeben keine Auswahl, ein reines Hevy-Konto mit Laufband-Sessions alle drei Optionen |
+| AC2 | Profil «Overall load» | Prompt wird gebaut | Prompt enthält eine Kraft-Sektion, eine Ausdauer-Sektion (Wochen-km/-h, Puls, Tempo, Trend) und eine Sektion zur Wochenstruktur (Kraft- und Cardio-Tage, harte Tage in Folge) |
+| AC3 | User hat an ≥6 der letzten 7 Tage trainiert, Kraft und Cardio zusammengezählt | Analyse läuft | Recovery-Hinweis erscheint (US-3 AC6 gilt über alle Quellen) |
+| AC4 | Analyse abgeschlossen | Kontextzeile wird angezeigt | Zeile nennt die Zählung pro Quelle («14 Hevy · 9 Strava sessions · last 4 weeks»); die Warnung «Thin data» wird pro Domäne beurteilt |
+| AC5 | Profil «Endurance» | Ergebnis wird angezeigt | Karten nutzen Ausdauer-Einheiten (km, min/km, bpm, h) und nennen keine Kilogramm-Werte |
+| AC6 | Prompt wird gebaut | LLM-Aufruf | Prompt nennt keine Populationsvergleiche oder Normwerte; allgemeine Trainingsprinzipien (z. B. Intensitätsverteilung) sind erlaubt und im System-Prompt so benannt (US-3 AC3 bleibt erfüllt) |
+| AC7 | Eine Quelle liefert eine Kennzahl nicht (z. B. kein RPE bei Strava) | Karte wird gebaut | Die Zelle entfällt; es wird kein Platzhalter «—» angezeigt |
+| AC8 | 90 Tage Kraft + Cardio im Cache | Prompt wird gebaut | Prompt bleibt unter einem definierten Token-Budget (TD-1); Cardio wird bei Bedarf als Wochenaggregat statt Sessionliste übergeben |
+
+> **Hinweis:** Hebt die Abgrenzung «Cross-Source-Analyse» aus Kapitel 4 auf. Bis dahin filtert `AnalysisPromptBuilder` alle Cardio-Sessions aus dem Prompt, die Kontextzeile ist auf «Hevy» festgelegt, und der Strava-DTO speichert nur Distanz und Zeit (kein Puls, keine Höhenmeter, kein Tempo). Setzt US-14 «AI-Empfehlung als strukturierte Karten» (#170) voraus — die Ausdauer-Karten bauen auf deren Karten-Schema auf — sowie die Polar-Tasks als dritte Quelle. Umsetzung und Tasks: Issue #171.
+>
+> **Die Sportart entscheidet, nicht die Quelle:** Seit ADR-012 (`ActivityKind`) übersetzt jede Quelle ihr Sportart-Vokabular an genau einer Stelle in eine normalisierte Domäne. Ob die Profil-Auswahl erscheint, hängt deshalb an den Trainingsarten im Fenster, nicht an der Zahl der verbundenen Quellen: Zwei Quellen, die beide nur Kraft liefern, sind eine Domäne und bekommen keine Auswahl; ein reines Hevy-Konto, in dem Laufband-Sessions protokolliert werden, bekommt alle drei Optionen.
+>
+> **Ein Verdikt pro Screen:** «You're ready to progress» und «Recover this week» schliessen sich gegenseitig aus. Bei gemischtem Profil kann Kraft steigern und Ausdauer erholen — das gewählte Profil hält den Prompt klein, macht die Empfehlung eindeutig und lässt die Kraft-Kriterien aus US-3 im Profil «Strength» unverändert prüfbar. Das Trainingsziel aus US-13 kann den Standard für diese Auswahl setzen, statt ein zweites Mal zu fragen.
+>
+> **Nummerierung:** US-13 ist an #189 «Trainingsprofil für gezieltere AI-Empfehlungen» vergeben (PR #193) und US-14 an #170, deshalb US-15.
+
 
 
 ## 1.3 Could Have — Nice-to-have, wenn Sprint Luft hat
@@ -185,6 +207,7 @@ Out of Scope — siehe Abschnitt 4.
 | US-8 | Datenquelle-Status sichtbar | **Could** | Bei nur einer Quelle (Hevy) trägt der Sync-Zeitstempel aus US-2 AC2 den Grossteil. AC1 und AC2 sind in v0 dennoch umgesetzt (Stale-Indikator ab >24 h mit Retry, aktive Benachrichtigung bei widerrufenem Key), weil der blosse Zeitstempel veraltete Daten nicht als solche kenntlich macht. Vollwertig — mehrere Quellen nebeneinander — relevant ab v1. |
 | US-13 | Trainingsprofil für gezieltere AI-Empfehlungen | **Should** | Hebt die Qualität von US-3 spürbar, ohne dass irgendetwas davon abhängt: Ohne Profil verhält sich die App exakt wie bisher. Zwei Felder, überspringbar — der Aufwand steht in keinem Verhältnis zum Gewinn an Treffsicherheit der Empfehlung. |
 | US-14 | AI-Empfehlung als strukturierte Karten | **Should** | Macht die Empfehlung aus US-3 direkt umsetzbar, statt sie als Fliesstext lesen zu lassen. Die App prüft Übung und Ausgangswert jeder Karte gegen den Cache; antwortet ein Modell nicht schema-konform, bleibt die Prosa-Darstellung. Der PoC funktioniert auch ohne. |
+| US-15 | Quellenübergreifende AI-Analyse | **Should** | Löst das Versprechen aus US-5 ein: Kraft und Ausdauer werden zusammen beurteilt statt nebeneinander angezeigt. Der PoC funktioniert auch ohne — ohne die Story bleibt die Analyse auf Kraftdaten beschränkt, wie sie es heute ist, und Cardio-Sessions erscheinen weiterhin nur im Dashboard. |
 | US-9 | Progressionskurven pro Übung | **Could** | US-3 deckt den Hauptnutzen ab. Epley-Formel + Plateau-Detection sind nicht-trivial. |
 | US-10 | Daten manuell neu laden | **Could** | iOS-Pattern, das User erwarten — kein Showstopper. 1–2 Tage Aufwand, ergänzt US-2 AC2. |
 | US-11 | Wochenübersicht als Push-Notification | **Won't** | iOS-Permission-Flow + Background-Scheduling + LLM-Call-Fallback ist eigenes Sub-System. Relevant ab v1.2. |
