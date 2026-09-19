@@ -55,7 +55,7 @@ Alle 12 User Stories mit Akzeptanzkriterien, MoSCoW-Priorisierung und Out of Sco
 
 ## Architektur
 
-Native iOS (SwiftUI), kein Backend: Alle API-Keys verbleiben auf dem Gerät im iOS Keychain, die Aufrufe an Hevy- und Claude-API laufen direkt vom Gerät. Ein `FitnessConnector`-Interface kapselt die Datenquellen, damit Strava (v1) ohne Umbau ergänzt werden kann.
+Native iOS (SwiftUI), kein Backend: Alle API-Keys verbleiben auf dem Gerät im iOS Keychain, die Aufrufe an Hevy- und Claude-API laufen direkt vom Gerät. Ein `FitnessConnector`-Interface kapselt die Datenquellen; Strava und Polar sind darüber im PoC (v0) ohne Umbau ergänzt worden.
 
 Systemdesign, Tech-Stack, Datenmodell, ADRs und offene Architektur-Fragen: siehe [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
