@@ -1,6 +1,6 @@
 # FitBuddy — Architektur
 
-> *Getrennt geführt: Ziele, Personas, Risiken → [README.md](../README.md) · User Stories, NFRs → [REQUIREMENTS.md](REQUIREMENTS.md) · Architekturentscheide (Detail) → [adr/](adr/)*
+> *Getrennt geführt: Ziele, Personas, Risiken → [README.md](../README.md) · User Stories, NFRs → [REQUIREMENTS.md](REQUIREMENTS.md) · Architekturentscheide (Detail) → [adr/](adr/) · Kontext-, Use-Case- und Ablaufdiagramme → [DIAGRAMS.md](DIAGRAMS.md)*
 
 ---
 
