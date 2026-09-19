@@ -16,6 +16,7 @@
   - [L3 — Komponenten](#l3--komponenten-folgt-in-modul-5--coding-phase)
   - [Connector-Interface](#connector-interface)
   - [Normalisiertes Datenmodell](#normalisiertes-datenmodell)
+  - [Datenmodell — Schema-Versionskette](#datenmodell--schema-versionskette)
 - [Laufzeitsicht](#laufzeitsicht)
   - [Kritischer Datenfluss — «Analysieren» (US-3)](#kritischer-datenfluss--analysieren--us-3)
   - [Caching-Strategie](#caching-strategie)
@@ -166,6 +167,27 @@ flowchart TB
 - Dashboard und InferenceService lesen ausschliesslich aus dem normalisierten `Activity`-Modell (ADR-006).
 - Alle SwiftData-Schreibzugriffe laufen über `ModelActor`, nie direkt auf dem `@MainActor`.
 
+### Datenmodell — Schema-Versionskette
+
+Der SwiftData-Store ist versioniert (`VersionedSchema`, ADR-001). `FitBuddyMigrationPlan` ordnet die Versionen und hält je eine Stufe dazwischen; alle bisherigen Stufen sind **lightweight** — jede Version fügt nur optionale Spalten oder Spalten mit Default hinzu, keine transformiert Daten.
+
+| Version | Neu | Issue |
+|---|---|---|
+| V1 | `Workout` · `Exercise` · `ExerciseSet` · `AnalysisResult` | #141 |
+| V2 | `Workout.sourceRawValue` (Default `"hevy"`) | — |
+| V3 | `AnalysisResult.goal` · `.experience` | #192 |
+| V4 | `AnalysisResult.reportJSON` · `.providerRawValue` · `.reportVersion` | #176 |
+| **V5** | `Workout.kindRawValue` + zehn flache Cardio-Spalten · `AnalysisResult.sessionCountsJSON` · `.analysisProfileRawValue` | #180 · #182 · #185 |
+
+**V5 (US-15)** persistiert, was [ADR-012](adr/ADR-012-activitykind-und-cardiometrics.md) normalisiert hat:
+
+- `Workout.kindRawValue` hält die gemappte Sportart (`ActivityKind`), die zehn `cardio*`-Spalten halten `CardioMetrics` flach ausgeschrieben (mittlerer und maximaler Puls, Höhenmeter, Tempo, Energie, Effort, Training Load, aktive Kalorien, Distanz, Dauer) — SwiftData speichert Skalare, gelesen und geschrieben wird nur über `Workout.cardio` (#180).
+- `AnalysisResult.sessionCountsJSON` merkt sich, wie die Sessions eines Laufs über die Quellen verteilt waren (#182), `analysisProfileRawValue` das Profil, unter dem er entstand (#185).
+
+Alle neuen Spalten sind optional, V4 → V5 ist entsprechend leichtgewichtig: `nil` ist für eine bestehende Zeile die Wahrheit. `Workout.kind` löst eine fehlende Sportart über die Quelle auf (Hevy → `.strength`, Ausdauerquelle → `.other`), statt einen gecachten Lauf als Kraft einzusortieren; `SessionCountFormat` liest eine fehlende Aufteilung als Gesamtzahl der Zeile aus Hevy. Der nächste Sync ersetzt das Fenster und füllt die Workout-Spalten real.
+
+> **V5 darf nur wachsen, bis es `develop` erreicht.** #182 und #185 sind deshalb in dieselbe Version gewandert, statt eine V6 aufzumachen — es gab noch keinen installierten V5-Store, von dem zu migrieren gewesen wäre. Danach ist die nächste Änderung V6: Ein Store, der von einem anderen V5 geschrieben wurde, gilt als «unknown model version» und fällt still auf einen leeren In-Memory-Container zurück.
+
 ---
 
 ## Laufzeitsicht
@@ -176,20 +198,51 @@ flowchart TB
 [1] Prioritätsreihenfolge lesen → LLMPriorityStore (UserDefaults, kein Key-Material)
 [2] Keychain Read      → Key je konfiguriertem Provider lesen (async — KeychainService ist actor)
 [3] SwiftData Query    → Workouts der letzten 4 + 4 Wochen laden (async, ModelActor)
-[4] Prompt-Build       → Daten serialisieren (max_tokens serverseitig gedeckelt)
-[5] HTTPS POST (SSE)   → Provider 1 (api.anthropic.com / generativelanguage.googleapis.com /
+[4] Profil auflösen    → AnalysisProfile gegen das geladene Fenster (#185)
+[5] Prompt-Build       → Domänen-Sektionen serialisieren (max_tokens serverseitig gedeckelt)
+[6] HTTPS POST (SSE)   → Provider 1 (api.anthropic.com / generativelanguage.googleapis.com /
                           api.mistral.ai), Streaming; jeder Fehler → Provider 2, dann 3 (#79)
-[6] @MainActor Update  → SwiftUI rendert die Antwort am Stück (#178) + Provider-Badge
+[7] @MainActor Update  → SwiftUI rendert die Antwort am Stück (#178) + Provider-Badge
 ```
 
 Eine Sperre nach dem Durchlauf gibt es nicht mehr: Die 60-s-Doppeltipp-Sperre (#117) ist entfernt,
 der «Analysieren»-Button ist nur während eines laufenden Calls deaktiviert. Das harte Kostenlimit
 bleibt das Spending Limit im Account des Users (BYO-Key, ADR-004).
 
+**Analyseprofil und Domänen (US-15).** Das Analyseprofil (`AnalysisProfile`: Strength · Endurance ·
+Overall load, #185) ist die Wahl des Users, worüber dieser Lauf urteilt — und die eine Regel, die
+alles Weitere liest: Es entscheidet, welche Domänen-Sektionen der Prompt trägt
+(`StrengthPromptSection`, `EndurancePromptSection`, `LoadPromptSection`, #183) und welche Domänen
+`AnalysisContext` als analysiert ausweist. `AnalysisProfileOptions` bietet nur Profile an, für die
+das Fenster Sessions hat — eine reine Hevy-Installation bekommt keinen Picker, sondern implizit
+«Strength»; `AnalysisProfile.resolved(for:)` verengt oder weitet die Wahl, wenn das Fenster zwischen
+Auswahl und Tap ein anderes geworden ist. Gemerkt wird sie in `AnalysisProfileStore`
+(UserDefaults, stehende Präferenz — nicht Teil der History).
+
+In welche Sektion eine Session fällt, entscheidet die **gemappte Sportart**, nicht die Quelle:
+`AnalysisDomain.init(summary:)` liest `WorkoutSummary.isCardio` und damit `ActivityKind`
+(ADR-012). Eine Strava-`WeightTraining`-Session ist Kraft, eine Hevy-Session aus Laufband-Sätzen
+ist Ausdauer.
+
+**Recovery bleibt profilblind** (#184): `RecoveryMetrics` zählt die letzten sieben Tage über *alle*
+Quellen und beide Domänen — vier Bankdrück-Sessions und drei Läufe sind sieben Trainingstage, nicht
+vier (US-15 AC3). Nur der mittlere RPE bleibt kraftspezifisch, weil Stravas Relative Effort kein
+RPE ist.
+
+**Kontextzeile.** `AnalysisContext` trägt die Datenbasis der Empfehlung: Sessions **pro Quelle**
+(`sessionCounts`) und dieselben Sessions **pro Domäne** (`domainCounts`), dazu `analysedCounts` —
+die Sessions, die unter dem gewählten Profil tatsächlich in den Prompt gingen. Die
+Dünn-Daten-Warnung (US-6 AC2, Schwelle `thinDataThreshold` = 5) wird **je analysierter Domäne**
+gestellt und benennt sie («Thin strength data — 3 sessions»); eine Domäne, die das Profil nicht
+abdeckt, steht auf der Zeile, wird aber nicht beurteilt. Die Zähler werden mit der Analyse
+gespeichert (`AnalysisResult.sessionCountsJSON`, Profil in `analysisProfileRawValue`), damit eine
+History-Zeile dieselbe Basis nennt wie am Tag des Laufs; einer älteren Zeile ohne Aufteilung bleibt
+die blanke Gesamtzahl.
+
 | Lücke | Konsequenz |
 |---|---|
-| ~~Kein Token-Limit (Schritt 3)~~ | geschlossen mit #187 — siehe TD-1 unter «Technische Schulden» |
-| Kein Backgrounding-Handling (Schritt 4) | iOS beendet URLSession-Task nach ~30s — Analyse verloren, kein User-Feedback |
+| ~~Kein Token-Limit (Schritt 5)~~ | geschlossen mit #187 — siehe TD-1 unter «Technische Schulden» |
+| Kein Backgrounding-Handling (Schritt 6) | iOS beendet URLSession-Task nach ~30s — Analyse verloren, kein User-Feedback |
 
 ### Caching-Strategie
 
@@ -224,6 +277,29 @@ Systemweite Regel: Claude wird nur dort eingesetzt, wo deterministischer Code ke
 System-Prompt definiert: Verbotene Termini (Fachjargon), Ausgabeformat («1 Satz Lage · 1 konkrete Aktion · 1 optionaler Hinweis»), medizinischen Disclaimer, English-only output.
 
 > **RPE-Nutzung:** `ExerciseSet.rpe` (6–10) gibt Claude Aufschluss über subjektive Anstrengung — ermöglicht Empfehlungen wie *"Your RPE has been consistently at 9+ for squats — consider a deload week."*
+
+**Karten (US-14 / US-15).** Die Antwort kommt als JSON-Schema-Report und wird von
+`AnalysisReportValidator` gegen den Cache geprüft, bevor eine Karte gerendert wird
+(`AnalysisReportCard`). Nach US-15 gibt es sechs Kartenarten:
+
+| Karte | Inhalt |
+|---|---|
+| `progression` | Übung, Muskelgruppe, Gewicht von → nach (kg) |
+| `recovery` | Sessions, Trainingstage, mittlerer RPE, mittlerer Puls, empfohlene Pause — über alle Quellen und beide Domänen (#184) |
+| `imbalance` | Zwei Muskelgruppen mit ihren Sätzen pro Woche |
+| `metric` | Eine Wochenkennzahl von → nach, mit Einheit — `MetricUnit`: km · min/km · h · kg (#186) |
+| `interference` | Kraft- und Ausdauertage derselben Woche gegeneinander (US-15 AC2, #186) |
+| `note` | Modellnotiz — und das, worauf eine gescheiterte Karte reduziert wird |
+
+**Jede Zahl auf einer Karte ist die der App.** Der Validator ersetzt die Zahlen des Modells durch
+die eigenen Aggregate; vom Modell bleiben Zielwert und Begründung. Eine Karte, deren Einheit zu
+einer Domäne gehört, die das Profil nicht abdeckt, wird nicht validiert — unter «Endurance»
+erreicht kein Kilogramm den Screen, unter «Strength» kein Kilometer (US-15 AC5). Die
+**Herzfrequenz** ist eine Einheit, die das Modell gar nicht nennen darf: Sie steht weder im
+JSON-Schema noch im Prompt, weil eine Metrik-Karte immer auch ein Ziel setzt und eine
+vorgeschlagene Zielherzfrequenz Populationsnormen voraussetzt, die US-3 AC3 verbietet. Die App
+selbst rechnet Herzfrequenzen (mittlerer Puls auf der Recovery-Karte) — zu ist nur der Weg aus der
+Modellantwort.
 
 ### Swift Concurrency-Konvention
 
