@@ -27,9 +27,9 @@ struct AnalysisContext: Equatable, Sendable {
     ///
     /// A second breakdown rather than one derived from `sessionCounts`,
     /// because the two answer different questions and no longer line up:
-    /// ADR-012 made `WorkoutSummary.isCardio` the arbiter of what endurance
-    /// is, so a Strava `WeightTraining` session is named under Strava on the
-    /// line and counted as strength in the warning. Derived from the sources
+    /// ADR-012 made the normalized sport (`ActivityKind.isEndurance`) the
+    /// arbiter of what endurance is, so a Strava `WeightTraining` session is
+    /// named under Strava on the line and counted as strength in the warning. Derived from the sources
     /// where nothing finer was recorded — see
     /// `init(sessionCounts:window:profile:)`.
     let domainCounts: [AnalysisDomain: Int]

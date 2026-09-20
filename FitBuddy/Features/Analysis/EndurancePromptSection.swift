@@ -284,7 +284,7 @@ enum EndurancePromptSection {
     ///
     /// A session can reach this section with a non-endurance `kind`: a Hevy
     /// workout of treadmill sets carries the model's default `.strength` and
-    /// is endurance by `WorkoutSummary.isCardio`'s fallback heuristic
+    /// is endurance by `WorkoutSummary.isEnduranceWork`'s fallback heuristic
     /// (ADR-012), and a row cached before schema V5 reads as `.other`.
     /// Filing either under "Strength" inside the endurance section would be
     /// worse than saying "Other", which is exactly what is known about it.

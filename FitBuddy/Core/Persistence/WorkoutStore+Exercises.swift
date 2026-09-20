@@ -21,7 +21,7 @@ extension WorkoutStore: ExerciseSummaryReading {
     /// exercise list is the strength picture, like the muscle split in
     /// `WorkoutSummary`.
     ///
-    /// Which sessions those are is decided by `WorkoutSummary.isCardio` since
+    /// Which sessions those are is decided by `WorkoutSummary.isEnduranceWork` since
     /// #183 — the same rule `AnalysisDomain` and the prompt's sections read —
     /// and no longer by the source. The two disagree in both directions, and
     /// each disagreement put the Exercises section out of step with the
@@ -33,7 +33,7 @@ extension WorkoutStore: ExerciseSummaryReading {
     /// recommendation grounded in something the prompt did not state.
     ///
     /// The filter therefore runs in memory rather than in the predicate:
-    /// `isCardio` reads the sets of a workout, which `#Predicate` cannot. The
+    /// `isEnduranceWork` reads the sets of a workout, which `#Predicate` cannot. The
     /// rows are walked anyway to fold the movements, and `WorkoutSummary`
     /// gives the one verdict the whole feature shares.
     func exerciseSummaries(since date: Date) throws -> [ExerciseSummary] {
@@ -44,7 +44,7 @@ extension WorkoutStore: ExerciseSummaryReading {
         descriptor.relationshipKeyPathsForPrefetching = [\.exercises]
 
         var summaries: [String: ExerciseSummary] = [:]
-        for workout in try modelContext.fetch(descriptor) where !WorkoutSummary(workout: workout).isCardio {
+        for workout in try modelContext.fetch(descriptor) where !WorkoutSummary(workout: workout).isEnduranceWork {
             // Per session, so a movement performed twice in one workout still
             // counts as one session for it.
             var keysInWorkout: Set<String> = []
