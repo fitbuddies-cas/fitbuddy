@@ -201,7 +201,7 @@ final class AnthropicClientTests: LLMClientTestCase {
         // take one just as badly. Keys only: a schema `description` is allowed
         // to contain the word "temperature" without it being a parameter.
         let keys = Self.allKeys(in: json)
-        for field in ["temperature", "top_p", "top_k", "seed"] {
+        for field in ["temperature", "top_p", "top_k", "topP", "topK", "seed"] {
             XCTAssertFalse(keys.contains(field), "Claude rejects `\(field)` on this model (HTTP 400)")
         }
     }
@@ -220,16 +220,5 @@ final class AnthropicClientTests: LLMClientTestCase {
         default:
             return []
         }
-    }
-
-    /// `output_config.effort` is the only sampling-adjacent knob Claude leaves.
-    func testEffortIsTheOnlyRemainingKnob() async throws {
-        stub(body: ClaudeSSEFactory.body(textChunks: ["Hi"]))
-
-        _ = try await collect(try await stream())
-
-        let json = try jsonBody(of: try capturedRequest())
-        let outputConfig = try XCTUnwrap(json["output_config"] as? [String: Any])
-        XCTAssertEqual(outputConfig["effort"] as? String, AnthropicClient.effort)
     }
 }

@@ -276,6 +276,9 @@ final class GeminiClientTests: LLMClientTestCase {
 
         let firstConfig = try XCTUnwrap(first["generationConfig"] as? [String: Any])
         let secondConfig = try XCTUnwrap(second["generationConfig"] as? [String: Any])
-        XCTAssertEqual(firstConfig["seed"] as? Int, secondConfig["seed"] as? Int)
+        // Unwrapped, not compared as optionals: drop the field entirely and
+        // both sides would be `nil`, so the equality alone would still pass.
+        let firstSeed = try XCTUnwrap(firstConfig["seed"] as? Int)
+        XCTAssertEqual(firstSeed, secondConfig["seed"] as? Int)
     }
 }

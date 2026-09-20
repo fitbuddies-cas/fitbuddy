@@ -237,6 +237,9 @@ final class MistralClientTests: LLMClientTestCase {
         _ = try await collect(try await stream())
         let second = try jsonBody(of: try capturedRequest())
 
-        XCTAssertEqual(first["random_seed"] as? Int, second["random_seed"] as? Int)
+        // Unwrapped, not compared as optionals: drop the field entirely and
+        // both sides would be `nil`, so the equality alone would still pass.
+        let firstSeed = try XCTUnwrap(first["random_seed"] as? Int)
+        XCTAssertEqual(firstSeed, second["random_seed"] as? Int)
     }
 }

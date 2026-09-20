@@ -24,14 +24,20 @@ enum LLMSampling {
     /// distribution the next token is drawn from, so the model stops wandering
     /// between defensible readings of the same numbers.
     ///
-    /// 0 is not the better choice here for two reasons. It buys no real
-    /// determinism — the measurement in #224 found the outputs still vary at
-    /// `temperature = 0`, because the cause is the batch dependence of the GPU
-    /// kernels behind a public API, not the sampling. And it costs something:
-    /// the report is prose the user reads, and greedy decoding makes it flat
-    /// and repetitive, headline and lead falling into the same phrasing every
-    /// time. 0.2 keeps the wording alive while cutting the spread that made the
-    /// recommendation impossible to follow.
+    /// Why not 0. Greedy decoding would not buy the determinism it looks like
+    /// it buys: the study #224 cites (arXiv 2604.19598 / PMID 42435611) found
+    /// outputs still varying at `temperature = 0`, because the cause is the
+    /// batch dependence of the GPU kernels behind a public API rather than the
+    /// sampling. That study covers GPT-4.1 and Claude Sonnet 4.6 — **not**
+    /// Gemini and Mistral, the only two providers this constant reaches — so it
+    /// is an argument by analogy, not a result measured on our own stack. The
+    /// remaining reason to stay off 0 is that greedy decoding on a structured
+    /// JSON answer can fall into degenerate repetition, and the report is prose
+    /// the user reads.
+    ///
+    /// **0.2 is a judgement call, not a measured optimum.** Nothing in this
+    /// repo has compared it against 0, 0.3 or 0.7, and #229 is the task that
+    /// measures what spread is actually left. Treat the number as revisable.
     ///
     /// The verdict itself does not become stable from this alone — #227 moves
     /// it out of the model and into the app's own metrics. This only lowers the
@@ -44,7 +50,9 @@ enum LLMSampling {
     /// The value is arbitrary; that it never changes between runs is the whole
     /// point. With an identical prompt and a fixed seed, the provider samples
     /// the same way twice — as far as its own scheduling allows, which is the
-    /// same caveat as above. A per-run seed would be strictly worse than none,
-    /// as it would guarantee the variation instead of merely permitting it.
+    /// same caveat as above. A fixed value is the only variant that buys
+    /// anything: omitting the field lets the provider pick a seed per request,
+    /// so sending a freshly drawn one each run is *equivalent* to omitting it —
+    /// not worse, just pointless.
     static let seed = 1
 }

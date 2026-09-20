@@ -13,7 +13,9 @@ import Foundation
 /// - The Messages API has no `seed` on any model, so there is nothing to pin
 ///   the sampling to either.
 ///
-/// The only knob left is `output_config.effort` below, set to `"low"`. The
+/// The only knob left is `output_config.effort` below, whose value is
+/// `AnthropicClient.effort` — named rather than repeated here, so raising it
+/// later cannot silently falsify this comment. The
 /// spread this leaves on Claude is not closed from here; the verdict moves into
 /// the app's own metrics in #227. `AnthropicClientTests` asserts that none of
 /// the four field names reaches the wire, so that nobody adds them later in
