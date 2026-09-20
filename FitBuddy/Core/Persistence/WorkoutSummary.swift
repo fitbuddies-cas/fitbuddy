@@ -77,25 +77,19 @@ struct WorkoutSummary: Hashable, Identifiable, Sendable {
         self.cardio = cardio
     }
 
-    /// Whether the session is better described by distance and time than by
-    /// kg. Since #180 `kind` decides this wherever it was actually mapped,
-    /// and the old heuristic — moved no load, but logged distance or time —
-    /// is only the fallback where it was not.
+    /// Whether the row is better described by distance and time than by kg.
+    /// This is a presentation question; the domain question — which sport was
+    /// trained — is answered by `kind.isEndurance`, which is what the
+    /// analysis paths read (ADR-012).
     ///
-    /// Two kinds are authoritative. An endurance discipline is cardio
-    /// whatever it logged, so a Strava `WeightTraining` session no longer
-    /// reads as a run just because it moved no barbell. `.strength` rules the
-    /// session out only when an endurance source mapped it from its own
-    /// vocabulary (`WeightTraining`, `STRENGTH_TRAINING`) — Hevy's
-    /// `.strength` is the model's default rather than a classification, so it
-    /// says nothing, and a Hevy session of treadmill sets still falls through
-    /// to the heuristic.
-    ///
-    /// `.other` falls through as well. That is what a row cached before V5
-    /// reads as, where the sport was never recorded (see `Workout.kind`).
+    /// Since #180 a mapped endurance discipline is cardio whatever it logged,
+    /// so a Strava `Run` no longer depends on the heuristic. Every other kind
+    /// falls through to that heuristic — moved no load, but logged distance
+    /// or time. A `WeightTraining` session that logged only a duration
+    /// therefore still shows its time: "0 kg" would be a wrong number rather
+    /// than a missing one, even though its `kind` is `.strength`.
     var isCardio: Bool {
         if kind.isEndurance { return true }
-        if kind == .strength, source.isEnduranceSource { return false }
         return volumeKg == 0 && (distanceMeters != nil || durationSeconds != nil)
     }
 }
