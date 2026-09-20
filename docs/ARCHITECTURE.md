@@ -285,7 +285,7 @@ Bekannte Lücken im PoC-Design — vor Sprint 3 (AI-Integration) adressieren.
 
 > **TD-1 («Kein Token-Limit im Prompt-Build») ist mit #187 gelöst.** `AnalysisPromptBudget`
 > definiert die Obergrenze als Konstante: `maxPromptTokens` ist ein Sechzehntel des **kleinsten
-> Kontextfensters der drei Provider** (`mistral-medium-2604` mit 128 k Tokens; `claude-opus-5`
+> Kontextfensters der drei Provider** (`mistral-medium-3-5` mit 128 k Tokens; `claude-opus-5`
 > und `gemini-3.6-flash` haben je 1 M). Gemessen wird deterministisch und ohne Netzwerkaufruf
 > über eine Zeichenzahl-Schätzung (vier Zeichen ≈ ein Token); die grosse Reserve bezahlt deren
 > Ungenauigkeit. `AnalysisPromptBuilder.make` baut den Prompt auf der obersten Stufe von

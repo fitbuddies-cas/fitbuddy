@@ -20,7 +20,7 @@ import Foundation
 /// |---|---|---|
 /// | Anthropic | `claude-opus-5` | 1 M tokens |
 /// | Google | `gemini-3.6-flash` | 1 M tokens |
-/// | Mistral | `mistral-medium-2604` | 128 k tokens |
+/// | Mistral | `mistral-medium-3-5` | 128 k tokens |
 ///
 /// `smallestContextWindowTokens` is therefore Mistral's 128 k. The budget is
 /// not that number, for three reasons:
