@@ -26,8 +26,8 @@ enum EndurancePromptSection {
     ///   - detail: How long the lists may be (#187). This half has no session
     ///     list to cap — #183 built it as an aggregate, which is what US-15
     ///     AC8's "cardio as a weekly aggregate" asks for, so only the per-week
-    ///     rows can still be cut, and they are cut at the same week as the
-    ///     strength half's.
+    ///     rows can still be cut, and each domain cuts at its own weeks that
+    ///     recorded a session — see `AnalysisPromptDetail.weekRows`.
     static func sections(
         recent: [WorkoutSummary],
         previous: [WorkoutSummary],
