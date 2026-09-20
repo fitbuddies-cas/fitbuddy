@@ -505,10 +505,16 @@ final class AnalysisViewModel: ObservableObject {
             // (US-6 AC2, #182). While `strengthSessions(in:)` filters by
             // source the two genuinely differ, and the difference is the whole
             // point: a basis half of which never reached the prompt is thin.
+            //
+            // Until #183 sections the prompt, everything handed to the
+            // builder is read as strength work — a Hevy conditioning
+            // session included — so that is the domain it was analysed in.
+            // Splitting `summaries` by `isCardio` here would warn about a
+            // thin endurance base the recommendation has no content for.
             context = AnalysisContext(
                 sessionCounts: counts.sources,
                 domainCounts: counts.domains,
-                analysedCounts: Self.sessionCounts(in: summaries, from: start).domains,
+                analysedCounts: [.strength: summaries.filter { $0.startTime >= start }.count],
                 window: window,
                 profile: profile
             )

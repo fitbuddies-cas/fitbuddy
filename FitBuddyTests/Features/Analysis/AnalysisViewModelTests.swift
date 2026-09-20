@@ -699,6 +699,40 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertNil(sut.context?.thinDataWarning)
     }
 
+    /// A Hevy conditioning session — no volume, a duration, and so `isCardio`
+    /// by ADR-012 — stays in `strengthSessions(in:)`, which filters by source.
+    /// It reaches the prompt as a "0 kg" strength session, so that is the
+    /// domain it was analysed in and there is no endurance verdict to give.
+    ///
+    /// **#183 is meant to turn this test around:** once the prompt carries
+    /// endurance sections, this session really is analysed as endurance, and
+    /// then a single one of them *should* read as a thin endurance base.
+    /// Flip the expectation there rather than deleting the case.
+    func testAHevyConditioningSessionDoesNotWarnAboutThinEnduranceData() async {
+        cache.summaries = (1...12).map { Self.workout(daysAgo: $0) }
+            + [
+                WorkoutSummary(
+                    id: "w-conditioning",
+                    title: "Treadmill Intervals",
+                    startTime: Self.reference.addingTimeInterval(-13 * 86_400),
+                    source: .hevy,
+                    volumeKg: 0,
+                    exerciseCount: 1,
+                    countedSetCount: 4,
+                    durationSeconds: 1_200
+                ),
+            ]
+        await streamer.setText("ok")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.basisDescription, "13 Hevy sessions")
+        XCTAssertEqual(sut.context?.analysedCounts, [.strength: 13])
+        XCTAssertEqual(sut.context?.isThin, false)
+        XCTAssertNil(sut.context?.thinDataWarning)
+    }
+
     /// The widened-window note has to stay true next to a line that counts
     /// every source: the ladder moved because the recent weeks held no
     /// *strength* sessions, and twelve runs sit in them (#87, #182).
