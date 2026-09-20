@@ -21,6 +21,10 @@ enum AnalysisFailure: Equatable {
     case unauthorized(LLMProvider?)
     /// The request never reached the provider.
     case offline(LLMProvider?)
+    /// The provider answered with a certificate FitBuddy must not trust
+    /// (failed pinning, #153): the network is intercepting TLS, and the
+    /// prompt with the training data was never sent.
+    case untrustedConnection(LLMProvider?)
     /// HTTP 429, with the provider's `Retry-After` in seconds when it sent one.
     case rateLimited(provider: LLMProvider?, retryAfter: TimeInterval?)
     /// The provider's plan for this key allows no requests to the model at
@@ -63,6 +67,8 @@ enum AnalysisFailure: Equatable {
             self = .unauthorized(provider)
         case .networkUnavailable:
             self = .offline(provider)
+        case .untrustedConnection:
+            self = .untrustedConnection(provider)
         case .rateLimited(let retryAfter):
             self = .rateLimited(provider: provider, retryAfter: retryAfter)
         case .planExcludesModel:
@@ -85,6 +91,8 @@ enum AnalysisFailure: Equatable {
             return "Key not readable"
         case .offline:
             return "No connection"
+        case .untrustedConnection:
+            return "Connection not trusted"
         case .rateLimited:
             return "Too many requests"
         case .planExcludesModel(let provider):
@@ -112,6 +120,9 @@ enum AnalysisFailure: Equatable {
             return "Your key could not be read from the Keychain. Unlock your device and try again."
         case .offline(let provider):
             return "Your device could not reach \(Self.name(provider)). Check your connection and try again."
+        case .untrustedConnection(let provider):
+            return "Something on this network is intercepting the secure connection to \(Self.name(provider)). "
+                + "Nothing was sent. Switch to another network and try again."
         case .rateLimited(let provider, let retryAfter):
             guard let wait = Self.wait(retryAfter) else {
                 return "\(Self.name(provider)) is rate-limiting your key. Try again in a few minutes."
@@ -140,6 +151,8 @@ enum AnalysisFailure: Equatable {
             return "lock.slash"
         case .offline:
             return "antenna.radiowaves.left.and.right.slash"
+        case .untrustedConnection:
+            return "lock.trianglebadge.exclamationmark"
         case .rateLimited, .serviceUnavailable:
             return "exclamationmark.icloud"
         case .planExcludesModel:
@@ -159,7 +172,7 @@ enum AnalysisFailure: Equatable {
         switch self {
         case .missingAPIKey, .unauthorized, .noTrainingData, .planExcludesModel:
             return false
-        case .keychainUnavailable, .offline, .rateLimited, .serviceUnavailable,
+        case .keychainUnavailable, .offline, .untrustedConnection, .rateLimited, .serviceUnavailable,
              .cacheUnavailable, .unreadableResponse:
             return true
         }

@@ -156,7 +156,7 @@ die beiden Screens samt ViewModels unter `Features/Settings/`.
 | Frage | Priorität | Fällig |
 |---|---|---|
 | **Strava-API-Doku bei der Implementierung gegenprüfen** (Endpoints, Scope-Namen, Rate-Limits, Pflichtfelder am Token-Endpoint) — dieser ADR ist gegen den Stand 09/2026 geschrieben | **Hoch** | **#138** |
-| **Certificate Pinning inkl. `www.strava.com`** (TD-4, nun fünf Hosts) | Hoch | vor TestFlight mit externen Testern |
+| ~~Certificate Pinning inkl. `www.strava.com`~~ (TD-4) — mit #153 umgesetzt, `docs/CERTIFICATE-PINNING.md`. **(geschlossen)** | — | — |
 | Consent-Version anheben, sobald Strava als Empfänger in der Privacy-Notice steht | Hoch | #145 |
 | `/oauth/mobile/authorize` + `onOpenURL` für den App-Switch in die Strava-App evaluieren | Niedrig | v1 |
 | Athlete-ID aus der Token-Antwort persistieren, falls Multi-Account je relevant wird | Niedrig | offen |

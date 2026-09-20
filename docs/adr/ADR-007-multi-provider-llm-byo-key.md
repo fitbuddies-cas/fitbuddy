@@ -65,7 +65,7 @@ FitBuddy erlaubt im PoC bis zu drei LLM-Provider (Claude, Gemini, Mistral) im st
 | ~~Hinweis «v0 analysiert nur mit Claude» aus Schritt 3 entfernen~~ — mit #79 entfernt; `LLMProvider.isCallable` und `providerNotSupportedYet` sind gelöscht. **(geschlossen)** | — | — |
 | Einseitige Risikonotiz (PoC) um Google/Mistral erweitern | Mittel | vor v1.0 |
 | **Verhältnismässigkeits-Freigabe durch Datenschutz-Verantwortlichen der BFH einholen → Status auf «Accepted» heben** | **Hoch** | **vor Merge von #79** |
-| Cert-Pinning-Scope in [ADR-004](ADR-004-no-backend-proxy-poc.md) auf `generativelanguage.googleapis.com` und `api.mistral.ai` erweitern — Pinning ist bisher für keinen Host umgesetzt (QA-1) | Hoch | Sprint 2 / vor TestFlight |
+| ~~Cert-Pinning-Scope in [ADR-004](ADR-004-no-backend-proxy-poc.md) auf `generativelanguage.googleapis.com` und `api.mistral.ai` erweitern~~ — mit #153 für beide Hosts umgesetzt, `docs/CERTIFICATE-PINNING.md`. **(geschlossen)** | — | — |
 
 ---
 

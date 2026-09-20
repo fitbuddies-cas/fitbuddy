@@ -181,4 +181,17 @@ final class AnthropicClientTests: LLMClientTestCase {
             XCTAssertEqual(error, .networkUnavailable)
         }
     }
+
+    /// A failed certificate check (pinning, #153) is reported as such, not
+    /// as offline — the prompt with the training data was never sent.
+    func testUntrustedConnectionWhenCertificateCheckFails() async throws {
+        StubURLProtocol.handler = { _ in throw URLError(.serverCertificateUntrusted) }
+
+        do {
+            _ = try await stream()
+            XCTFail("expected untrustedConnection")
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .untrustedConnection)
+        }
+    }
 }

@@ -210,6 +210,8 @@ actor StravaConnector: FitnessConnector {
                 return .cancelled
             case .transport:
                 return .failed(.networkUnavailable)
+            case .untrustedConnection:
+                return .failed(.untrustedConnection)
             case .unexpectedStatus(let status) where (500...599).contains(status):
                 return .failed(.serviceUnavailable)
             case .unexpectedStatus, .invalidResponse, .accessDenied, .stateMismatch, .missingScope, .invalidCallback:
@@ -295,6 +297,7 @@ actor StravaConnector: FitnessConnector {
             // A cancelled request is not a connectivity problem and must not
             // surface as one — rethrow it untouched.
             if error.isCancellation { throw error }
+            if error.isUntrustedConnection { throw ConnectorError.untrustedConnection }
             throw ConnectorError.networkUnavailable
         }
         guard let http = response as? HTTPURLResponse else { throw ConnectorError.networkUnavailable }

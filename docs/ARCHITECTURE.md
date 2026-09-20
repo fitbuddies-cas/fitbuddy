@@ -382,7 +382,15 @@ Alle asynchronen Zugriffe folgen drei fixen Ausführungskontexten — gilt schic
 
 ### Technische Schulden
 
-Bekannte Lücken im PoC-Design. Stand nach US-15 (#188): TD-1 und TD-2 sind geschlossen, TD-3 und TD-4 offen.
+Bekannte Lücken im PoC-Design. Stand nach #153: TD-1, TD-2 und TD-4 sind geschlossen, TD-3 offen.
+
+> TD-4 («Cert-Pinning für keinen Host umgesetzt») ist mit #153 geschlossen: Alle sieben Hosts, an
+> die ein Nutzer-Geheimnis geht, sind deklarativ über `NSPinnedDomains` in der `Info.plist` auf ihre
+> Root-CAs gepinnt (nicht per `URLSessionDelegate`, nicht auf Leaf oder Intermediate — die rotieren).
+> `flow.polar.com` und die Strava-Autorisierungsseite bleiben ungepinnt, weil sie in
+> `ASWebAuthenticationSession` ausserhalb des App-Prozesses laufen. Ein Pin-Fehler erscheint dem
+> Nutzer als «connection not trusted», nicht als «no connection». Herleitung, Prüfung und
+> Rotationsablauf: [CERTIFICATE-PINNING.md](CERTIFICATE-PINNING.md).
 
 > TD-2 («Cooldown-Write nach API-Call») ist hinfällig: Der 6h-Cooldown wurde mit #117 durch eine
 > 60-s-Doppeltipp-Sperre ersetzt, und auch diese ist inzwischen entfernt — es gibt keinen
@@ -408,7 +416,6 @@ Bekannte Lücken im PoC-Design. Stand nach US-15 (#188): TD-1 und TD-2 sind gesc
 | # | Lücke | Konsequenz | Handlungsbedarf |
 |---|---|---|---|
 | TD-3 | **Kein Backgrounding-Handling beim Analyse-Call** | iOS beendet URLSession-Task nach ~30s — Analyse verloren, kein Benutzer-Feedback | `URLSession` mit `background`-Konfiguration oder explizites Timeout + Benutzer-Feedback |
-| TD-4 | **Cert-Pinning für keinen Host umgesetzt** (QA-1, ADR-004) — mit #79 kommen `generativelanguage.googleapis.com` und `api.mistral.ai` zu `api.anthropic.com` und `api.hevyapp.com` dazu, mit ADR-010 und ADR-011 zusätzlich `www.strava.com` sowie `polarremote.com` und `www.polaraccesslink.com`. **`flow.polar.com` gehört nicht dazu**: die Authorize-URL wird an `ASWebAuthenticationSession` übergeben, läuft also im System-Browser — ein `URLSessionDelegate` der App sieht diese Verbindung nie | MITM im offenen WLAN kann API-Keys und Gesundheitsdaten abgreifen | `URLSessionDelegate` mit Public-Key-Pinning für alle sieben Hosts |
 
 ---
 
@@ -416,7 +423,11 @@ Bekannte Lücken im PoC-Design. Stand nach US-15 (#188): TD-1 und TD-2 sind gesc
 
 ### Widersprüche & Unklarheiten
 
-*Ursprünglich vor Sprint 1 aufzulösen. W-4 und W-6 sind erledigt; W-3 und W-5 sind weiterhin offen und unten auf den aktuellen Stand gebracht.*
+*Ursprünglich vor Sprint 1 aufzulösen. W-3, W-4 und W-6 sind erledigt; W-5 ist weiterhin offen und unten auf den aktuellen Stand gebracht.*
+
+> W-3 («Certificate Pinning: als aktiv formuliert, laut ADR noch nicht implementiert») ist mit #153
+> aufgelöst: Das Pinning ist umgesetzt (TD-4), ADR-004 beschreibt den tatsächlichen Mechanismus
+> (`NSPinnedDomains`, sieben Hosts, Root-CA-Pins) — Doku und Code stimmen wieder überein.
 
 > W-4 («6h-Cooldown-Speicherort undefiniert») ist aufgelöst: Mit #117 wurde die Sperre auf 60 s
 > verkürzt und als `fitbuddy.analysis.lastCallTimestamp` in `UserDefaults` abgelegt; inzwischen
@@ -434,7 +445,6 @@ Bekannte Lücken im PoC-Design. Stand nach US-15 (#188): TD-1 und TD-2 sind gesc
 
 | # | Widerspruch / Unklarheit | Betroffene Dokumente | Handlungsbedarf |
 |---|---|---|---|
-| W-3 | **Certificate Pinning ist für keinen Host implementiert** — TD-4 ist die massgebliche Stelle, inzwischen sieben Hosts. `CLAUDE.md` und die QA-1-Massnahmen in `REQUIREMENTS.md` führten es als vorhandene Massnahme; beide sind auf «geplant» korrigiert. | `ADR-004`, `CLAUDE.md`, `REQUIREMENTS.md` | Offen bleibt die Umsetzung — fällig vor TestFlight mit externen Testern (ADR-010). |
 | W-5 | **HealthKit: formeller Entscheid nie protokolliert.** Faktisch ist der PoC ohne HealthKit ausgeliefert; `Activity` und Schema V5 stehen (ADR-012), das Datenmodell ist damit nicht mehr blockiert. | `ADR-006` | Nur noch Protokoll-Schuld: den De-facto-Entscheid «OUT für v0» als Nachtrag in ADR-006 festhalten und für v1 neu bewerten. |
 
 ### Offene Architektur-Fragen

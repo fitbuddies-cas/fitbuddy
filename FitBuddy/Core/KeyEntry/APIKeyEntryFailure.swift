@@ -12,6 +12,9 @@ enum APIKeyEntryFailure: Equatable {
     case invalidKey
     /// The provider could not be reached at all (offline, timeout, DNS…).
     case network
+    /// The provider answered with a certificate FitBuddy must not trust
+    /// (failed pinning, #153) — the network is intercepting the connection.
+    case untrustedConnection
     /// The provider answered, but not with 200/401 (rate limit, outage…) —
     /// the key was not rejected and the connection works.
     case serviceUnavailable
@@ -27,6 +30,7 @@ enum APIKeyEntryFailure: Equatable {
         switch error {
         case .invalidKey: self = .invalidKey
         case .transport: self = .network
+        case .untrustedConnection: self = .untrustedConnection
         case .unexpectedStatus: self = .serviceUnavailable
         }
     }
@@ -41,6 +45,7 @@ enum APIKeyEntryFailure: Equatable {
         switch self {
         case .invalidKey: return "\(Self.name(provider)) rejected this key (HTTP 401)"
         case .network: return "Could not reach \(Self.inlineName(provider))"
+        case .untrustedConnection: return "Connection to \(Self.inlineName(provider)) not trusted"
         case .serviceUnavailable: return "\(Self.name(provider)) is currently unavailable"
         case .keychain: return "Could not save to the Keychain"
         }
@@ -53,6 +58,8 @@ enum APIKeyEntryFailure: Equatable {
             return "The key may be revoked or mistyped. Generate a new one in your \(Self.possessiveName(provider)) account, then paste it here."
         case .network:
             return "Check your internet connection and try again."
+        case .untrustedConnection:
+            return "Something on this network is intercepting the secure connection to \(Self.inlineName(provider)). Your key was not sent. Switch to another network, for example mobile data, and try again."
         case .serviceUnavailable:
             return "\(Self.name(provider)) answered with an unexpected error — your key was not rejected. Please try again in a little while."
         case .keychain:

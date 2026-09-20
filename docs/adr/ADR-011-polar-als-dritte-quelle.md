@@ -73,7 +73,7 @@ Der Hard-Logout (US-1 AC3) löscht alle sechs samt der gecachten Polar-Trainings
 - **`trainingLoad` ist providerspezifisch skaliert** — nur als Trend innerhalb von Polar interpretierbar.
 - **`metrics` wird noch nicht persistiert.** Das SwiftData-Schema kennt die Ausdauer-Kennzahlen nicht; im Cache fehlen sie.
 - **v3 wird mittelfristig abgelöst.** Die Migration auf v4 bedeutet neue Hosts, neue Client-Registrierung und ein neues DTO.
-- **Drei weitere Hosts für das Certificate-Pinning** (TD-4).
+- **Zwei weitere Hosts für das Certificate-Pinning** (TD-4): `www.polaraccesslink.com` und `polarremote.com`, mit #153 umgesetzt. `flow.polar.com` läuft in `ASWebAuthenticationSession` und ist nicht pinnbar.
 
 ---
 

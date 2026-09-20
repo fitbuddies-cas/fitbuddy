@@ -5,7 +5,9 @@ import XCTest
 /// is user-facing text for three screens, so the tests guard that every case
 /// has usable copy and that the validator mapping stays deliberate.
 final class APIKeyEntryFailureTests: XCTestCase {
-    private let allFailures: [APIKeyEntryFailure] = [.invalidKey, .network, .serviceUnavailable, .keychain]
+    private let allFailures: [APIKeyEntryFailure] = [
+        .invalidKey, .network, .untrustedConnection, .serviceUnavailable, .keychain,
+    ]
 
     // MARK: - Validator mapping
 
@@ -14,7 +16,18 @@ final class APIKeyEntryFailureTests: XCTestCase {
     func testMapsEveryValidatorErrorOntoItsOwnFailure() {
         XCTAssertEqual(APIKeyEntryFailure(.invalidKey), .invalidKey)
         XCTAssertEqual(APIKeyEntryFailure(.transport), .network)
+        XCTAssertEqual(APIKeyEntryFailure(.untrustedConnection), .untrustedConnection)
         XCTAssertEqual(APIKeyEntryFailure(.unexpectedStatus(503)), .serviceUnavailable)
+    }
+
+    /// A failed certificate check (pinning, #153) must not inherit the
+    /// "check your internet" advice — the user has to leave the network.
+    func testUntrustedConnectionIsNeverReportedAsANetworkProblem() {
+        XCTAssertNotEqual(APIKeyEntryFailure(.untrustedConnection), .network)
+        XCTAssertNotEqual(
+            APIKeyEntryFailure.untrustedConnection.message(for: "Hevy"),
+            APIKeyEntryFailure.network.message(for: "Hevy")
+        )
     }
 
     /// A rejected key is the one case that may not be reported as a transport

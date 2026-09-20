@@ -139,6 +139,7 @@ actor HevyConnector: FitnessConnector {
             // this one) is not a connectivity problem and must not surface as
             // one — rethrow it untouched.
             if error.isCancellation { throw error }
+            if error.isUntrustedConnection { throw ConnectorError.untrustedConnection }
             throw ConnectorError.networkUnavailable
         }
 
