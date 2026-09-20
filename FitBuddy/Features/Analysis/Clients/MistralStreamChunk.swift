@@ -22,7 +22,41 @@ struct MistralStreamChunk: Decodable {
         let finishReason: String?
 
         struct Delta: Decodable {
+            /// The answer text carried by this delta, whichever wire shape it
+            /// arrived in.
             let content: String?
+
+            /// One entry of a chunk-array `content`. Mistral sends `text`
+            /// chunks for the answer and `thinking` chunks for the model's
+            /// reasoning; only the former is answer text. Both fields are
+            /// optional so that an entry without them does not fail the whole
+            /// array decode and lose the text chunk beside it.
+            private struct ContentChunk: Decodable {
+                let type: String?
+                let text: String?
+            }
+
+            private enum CodingKeys: String, CodingKey {
+                case content
+            }
+
+            /// With reasoning on, Mistral's `delta.content` is a chunk array
+            /// while the model thinks and a plain string once it answers (#211).
+            /// The client leaves reasoning at Mistral's default, so both shapes
+            /// have to yield the answer. The array is decoded as one value: an
+            /// entry whose `text` is not a string still drops the whole delta.
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                if let text = try? container.decode(String.self, forKey: .content) {
+                    content = text
+                } else if let chunks = try? container.decode([ContentChunk].self, forKey: .content) {
+                    content = chunks.filter { $0.type == Self.textChunkType }.compactMap(\.text).joined()
+                } else {
+                    content = nil
+                }
+            }
+
+            private static let textChunkType = "text"
         }
 
         enum CodingKeys: String, CodingKey {

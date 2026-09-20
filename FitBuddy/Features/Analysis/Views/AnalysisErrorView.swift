@@ -55,6 +55,13 @@ struct AnalysisErrorView: View {
                 Button("Open Settings", action: onOpenSettings)
                     .buttonStyle(.fb(.accent))
             }
+            // The one failure fixed outside the app: a plan that allows no
+            // requests to the model (#211). The link leads to the page that
+            // shows the restriction, in place of a retry that cannot help.
+            if let planURL = failure.planURL {
+                Link("Open \(planURL.host() ?? "console") ↗", destination: planURL)
+                    .buttonStyle(.fb(.accent))
+            }
             Button("Back", action: onBack)
                 .buttonStyle(.fb(.secondary))
         }
@@ -85,6 +92,18 @@ struct AnalysisErrorView: View {
     )
         .padding(16)
         .background(Color.fbBackground)
+}
+
+#Preview("Plan excludes model") {
+    AnalysisErrorView(
+        failure: .planExcludesModel(.mistral),
+        attribution: AnalysisAttribution(first: .mistral),
+        onRetry: nil,
+        onOpenSettings: nil,
+        onBack: {}
+    )
+    .padding(16)
+    .background(Color.fbBackground)
 }
 
 #Preview("Every provider failed") {
