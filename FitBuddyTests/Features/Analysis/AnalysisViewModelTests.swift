@@ -702,6 +702,40 @@ final class AnalysisViewModelTests: XCTestCase {
         )
     }
 
+    /// A Hevy conditioning session — no volume, a duration, and so cardio to
+    /// look at — must not warn about a thin endurance base on its own.
+    ///
+    /// It held while the prompt filtered by source (#182) because everything
+    /// the builder saw was counted as strength. It holds now for a better
+    /// reason: the domain follows the mapped sport (ADR-012), and Hevy's
+    /// `.strength` is the model's default rather than a classification, so
+    /// the session is strength work to the analysis however the row displays
+    /// it. A real endurance session from Strava or Polar does warn.
+    func testAHevyConditioningSessionDoesNotWarnAboutThinEnduranceData() async {
+        cache.summaries = (1...12).map { Self.workout(daysAgo: $0) }
+            + [
+                WorkoutSummary(
+                    id: "w-conditioning",
+                    title: "Treadmill Intervals",
+                    startTime: Self.reference.addingTimeInterval(-13 * 86_400),
+                    source: .hevy,
+                    volumeKg: 0,
+                    exerciseCount: 1,
+                    countedSetCount: 4,
+                    durationSeconds: 1_200
+                ),
+            ]
+        await streamer.setText("ok")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.basisDescription, "13 Hevy sessions")
+        XCTAssertEqual(sut.context?.analysedCounts, [.strength: 13])
+        XCTAssertEqual(sut.context?.isThin, false)
+        XCTAssertNil(sut.context?.thinDataWarning)
+    }
+
     /// The ladder runs over every session now, because every session reaches
     /// the prompt: twelve recent runs are training, so the window stays at
     /// four weeks instead of widening past them to find a lift (#87, #183).

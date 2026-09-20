@@ -220,8 +220,9 @@ final class StravaConnectorTests: XCTestCase {
     }
 
     /// Zero is what Strava sends for what it never measured, so it must not
-    /// turn into "0 m of ascent" or "0 m/s".
-    func testZeroElevationSpeedEnergyAndEffortDecodeAsNotLogged() async throws {
+    /// turn into "0 m of ascent", "0 m/s" or a heart rate of 0 bpm — the last
+    /// one being a number the dashboard would otherwise show as a reading.
+    func testZeroHeartRateElevationSpeedEnergyAndEffortDecodeAsNotLogged() async throws {
         stub(pages: [StravaPayloadFactory.page([
             StravaPayloadFactory.activity(
                 id: 1,
@@ -229,6 +230,8 @@ final class StravaConnectorTests: XCTestCase {
                 sportType: "Swim",
                 totalElevationGain: 0,
                 averageSpeed: 0,
+                averageHeartRate: 0,
+                maxHeartRate: 0,
                 kilojoules: 0,
                 sufferScore: 0
             ),
@@ -239,8 +242,10 @@ final class StravaConnectorTests: XCTestCase {
     }
 
     /// Strava composes its finer sports out of the coarse ones, so the
-    /// mapping is matched on the suffix rather than on a lookup table.
-    func testSportTypeMapsOntoTheNormalizedKind() async throws {
+    /// mapping is matched on the suffix rather than on a lookup table. Tested
+    /// against the mapper directly: a failure then points at the sport type
+    /// instead of at the connector round-trip.
+    func testSportTypeMapsOntoTheNormalizedKind() {
         let cases: [(String, ActivityKind)] = [
             ("Run", .run),
             ("TrailRun", .run),
@@ -261,23 +266,23 @@ final class StravaConnectorTests: XCTestCase {
         ]
 
         for (sportType, expected) in cases {
-            stub(pages: [StravaPayloadFactory.page([
-                StravaPayloadFactory.activity(id: 1, start: Self.daysAgo(1), sportType: sportType),
-            ])])
-
-            let activities = await fetchAll()
-            let activity = try XCTUnwrap(activities.first)
-            XCTAssertEqual(activity.kind, expected, sportType)
+            XCTAssertEqual(StravaActivityDTO.kind(sportType: sportType, type: nil), expected, sportType)
         }
     }
 
-    func testAnUnknownSportTypeFallsBackToTypeBeforeGivingUp() async throws {
+    func testAnUnknownSportTypeFallsBackToTypeBeforeGivingUp() {
+        XCTAssertEqual(StravaActivityDTO.kind(sportType: nil, type: "Ride"), .ride)
+    }
+
+    /// The mapped kind survives the connector, so the direct mapper cases
+    /// above stand for what the dashboard actually receives.
+    func testTheMappedKindReachesTheNormalizedActivity() async throws {
         stub(pages: [StravaPayloadFactory.page([
-            StravaPayloadFactory.activity(id: 1, start: Self.daysAgo(1), sportType: nil, type: "Ride"),
+            StravaPayloadFactory.activity(id: 1, start: Self.daysAgo(1), sportType: "TrailRun"),
         ])])
 
         let activities = await fetchAll()
-        XCTAssertEqual(activities.first?.kind, .ride)
+        XCTAssertEqual(activities.first?.kind, .run)
     }
 
     /// Every activity of the default 90-day window.
