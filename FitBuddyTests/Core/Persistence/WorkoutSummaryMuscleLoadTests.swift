@@ -103,10 +103,12 @@ final class WorkoutSummaryMuscleLoadTests: XCTestCase {
 
     // MARK: - kind decides what is cardio (#180)
 
-    /// A `WeightTraining` session from Strava logs a duration and no load, so
-    /// the old heuristic called it cardio. The mapped sport says otherwise,
-    /// and it wins.
-    func testAStrengthSessionFromAnEnduranceSourceIsNotCardio() {
+    /// `kind` and `isCardio` deliberately disagree here: domain versus
+    /// presentation. The mapped sport is `.strength` — that is what the
+    /// analysis reads — but the session logged a duration and no load, so the
+    /// row still has to show its time. "0 kg · 1 set · 1 exercise" would be a
+    /// wrong number rather than a missing one.
+    func testAStrengthSessionWithOnlyADurationStillShowsCardioFigures() {
         let summary = WorkoutSummary(workout: Workout(
             id: "strava:2",
             title: "Gym",
@@ -121,7 +123,7 @@ final class WorkoutSummaryMuscleLoadTests: XCTestCase {
         ))
 
         XCTAssertEqual(summary.kind, .strength)
-        XCTAssertFalse(summary.isCardio)
+        XCTAssertTrue(summary.isCardio)
     }
 
     /// A row cached before V5 has no sport recorded and reads as `.other`

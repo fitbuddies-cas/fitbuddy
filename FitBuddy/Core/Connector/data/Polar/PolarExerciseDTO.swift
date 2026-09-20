@@ -79,8 +79,12 @@ struct PolarExerciseDTO: Decodable, Equatable, Sendable {
             maxHeartRate: maximumHeartRate,
             averageSpeedMetersPerSecond: Self.averageSpeed(meters: distanceMeters, seconds: seconds),
             activeCalories: calories,
-            distanceMeters: distanceMeters,
-            durationSeconds: seconds.map(Int.init),
+            // Zero means "not logged" for both, as it does for average speed
+            // above: an indoor session Polar never measured spatially sends
+            // `distance: 0.0`, and "0 m" on the dashboard row would read as a
+            // bug where the duration belongs.
+            distanceMeters: distanceMeters.flatMap { $0 > 0 ? $0 : nil },
+            durationSeconds: seconds.flatMap { $0 > 0 ? Int($0) : nil },
             trainingLoad: trainingLoad
         )
 
