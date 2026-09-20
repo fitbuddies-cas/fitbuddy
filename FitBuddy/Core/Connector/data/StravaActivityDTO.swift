@@ -96,8 +96,8 @@ struct StravaActivityDTO: Decodable, Equatable, Sendable {
     /// reads them.
     private func cardioMetrics() -> CardioMetrics? {
         CardioMetrics(
-            averageHeartRate: averageHeartRate.map { Int($0.rounded()) },
-            maxHeartRate: maxHeartRate.map { Int($0.rounded()) },
+            averageHeartRate: averageHeartRate.flatMap { $0 > 0 ? Int($0.rounded()) : nil },
+            maxHeartRate: maxHeartRate.flatMap { $0 > 0 ? Int($0.rounded()) : nil },
             // Zero means "not logged" here as it does for distance above:
             // Strava sends 0 for an activity it never measured spatially, and
             // "0 m of ascent" on a pool swim would read as a bug.

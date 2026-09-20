@@ -37,7 +37,7 @@ Distanz und Dauer bleiben bei Hevy und Strava auf dem `ActivityExerciseSet`, wo 
 
 `kindRawValue` ist **optional**, nicht defaultet. Ein vor V5 geschriebener Store enthält auch Strava- und Polar-Sessions; ein Default `strength` würde einen gecachten Lauf in der falschen Domäne einsortieren. `Workout.kind` löst eine fehlende Sportart stattdessen über die Quelle auf: Hevy → `.strength`, eine Ausdauer-Quelle → `.other`, denn welche Disziplin es war, ist genau das, was nicht erfasst wurde. Der nächste Sync ersetzt das Fenster und füllt die Spalte real.
 
-**4. Die Sportart entscheidet, was Ausdauer ist.** `WorkoutSummary.isCardio` liest neu `kind`, wo dieser gemappt wurde. Die alte Heuristik («kein Gewicht bewegt, aber Distanz oder Zeit erfasst») bleibt nur Rückfall für `.other` — also für Zeilen vor V5 — und für Hevy, wo `.strength` der Modell-Default und keine Klassifikation ist, sodass eine Laufband-Session dort weiterhin als Ausdauer liest.
+**4. Die Sportart entscheidet, was Ausdauer ist — die Darstellung bleibt eine eigene Frage.** Die Domänenfrage («welche Sportart wurde trainiert?») beantwortet `ActivityKind.isEndurance`; das lesen die Analysepfade. `WorkoutSummary.isCardio` ist die Darstellungsfrage («beschreiben Distanz und Zeit die Zeile besser als Kilogramm?»): Eine gemappte Ausdauer-Disziplin ist Cardio, was immer sie geloggt hat. Jede andere Sportart — `.strength` wie `.other`, und damit auch jede Zeile vor V5 — fällt auf die alte Heuristik zurück («kein Gewicht bewegt, aber Distanz oder Zeit erfasst»), sodass eine Kraft-Session mit nur einer Dauer weiterhin ihre Zeit statt «0 kg» zeigt.
 
 ---
 
