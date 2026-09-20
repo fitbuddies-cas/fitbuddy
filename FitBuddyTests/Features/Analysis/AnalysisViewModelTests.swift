@@ -702,16 +702,17 @@ final class AnalysisViewModelTests: XCTestCase {
         )
     }
 
-    /// A Hevy conditioning session — no volume, a duration, and so cardio to
-    /// look at — must not warn about a thin endurance base on its own.
+    /// A Hevy conditioning session — no volume, a duration, and so endurance
+    /// work by the fallback half of `isEnduranceWork`, because Hevy's
+    /// `.strength` is the model's default rather than a classification.
     ///
-    /// It held while the prompt filtered by source (#182) because everything
-    /// the builder saw was counted as strength. It holds now for a better
-    /// reason: the domain follows the mapped sport (ADR-012), and Hevy's
-    /// `.strength` is the model's default rather than a classification, so
-    /// the session is strength work to the analysis however the row displays
-    /// it. A real endurance session from Strava or Polar does warn.
-    func testAHevyConditioningSessionDoesNotWarnAboutThinEnduranceData() async {
+    /// This is the case #182 wrote down and asked #183 to turn around, and
+    /// this is where it turns: while the prompt filtered by source, the
+    /// session reached the model as a "0 kg" strength session and warning
+    /// about a thin endurance base would have been wrong. Now the prompt
+    /// carries an endurance section, that section holds exactly this one
+    /// session, and saying so is the honest answer.
+    func testASingleHevyConditioningSessionWarnsAboutThinEnduranceData() async {
         cache.summaries = (1...12).map { Self.workout(daysAgo: $0) }
             + [
                 WorkoutSummary(
@@ -731,9 +732,12 @@ final class AnalysisViewModelTests: XCTestCase {
         await sut.start()
 
         XCTAssertEqual(sut.context?.basisDescription, "13 Hevy sessions")
-        XCTAssertEqual(sut.context?.analysedCounts, [.strength: 13])
-        XCTAssertEqual(sut.context?.isThin, false)
-        XCTAssertNil(sut.context?.thinDataWarning)
+        XCTAssertEqual(sut.context?.analysedCounts, [.strength: 12, .endurance: 1])
+        XCTAssertEqual(sut.context?.isThin, true)
+        XCTAssertEqual(
+            sut.context?.thinDataWarning,
+            "Thin endurance data — 1 session. Treat the recommendation as a starting point."
+        )
     }
 
     /// The ladder runs over every session now, because every session reaches
