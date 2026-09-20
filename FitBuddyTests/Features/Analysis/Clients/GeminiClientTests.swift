@@ -246,4 +246,36 @@ final class GeminiClientTests: LLMClientTestCase {
             XCTAssertEqual(error, .networkUnavailable)
         }
     }
+
+    // MARK: - Sampling (#226)
+
+    /// Both fields belong inside `generationConfig`; Gemini has no top-level
+    /// sampling keys.
+    func testRequestCarriesTheSharedTemperatureAndSeed() async throws {
+        stub(body: GeminiSSEFactory.body(textChunks: ["Hi"]))
+
+        _ = try await collect(try await stream())
+
+        let json = try jsonBody(of: try capturedRequest())
+        XCTAssertNil(json["temperature"])
+        XCTAssertNil(json["seed"])
+        let config = try XCTUnwrap(json["generationConfig"] as? [String: Any])
+        XCTAssertEqual(config["temperature"] as? Double, LLMSampling.temperature)
+        XCTAssertEqual(config["seed"] as? Int, LLMSampling.seed)
+    }
+
+    /// The point of the seed is that it does not move between runs.
+    func testTheSeedIsTheSameOnEveryRun() async throws {
+        stub(body: GeminiSSEFactory.body(textChunks: ["Hi"]))
+        _ = try await collect(try await stream())
+        let first = try jsonBody(of: try capturedRequest())
+
+        stub(body: GeminiSSEFactory.body(textChunks: ["Hi"]))
+        _ = try await collect(try await stream())
+        let second = try jsonBody(of: try capturedRequest())
+
+        let firstConfig = try XCTUnwrap(first["generationConfig"] as? [String: Any])
+        let secondConfig = try XCTUnwrap(second["generationConfig"] as? [String: Any])
+        XCTAssertEqual(firstConfig["seed"] as? Int, secondConfig["seed"] as? Int)
+    }
 }

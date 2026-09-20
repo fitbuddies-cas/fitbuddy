@@ -211,4 +211,32 @@ final class MistralClientTests: LLMClientTestCase {
             XCTAssertEqual(error, .networkUnavailable)
         }
     }
+
+    // MARK: - Sampling (#226)
+
+    /// `random_seed`, not OpenAI's `seed` — Mistral renamed the field, and the
+    /// wrong key would be ignored rather than rejected.
+    func testRequestCarriesTheSharedTemperatureAndSeed() async throws {
+        stub(body: MistralSSEFactory.body(textChunks: ["Hi"]))
+
+        _ = try await collect(try await stream())
+
+        let json = try jsonBody(of: try capturedRequest())
+        XCTAssertEqual(json["temperature"] as? Double, LLMSampling.temperature)
+        XCTAssertEqual(json["random_seed"] as? Int, LLMSampling.seed)
+        XCTAssertNil(json["seed"])
+    }
+
+    /// The point of the seed is that it does not move between runs.
+    func testTheSeedIsTheSameOnEveryRun() async throws {
+        stub(body: MistralSSEFactory.body(textChunks: ["Hi"]))
+        _ = try await collect(try await stream())
+        let first = try jsonBody(of: try capturedRequest())
+
+        stub(body: MistralSSEFactory.body(textChunks: ["Hi"]))
+        _ = try await collect(try await stream())
+        let second = try jsonBody(of: try capturedRequest())
+
+        XCTAssertEqual(first["random_seed"] as? Int, second["random_seed"] as? Int)
+    }
 }
