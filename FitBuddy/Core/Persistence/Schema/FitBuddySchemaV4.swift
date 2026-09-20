@@ -16,8 +16,8 @@ import SwiftData
 ///
 /// **Why #180 did not grow this version.** V4 was written to absorb the other
 /// pending schema changes while it was still open, #180 among them. It stopped
-/// being open first: PR #202 is reviewed and about to merge, and the branches
-/// above it in the US-14 stack already carry stores written by this exact V4.
+/// being open first: PR #202 was reviewed and merged, and the branches above
+/// it in the US-14 stack already carried stores written by this exact V4.
 /// Reopening it would invalidate those and put a reviewed PR back into review,
 /// so the cardio columns became V5 — one lightweight stage instead.
 ///
