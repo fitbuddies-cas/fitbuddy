@@ -826,7 +826,8 @@ const REPORT_OVERALL = {
 };
 
 function FBAnalysisResultScreen({
-  variant = 'progression', sources = ['Hevy'], sessionCount = 14, weeks = 4,
+  variant = 'progression', sources = [{ name: 'Hevy', count: 14 }, { name: 'Strava', count: 9 }],
+  sessionCount = 23, weeks = 4,
   profile = null, provider = 'Claude', age = 'just now',
   onClose, onHistory,
 }) {
@@ -989,17 +990,29 @@ function FBDisclaimer() {
 /**
  * Context line (US-6) — what the recommendation rests on.
  *
- * @prop sources       string[]  e.g. ['Hevy'] — a list, not a literal, so
- *                               US-15 can add Strava/Polar (#182)
- * @prop sessionCount  number    sessions counted in the window
+ * @prop sources       {name, count}[] | null — counted per source and joined
+ *                     with ' · ': [{ name: 'Hevy', count: 14 },
+ *                     { name: 'Strava', count: 9 }] reads "14 Hevy · 9 Strava
+ *                     sessions". Per source, not one total over a list of
+ *                     names, because US-15 AC4 asks which source carried how
+ *                     much — this mirrors AnalysisContext.basisDescription
+ *                     (#182). A source with nothing in the window is left out.
+ * @prop sessionCount  number    total sessions in the window, used only when
+ *                     no per-source breakdown survived — a stored analysis
+ *                     from before #182 reads as the bare "11 sessions"
  * @prop weeks         number    analysis window in weeks
  * @prop profile       { goal?, experience? } | null — training profile (US-13
  *                     AC4, #192). Labels as in TrainingGoal/TrainingExperience.
  *                     No profile → no second line; half a profile → only the
  *                     half that is set.
  */
-function FBAnalysisContextLine({ sources = ['Hevy'], sessionCount, weeks, profile = null }) {
-  const noun = sessionCount === 1 ? 'session' : 'sessions';
+function FBAnalysisContextLine({ sources = null, sessionCount, weeks, profile = null }) {
+  const counted = (sources || []).filter((s) => s.count > 0);
+  const total = counted.length ? counted.reduce((sum, s) => sum + s.count, 0) : sessionCount;
+  const noun = total === 1 ? 'session' : 'sessions';
+  const basis = counted.length
+    ? `${counted.map((s) => `${s.count} ${s.name}`).join(' · ')} ${noun}`
+    : `${total} ${noun}`;
   const profileParts = profile
     ? [profile.goal && `Goal: ${profile.goal}`, profile.experience && `${profile.experience} training`].filter(Boolean)
     : [];
@@ -1016,7 +1029,7 @@ function FBAnalysisContextLine({ sources = ['Hevy'], sessionCount, weeks, profil
         <span>
           Based on{' '}
           <strong style={{ color: FB.ink, fontWeight: 600 }}>
-            {sessionCount} {sources.join(', ')} {noun}
+            {basis}
           </strong>
           {' '}· last {weeks} weeks
         </span>
@@ -1342,15 +1355,19 @@ function RecoveryRecCard({ headline, reasoning, sessions7d, avgRPE, suggestedRes
 // before the structured output (prose) — it stays readable (US-14 AC6).
 const HISTORY_ENTRIES = [
   {
-    id: 'h1', age: '2 h ago', report: REPORT_PROGRESS, sessionCount: 14, weeks: 4,
+    id: 'h1', age: '2 h ago', report: REPORT_PROGRESS, weeks: 4,
+    sources: [{ name: 'Hevy', count: 14 }, { name: 'Strava', count: 9 }], sessionCount: 23,
     profile: { goal: 'Build muscle', experience: '1–3 years' },
     preview: 'Bench Press 60 → 62.5 kg · Back Squat 80 → 82.5 kg · Chest vs Legs',
   },
   {
-    id: 'h2', age: '3 d ago', report: REPORT_RECOVER, sessionCount: 13, weeks: 4,
+    id: 'h2', age: '3 d ago', report: REPORT_RECOVER, weeks: 4,
+    sources: [{ name: 'Hevy', count: 13 }], sessionCount: 13,
     preview: 'You trained 6 of the last 7 days.',
   },
   {
+    // No `sources`: saved before #182 counted per source, so the context line
+    // falls back to the bare total — the most the stored row can justify.
     id: 'h3', age: '12 d ago', report: null, sessionCount: 11, weeks: 4,
     preview: 'Across the last four weeks you trained 11 times, with chest and back carrying most of the volume while legs appeared in only 3 sessions.',
   },
@@ -1507,12 +1524,14 @@ function FBAnalysisHistoryDetailScreen({ entry = HISTORY_ENTRIES[0], onBack }) {
 
         {entry.report ? (
           <FBAnalysisReportBody
-            report={entry.report} sources={['Hevy']} sessionCount={entry.sessionCount}
+            report={entry.report} sources={entry.sources} sessionCount={entry.sessionCount}
             weeks={entry.weeks} profile={entry.profile}
           />
         ) : (
           <>
-            <FBAnalysisContextLine sessionCount={entry.sessionCount} weeks={entry.weeks} />
+            <FBAnalysisContextLine
+              sources={entry.sources} sessionCount={entry.sessionCount} weeks={entry.weeks}
+            />
             <FBCard pad={18} style={{ marginTop: 18 }}>
               <div style={{ fontSize: 14, color: FB.ink2, lineHeight: 1.5 }}>{entry.preview}</div>
             </FBCard>

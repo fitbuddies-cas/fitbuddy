@@ -158,7 +158,7 @@ enum AnalysisPromptBuilder {
     /// The sessions of one domain (#183).
     ///
     /// The filter reads `AnalysisDomain(summary:)`, i.e. the normalized sport
-    /// (`WorkoutSummary.isCardio`, ADR-012), and no longer the source. Before
+    /// (`WorkoutSummary.isEnduranceWork`, ADR-012), and no longer the source. Before
     /// #183 it dropped every endurance *source* — which put a Strava
     /// `WeightTraining` session out of the prompt entirely and would have let
     /// a Hevy treadmill session into the strength figures as "1 exercise,

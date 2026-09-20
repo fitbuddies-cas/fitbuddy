@@ -653,9 +653,10 @@ final class AnalysisViewModel: ObservableObject {
     ///
     /// One pass over the same sessions, so the two breakdowns cannot disagree
     /// about how many there were. They do differ in *where* a session lands:
-    /// the source is where it came from, the domain is what it was
-    /// (`WorkoutSummary.isCardio`, ADR-012), and a Strava strength session is
-    /// named under Strava and counted as strength.
+    /// the source is where it came from, the domain is what was trained
+    /// (`ActivityKind.isEndurance`, ADR-012 — not `isCardio`, which is how
+    /// the row is displayed), and a Strava strength session is named under
+    /// Strava and counted as strength.
     ///
     /// Counted from `start`, not over everything the read returned: the cache
     /// is read wide enough for the widest rung of the ladder and its comparison
