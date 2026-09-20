@@ -99,6 +99,37 @@ final class PolarExerciseDTOTests: XCTestCase {
         }
     }
 
+    /// Polar sends `distance: 0.0` for an indoor session it never measured
+    /// spatially. Zero means "not logged", so it must not reach the dashboard
+    /// as "0 m" where the duration belongs.
+    func testAZeroDistanceIsTreatedAsNotLogged() throws {
+        let json = Data(#"""
+        { "id": "x", "start_time": "2020-01-01T12:00:00", "distance": 0, "duration": "PT1H" }
+        """#.utf8)
+
+        let activity = try XCTUnwrap(
+            try JSONDecoder().decode(PolarExerciseDTO.self, from: json).makeActivity()
+        )
+
+        XCTAssertNil(activity.cardio?.distanceMeters)
+        XCTAssertEqual(activity.cardio?.durationSeconds, 3_600)
+    }
+
+    /// And `PT0S` the same way round: a zero duration is one Polar never
+    /// recorded, not a session that lasted no time.
+    func testAZeroDurationIsTreatedAsNotLogged() throws {
+        let json = Data(#"""
+        { "id": "x", "start_time": "2020-01-01T12:00:00", "distance": 5000, "duration": "PT0S" }
+        """#.utf8)
+
+        let activity = try XCTUnwrap(
+            try JSONDecoder().decode(PolarExerciseDTO.self, from: json).makeActivity()
+        )
+
+        XCTAssertNil(activity.cardio?.durationSeconds)
+        XCTAssertEqual(activity.cardio?.distanceMeters, 5000)
+    }
+
     // MARK: - Sport mapping (#180)
 
     func testSportLabelsMapOntoTheNormalizedKind() {

@@ -841,6 +841,44 @@ final class AnalysisViewModelTests: XCTestCase {
         )
     }
 
+    /// A Hevy conditioning session — no volume, a duration, and so endurance
+    /// work by the fallback half of `isEnduranceWork`, because Hevy's
+    /// `.strength` is the model's default rather than a classification.
+    ///
+    /// This is the case #182 wrote down and asked #183 to turn around, and
+    /// this is where it turns: while the prompt filtered by source, the
+    /// session reached the model as a "0 kg" strength session and warning
+    /// about a thin endurance base would have been wrong. Now the prompt
+    /// carries an endurance section, that section holds exactly this one
+    /// session, and saying so is the honest answer.
+    func testASingleHevyConditioningSessionWarnsAboutThinEnduranceData() async {
+        cache.summaries = (1...12).map { Self.workout(daysAgo: $0) }
+            + [
+                WorkoutSummary(
+                    id: "w-conditioning",
+                    title: "Treadmill Intervals",
+                    startTime: Self.reference.addingTimeInterval(-13 * 86_400),
+                    source: .hevy,
+                    volumeKg: 0,
+                    exerciseCount: 1,
+                    countedSetCount: 4,
+                    durationSeconds: 1_200
+                ),
+            ]
+        await streamer.setText("ok")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.basisDescription, "13 Hevy sessions")
+        XCTAssertEqual(sut.context?.analysedCounts, [.strength: 12, .endurance: 1])
+        XCTAssertEqual(sut.context?.isThin, true)
+        XCTAssertEqual(
+            sut.context?.thinDataWarning,
+            "Thin endurance data — 1 session. Treat the recommendation as a starting point."
+        )
+    }
+
     /// The orchestrator's decision, visible where it matters: under "Strength"
     /// the run is out of every figure and still in the week the recovery rule
     /// is judged on (US-3 AC6 / US-15 AC3).

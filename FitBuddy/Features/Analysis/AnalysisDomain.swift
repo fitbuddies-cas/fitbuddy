@@ -22,13 +22,15 @@ enum AnalysisDomain: String, CaseIterable, Sendable {
 
     /// Which domain a session belongs to.
     ///
-    /// `isCardio` and not the source, because ADR-012 made the normalized
-    /// sport the answer to "what is endurance": a Strava `WeightTraining`
-    /// session is strength work however it reached the cache, and a Hevy
-    /// session of treadmill sets is not. Reading the source instead would put
-    /// both in the wrong half and warn about the wrong one.
+    /// `WorkoutSummary.isEnduranceWork` and not `isCardio`: since #180 made
+    /// `isCardio` a presentation rule, a Strava `WeightTraining` session that
+    /// logged only a duration reads as cardio on the dashboard row while it
+    /// is strength work to the analysis, and the domain is about what was
+    /// trained rather than about how the row is best displayed (ADR-012).
+    /// Reading the source instead would file that session, and a Hevy session
+    /// of treadmill sets, in the wrong half and warn about the wrong one.
     init(summary: WorkoutSummary) {
-        self = summary.isCardio ? .endurance : .strength
+        self = summary.isEnduranceWork ? .endurance : .strength
     }
 
     /// Which domain a source's sessions belong to, where nothing finer is
