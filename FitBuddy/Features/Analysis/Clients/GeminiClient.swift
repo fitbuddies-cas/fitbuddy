@@ -112,7 +112,9 @@ struct GeminiClient: LLMProviderClient {
                 generationConfig: .init(
                     maxOutputTokens: Self.maxOutputTokens,
                     responseMimeType: "application/json",
-                    responseJsonSchema: AnalysisReportSchema.schema
+                    responseJsonSchema: AnalysisReportSchema.schema,
+                    temperature: LLMSampling.temperature,
+                    seed: LLMSampling.seed
                 )
             )
         )
