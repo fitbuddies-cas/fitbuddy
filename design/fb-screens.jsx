@@ -1114,7 +1114,7 @@ function ProgressionRecCard({ exercise, muscle, from, to, delta, reasoning }) {
  * @prop source     string? small right-hand label ('Run', 'Strength', 'Chest').
  *                          Absent → no label, never an empty pill
  * @prop from       string  the app's own current figure — checked against the
- *                          weekly aggregate (±5 %), the model's is replaced
+ *                          weekly aggregate (same figure, at the prompt's precision), the model's is replaced
  * @prop to         string  the recommended figure
  * @prop delta      string  signed difference, 'hold' where the card asks for
  *                          none
