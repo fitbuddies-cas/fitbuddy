@@ -89,7 +89,8 @@ final class AnalysisMockProfileTests: XCTestCase {
                     reasoning: "3 sessions at 60 kg × 5 with RPE 7 or lower — clean overload signal."
                 ),
             ],
-            summary: AnalysisReportFactory.progressionReady.summary
+            summary: AnalysisReportFactory.progressionReady.summary,
+            modelVerdict: .progress
         ))
     }
 
@@ -160,13 +161,18 @@ final class AnalysisMockProfileTests: XCTestCase {
     /// A model that finds nothing to put on a card answers with none, and the
     /// screen gets a report — lead and summary — rather than the prose
     /// fallback. The disclosure then starts open.
+    /// A model answer without cards stays one. Its verdict does not: the
+    /// `progression-ready` cache carries the step, so the app's own figures
+    /// say "progress" where the model asked to hold (#227). The disclosure
+    /// still starts open, because no card here is actionable.
     func testAThinAnswerStaysAReportWithoutCards() async throws {
         let outcome = try await run(.progressionReady, answer: AnalysisReportFactory.thin).outcome
 
         let report = try XCTUnwrap(outcome?.report)
         XCTAssertTrue(report.cards.isEmpty)
-        XCTAssertEqual(report.verdict, .hold)
-        XCTAssertEqual(report.lead, AnalysisReportFactory.thin.lead)
+        XCTAssertEqual(report.verdict, .progress)
+        XCTAssertEqual(report.modelVerdict, .hold)
+        XCTAssertEqual(report.lead, AnalysisReportValidator.progressLead)
         XCTAssertEqual(report.summary, AnalysisReportFactory.thin.summary)
         XCTAssertTrue(AnalysisFullAnalysis.startsExpanded(for: report.cards))
     }
@@ -238,16 +244,22 @@ final class AnalysisMockProfileTests: XCTestCase {
         ).outcome
 
         let report = try XCTUnwrap(outcome?.report)
-        XCTAssertEqual(report.verdict, .progress)
-        XCTAssertEqual(report.cards.count, 1)
-        XCTAssertEqual(report.cards.first?.kind, .metric)
-        guard case let .metric(_, from, to, unit, _, source)? = report.cards.first else {
-            return XCTFail("The endurance answer did not survive as a metric card")
-        }
-        XCTAssertEqual(unit, .kilometers)
-        XCTAssertEqual(from, kilometers, accuracy: 0.0001)
-        XCTAssertEqual(to, AnalysisReportFactory.metricStep(from: kilometers), accuracy: 0.0001)
-        XCTAssertEqual(source, "Run")
+        // ADR-013 §5: under "Endurance" the app has no figure that could
+        // carry a verdict in v0, so this run has none — and a metric card,
+        // which states a step, cannot stand under a report without one.
+        // Before #227 the model's progress verdict and its card both stood
+        // here; what the card is checked against is unchanged and covered by
+        // `AnalysisReportValidatorTests`.
+        XCTAssertEqual(report.verdict, .insufficientData)
+        XCTAssertEqual(report.modelVerdict, .progress)
+        XCTAssertEqual(report.cards.map(\.kind), [.note, .note])
+        XCTAssertEqual(
+            report.cards.last,
+            .note(
+                title: "Weekly distance",
+                text: "Three weeks at the same distance with an unchanged easy heart rate."
+            )
+        )
     }
 
     /// The context line of a single endurance source, and no thin-data

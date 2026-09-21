@@ -222,6 +222,7 @@ final class AnalysisResultRenderingTests: XCTestCase {
             AnalysisReportSamples.recover,
             AnalysisReportSamples.hold,
             AnalysisReportSamples.thin,
+            AnalysisReportSamples.insufficientData,
             AnalysisReportSamples.endurance,
             AnalysisReportSamples.overallLoad,
         ] {
