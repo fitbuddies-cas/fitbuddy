@@ -1295,7 +1295,9 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         for kind in AnalysisCard.Kind.allCases {
             XCTAssertTrue(system.contains("\"\(kind.rawValue)\""), kind.rawValue)
         }
-        for verdict in AnalysisVerdict.allCases {
+        // The three the schema offers — the app's fourth class is not one the
+        // model may pick (ADR-013 §7).
+        for verdict in AnalysisVerdict.modelChoices {
             XCTAssertTrue(system.contains("\"\(verdict.rawValue)\""), verdict.rawValue)
         }
         XCTAssertTrue(system.contains("under 200 words"))

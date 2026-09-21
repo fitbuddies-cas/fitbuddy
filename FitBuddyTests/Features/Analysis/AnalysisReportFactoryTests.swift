@@ -19,7 +19,7 @@ final class AnalysisReportFactoryTests: XCTestCase {
     /// Each verdict's answer, encoded as a provider sends it, decodes through
     /// the parser back into the same report — not into the prose fallback.
     func testEveryVerdictDecodesFromTheWire() throws {
-        for verdict in AnalysisVerdict.allCases {
+        for verdict in AnalysisVerdict.modelChoices {
             let report = AnalysisReportFactory.report(verdict)
             XCTAssertEqual(report.verdict, verdict)
             let json = try XCTUnwrap(String(data: JSONEncoder().encode(report), encoding: .utf8))

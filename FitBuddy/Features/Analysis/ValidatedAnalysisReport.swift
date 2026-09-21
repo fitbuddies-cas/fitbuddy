@@ -16,9 +16,17 @@ struct ValidatedAnalysisReport: Codable, Equatable, Sendable {
     let lead: String
     let cards: [AnalysisReportCard]
     let summary: String
+    /// What the model itself answered, before the app overwrote it (#227,
+    /// ADR-013 §7).
+    ///
+    /// Kept rather than dropped because #228 and #229 measure how often the
+    /// two agree, and there is nothing to compare without it. Never shown.
+    /// `nil` on a report stored before #227 and on one built by hand, e.g. the
+    /// preview samples — "no model answer recorded", not "the model agreed".
+    var modelVerdict: AnalysisVerdict?
 
     enum CodingKeys: String, CodingKey {
-        case headline, verdict, lead, cards, summary
+        case headline, verdict, lead, cards, summary, modelVerdict
     }
 }
 
@@ -40,7 +48,8 @@ extension ValidatedAnalysisReport {
                 summary: summary
             ),
             cards: try container.decode([AnalysisReportCard].self, forKey: .cards),
-            summary: summary
+            summary: summary,
+            modelVerdict: try container.decodeIfPresent(AnalysisVerdict.self, forKey: .modelVerdict)
         )
     }
 }

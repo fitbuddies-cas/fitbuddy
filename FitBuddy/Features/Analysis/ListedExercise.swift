@@ -21,10 +21,39 @@ struct ListedExercise: Equatable, Sendable {
     /// whatever is listed here.
     let smallestStepKg: Double?
 
-    init(title: String, muscleGroup: MuscleGroup, workingSet: WorkingSet?, smallestStepKg: Double? = nil) {
+    /// How many of the movement's sessions in the window Epley could project
+    /// an e1RM from — `ExerciseProgression.points.count` over the window.
+    ///
+    /// Carried here rather than in a second list beside `exercises`: the
+    /// evidence already names these movements, and two lists over the same
+    /// rows are two chances to disagree (ADR-013, "Was #227 ergänzen muss").
+    /// `AnalysisVerdictRule` reads it for stage 2.
+    let progressionPoints: Int
+
+    /// `ExerciseProgression.isPlateaued` over the window — ADR-013 stage 3.
+    /// Meaningless on its own: only decidable with `progressionPoints` past
+    /// `ExerciseProgression.plateauSessionCount`, which the rule checks first.
+    let isPlateaued: Bool
+
+    /// `ExerciseProgression.latestIsWindowBest` over the window — ADR-013
+    /// stage 4.
+    let latestIsWindowBest: Bool
+
+    init(
+        title: String,
+        muscleGroup: MuscleGroup,
+        workingSet: WorkingSet?,
+        smallestStepKg: Double? = nil,
+        progressionPoints: Int = 0,
+        isPlateaued: Bool = false,
+        latestIsWindowBest: Bool = false
+    ) {
         self.title = title
         self.muscleGroup = muscleGroup
         self.workingSet = workingSet
         self.smallestStepKg = smallestStepKg
+        self.progressionPoints = progressionPoints
+        self.isPlateaued = isPlateaued
+        self.latestIsWindowBest = latestIsWindowBest
     }
 }

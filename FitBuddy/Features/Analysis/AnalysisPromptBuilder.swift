@@ -540,7 +540,13 @@ enum AnalysisPromptBuilder {
                 workingSet: listing.last.heaviestWorkingSet,
                 smallestStepKg: listing.last.heaviestWorkingSet.flatMap {
                     smallestStep(in: listing.inWindow.sessions, latest: $0)
-                }
+                },
+                // The same three facts `plateauVerdict(_:)` prints into the
+                // prompt line and then throws away — ADR-013 stages 2 to 4
+                // read them here instead of recomputing them.
+                progressionPoints: listing.inWindow.points.count,
+                isPlateaued: listing.inWindow.isPlateaued,
+                latestIsWindowBest: listing.inWindow.latestIsWindowBest
             )
         }
     }

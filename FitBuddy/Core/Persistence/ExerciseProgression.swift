@@ -49,7 +49,7 @@ struct ExerciseProgression: Equatable, Sendable {
     /// only three, the first of them set the best and there is nothing earlier
     /// it failed to beat.
     var isPlateaued: Bool {
-        guard points.count > Self.plateauSessionCount else { return false }
+        guard isPlateauDecidable else { return false }
         let recent = points.suffix(Self.plateauSessionCount)
         let earlierBest = points
             .dropLast(Self.plateauSessionCount)
@@ -68,5 +68,23 @@ struct ExerciseProgression: Equatable, Sendable {
     /// The most recent session's estimate.
     var latestEstimateKg: Double? {
         points.last?.estimatedOneRepMaxKg
+    }
+
+    /// Whether `isPlateaued` is an answer rather than a shrug: below this the
+    /// movement has no session the three recent ones could have failed to
+    /// beat, so "not plateaued" would claim progress nobody measured.
+    ///
+    /// The same condition `isPlateaued` guards on, named once so the prompt
+    /// line, the report evidence and ADR-013 stage 2 all read it here.
+    var isPlateauDecidable: Bool { points.count > Self.plateauSessionCount }
+
+    /// Whether the most recent session set the window's best estimate —
+    /// ADR-013 stage 4, the one statement about a rising movement the app can
+    /// prove from its own figures.
+    ///
+    /// `false` without points: no session, no best.
+    var latestIsWindowBest: Bool {
+        guard let latest = latestEstimateKg, let best = bestEstimateKg else { return false }
+        return latest >= best
     }
 }

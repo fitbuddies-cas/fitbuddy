@@ -16,6 +16,9 @@ enum AnalysisHeadline {
         // Design 3.4b (thin data): the same two-line rhythm as the recovery
         // headline.
         case .hold: return ["Hold steady", "this week."]
+        // ADR-013 §6: the app's own words, because there is no verdict for
+        // the model to have phrased. Same two-line rhythm again.
+        case .insufficientData: return ["Not enough data", "to judge."]
         }
     }
 

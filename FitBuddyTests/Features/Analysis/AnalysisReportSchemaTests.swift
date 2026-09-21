@@ -49,6 +49,19 @@ final class AnalysisReportSchemaTests: XCTestCase {
         XCTAssertEqual(verdict["enum"] as? [String], ["progress", "recover", "hold"])
     }
 
+    /// ADR-013 §7: the fourth class is a statement the app makes about its own
+    /// data basis, so it is never on the list the model chooses from.
+    func testTheVerdictEnumDoesNotOfferTheAppsFourthClass() throws {
+        let schema = try encoded(AnalysisReportSchema.schema)
+        let properties = try XCTUnwrap(schema["properties"] as? [String: Any])
+        let verdict = try XCTUnwrap(properties["verdict"] as? [String: Any])
+
+        XCTAssertFalse(
+            (verdict["enum"] as? [String] ?? []).contains(AnalysisVerdict.insufficientData.rawValue)
+        )
+        XCTAssertFalse(AnalysisVerdict.modelChoices.contains(.insufficientData))
+    }
+
     /// Encodes the fixture report and checks its keys against the schema, so a
     /// field renamed in Swift cannot silently drift from what the model is
     /// asked to send.

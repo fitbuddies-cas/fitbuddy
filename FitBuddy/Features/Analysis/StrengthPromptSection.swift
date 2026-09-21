@@ -351,7 +351,7 @@ enum StrengthPromptSection {
     /// out loud: a "no" over three sessions would claim progress nobody
     /// measured.
     private static func plateauVerdict(_ progression: ExerciseProgression) -> String {
-        guard progression.points.count > ExerciseProgression.plateauSessionCount else {
+        guard progression.isPlateauDecidable else {
             return "Plateau: too few sessions to tell"
         }
         return progression.isPlateaued
