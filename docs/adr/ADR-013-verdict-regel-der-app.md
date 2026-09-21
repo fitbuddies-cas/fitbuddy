@@ -1,6 +1,6 @@
 # ADR-13: Verdict-Regel der App — Reihenfolge, Schwellen und die vierte Klasse «zu dünne Datenbasis»
 
-**Status:** Proposed
+**Status:** Accepted
 **Datum:** 2026-09-20
 **Treiber-QA:** Reliability (QA-2), Maintainability (QA-3)
 
