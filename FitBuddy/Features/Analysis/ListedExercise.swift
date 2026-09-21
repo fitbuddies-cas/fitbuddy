@@ -31,9 +31,17 @@ struct ListedExercise: Equatable, Sendable {
     let progressionPoints: Int
 
     /// `ExerciseProgression.isPlateaued` over the window — ADR-013 stage 3.
-    /// Meaningless on its own: only decidable with `progressionPoints` past
-    /// `ExerciseProgression.plateauSessionCount`, which the rule checks first.
+    /// Meaningless on its own: only readable where `isPlateauDecidable`.
     let isPlateaued: Bool
+
+    /// Whether `isPlateaued` is an answer rather than a shrug — ADR-013
+    /// stage 2, and the same condition `ExerciseProgression.isPlateauDecidable`
+    /// applies to the progression this line was built from. Written once, so
+    /// the rule and the series cannot come to different conclusions about the
+    /// same movement.
+    var isPlateauDecidable: Bool {
+        progressionPoints > ExerciseProgression.plateauSessionCount
+    }
 
     /// `ExerciseProgression.latestIsWindowBest` over the window — ADR-013
     /// stage 4.

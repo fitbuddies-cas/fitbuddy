@@ -29,15 +29,19 @@ enum AnalysisReportCard: Equatable, Sendable {
     /// A model note, or a card that failed validation, reduced to its text.
     case note(title: String, text: String)
 
-    /// Whether this card states a step that adds training load — what decides
-    /// whether a "progress" verdict has a card behind it (#177).
+    /// Whether this card states a step that adds training load.
+    ///
+    /// Since #227 it no longer decides the verdict — `AnalysisVerdictRule`
+    /// does, from the app's own figures. What it decides is whether the
+    /// **model's lead** may stand under a progress verdict: a lead arguing
+    /// for a step no surviving card states is naming a figure the app
+    /// rejected, and `AnalysisReportValidator` replaces it with its own
+    /// (#170).
     ///
     /// A progression always does. A metric card does when its step is an
     /// improvement in its own unit (`MetricUnit.isImprovement`), so a card
     /// asking for fewer kilometres or an easier heart rate does not hold up a
-    /// progress verdict, and an endurance report recommending +3 km does —
-    /// without this, the "Endurance" profile could never reach a progress
-    /// verdict at all, because it produces no progression cards.
+    /// progress lead, and an endurance report recommending +3 km does.
     var backsProgress: Bool {
         switch self {
         case .progression:

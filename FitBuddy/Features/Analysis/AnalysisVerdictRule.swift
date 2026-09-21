@@ -88,12 +88,11 @@ enum AnalysisVerdictRule {
             return Outcome(verdict: .insufficientData, reason: .noStrengthDomain)
         }
 
-        // Stage 2. "Decidable" is `ExerciseProgression.isPlateauDecidable` —
-        // the existing plateau definition of US-9 AC2, reused so the product
-        // has one.
-        let decidable = evidence.exercises.filter {
-            $0.progressionPoints > ExerciseProgression.plateauSessionCount
-        }
+        // Stage 2. "Decidable" is `ListedExercise.isPlateauDecidable`, which
+        // is `ExerciseProgression.isPlateauDecidable` for the same movement —
+        // the plateau definition of US-9 AC2, stated in one place so the
+        // product has one.
+        let decidable = evidence.exercises.filter(\.isPlateauDecidable)
         guard !decidable.isEmpty else {
             return Outcome(verdict: .insufficientData, reason: .plateauUndecidable)
         }

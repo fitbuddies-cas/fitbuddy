@@ -541,6 +541,77 @@ final class AnalysisReportValidatorTests: XCTestCase {
         XCTAssertEqual(validated.verdict, .progress, "The app's figures carry the step, not the card")
     }
 
+    /// #170 survives #227 as a rule about the model's prose. Both call it
+    /// progress, so nothing diverges — but the model's lead names a step its
+    /// card just lost, and the app does not print a figure it rejected.
+    func testAProgressLeadIsReplacedWhenNoSurvivingCardBacksTheStep() {
+        let report = AnalysisReport(
+            headline: "You're ready to progress.",
+            verdict: .progress,
+            lead: "Bench press can go up to 100 kg.",
+            cards: [benchPress(from: 99, to: 100)],
+            summary: "Summary"
+        )
+
+        let validated = AnalysisReportValidator.validate(
+            report,
+            against: evidence(exercises: [Self.listedBenchPress(latestIsWindowBest: true)])
+        )
+
+        XCTAssertEqual(validated.verdict, .progress)
+        XCTAssertEqual(validated.cards.map(\.kind), [.note])
+        XCTAssertEqual(validated.lead, AnalysisReportValidator.progressLead)
+    }
+
+    /// A surviving card that states the step keeps the model's own lead: the
+    /// app rejected nothing in it.
+    func testAProgressLeadStaysWhenACardStillBacksTheStep() {
+        let report = AnalysisReport(
+            headline: "You're ready to progress.",
+            verdict: .progress,
+            lead: "Bench press can go up.",
+            cards: [benchPress(from: 60, to: 62.5)],
+            summary: "Summary"
+        )
+
+        let validated = AnalysisReportValidator.validate(
+            report,
+            against: evidence(exercises: [Self.listedBenchPress(latestIsWindowBest: true)])
+        )
+
+        XCTAssertEqual(validated.lead, "Bench press can go up.")
+    }
+
+    /// The cap counts too: a backing card cut for space is a backing card the
+    /// screen does not show.
+    func testAProgressLeadIsReplacedWhenTheCapTookTheBackingCard() {
+        let report = AnalysisReport(
+            headline: "You're ready to progress.",
+            verdict: .progress,
+            lead: "Bench press can go up.",
+            // Five cards, the progression last: the cap drops the last card
+            // that is not a recovery card, which here is the only one that
+            // states the step.
+            cards: [
+                chestVersusLegs(3, 1),
+                chestVersusLegs(3, 1),
+                chestVersusLegs(3, 1),
+                chestVersusLegs(3, 1),
+                benchPress(from: 60, to: 62.5),
+            ],
+            summary: "Summary"
+        )
+
+        let validated = AnalysisReportValidator.validate(
+            report,
+            against: evidence(exercises: [Self.listedBenchPress(latestIsWindowBest: true)])
+        )
+
+        XCTAssertEqual(validated.verdict, .progress)
+        XCTAssertFalse(validated.cards.contains { $0.backsProgress })
+        XCTAssertEqual(validated.lead, AnalysisReportValidator.progressLead)
+    }
+
     /// A progression dropped for a blank reason is rejected just the same.
     func testADroppedProgressionNoLongerDecidesTheVerdict() {
         let blank = AnalysisCard.progression(
@@ -1234,6 +1305,33 @@ final class AnalysisReportValidatorTests: XCTestCase {
         )
 
         XCTAssertEqual(validated.verdict, .recover)
+    }
+
+    /// ADR-013 §6 allows no exception: headline and lead are the app's under
+    /// the fourth class, including where a provider put `insufficientData` on
+    /// the wire itself. `AnalysisReport.offered(_:)` turns such an answer into
+    /// `hold` on decode, so it can never equal the app's verdict and can never
+    /// be recorded as a model choice.
+    func testAModelAnswerCannotClaimTheAppsFourthClass() throws {
+        let json = """
+        {
+          "headline": "No idea.",
+          "verdict": "insufficientData",
+          "lead": "The model's own words.",
+          "summary": "Summary",
+          "cards": []
+        }
+        """
+        let report = try JSONDecoder().decode(AnalysisReport.self, from: Data(json.utf8))
+
+        XCTAssertEqual(report.verdict, .hold, "Normalised at the wire boundary")
+
+        let validated = AnalysisReportValidator.validate(report, against: evidence(sessionsInWindow: 3))
+
+        XCTAssertEqual(validated.verdict, .insufficientData)
+        XCTAssertEqual(validated.headline, AnalysisReportValidator.insufficientDataHeadline)
+        XCTAssertEqual(validated.lead, AnalysisReportValidator.insufficientDataLead)
+        XCTAssertEqual(validated.modelVerdict, .hold, "Never a choice the model was not offered")
     }
 
     // MARK: - Fixtures for the new kinds

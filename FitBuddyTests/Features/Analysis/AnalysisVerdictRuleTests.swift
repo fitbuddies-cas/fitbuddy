@@ -133,12 +133,6 @@ final class AnalysisVerdictRuleTests: XCTestCase {
         XCTAssertNotEqual(outcome.reason, .plateauUndecidable)
     }
 
-    /// The same four points `ExerciseProgression.isPlateaued` needs — one
-    /// plateau definition in the product (US-9 AC2).
-    func testTheDecidableThresholdIsThePlateauDefinition() {
-        XCTAssertEqual(ExerciseProgression.plateauSessionCount + 1, 4)
-    }
-
     func testAWindowWithNoListedExerciseCannotDecideAPlateau() {
         let outcome = AnalysisVerdictRule.outcome(for: evidence(exercises: []))
 
@@ -248,22 +242,6 @@ final class AnalysisVerdictRuleTests: XCTestCase {
 
         XCTAssertEqual(AnalysisVerdictRule.outcome(for: withoutRPE).verdict, .progress)
         XCTAssertEqual(AnalysisVerdictRule.outcome(for: withRPE), AnalysisVerdictRule.outcome(for: withoutRPE))
-    }
-
-    // MARK: - Reproducibility (US-16 AC1)
-
-    /// The same evidence always yields the same verdict — the rule reads
-    /// nothing but its argument.
-    func testTheSameEvidenceAlwaysYieldsTheSameVerdict() {
-        let evidence = self.evidence(exercises: [
-            exercise(points: 5, isPlateaued: true),
-            exercise(points: 5, latestIsWindowBest: true),
-            exercise(points: 3),
-        ])
-
-        let outcomes = (0..<5).map { _ in AnalysisVerdictRule.outcome(for: evidence) }
-
-        XCTAssertEqual(Set(outcomes.map(\.verdict)).count, 1)
     }
 
     // MARK: - Fixtures

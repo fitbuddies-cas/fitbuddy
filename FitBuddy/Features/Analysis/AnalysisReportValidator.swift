@@ -179,6 +179,8 @@ enum AnalysisReportValidator {
             }
         }
 
+        let kept = capped(cards)
+
         // Where the app's verdict differs from the model's, the model's
         // headline and lead argue for the call the app has just replaced, so
         // they go with it (ADR-013 §7). Where the two agree, the model keeps
@@ -188,11 +190,22 @@ enum AnalysisReportValidator {
             lead = self.lead(for: verdict, evidence: evidence)
         }
 
+        // #170, kept after #227 took the verdict away from the cards: a
+        // progress lead may only name a step that survived. The verdict is
+        // the app's either way — what this guards is the model's prose, which
+        // is otherwise taken on trust wherever the two happen to agree. A
+        // lead reading "Bench press can go up to 100 kg." over a progression
+        // the cache rejected states a figure the app has just thrown away.
+        // `progressLead` then says what stage 4 measured and nothing else.
+        if verdict == .progress, !kept.contains(where: \.backsProgress) {
+            lead = progressLead
+        }
+
         return ValidatedAnalysisReport(
             headline: headline,
             verdict: verdict,
             lead: lead,
-            cards: capped(cards),
+            cards: kept,
             summary: report.summary,
             modelVerdict: report.verdict
         )
