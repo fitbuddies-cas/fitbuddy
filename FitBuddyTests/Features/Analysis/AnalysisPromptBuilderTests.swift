@@ -1332,6 +1332,165 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertFalse(system[cards.upperBound..<order.lowerBound].contains("Never write placeholder"))
     }
 
+    // MARK: - Analysis profile (US-15 AC1, #185)
+
+    /// The default and the prompt of #183/#184: every section the window
+    /// supports.
+    func testOverallLoadBuildsBothDomainSectionsAndTheWeekStructure() {
+        let prompt = make(
+            [workout(daysAgo: 2, volume: 5_000), run(daysAgo: 3)],
+            analysisProfile: .overallLoad
+        ).user
+        XCTAssertTrue(prompt.contains("## Last 4 weeks"))
+        XCTAssertTrue(prompt.contains("## Endurance, last 4 weeks"))
+        XCTAssertTrue(prompt.contains("## Week structure"))
+        XCTAssertTrue(prompt.contains("Days with both:"))
+    }
+
+    func testTheStrengthProfileLeavesTheEnduranceSectionsOut() {
+        let prompt = make(
+            [workout(daysAgo: 2, volume: 5_000), run(daysAgo: 3)],
+            analysisProfile: .strength
+        ).user
+        XCTAssertTrue(prompt.contains("## Last 4 weeks"))
+        XCTAssertFalse(prompt.contains("## Endurance"))
+        XCTAssertFalse(prompt.contains("Morning Run"))
+    }
+
+    /// AC5: an endurance analysis names no kilogram value, because the whole
+    /// strength half — figures, session list and Exercises section — is gone.
+    func testTheEnduranceProfileLeavesEveryKilogramOut() {
+        let prompt = make(
+            [workout(daysAgo: 2, volume: 5_000), run(daysAgo: 3)],
+            analysisProfile: .endurance
+        ).user
+        XCTAssertTrue(prompt.contains("## Endurance, last 4 weeks"))
+        XCTAssertFalse(prompt.contains("## Volume per week"))
+        XCTAssertFalse(prompt.contains("## Exercises"))
+        XCTAssertFalse(prompt.contains("kg"))
+    }
+
+    /// The system prompt tells the model that a missing section is training
+    /// this person did not record. Under a single-domain profile that would be
+    /// untrue, so the user turn says what was left out and why.
+    func testASingleDomainProfileSaysWhatItLeftOut() {
+        let prompt = make(
+            [workout(daysAgo: 2, volume: 5_000), run(daysAgo: 3)],
+            analysisProfile: .strength
+        ).user
+        XCTAssertTrue(prompt.contains("Analyse my strength training only"))
+        XCTAssertTrue(prompt.contains("left them out of this analysis on purpose"))
+    }
+
+    func testNothingIsSaidAboutAnOmissionThatDidNotHappen() {
+        let prompt = make([workout(daysAgo: 2, volume: 5_000)], analysisProfile: .strength).user
+        XCTAssertFalse(prompt.contains("on purpose"))
+    }
+
+    /// The orchestrator's decision: a run costs recovery under the "Strength"
+    /// profile too, so the week the app judges US-3 AC6 on is still stated.
+    func testTheStrengthProfileStillStatesTheLastSevenDaysAcrossBothDomains() throws {
+        let prompt = make(
+            [
+                workout(daysAgo: 1, volume: 5_000, id: "w-1"),
+                workout(daysAgo: 2, volume: 5_000, id: "w-2"),
+                run(daysAgo: 3, id: "strava:1"),
+                run(daysAgo: 4, id: "strava:2"),
+            ],
+            analysisProfile: .strength
+        )
+        let structure = try section(prompt, "## Week structure")
+        XCTAssertTrue(structure.contains("Last 7 days: 4 training days"))
+        XCTAssertTrue(structure.contains("2 strength sessions"))
+        XCTAssertTrue(structure.contains("2 endurance sessions"))
+        XCTAssertTrue(structure.contains("cost the same recovery"))
+        // The full structure belongs to "Overall load" — under one domain the
+        // section carries the recovery week and nothing else.
+        XCTAssertFalse(structure.contains("Days with both:"))
+        XCTAssertFalse(structure.contains("Longest streak"))
+    }
+
+    func testTheEnduranceProfileNamesTheStrengthSessionsItLeftInTheDayCount() throws {
+        let prompt = make(
+            [workout(daysAgo: 1, volume: 5_000), run(daysAgo: 2)],
+            analysisProfile: .endurance
+        )
+        let structure = try section(prompt, "## Week structure")
+        XCTAssertTrue(structure.contains("I asked about my endurance training only"))
+        XCTAssertTrue(structure.contains("my strength sessions are not described above"))
+    }
+
+    /// A window with one domain has nothing to leave out, so no profile adds a
+    /// week-structure section to it — which is what keeps a Hevy-only prompt
+    /// where #183 froze it.
+    func testASingleDomainWindowHasNoWeekStructureUnderAnyProfile() {
+        for profile in AnalysisProfile.allCases {
+            let prompt = make([workout(daysAgo: 2, volume: 5_000)], analysisProfile: profile).user
+            XCTAssertFalse(prompt.contains("## Week structure"), "\(profile)")
+        }
+    }
+
+    /// US-15 AC1 over a Hevy-only cache: the profile is implicit, and the
+    /// prompt is byte for byte the one every earlier build produced.
+    func testAHevyOnlyUserTurnIsTheSameUnderEveryProfile() {
+        let summaries = [
+            workout(daysAgo: 2, volume: 5_000, id: "w-1"),
+            workout(daysAgo: 9, volume: 4_000, id: "w-2"),
+        ]
+        let overall = make(summaries, analysisProfile: .overallLoad).user
+        XCTAssertEqual(make(summaries, analysisProfile: .strength).user, overall)
+        // "Endurance" cannot be chosen here — the picker does not offer it —
+        // and a stale choice widens to what this window actually holds, which
+        // over a cache of lifts alone is "Strength" (#185). Either way the
+        // user turn is the one every build before the profile produced.
+        XCTAssertEqual(make(summaries, analysisProfile: .endurance).user, overall)
+    }
+
+    func testAProfileWithoutASessionInTheWindowFallsBackToEverything() {
+        let prompt = make([run(daysAgo: 2), run(daysAgo: 4, id: "strava:2")], analysisProfile: .strength).user
+        XCTAssertTrue(prompt.contains("## Endurance, last 4 weeks"))
+        XCTAssertFalse(prompt.contains("on purpose"))
+    }
+
+    /// US-13's profile line names what the prompt actually carries, so an
+    /// endurance analysis does not claim to be about strength sessions.
+    func testTheTrainingProfileLineNamesTheDomainsThePromptCarries() {
+        let summaries = [workout(daysAgo: 2, volume: 5_000), run(daysAgo: 3)]
+        let goal = TrainingProfile(goal: .improveEndurance)
+        XCTAssertTrue(
+            make(summaries, profile: goal, analysisProfile: .endurance)
+                .user.contains("covers my endurance sessions only")
+        )
+        XCTAssertTrue(
+            make(summaries, profile: goal, analysisProfile: .strength)
+                .user.contains("covers my strength sessions only")
+        )
+        XCTAssertTrue(
+            make(summaries, profile: goal, analysisProfile: .overallLoad)
+                .user.contains("covers my strength and endurance sessions")
+        )
+    }
+
+    /// Nothing was left out, so the section #184 built for a running week is
+    /// rendered as it is — no "I asked about" sentence, and the streak and the
+    /// last seven days both there.
+    func testAnEnduranceOnlyWindowKeepsTheSectionItAlreadyHad() throws {
+        let prompt = make(
+            [run(daysAgo: 1, id: "strava:1"), run(daysAgo: 2, id: "strava:2")],
+            analysisProfile: .endurance
+        )
+        let structure = try section(prompt, "## Week structure")
+        XCTAssertFalse(structure.contains("I asked about"))
+        XCTAssertTrue(structure.contains("Longest streak"))
+        XCTAssertTrue(structure.contains("Last 7 days: 2 training days"))
+    }
+
+    func testTheSystemPromptExplainsADeliberatelyOmittedSection() {
+        let system = AnalysisPromptBuilder.systemPrompt
+        XCTAssertTrue(system.contains("chose to leave out of this analysis"))
+        XCTAssertTrue(system.contains("still count towards those days and still cost recovery"))
+    }
+
     // MARK: - Review round on #183
 
     /// AC1 pinned as a whole, not as a list of absences: a Hevy-only cache has
@@ -1560,14 +1719,16 @@ final class AnalysisPromptBuilderTests: XCTestCase {
     private func make(
         _ summaries: [WorkoutSummary],
         window: AnalysisWindow = .default,
-        profile: TrainingProfile = TrainingProfile()
+        profile: TrainingProfile = TrainingProfile(),
+        analysisProfile: AnalysisProfile = .overallLoad
     ) -> AnalysisPrompt {
         AnalysisPromptBuilder.make(
             summaries: summaries,
             window: window,
             now: reference,
             calendar: calendar,
-            profile: profile
+            profile: profile,
+            analysisProfile: analysisProfile
         )
     }
 

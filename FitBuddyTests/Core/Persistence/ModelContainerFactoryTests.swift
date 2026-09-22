@@ -230,6 +230,10 @@ final class ModelContainerFactoryTests: XCTestCase {
         XCTAssertEqual(analyses.map(\.sessionCountsJSON), [nil])
         XCTAssertEqual(restored?.context.sessionCounts, [.hevy: 12])
         XCTAssertEqual(restored?.context.basisDescription, "12 Hevy sessions")
+        // Nor a profile (#185): the run predates the choice, so the line names
+        // none rather than claiming one on a guess.
+        XCTAssertEqual(analyses.map(\.analysisProfileRawValue), [nil])
+        XCTAssertNil(restored?.context.analysisProfile)
 
         // And the migrated store accepts what only V5 can write.
         let store = WorkoutStore(modelContainer: container)

@@ -340,6 +340,53 @@ final class AnalysisResultStoreTests: XCTestCase {
         XCTAssertEqual(stored.context.profile, TrainingProfile())
     }
 
+    // MARK: - Analysis profile (US-15 AC1, #185)
+
+    /// The history row has to say which profile produced it: two
+    /// recommendations from the same week can give opposite advice because
+    /// they were run under different profiles.
+    func testTheAnalysisProfileIsReadBackWithTheRecommendation() async throws {
+        let context = AnalysisContext(
+            sessionCounts: [.hevy: 14, .strava: 9],
+            domainCounts: [.strength: 14, .endurance: 9],
+            analysedCounts: [.strength: 14],
+            window: .default,
+            analysisProfile: .strength
+        )
+        try await sut.save(text: "Add a set.", generatedAt: Self.reference, context: context)
+
+        let latest = try await sut.latest()
+        let stored = try XCTUnwrap(latest)
+
+        XCTAssertEqual(stored.context.analysisProfile, .strength)
+        XCTAssertEqual(stored.context.analysedCounts, [.strength: 14])
+        XCTAssertNil(stored.context.thinDataWarning)
+        XCTAssertEqual(stored.context, context)
+    }
+
+    /// A row written before the choice existed: no profile, and the line says
+    /// nothing rather than claiming "Overall load" on a guess.
+    func testARunWithoutAnAnalysisProfileReadsBackWithoutOne() async throws {
+        try await sut.save(text: "Add a set.", generatedAt: Self.reference, context: Self.context())
+
+        let latest = try await sut.latest()
+        let stored = try XCTUnwrap(latest)
+
+        XCTAssertNil(stored.context.analysisProfile)
+    }
+
+    /// A profile a newer build wrote reads as none, like an unknown provider —
+    /// the row stays readable, minus that one chip.
+    func testAnUnknownAnalysisProfileReadsAsNone() async throws {
+        try insertRow(text: "From a newer build.", analysisProfileRawValue: "interference")
+
+        let latest = try await sut.latest()
+        let stored = try XCTUnwrap(latest)
+
+        XCTAssertEqual(stored.text, "From a newer build.")
+        XCTAssertNil(stored.context.analysisProfile)
+    }
+
     // MARK: - Per-source session counts (US-15 AC4, #182)
 
     /// The history row has to name the same basis the live run did: which
@@ -440,7 +487,8 @@ final class AnalysisResultStoreTests: XCTestCase {
         sessionCountsJSON: Data? = nil,
         reportJSON: Data? = nil,
         reportVersion: Int = AnalysisReportFormat.prose,
-        providerRawValue: String? = nil
+        providerRawValue: String? = nil,
+        analysisProfileRawValue: String? = nil
     ) throws {
         let context = ModelContext(container)
         context.insert(
@@ -450,6 +498,7 @@ final class AnalysisResultStoreTests: XCTestCase {
                 windowWeeks: 4,
                 sessionCount: 12,
                 sessionCountsJSON: sessionCountsJSON,
+                analysisProfileRawValue: analysisProfileRawValue,
                 reportJSON: reportJSON,
                 reportVersion: reportVersion,
                 providerRawValue: providerRawValue

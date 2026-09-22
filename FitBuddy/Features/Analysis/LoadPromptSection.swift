@@ -16,30 +16,64 @@ import Foundation
 /// since #184 is what makes a week of six runs a recovery week and the model
 /// would otherwise never be told the day count the app then overrules it on.
 ///
-/// What is rendered depends on what is there:
+/// What is rendered depends on what the window holds and on what the user's
+/// `AnalysisProfile` asked about (#185):
 ///
-/// - **Both domains:** the full section — the cross-domain day counts, the
-///   streak and the last seven days.
+/// - **Both domains, "Overall load":** the full section — the cross-domain day
+///   counts, the streak and the last seven days.
 /// - **Endurance only:** the streak and the last seven days. The window's own
 ///   training days are already in the endurance header, and "Days with strength
 ///   only: 0" restates the absence of a section the model was told not to
 ///   reason about.
+/// - **Both domains, one of them left out by the profile:** the last seven days
+///   and nothing else, prefaced by the reason. Everything above that line would
+///   describe training this prompt does not carry.
 /// - **Strength only:** `nil`, unchanged (#183 AC1).
+///
+/// **The orchestrator's decision (#184's open question, settled here): a run
+/// still counts as a training day for the recovery rule under the "Strength"
+/// profile.** One body has one recovery, and FitBuddy records no intensity by
+/// which a run could be ranked below a squat session — so leaving endurance out
+/// of the analysis is a choice about what to advise on, never a claim that the
+/// week was emptier than it was. `RecoveryMetrics` counts every session whatever
+/// the profile, `AnalysisReportValidator` enforces the card on that count (US-3
+/// AC6 / US-15 AC3), and a prompt that stayed silent would have the model reason
+/// about a week the app then overrules it on.
 enum LoadPromptSection {
     /// The week-structure section, or `nil` when the window holds no endurance
     /// session.
     ///
-    /// - Parameter now: The reference the window ends at, for the
-    ///   last-seven-days line (#184).
+    /// - Parameters:
+    ///   - strength: Every strength session of the window, whatever the
+    ///     profile covers — recovery is judged over all of it (#185).
+    ///   - endurance: Every endurance session of the window, likewise.
+    ///   - profile: What the user asked this analysis to be about. Decides
+    ///     which of the forms above is rendered.
+    ///   - now: The reference the window ends at, for the last-seven-days line
+    ///     (#184).
     static func section(
         strength: [WorkoutSummary],
         endurance: [WorkoutSummary],
+        profile: AnalysisProfile = .overallLoad,
         window: AnalysisWindow,
         now: Date,
         calendar: Calendar,
         days formatter: PromptDayFormatter
     ) -> String? {
         guard !endurance.isEmpty else { return nil }
+        // A profile that leaves out a domain this window holds gets the
+        // recovery week and nothing else: the figures above it describe
+        // training the prompt does not carry.
+        if omitsAPresentDomain(profile, strength: strength, endurance: endurance) {
+            return recoverySection(
+                strength: strength,
+                endurance: endurance,
+                profile: profile,
+                window: window,
+                now: now,
+                calendar: calendar
+            )
+        }
 
         let strengthDays = PromptFigures.trainingDayStarts(strength, calendar: calendar)
         let enduranceDays = PromptFigures.trainingDayStarts(endurance, calendar: calendar)
@@ -69,6 +103,54 @@ enum LoadPromptSection {
             lastSevenDaysLine(strength: strength, endurance: endurance, now: now, calendar: calendar)
         )
         return lines.joined(separator: "\n")
+    }
+
+    /// Whether the profile leaves out a domain this window actually holds.
+    ///
+    /// The distinction that decides which form the section takes: an
+    /// endurance-only window under the "Endurance" profile omits nothing, and
+    /// gets the ordinary section #184 built for it, while the same profile over
+    /// a window that also held lifts has to say why they are missing.
+    private static func omitsAPresentDomain(
+        _ profile: AnalysisProfile,
+        strength: [WorkoutSummary],
+        endurance: [WorkoutSummary]
+    ) -> Bool {
+        (!profile.covers(.strength) && !strength.isEmpty)
+            || (!profile.covers(.endurance) && !endurance.isEmpty)
+    }
+
+    /// The week structure reduced to what a single-domain profile still has
+    /// to be told: the week the recovery rule is judged on (#185).
+    ///
+    /// The other domain's sessions are described nowhere else in this prompt,
+    /// so the day count below would look like an error without the sentence
+    /// that explains it — the model, told six training days and shown three
+    /// strength sessions, would otherwise assume a figure had gone wrong.
+    private static func recoverySection(
+        strength: [WorkoutSummary],
+        endurance: [WorkoutSummary],
+        profile: AnalysisProfile,
+        window: AnalysisWindow,
+        now: Date,
+        calendar: Calendar
+    ) -> String {
+        let left = AnalysisDomain.allCases
+            .filter { !profile.covers($0) }
+            .map(\.displayName)
+            .joined(separator: " and ")
+        return [
+            "## Week structure (last \(window.weeks) weeks)",
+            "I asked about my \(profile.displayName.lowercased()) training only, so my "
+                + "\(left) sessions are not described above. They happened in the same "
+                + "weeks and cost the same recovery, so the day count below counts them too.",
+            lastSevenDaysLine(
+                strength: strength,
+                endurance: endurance,
+                now: now,
+                calendar: calendar
+            ),
+        ].joined(separator: "\n")
     }
 
     /// The last seven days over both domains — the span US-3 AC6 judges

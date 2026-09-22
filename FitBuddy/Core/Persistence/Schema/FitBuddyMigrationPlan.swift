@@ -23,12 +23,14 @@ import SwiftData
 /// recorded the provider. The row's `text` is untouched, so it renders as
 /// before (US-14 AC6).
 ///
-/// V4 → V5 is lightweight as well (#180, #182): `Workout` gains
+/// V4 → V5 is lightweight as well (#180, #182, #185): `Workout` gains
 /// `kindRawValue` and ten flat cardio columns, and `AnalysisResult` gains
-/// `sessionCountsJSON` — all optional. `nil` is the truth for an existing row:
-/// no build before this version read heart rate, elevation, speed or effort off
-/// a payload, the sport was never recorded as anything but the session title,
-/// and no analysis before it counted anything but Hevy sessions.
+/// `sessionCountsJSON` and `analysisProfileRawValue` — all optional. `nil` is
+/// the truth for an existing row: no build before this version read heart
+/// rate, elevation, speed or effort off a payload, the sport was never
+/// recorded as anything but the session title, no analysis before it counted
+/// anything but Hevy sessions, and none of them was run under a profile the
+/// user had chosen.
 /// `Workout.kind` resolves the missing sport from the row's source rather than
 /// guessing `strength` for a cached run, `SessionCountFormat` reads a missing
 /// map as that row's own total from Hevy, and the next sync replaces the window

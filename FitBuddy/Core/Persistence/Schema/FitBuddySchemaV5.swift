@@ -1,15 +1,17 @@
 import Foundation
 import SwiftData
 
-/// The current store schema (#180, #182): V4 plus `Workout.kindRawValue` and
-/// the flat cardio columns, so a cached session remembers which sport it was
-/// and the heart rate, elevation, speed and effort the source reported, plus
-/// `AnalysisResult.sessionCountsJSON`, so a stored recommendation remembers how
-/// its sessions split across the sources (US-15).
+/// The current store schema (#180, #182, #185): V4 plus `Workout.kindRawValue`
+/// and the flat cardio columns, so a cached session remembers which sport it
+/// was and the heart rate, elevation, speed and effort the source reported,
+/// plus `AnalysisResult.sessionCountsJSON` and
+/// `AnalysisResult.analysisProfileRawValue`, so a stored recommendation
+/// remembers how its sessions split across the sources and which profile
+/// produced it (US-15).
 ///
-/// #182 grew this version in place rather than adding a V6, under the rule
-/// below: no V5 store had reached `develop` — #180 created the version in the
-/// same wave — so there was no installed store to migrate from.
+/// #182 and #185 grew this version in place rather than adding a V6, under the
+/// rule below: no V5 store had reached `develop` — #180 created the version in
+/// the same wave — so there was no installed store to migrate from.
 ///
 /// The model classes live in their own files as extensions of this enum
 /// (`Workout.swift`, `Exercise.swift`, …), each with a top-level typealias so

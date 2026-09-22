@@ -32,6 +32,7 @@ actor AnalysisResultStore {
             windowWeeks: context.window.weeks,
             sessionCount: context.sessionCount,
             sessionCountsJSON: SessionCountFormat.encode(context),
+            analysisProfileRawValue: context.analysisProfile?.rawValue,
             goal: context.profile.goal?.rawValue,
             experience: context.profile.experience?.rawValue,
             reportJSON: encoded.json,
@@ -124,7 +125,7 @@ actor AnalysisResultStore {
         )
     }
 
-    /// The data basis of a stored row (#36, #87, #182).
+    /// The data basis of a stored row (#36, #87, #182, #185).
     ///
     /// A row without a domain breakdown takes the initializer that derives one
     /// from the sources — that is what a run counted before #182 meant — and a
@@ -139,6 +140,7 @@ actor AnalysisResultStore {
             experience: result.experience.flatMap(TrainingExperience.init(rawValue:))
         )
         let window = AnalysisWindow(weeks: result.windowWeeks)
+        let analysisProfile = result.analysisProfile
         switch SessionCountFormat.decode(
             result.sessionCountsJSON,
             fallbackSessionCount: result.sessionCount
@@ -147,17 +149,24 @@ actor AnalysisResultStore {
             return AnalysisContext(
                 unattributedSessionCount: total,
                 window: window,
+                analysisProfile: analysisProfile,
                 profile: profile
             )
         case .breakdown(let sources, let domains, let analysed):
             guard let domains else {
-                return AnalysisContext(sessionCounts: sources, window: window, profile: profile)
+                return AnalysisContext(
+                    sessionCounts: sources,
+                    window: window,
+                    analysisProfile: analysisProfile,
+                    profile: profile
+                )
             }
             return AnalysisContext(
                 sessionCounts: sources,
                 domainCounts: domains,
                 analysedCounts: analysed,
                 window: window,
+                analysisProfile: analysisProfile,
                 profile: profile
             )
         }

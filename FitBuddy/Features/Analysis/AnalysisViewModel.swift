@@ -63,6 +63,20 @@ final class AnalysisViewModel: ObservableObject {
     /// worth opening (US-3 AC11, #117). With a single one the screen already
     /// shows it, and a link to a list of exactly that would be a detour.
     @Published private(set) var hasHistory = false
+    /// Which analysis profiles this cache is worth offering, and which one is
+    /// preselected (US-15 AC1, #185). Refreshed by `prepareProfileSelection()`
+    /// every time the intro screen appears, so a sync that has just brought in
+    /// the first run changes what the picker offers.
+    @Published private(set) var profileOptions = AnalysisProfileOptions(domainCounts: [:])
+    /// The profile the next run will use — the user's tap, their last choice,
+    /// or the default this cache suggests, in that order.
+    ///
+    /// "Overall load" until `prepareProfileSelection()` has read the cache:
+    /// before anything is known about the window, everything in it is the only
+    /// honest scope, and it is also the value that leaves the prompt and the
+    /// context exactly as #183/#184 built them. Starting on "Strength" would
+    /// silently narrow a run begun before the first read returned.
+    @Published private(set) var selectedProfile: AnalysisProfile = .overallLoad
 
     /// Whether tapping "Analyse" can start a run right now: whenever no run is
     /// in flight.
@@ -94,6 +108,11 @@ final class AnalysisViewModel: ObservableObject {
     /// whenever nothing persisted is showing — a preview without a store, or a
     /// run whose write failed.
     private var currentResultID: UUID?
+    /// What the user picked on this screen, held in memory so a refresh of the
+    /// options cannot undo their tap while the write to `AnalysisProfileStore`
+    /// is still in flight. `nil` until they touch the picker, where the
+    /// remembered choice from the store decides instead.
+    private var chosenProfile: AnalysisProfile?
     /// Guards `restore()` against overlapping itself: the view's `.task` and
     /// `dismissFailure()` can both ask for a restore, and the store read
     /// between them releases the main actor.
@@ -105,6 +124,7 @@ final class AnalysisViewModel: ObservableObject {
     private let inference: AnalysisStreaming
     private let resultStore: (any AnalysisResultStoring)?
     private let trainingProfile: TrainingProfileStore
+    private let analysisProfiles: AnalysisProfileStore
     private let calendar: Calendar
     private let now: () -> Date
     private let slowThreshold: TimeInterval
@@ -133,6 +153,9 @@ final class AnalysisViewModel: ObservableObject {
     ///   - trainingProfile: Where the user's goal and experience live
     ///     (US-13). Read at the start of every run, not once at init: the
     ///     Settings screen changes it while this view model lives on (#191).
+    ///   - analysisProfiles: Where the last analysis profile is remembered
+    ///     (US-15 AC1, #185), so the next run starts on the one the user
+    ///     chose rather than on the default their data suggests.
     ///   - now: Injectable clock, so windows and the result age are testable.
     ///   - slowThreshold: Injectable, so tests do not wait 30 real seconds.
     ///   - tickInterval: How often `trackResultAge()` re-renders the
@@ -145,6 +168,7 @@ final class AnalysisViewModel: ObservableObject {
         inference: AnalysisStreaming,
         resultStore: (any AnalysisResultStoring)? = nil,
         trainingProfile: TrainingProfileStore = TrainingProfileStore(),
+        analysisProfiles: AnalysisProfileStore = AnalysisProfileStore(),
         calendar: Calendar = .current,
         now: @escaping () -> Date = Date.init,
         slowThreshold: TimeInterval = AnalysisViewModel.defaultSlowThreshold,
@@ -156,10 +180,78 @@ final class AnalysisViewModel: ObservableObject {
         self.inference = inference
         self.resultStore = resultStore
         self.trainingProfile = trainingProfile
+        self.analysisProfiles = analysisProfiles
         self.calendar = calendar
         self.now = now
         self.slowThreshold = slowThreshold
         self.tickInterval = tickInterval
+    }
+
+    // MARK: - Profile (US-15 AC1, #185)
+
+    /// The user picked a profile on the intro screen.
+    ///
+    /// Remembered straight away rather than when the run starts: the choice is
+    /// the user's standing preference, and someone who switches to "Endurance"
+    /// and then leaves the screen without analysing still meant it. Ignored
+    /// for a profile this cache has no data for, so a stale tap cannot start a
+    /// run over an empty half.
+    func select(_ profile: AnalysisProfile) async {
+        guard profileOptions.available.contains(profile) else { return }
+        // Published before the write, so the segmented control moves under the
+        // finger rather than after a store round trip.
+        chosenProfile = profile
+        selectedProfile = profile
+        await analysisProfiles.save(profile)
+    }
+
+    /// Works out which profiles this cache is worth offering and which one
+    /// starts selected — the intro screen's `.task`.
+    ///
+    /// Reads the cache rather than waiting for the run: US-15 AC1 asks for a
+    /// choice *before* the analysis, and which options are honest depends on
+    /// what the window holds. The same read, window ladder and per-domain
+    /// count as `buildPrompt()`, so the picker and the context line cannot
+    /// disagree about what is in the window.
+    ///
+    /// A failing read leaves the options as they are: the user came for the
+    /// analysis screen, and the run itself reports a cache it cannot read.
+    ///
+    /// The remembered choice is read **after** the cache, immediately before
+    /// the write. The cache read releases the main actor for as long as
+    /// SwiftData needs, and a tap landing in that window would otherwise be
+    /// overwritten by the value that was current before it: the segmented
+    /// control would snap back under the finger, and the run would use the
+    /// profile the user had just moved away from.
+    func prepareProfileSelection() async {
+        guard !state.isRunning else { return }
+        let reference = now()
+        let cached: [WorkoutSummary]
+        do {
+            cached = try await cache.workoutSummaries(
+                since: AnalysisWindow.widest.start(endingAt: reference, calendar: calendar)
+            )
+        } catch {
+            logger.error("Analysis profiles not resolved: \(error, privacy: .public)")
+            return
+        }
+        guard !Task.isCancelled else { return }
+        var domains: [AnalysisDomain: Int] = [:]
+        if let window = AnalysisWindow.resolve(for: cached, endingAt: reference, calendar: calendar) {
+            let start = window.start(endingAt: reference, calendar: calendar)
+            domains = Self.sessionCounts(in: cached, from: start).domains
+        }
+        var remembered = chosenProfile
+        if remembered == nil {
+            let stored = await analysisProfiles.profile
+            // Re-read afterwards for the same reason: the store read is a
+            // second hop off this actor, and a tap inside it has to win over a
+            // value written before it.
+            remembered = chosenProfile ?? stored
+        }
+        let options = AnalysisProfileOptions(domainCounts: domains, remembered: remembered)
+        profileOptions = options
+        selectedProfile = options.preselected
     }
 
     // MARK: - Run
@@ -438,7 +530,8 @@ final class AnalysisViewModel: ObservableObject {
             details: reads.details ?? [],
             window: reads.window,
             now: reads.now,
-            calendar: calendar
+            calendar: calendar,
+            analysisProfile: reads.analysisProfile
         )
         return AnalysisOutcome(validated: AnalysisReportValidator.validate(report, against: evidence))
     }
@@ -479,10 +572,27 @@ final class AnalysisViewModel: ObservableObject {
                 return nil
             }
             let start = window.start(endingAt: reference, calendar: calendar)
+            // The profile the user chose, unless this window holds nothing it
+            // covers — a sync can land between the moment the picker was
+            // filled and the moment they tapped (US-15 AC1, #185). Resolved
+            // here as well as in the builder so the prompt and the context
+            // line describe the same analysis.
+            let analysisProfile = selectedProfile.resolved(
+                for: cached.filter { $0.startTime >= start }
+            )
             // Read before the context is published: a read that fails here
             // fails the run, and a failed run must not leave a data basis on
             // screen.
-            let exercises = try await readExercises(since: start)
+            //
+            // Skipped entirely where the profile does not cover strength: the
+            // prompt then carries no Exercises section, so the movements would
+            // cost up to eleven store reads for a section nobody is shown —
+            // and, worse, a progression card the model invented without ever
+            // being given an exercise name would validate against them
+            // (#175).
+            let exercises = analysisProfile.covers(.strength)
+                ? try await readExercises(since: start)
+                : (summaries: [ExerciseSummary](), progressions: [String: ExerciseProgression]())
             guard !Task.isCancelled else { return nil }
             let details = await readRecentDetails(in: cached, now: reference)
             guard !Task.isCancelled else { return nil }
@@ -497,16 +607,18 @@ final class AnalysisViewModel: ObservableObject {
             // basis would overstate it by a factor of six.
             let counts = Self.sessionCounts(in: cached, from: start)
             // The thin-data verdict is about what the model was shown, and
-            // since #183 that is every session of the window: the prompt is
-            // sectioned by domain rather than filtered by source, so the
-            // analysed breakdown *is* the domain breakdown and the default
-            // says so (US-6 AC2). #185 reopens the gap from the other side —
-            // under the "Strength" profile the endurance half is counted on
-            // the line and deliberately not analysed.
+            // since #185 that is what the profile covers: the line keeps the
+            // honest count of everything the app read, while the warning
+            // speaks only about the domains this analysis was asked to judge
+            // (US-6 AC2, US-15 AC4). Fourteen Hevy sessions and one run under
+            // "Strength" therefore warn about nothing — the run was logged and
+            // counted, and no recommendation here is about it.
             context = AnalysisContext(
                 sessionCounts: counts.sources,
                 domainCounts: counts.domains,
+                analysedCounts: counts.domains.filter { analysisProfile.covers($0.key) },
                 window: window,
+                analysisProfile: analysisProfile,
                 profile: profile
             )
             let reads = AnalysisRunReads(
@@ -515,7 +627,8 @@ final class AnalysisViewModel: ObservableObject {
                 progressions: exercises.progressions,
                 details: details,
                 window: window,
-                now: reference
+                now: reference,
+                analysisProfile: analysisProfile
             )
             let prompt = AnalysisPromptBuilder.make(
                 summaries: reads.summaries,
@@ -524,7 +637,8 @@ final class AnalysisViewModel: ObservableObject {
                 window: reads.window,
                 now: reads.now,
                 calendar: calendar,
-                profile: profile
+                profile: profile,
+                analysisProfile: analysisProfile
             )
             return (prompt, reads)
         } catch {
