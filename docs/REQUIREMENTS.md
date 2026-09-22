@@ -269,7 +269,7 @@ Das Kernversprechen der App *ist* Security: «API-Keys verbleiben im iOS Keychai
 | Massnahme | Begründung |
 |---|---|
 | `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` (US-1 AC1) | Verhindert iCloud-Sync des Keys und Zugriff bei gesperrtem Gerät — falsches Attribut = Key landet in iCloud-Backup |
-| Certificate Pinning für alle sieben Hosts (Quellen + LLM-Anbieter) | Einziger verbleibender Angriffsvektor bei kompromittiertem Netzwerk. **Status: geplant, für keinen Host umgesetzt** — offene technische Schuld TD-4, fällig vor TestFlight mit externen Testern |
+| Certificate Pinning für alle sieben Hosts (Quellen + LLM-Anbieter) | Einziger verbleibender Angriffsvektor bei kompromittiertem Netzwerk. **Status: umgesetzt (#153)** — Root-CA-Pins über `NSPinnedDomains` in der `Info.plist`, Details in [CERTIFICATE-PINNING.md](CERTIFICATE-PINNING.md) |
 | Consent-Text US-4 AC4 korrekt formulieren **vor erstem TestFlight-Build** | Anthropic Ireland Ltd als Vertragspartner, USA als Drittland, DPA des Users als Rechtsgrundlage — inhaltlich falscher Consent verletzt Art. 19 nDSG |
 | Consent mit Version + Timestamp im Keychain (US-4 AC5) | Versionierter Consent ist Pflicht: bei Änderung der Datenverarbeitung muss erneut eingeholt werden |
 | Kein Logging von Key-Material | Eine einzige Log-Zeile mit API-Key in einem Crash-Report reicht für eine Kompromittierung |
