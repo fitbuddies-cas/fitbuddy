@@ -1,4 +1,4 @@
-# ADR-9: CI auf selbst gehostetem macOS-Runner
+# ADR-009: CI auf selbst gehostetem macOS-Runner
 
 **Status:** Accepted
 **Datum:** 2026-09-02

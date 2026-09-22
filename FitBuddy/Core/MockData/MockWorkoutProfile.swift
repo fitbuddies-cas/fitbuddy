@@ -12,7 +12,19 @@ import Foundation
 /// for: a dense strength-training week and a minimal one. The two analysis
 /// profiles (#179) each reproduce one acceptance criterion of US-14 from real
 /// cache data: a lift that is ready for more load (AC2) and a week that calls
-/// for recovery first (AC4).
+/// for recovery first (AC4). The three cross-source profiles (#188) do the
+/// same for US-15 — one window of nothing but endurance, one of both
+/// disciplines side by side, and one whose overall load calls for recovery
+/// although no single source shows it.
+///
+/// **Every session of the three cross-source profiles starts at 12:00 UTC**,
+/// whichever source recorded it, as every session of `overreached` starts at
+/// the same time of day. A profile whose sources sit at different hours is
+/// only stable near UTC: shift the time zone far enough and one source crosses
+/// the local date line while the others do not, which moves overlap days and
+/// training-day counts without moving a single date. One wall clock makes the
+/// shift uniform, so the counts these profiles exist to prove hold in every
+/// zone — `MockWorkoutLoaderTests` pins that across zones as well as hours.
 enum MockWorkoutProfile: String, CaseIterable, Sendable {
     /// Trains five times a week — push/pull/legs plus an upper-body volume and
     /// a conditioning session, heavy loads. Twelve whole weeks of the same five
@@ -36,9 +48,65 @@ enum MockWorkoutProfile: String, CaseIterable, Sendable {
     /// of US-14 AC4 is mandatory. The rest day sits where the re-anchoring
     /// keeps the count at six whatever the time of day.
     case overreached = "overreached"
+    /// Strava only: four runs a week for eight weeks — an easy run, a tempo
+    /// session, a shake-out run and a long trail run, on four of the seven
+    /// days. The shake-out run is the one without a heart rate, so the
+    /// endurance section has to say how many sessions its mean rests on
+    /// (US-15 AC7).
+    ///
+    /// An endurance-only window: the analysis offers no profile choice and
+    /// runs as "Endurance" (US-15 AC1), and every figure it reports is in km,
+    /// min/km and bpm (AC5).
+    ///
+    /// The week's four days sit within five of each other, so the seven-day
+    /// span holds all of them whichever day the re-anchoring lands the newest
+    /// run on — see the note on `overreachedMixed` for the other half of that
+    /// property.
+    case runner
+    /// Hevy and Strava: three push/pull/legs sessions and three endurance
+    /// sessions a week for eight weeks, two of the endurance sessions on a day
+    /// that also carried a lift. Four training days a week, so the week is
+    /// dense but never a recovery week — the profile for the cross-source
+    /// context line of US-15 AC4 and the week-structure section of AC2.
+    case mixed
+    /// Hevy, Strava and Polar: six days in a row across all three sources,
+    /// then two rest days, on top of eight weeks of three lifts and two
+    /// endurance sessions a week.
+    ///
+    /// No single source shows a recovery week — three lifts, two runs and one
+    /// ride — and together they are six of the last seven days, which is what
+    /// US-15 AC3 asks the app to catch. The two rest days sit where the
+    /// re-anchoring keeps the count at six whatever the time of day, as in
+    /// `overreached`.
+    case overreachedMixed = "overreached-mixed"
 
-    /// Name of the bundled JSON payload (without the `.json` extension).
-    var resourceName: String { "mock-workouts-\(rawValue)" }
+    /// The bundled payloads this profile is built from, in the order they are
+    /// cached — one per source, each in that source's wire format (#188).
+    var payloads: [MockWorkoutPayload] {
+        switch self {
+        case .personA, .personB, .progressionReady, .overreached:
+            return [MockWorkoutPayload(source: .hevy, resourceName: "mock-workouts-\(rawValue)")]
+        case .runner:
+            return [MockWorkoutPayload(source: .strava, resourceName: "mock-workouts-runner-strava")]
+        case .mixed:
+            return [
+                MockWorkoutPayload(source: .hevy, resourceName: "mock-workouts-mixed-hevy"),
+                MockWorkoutPayload(source: .strava, resourceName: "mock-workouts-mixed-strava"),
+            ]
+        case .overreachedMixed:
+            return [
+                MockWorkoutPayload(source: .hevy, resourceName: "mock-workouts-overreached-mixed-hevy"),
+                MockWorkoutPayload(source: .strava, resourceName: "mock-workouts-overreached-mixed-strava"),
+                MockWorkoutPayload(source: .polar, resourceName: "mock-workouts-overreached-mixed-polar"),
+            ]
+        }
+    }
+
+    /// The Hevy payload of this profile, or `nil` for one that records no
+    /// strength training — the file a stubbed `GET /v1/workouts` walk serves.
+    var hevyPayload: MockWorkoutPayload? {
+        payloads.first { $0.source == .hevy }
+    }
 
     /// Label for preview pickers and debug menus.
     var displayName: String {
@@ -47,6 +115,9 @@ enum MockWorkoutProfile: String, CaseIterable, Sendable {
         case .personB: return "Person B · 2 sessions/week"
         case .progressionReady: return "Progression-ready · bench 60 kg × 5"
         case .overreached: return "Overreached · 6 of the last 7 days"
+        case .runner: return "Runner · 4 runs/week, Strava only"
+        case .mixed: return "Mixed · 3 lifts + 3 endurance sessions/week"
+        case .overreachedMixed: return "Overreached mixed · 6 of 7 days, 3 sources"
         }
     }
 }

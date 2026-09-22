@@ -1,6 +1,7 @@
 # AI Agent Risk Classification — FitBuddy
 
-> Ergebnisse des Risiko-Rechners (Teaching Version), bewertet am 05.08.2026.
+> Ergebnisse des Risiko-Rechners (Teaching Version), bewertet am 05.08.2026,
+> nachgeführt auf den Stand nach US-15 (Polar als dritte Quelle, Multi-Provider-LLM).
 > Zwei Einstufungen: das **Produkt** (FitBuddy App) und der **Entwicklungsprozess** (Claude Code).
 > Dieses Dokument ist die dokumentierte Risikonotiz für das PoC (v0).
 > Präsentationsfassung: [`risk-classification-presentation.html`](risk-classification-presentation.html)
@@ -28,7 +29,7 @@
 
 * **Data 4** greift wegen der *besonderen Kategorie*: Trainingsdaten sind Gesundheitsdaten nach nDSG Art. 5 lit. c. Zahlungsdaten verarbeitet FitBuddy nicht.
 * **Autonomy 2:** Claude generiert ausschliesslich Text (Trainingsempfehlung). Kein Tool-Use, kein Write-back nach Hevy (US-12 = Won't). Die Umsetzung jeder Empfehlung liegt beim User — das ist zugleich der geforderte Human-in-the-Loop.
-* **Exposure 4:** Daten verlassen das Gerät zu drei externen Empfängern: Hevy und — sobald verbunden — Strava (USA) als Quellen der Trainingsdaten, Anthropic (USA) bzw. der gewählte LLM-Anbieter als Empfänger der Analyse-Daten. Strava erhält dabei nur die Autorisierung und die Lese-Anfragen der nutzereigenen API-Application (ADR-010), nie Hevy-Daten oder die Analyse.
+* **Exposure 4:** Daten verlassen das Gerät zu bis zu sechs externen Empfängern, je nachdem, was der User verbindet. Als **Quellen** der Trainingsdaten: Hevy, Strava (USA, ADR-010) und Polar Electro Oy (Finnland/EU, ADR-011). Als **Empfänger der Analyse-Daten**: der gewählte LLM-Anbieter — Anthropic (USA), Google (USA) oder Mistral AI (EU), in der vom User gesetzten Prioritätsreihenfolge (ADR-007). Quellen und LLM-Anbieter sehen einander nie: Strava und Polar erhalten ausschliesslich die Autorisierung und die Lese-Anfragen der nutzereigenen API-Application, nie Hevy-Daten und nie die Analyse.
 
 ## 2. Entwicklungsprozess — Claude Code
 
@@ -93,7 +94,7 @@ Auf diesem Level ist eine Ausnahme eine Entscheidung mit Namen dran — keine Ko
 | Personendaten im Prompt dokumentiert (DSGVO/nDSG) | Datenschutzerklärung-Screen: bearbeitete Daten, Zweck, Empfänger |
 | Sicherheitsrelevante Ereignisse geloggt | 401-Handling mit aktiver Benachrichtigung (US-1 AC3, US-8 AC2) |
 | Datenschutz-Folgenabschätzung geprüft (DPIA nötig?) | Geprüft: volle DSFA ist v1-Material; für v0 genügt diese Risikonotiz + Consent (Entscheid siehe CLAUDE.md, Verhältnismässigkeit bei BFH-Datenschutzstelle) |
-| Least-Privilege-Zugriff auf Tools und Daten | Hevy-Key nur lesend genutzt; Strava nur mit dem Scope `activity:read_all` (kein Schreib-Scope, ADR-010); Keys, Client-Credentials und Tokens nur im Keychain (`ThisDeviceOnly`), nur in Services |
+| Least-Privilege-Zugriff auf Tools und Daten | Hevy-Key nur lesend genutzt; Strava nur mit dem Scope `activity:read_all`, Polar nur mit `accesslink.read_all` (beide ohne Schreib-Scope, ADR-010/011); Keys, Client-Credentials und Tokens nur im Keychain (`ThisDeviceOnly`), nur in Services |
 | Zahlungsdaten erreichen das Modell nie (PCI) | Nicht anwendbar — FitBuddy verarbeitet keine Zahlungsdaten |
 | DPIA / FRIA abgeschlossen | Für v0 durch diese Notiz abgedeckt (siehe oben); vollständige DSFA vor kommerziellem Launch (v1) |
 | Mensch bestätigt die Aktion | App: AI-Analyse nur auf Knopfdruck (US-3), Empfehlungen werden nie automatisch umgesetzt. Prozess: kein Merge ohne Human Review |
@@ -112,7 +113,7 @@ Auf diesem Level ist eine Ausnahme eine Entscheidung mit Namen dran — keine Ko
 
 Das Tier **Critical** ist in beiden Fällen kein Blocker, sondern die ehrliche Beschreibung der Ausgangslage:
 
-* **Produkt:** Die Red Line «Gesundheitsdaten an ein externes Modell» ist die inhärente Eigenschaft des Produkts (AI-Analyse von Trainingsdaten), nicht ein vermeidbarer Implementierungsfehler. Die Rechtsgrundlage ist im BYO-Key-Modell der eigene Anthropic-DPA des Users (inkl. SCCs + Swiss Addendum); Transparenz und Einwilligung sind über den Consent-Screen abgedeckt (US-4 AC4).
+* **Produkt:** Die Red Line «Gesundheitsdaten an ein externes Modell» ist die inhärente Eigenschaft des Produkts (AI-Analyse von Trainingsdaten), nicht ein vermeidbarer Implementierungsfehler. Die Rechtsgrundlage ist im BYO-Key-Modell der API-Vertrag des eigenen Accounts beim jeweiligen Anbieter — bei Anthropic der DPA inkl. SCCs + Swiss Addendum, bei Google und Mistral die entsprechenden API-Bedingungen (ADR-007); Transparenz und Einwilligung sind über den Consent-Screen abgedeckt (US-4 AC4).
 * **Entwicklungsprozess:** Das Tier folgt aus der Natur eines Coding-Agenten. Die Antwort ist nicht «abschalten», sondern Human-in-the-Loop an jeder Stelle, an der etwas Wirkung entfaltet: der User entscheidet über jede Trainingsempfehlung, das Team über jeden Merge.
 
 Details: `docs/REQUIREMENTS.md` (Kap. 5, Security & Privacy) und `docs/adr/ADR-005-claude-api-usa-with-dpa.md`.

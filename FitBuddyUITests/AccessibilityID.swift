@@ -105,6 +105,9 @@ enum AccessibilityID {
         /// The finished recommendation — report or prose, live or restored.
         static let result = "analysis.result"
         static let headline = "analysis.headline"
+        /// The data-basis line over the result: sources, period, profile and
+        /// the thin-data warning (US-6, US-15 AC4).
+        static let context = "analysis.context"
         /// Every card of a kind carries its kind's identifier — the tests ask
         /// whether a kind is on screen, not which of its cards.
         static let progressionCard = "analysis.progressionCard"

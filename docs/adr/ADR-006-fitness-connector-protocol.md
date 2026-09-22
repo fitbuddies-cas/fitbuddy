@@ -1,4 +1,4 @@
-# ADR-6: `FitnessConnector`-Protocol als Abstraktion ab Sprint 1
+# ADR-006: `FitnessConnector`-Protocol als Abstraktion ab Sprint 1
 
 **Status:** Accepted
 **Datum:** 2026-06-03
@@ -41,7 +41,7 @@ enum ConnectorError: Error {
 }
 ```
 
-Ohne dieses Error-Enum können Dashboard und AI-Engine nicht zwischen Auth-Fehler (→ Keychain löschen) und Netzwerkfehler (→ Offline-Mode) unterscheiden — der HTTP-401-Reset-Flow aus [[ADR-3]] wäre nicht implementierbar.
+Ohne dieses Error-Enum können Dashboard und AI-Engine nicht zwischen Auth-Fehler (→ Keychain löschen) und Netzwerkfehler (→ Offline-Mode) unterscheiden — der HTTP-401-Reset-Flow aus [ADR-003](ADR-003-keychain-this-device-only.md) wäre nicht implementierbar.
 
 Wir committen gleichzeitig einen **`MockConnector`** (konfigurierbares Test-Double mit einstellbaren Responses: leere Liste, n Activities, Fehler-Injection) und einen **`StravaConnectorStub`** (nur Compilation-Garant, wirft `.notImplemented` — separates Konzept vom MockConnector).
 
@@ -66,7 +66,7 @@ Die Umsetzung des Protocols weicht an vier Stellen bewusst von der obigen Entsch
 
 Die Implementierung des ersten Connectors weicht an fünf Stellen von der obigen Skizze ab:
 
-1. **Der Connector ist reines Provider-I/O, die Sync-Orchestrierung liegt darüber.** `HevyConnector` kennt nur HTTP, Pagination und die DTO→`Activity`-Abbildung; Keychain-Lesen, Cache-Write, Sync-Timestamp und der Hard-Logout aus [[ADR-3]] liegen in `WorkoutSyncService`. Grund: `ConnectorError` beschreibt ausschliesslich Provider-Fehler — für "Keychain gesperrt" und "Cache-Write fehlgeschlagen" gibt es dort bewusst keine Cases, und beide muss das Dashboard unterscheiden können. Ein Connector, der die Keychain leert, wäre ausserdem nicht mehr austauschbar: das Löschen der Session ist eine App-Entscheidung, keine des Providers.
+1. **Der Connector ist reines Provider-I/O, die Sync-Orchestrierung liegt darüber.** `HevyConnector` kennt nur HTTP, Pagination und die DTO→`Activity`-Abbildung; Keychain-Lesen, Cache-Write, Sync-Timestamp und der Hard-Logout aus [ADR-003](ADR-003-keychain-this-device-only.md) liegen in `WorkoutSyncService`. Grund: `ConnectorError` beschreibt ausschliesslich Provider-Fehler — für "Keychain gesperrt" und "Cache-Write fehlgeschlagen" gibt es dort bewusst keine Cases, und beide muss das Dashboard unterscheiden können. Ein Connector, der die Keychain leert, wäre ausserdem nicht mehr austauschbar: das Löschen der Session ist eine App-Entscheidung, keine des Providers.
 2. **`WorkoutSyncError` ist das Fehler-Vokabular der Sync-Schicht.** Es hebt jeden `ConnectorError`-Case 1:1 an und ergänzt `missingAPIKey`, `keychainUnavailable` und `persistenceFailed`. `ConnectorError` selbst bleibt damit eingefroren, wie unter "Negativ" gefordert.
 3. **HTTP 403 wird als `invalidResponse` gemeldet, nicht als `unauthorized`.** `ConnectorError` hat keinen Case für "unerwarteter Status", und 403 trifft auch gültige Keys (WAF, Geo) — als Auth-Fehler gemeldet würde der Aufrufer einen funktionierenden Key löschen. Der Statuscode geht ins Log.
 4. **`Activity` wurde additiv erweitert** um `notes`, `updatedAt` (Workout-Ebene) sowie `templateID` und `supersetID` (Übungsebene). Ohne diese Felder verliert der Weg Hevy → `Activity` → Cache Daten, die die App bereits anzeigt (die Session-Beschreibung in der Detailansicht) oder für US-9 braucht (die stabile Identität der Übung). Das ist der additive Eingriff, den Nachtrag Punkt 2 der ersten Umsetzung vorgesehen hat — die Strava-Feldanalyse bleibt davon unberührt offen.
@@ -85,13 +85,13 @@ Der in Sprint 1 verschobene Stub ist mit #35 ausgeliefert, zusammen mit der `Con
 
 Die Strava-API-Feldanalyse (Punkt 2 des Nachtrags zu #33, bestätigt in Punkt 4 des Nachtrags zu #34) bleibt offen — der Stub bildet keine Strava-Daten ab und beantwortet die Frage nach `Activity`-Zusatzfeldern daher nicht.
 
-### Nachtrag: Strava-Feldanalyse beantwortet (ADR-10)
+### Nachtrag: Strava-Feldanalyse beantwortet (ADR-010)
 
-Die seit #33 offene Feldanalyse ist mit [[ADR-10]] erledigt, und zwar negativ: **`Activity` wird für Strava nicht erweitert.** Eine Strava-Aktivität bildet auf genau eine `ActivityExercise` (Titel = `sport_type`) mit genau einem `ActivityExerciseSet` ab, dessen bereits vorhandene Felder `distanceMeters` und `durationSeconds` die Cardio-Kennzahlen tragen. GPS-Route, Lap-Splits, Power, VO2max und HR-Zonen kommen nicht ins Modell — weder als optionale Felder noch über einen `metadata`-Escape-Hatch.
+Die seit #33 offene Feldanalyse ist mit [ADR-010](ADR-010-strava-oauth-byo-app.md) erledigt, und zwar negativ: **`Activity` wird für Strava nicht erweitert.** Eine Strava-Aktivität bildet auf genau eine `ActivityExercise` (Titel = `sport_type`) mit genau einem `ActivityExerciseSet` ab, dessen bereits vorhandene Felder `distanceMeters` und `durationSeconds` die Cardio-Kennzahlen tragen. GPS-Route, Lap-Splits, Power, VO2max und HR-Zonen kommen nicht ins Modell — weder als optionale Felder noch über einen `metadata`-Escape-Hatch.
 
 Damit bleibt die ursprünglich formulierte Bedingung *«sofern das `Activity`-Modell vorab die nötigen optionalen Felder enthält»* ohne Gegenstand: Der für v1 nötige additive Eingriff ist nicht der Cardio-Datensatz, sondern die Unterscheidung der Quelle (`Activity.source` und `Workout.sourceRawValue`, Issue #141) — sonst verwirft ein Hevy-Sync die Strava-Aktivitäten desselben Zeitfensters mit.
 
-Der OAuth-Entscheid selbst (BYO-App des Nutzers statt Team-Secret, `ASWebAuthenticationSession`, fünf Keychain-Items statt des in [[ADR-3]] reservierten `fitbuddy.strava.token`) steht in [[ADR-10]]. Punkt 2 des Nachtrags zu #35 bleibt unverändert gültig: Der Refresh liegt im `StravaConnector`, die Ablauf-Buchführung in der `ConnectorRegistry`.
+Der OAuth-Entscheid selbst (BYO-App des Nutzers statt Team-Secret, `ASWebAuthenticationSession`, fünf Keychain-Items statt des in [ADR-003](ADR-003-keychain-this-device-only.md) reservierten `fitbuddy.strava.token`) steht in [ADR-010](ADR-010-strava-oauth-byo-app.md). Punkt 2 des Nachtrags zu #35 bleibt unverändert gültig: Der Refresh liegt im `StravaConnector`, die Ablauf-Buchführung in der `ConnectorRegistry`.
 
 ---
 
@@ -119,11 +119,11 @@ Der OAuth-Entscheid selbst (BYO-App des Nutzers statt Team-Secret, `ASWebAuthent
 | Frage | Priorität | Fällig |
 |---|---|---|
 | **HealthKit IN oder OUT of Scope? — Bei IN: separates `HealthDataProvider`-Protocol designen** | **Kritisch** | **vor Sprint 1** |
-| ~~**Strava-API-Feldanalyse: GPS, Lap-Splits, Power, VO2max, HR Zones — `Activity`-Modell um optionale Felder erweitern**~~ — beantwortet in [[ADR-10]]: keine Erweiterung, Cardio bildet auf `distanceMeters` / `durationSeconds` ab. **(geschlossen)** | — | — |
+| ~~**Strava-API-Feldanalyse: GPS, Lap-Splits, Power, VO2max, HR Zones — `Activity`-Modell um optionale Felder erweitern**~~ — beantwortet in [ADR-010](ADR-010-strava-oauth-byo-app.md): keine Erweiterung, Cardio bildet auf `distanceMeters` / `durationSeconds` ab. **(geschlossen)** | — | — |
 | **`ConnectorError`-Enum finalisieren und in alle `throws`-Signaturen einsetzen** | **Hoch** | **Sprint 1** |
 | **`MockConnector` mit Fehler-Injection und konfigurierbaren Responses implementieren** | **Hoch** | **Sprint 1** |
-| ~~**`ConnectorCredentials`-Struktur für OAuth-Token (Strava) vs. API-Key (Hevy) definieren**~~ — `ConnectorCredentials.oauth(accessToken:refreshToken:expiresAt:)` seit #35; die Keychain-Ablage dahinter definiert [[ADR-10]] (fünf Items). **(geschlossen)** | — | — |
-| `kSecAttrAccessGroup` setzen — in [[ADR-3]] und [[ADR-10]] bewusst offen gelassen, fällig erst mit Watch-Extension oder Widget | Niedrig | v1.0 |
+| ~~**`ConnectorCredentials`-Struktur für OAuth-Token (Strava) vs. API-Key (Hevy) definieren**~~ — `ConnectorCredentials.oauth(accessToken:refreshToken:expiresAt:)` seit #35; die Keychain-Ablage dahinter definiert [ADR-010](ADR-010-strava-oauth-byo-app.md) (fünf Items). **(geschlossen)** | — | — |
+| `kSecAttrAccessGroup` setzen — in [ADR-003](ADR-003-keychain-this-device-only.md) und [ADR-010](ADR-010-strava-oauth-byo-app.md) bewusst offen gelassen, fällig erst mit Watch-Extension oder Widget | Niedrig | v1.0 |
 | Pagination-Strategie für v1.0 evaluieren: `AsyncStream<Activity>` vs. Cursor-Modell | Mittel | vor v1.0 |
 | Hevy-spezifische Features (Routinen-Metadaten): Sub-Interface oder Verzicht? | Niedrig | Sprint 2 |
 | Protocol-Extension-Strategie für zukünftige Methoden festlegen (Sub-Protocol vs. `extension`-Default) | Niedrig | vor v1.0 |

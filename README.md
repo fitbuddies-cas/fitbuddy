@@ -16,9 +16,9 @@ Trainingsdaten (Kraft, Ausdauer) sind auf mehrere Apps verteilt (Hevy, Strava, A
 
 Native iOS-App (SwiftUI), die:
 
-1. **Hevy-Trainingsdaten via API aggregiert** (PoC: Hevy only)
+1. **Trainingsdaten aus drei Quellen aggregiert** — Hevy (Kraft), Strava und Polar AccessLink (Ausdauer), alle hinter demselben `FitnessConnector`-Interface
 2. **Ein Dashboard liefert** — Sessions, Gesamtvolumen, Muskelbelastungsverteilung
-3. **On-demand AI-Progressionsempfehlungen generiert** — ein Tap für eine konkrete, verständliche Empfehlung via Claude API
+3. **On-demand AI-Progressionsempfehlungen generiert** — ein Tap für eine konkrete, verständliche Empfehlung über Kraft und Ausdauer zusammen (US-15), via Claude, Gemini oder Mistral
 4. **API-Keys lokal im iOS Keychain speichert** — keine fremden Server
 5. **Onboarding in 3 Schritten** bietet — für nicht-technische Nutzer, ohne Dokumentation bedienbar
 
@@ -51,11 +51,11 @@ Native iOS-App (SwiftUI), die:
 
 Der PoC umfasst vier **Must-Have**-User-Stories: API-Key sicher speichern (US-1), Trainingsdaten im Dashboard (US-2), AI-Analyse auf Knopfdruck (US-3) und Onboarding in 3 Schritten (US-4).
 
-Alle 12 User Stories mit Akzeptanzkriterien, MoSCoW-Priorisierung und Out of Scope: siehe [REQUIREMENTS.md](docs/REQUIREMENTS.md).
+Alle 15 User Stories mit Akzeptanzkriterien, MoSCoW-Priorisierung und Out of Scope: siehe [REQUIREMENTS.md](docs/REQUIREMENTS.md).
 
 ## Architektur
 
-Native iOS (SwiftUI), kein Backend: Alle API-Keys verbleiben auf dem Gerät im iOS Keychain, die Aufrufe an Hevy- und Claude-API laufen direkt vom Gerät. Ein `FitnessConnector`-Interface kapselt die Datenquellen; Strava und Polar sind darüber im BYO-App-Modell angebunden (ADR-010, ADR-011) — der Nutzer bringt seine eigene API-Application mit, siehe [STRAVA-SETUP.md](docs/STRAVA-SETUP.md).
+Native iOS (SwiftUI), kein Backend: Alle API-Keys verbleiben auf dem Gerät im iOS Keychain, die Aufrufe an die Datenquellen (Hevy, Strava, Polar) und an den gewählten LLM-Anbieter (Claude, Gemini, Mistral) laufen direkt vom Gerät. Ein `FitnessConnector`-Interface kapselt die Datenquellen; Strava und Polar sind darüber im PoC (v0) ohne Umbau ergänzt worden, im BYO-App-Modell (ADR-010, ADR-011) — der Nutzer bringt seine eigene API-Application mit, siehe [STRAVA-SETUP.md](docs/STRAVA-SETUP.md).
 
 Systemdesign, Tech-Stack, Datenmodell, ADRs und offene Architektur-Fragen: siehe [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

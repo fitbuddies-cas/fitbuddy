@@ -70,8 +70,11 @@ Open `index.html` directly in a modern browser. No build step, no install. All d
 | US-14 AC2 (Übung, Muskelgruppe, von → nach, Delta, Begründung) | 3.4 Progression-Karten |
 | US-14 AC4 (Recovery-Kennzahlen aus der App, Ø RPE optional) | 3.5 Recovery-Karte |
 | US-14 AC6 (alte Prosa-Einträge bleiben lesbar) | 3.7 Eintrag «Text» |
-| US-15 AC5 (Profil «Endurance»: Ausdauer-Einheiten, keine Kilogramm) | 3.4c — drei Metrik-Karten in km und min/km, kein kg auf dem Screen |
+| US-15 AC1 (Profil-Auswahl «Strength» / «Endurance» / «Overall load») | noch kein Mock — der Segmented Control über dem Analyse-Button kam mit #185 dazu; bei nur einer Domäne im Fenster entfällt er |
 | US-15 AC2 (Wochenstruktur über beide Domänen) | 3.4d — Interferenz-Karte «Strength and running shared 3 of the last 7 days» |
+| US-15 AC3 (Recovery ab 6 von 7 Tagen über alle Quellen) | 3.5 — Recovery-Karte; die Tageszählung umfasst seit #184 Kraft und Cardio, der Screen selbst bleibt unverändert |
+| US-15 AC4 (Kontextzeile pro Quelle, Thin-Data pro Domäne) | `FBAnalysisContextLine` nimmt eine Quellen-Liste, aber kein Screen übergibt bisher zwei — die mehrquellige Zeile «12 Hevy · 12 Strava sessions» ist nur im UI-Test (`mixed`-Profil, #188) zu sehen |
+| US-15 AC5 (Profil «Endurance»: Ausdauer-Einheiten, keine Kilogramm) | 3.4c — drei Metrik-Karten in km und min/km, kein kg auf dem Screen |
 | US-15 AC7 (fehlende Kennzahl: Zelle entfällt, kein «—») | 3.5 ohne Ø RPE · 3.4c ohne `source`-Label, wo die Quelle fehlt |
 | US-9 AC1–AC3 (Progressionskurve, Plateau-Label, Session-Historie) | noch kein Mock — Screen ist mit #42/#163 dazugekommen |
 

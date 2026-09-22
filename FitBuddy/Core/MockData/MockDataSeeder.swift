@@ -15,12 +15,14 @@ import SwiftData
 /// onboarding sits on its empty state — the dashboard, the exercise list and
 /// the progression curve are all unreachable for a test that has no data to
 /// tap on. This writes a real window through the real mapping instead:
-/// recorded Hevy payloads → `HevyWorkoutDTO` → `Activity` → `WorkoutStore`, the
+/// recorded payloads → the source's own DTO → `Activity` → `WorkoutStore`, the
 /// same path a live sync takes, so a test walks over data shaped like the
-/// data users have.
+/// data users have. Since #188 a profile may hold more than one source, and
+/// each is written the way its own sync would write it.
 ///
 /// `-fbSeedMockData person-a` (or `person-b`, `progression-ready`,
-/// `overreached`) turns it on; without the argument nothing here runs.
+/// `overreached`, `runner`, `mixed`, `overreached-mixed`) turns it on; without
+/// the argument nothing here runs.
 enum MockDataSeeder {
     static let launchArgument = "-fbSeedMockData"
 
@@ -76,10 +78,34 @@ enum MockDataSeeder {
     ) async {
         guard let profile = requestedProfile(in: launchArguments) else { return }
         do {
-            let activities = try MockWorkoutLoader().activities(for: profile)
-            try await WorkoutStore(modelContainer: container).replaceCachedWorkouts(from: .hevy, with: activities)
+            // Re-anchored on the clock the sync is dated with, not on the
+            // system one: a caller that seeds at a fixed instant and then reads
+            // the cache as of that instant has to see the window it asked for.
+            let loader = MockWorkoutLoader(now: now)
+            let store = WorkoutStore(modelContainer: container)
+            var seeded = 0
+            // One call per source, because that is how a sync writes: the store
+            // replaces one source's window and leaves the others alone, so a
+            // mixed profile has to hand it its Hevy half and its Strava half
+            // separately — seeding both under `.hevy` would label the runs as
+            // Hevy sessions and break the context line they exist for (#188).
+            for payload in profile.payloads {
+                let activities = try loader.activities(for: profile, from: payload.source)
+                try await store.replaceCachedWorkouts(from: payload.source, with: activities)
+                seeded += activities.count
+            }
+            // And nothing else: a source the profile does not carry is dropped
+            // rather than left where a previous seeding put it. Without this,
+            // switching the scheme from `mixed` to a Hevy-only profile without
+            // `-fbResetState` keeps the Strava runs, and the basis line names
+            // two sources for a one-source profile. The UI tests never saw it
+            // because they always reset; manual seeding does not.
+            let seededSources = Set(profile.payloads.map(\.source))
+            for source in ConnectorSource.allCases where !seededSources.contains(source) {
+                try await store.deleteCachedWorkouts(from: source)
+            }
             await timestamps.setLastSync(now())
-            logger.debug("Seeded \(activities.count, privacy: .public) mock workouts")
+            logger.debug("Seeded \(seeded, privacy: .public) mock workouts")
         } catch {
             logger.error("Seeding \(profile.rawValue, privacy: .public) failed: \(error, privacy: .public)")
         }
