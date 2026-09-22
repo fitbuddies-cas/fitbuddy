@@ -89,9 +89,10 @@ final class AnalysisContextTests: XCTestCase {
         XCTAssertEqual(sut.domainCounts, [.strength: 14, .endurance: 9])
     }
 
-    /// The regression the review caught: three Hevy and three Strava strength
-    /// sessions are six on the line, but `strengthSessions(in:)` hands the
-    /// model three, and US-6 AC2 is about what the model saw.
+    /// The rule the review settled on, and the shape #185 brings back: where
+    /// the analysis covered less of the window than the line counts — under a
+    /// profile, or while the prompt filtered by source before #183 — US-6 AC2
+    /// is about what the model saw, not about what the app read.
     func testADomainIsThinOnWhatReachedThePromptAndNotOnTheWholeWindow() {
         let sut = AnalysisContext(
             sessionCounts: [.hevy: 3, .strava: 3],
@@ -139,21 +140,21 @@ final class AnalysisContextTests: XCTestCase {
 
     // MARK: - Widened window (#87)
 
-    /// The note has to stay true next to a line that counts every source: one
-    /// old lift and twelve recent runs widen the window to 8 weeks, and it is
-    /// *strength* sessions the most recent four were short of.
-    func testTheWidenedWindowNoteIsAboutStrengthSessions() {
+    /// The note names no domain since #183: the ladder resolves over every
+    /// session, because every session reaches the prompt, so "held no
+    /// sessions" is exactly what widening the window means again. The
+    /// qualifier #182 added was true only while the two disagreed.
+    func testTheWidenedWindowNoteNamesNoDomain() {
         let sut = AnalysisContext(
             sessionCounts: [.hevy: 1, .strava: 12],
             domainCounts: [.strength: 1, .endurance: 12],
-            analysedCounts: [.strength: 1],
             window: AnalysisWindow(weeks: 8)
         )
 
         XCTAssertEqual(sut.basisDescription, "1 Hevy · 12 Strava sessions")
         XCTAssertEqual(
             sut.widenedWindowNote,
-            "This analysis covered 8 weeks — its most recent 4 held no strength sessions."
+            "This analysis covered 8 weeks — its most recent 4 held no sessions."
         )
     }
 

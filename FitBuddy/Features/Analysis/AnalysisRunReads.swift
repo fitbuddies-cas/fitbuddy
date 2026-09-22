@@ -7,7 +7,8 @@ import Foundation
 /// model was shown, read before the call — not against a second read the
 /// cache may have changed under while the provider was answering.
 struct AnalysisRunReads: Sendable {
-    /// Strength sessions of the wide read.
+    /// The sessions of the wide read, both domains (#183). The sections and
+    /// the validation select what they need from them by `AnalysisDomain`.
     let summaries: [WorkoutSummary]
     /// The movements of the resolved window.
     let exercises: [ExerciseSummary]

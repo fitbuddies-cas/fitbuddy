@@ -45,14 +45,34 @@ final class RecoveryMetricsTests: XCTestCase {
         XCTAssertEqual(metrics.suggestedRestHours, 48)
     }
 
-    /// The analysis is about strength training (#144): a run is not counted.
+    /// The recovery figures are the strength ones (#144), and "strength" is
+    /// the normalized sport since #183: a run is not counted, whichever source
+    /// it came from. Counting endurance sessions towards recovery is #184.
     func testEnduranceSessionsAreNotCounted() {
-        let summaries = [summary("lift", daysAgo: 1), summary("run", daysAgo: 2, source: .strava)]
+        let summaries = [
+            summary("lift", daysAgo: 1),
+            summary("run", daysAgo: 2, source: .strava, kind: .run),
+        ]
 
         let metrics = RecoveryMetrics(summaries: summaries, details: [], now: reference, calendar: calendar)
 
         XCTAssertEqual(metrics.sessions, 1)
         XCTAssertEqual(metrics.trainingDays, 1)
+    }
+
+    /// The flip of #183 from the other side: a Strava `WeightTraining` session
+    /// is strength work, so it counts towards the recovery figures where
+    /// before the source kept it out.
+    func testAStravaStrengthSessionIsCounted() {
+        let summaries = [
+            summary("lift", daysAgo: 1),
+            summary("gym", daysAgo: 2, source: .strava, kind: .strength),
+        ]
+
+        let metrics = RecoveryMetrics(summaries: summaries, details: [], now: reference, calendar: calendar)
+
+        XCTAssertEqual(metrics.sessions, 2)
+        XCTAssertEqual(metrics.trainingDays, 2)
     }
 
     func testAverageRPEIsNilWhenNoRPEWasLogged() {
@@ -96,15 +116,22 @@ final class RecoveryMetricsTests: XCTestCase {
         calendar.startOfDay(for: reference).addingTimeInterval(Double(-daysAgo) * 86_400 + 43_200)
     }
 
-    private func summary(_ id: String, daysAgo: Int, source: ConnectorSource = .hevy) -> WorkoutSummary {
+    private func summary(
+        _ id: String,
+        daysAgo: Int,
+        source: ConnectorSource = .hevy,
+        kind: ActivityKind = .strength
+    ) -> WorkoutSummary {
         WorkoutSummary(
             id: id,
             title: "Session",
             startTime: start(daysAgo: daysAgo),
             source: source,
-            volumeKg: 1_000,
+            kind: kind,
+            volumeKg: kind.isEndurance ? 0 : 1_000,
             exerciseCount: 1,
-            countedSetCount: 3
+            countedSetCount: 3,
+            distanceMeters: kind.isEndurance ? 8_000 : nil
         )
     }
 

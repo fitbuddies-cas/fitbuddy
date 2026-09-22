@@ -36,14 +36,14 @@ struct AnalysisContext: Equatable, Sendable {
     /// Of those sessions, the ones that actually reached the prompt, per
     /// domain — the basis the thin-data rule is judged on.
     ///
-    /// Not the same as `domainCounts` while the two differ, and they do:
-    /// `AnalysisPromptBuilder.strengthSessions(in:)` still drops the endurance
-    /// *sources* until #183 sections the prompt, so three Hevy and three
-    /// Strava strength sessions are six sessions on the line and three in the
-    /// model's hands. Warning on the full breakdown would have said the basis
-    /// was solid when the model had seen half of it (US-6 AC2), and warning
-    /// about a domain the analysis never covered would have put a thin-endurance
-    /// note on a recommendation with no endurance content in it.
+    /// Equal to `domainCounts` as of #183, which sections the prompt by domain
+    /// instead of dropping the endurance sources: every session the window
+    /// holds now reaches the model. The distinction is kept rather than
+    /// removed because #185 reopens it from the other side — under the
+    /// "Strength" profile the endurance sessions are counted on the line and
+    /// deliberately not analysed, which is the same shape #182 needed when
+    /// three Hevy and three Strava strength sessions were six on the line and
+    /// three in the model's hands.
     ///
     /// Its keys are therefore the domains the analysis *covers*: a domain that
     /// is absent was not judged at all, and a domain mapped to zero was
@@ -230,18 +230,18 @@ struct AnalysisContext: Equatable, Sendable {
     /// weeks are the *most recent* ones inside the widened window, not the ones
     /// before it.
     ///
-    /// "No strength sessions", not "no sessions": `AnalysisWindow.resolve`
-    /// ladders on the sessions that reach the prompt, and since #182 the basis
-    /// line counts every source. Someone with one old lift and twelve recent
-    /// runs would otherwise read "12 Strava sessions · last 8 weeks" over a
-    /// note claiming the most recent four weeks held nothing. #183 flips the
-    /// ladder's filter from the source to the sport and revisits this wording
-    /// with it.
+    /// "No sessions", without a qualifier, since #183. `AnalysisWindow.resolve`
+    /// now ladders on every session the cache holds, because every one of them
+    /// reaches the prompt: an endurance session is sectioned rather than
+    /// dropped, so twelve recent runs keep the window at four weeks instead of
+    /// widening past them. Note and basis line therefore describe the same
+    /// sessions again, and the domain qualifier #182 needed — for exactly as
+    /// long as the ladder read the source — would now be the wrong wording.
     var widenedWindowNote: String? {
         guard !window.isDefault else { return nil }
         return """
         This analysis covered \(window.weeks) weeks — its most recent \
-        \(AnalysisWindow.default.weeks) held no strength sessions.
+        \(AnalysisWindow.default.weeks) held no sessions.
         """
     }
 

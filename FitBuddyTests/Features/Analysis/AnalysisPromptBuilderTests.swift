@@ -147,6 +147,62 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertTrue(system.contains("only reference point"))
     }
 
+    /// US-15 AC6: the sharpened rule 2. General training principles are
+    /// established practice and the prompt says so by name, which is what
+    /// keeps the model from treating "progressive overload" as the kind of
+    /// outside knowledge US-3 AC3 forbids — while the ban on population
+    /// comparisons and norm values stands unchanged.
+    func testSystemPromptAllowsGeneralTrainingPrinciplesByName() {
+        let system = AnalysisPromptBuilder.systemPrompt.lowercased()
+
+        XCTAssertTrue(system.contains("general training principles"))
+        XCTAssertTrue(system.contains("progressive overload"))
+        XCTAssertTrue(system.contains("you may name them as principles"))
+        XCTAssertTrue(system.contains("never invoke population averages"))
+    }
+
+    /// The whole reason endurance sessions were dropped before #183: rule 5
+    /// reads a 0 kg line as bodyweight work. It is scoped to the strength
+    /// sections now, and the endurance rule says the opposite for its own.
+    func testSystemPromptScopesTheVolumeRuleAndStatesTheEnduranceOne() {
+        let system = AnalysisPromptBuilder.systemPrompt.lowercased()
+
+        XCTAssertTrue(system.contains("in the strength sections, volume is the sum of weight x reps"))
+        XCTAssertTrue(system.contains("in the endurance sections, load is distance, time, pace and heart rate"))
+        XCTAssertTrue(system.contains("rule 5 does not apply there"))
+        XCTAssertTrue(system.contains("no volume in kilograms is not an absence of training load"))
+        XCTAssertTrue(system.contains("week structure section is about both domains"))
+    }
+
+    /// A section that is not in the prompt describes training that was not
+    /// recorded — unstated, an absent endurance section reads as "no
+    /// endurance training", which is a different claim.
+    func testSystemPromptSaysWhatAnAbsentSectionMeans() {
+        let system = AnalysisPromptBuilder.systemPrompt.lowercased()
+
+        XCTAssertTrue(system.contains("a section you were not given"))
+        XCTAssertTrue(system.contains("did not record in this window"))
+    }
+
+    /// AC3 over a mixed window: the endurance and week-structure sections must
+    /// not smuggle in a comparison the strength sections were kept free of.
+    func testAMixedPromptCarriesNoExternalBenchmarksEither() {
+        let prompt = make([
+            workout(daysAgo: 1, volume: 3_000, loads: [MuscleLoad(group: .chest, volumeKg: 3_000, setCount: 9)]),
+            run(daysAgo: 2, id: "strava:1", heartRate: 150),
+            run(daysAgo: 3, id: "strava:2", title: "Commute", kind: .ride, meters: 20_000, seconds: 3_000),
+        ])
+
+        let forbidden = ["average", "benchmark", "standard", "typical", "percentile", "compared to other"]
+        for term in forbidden {
+            XCTAssertFalse(
+                prompt.user.lowercased().contains(term),
+                "The user prompt must not carry the notion of \(term)"
+            )
+        }
+    }
+
+
     // MARK: - Disclaimer
 
     func testSystemPromptCarriesTheNonMedicalDisclaimer() {
@@ -272,20 +328,39 @@ final class AnalysisPromptBuilderTests: XCTestCase {
 
     /// The prompt is data, not display text: a Swiss device must not send
     /// `48'320` where a US one sends `48,320` for identical training.
-    func testFiguresAreLocaleIndependent() {
-        var swiss = Calendar(identifier: .gregorian)
-        swiss.timeZone = TimeZone(identifier: "UTC") ?? .gmt
-        swiss.locale = Locale(identifier: "de_CH")
-
-        let prompt = AnalysisPromptBuilder.make(
-            summaries: [workout(daysAgo: 1, volume: 48_320)],
-            now: reference,
-            calendar: swiss
-        )
+    ///
+    /// Asserted as the property of the output, not by injecting a locale.
+    /// Nothing in the figure path reads one — `PromptFigures` writes integers
+    /// by interpolation and decimals through `String(format:)` without a
+    /// locale argument, which is POSIX by construction, and a `Calendar`'s
+    /// locale never reaches a number. A test that passed `de_CH` therefore
+    /// could not fail, which made it read as a guarantee it was not giving.
+    /// What it does catch is the regression that matters: a `NumberFormatter`
+    /// or a `display(_:locale:)` formatter introduced into the prompt, which
+    /// groups thousands and moves the decimal mark on the device it runs on.
+    func testFiguresCarryNoGroupingSeparatorAndAPeriodDecimalMark() {
+        let prompt = make([
+            workout(daysAgo: 1, volume: 48_320),
+            run(daysAgo: 2, id: "strava:1", meters: 123_456, seconds: 30_600, heartRate: 148),
+        ])
 
         XCTAssertTrue(prompt.user.contains("48320 kg"))
-        XCTAssertFalse(prompt.user.contains("48'320"))
-        XCTAssertFalse(prompt.user.contains("48,320"))
+        XCTAssertTrue(prompt.user.contains("123 km"))
+        XCTAssertTrue(prompt.user.contains("8 h 30 min"))
+        XCTAssertTrue(prompt.user.contains("148 bpm"))
+        for separator in ["48'320", "48,320", "48 320", "123'456", "4,03", "4 03"] {
+            XCTAssertFalse(prompt.user.contains(separator), "must not group or re-punctuate \(separator)")
+        }
+    }
+
+    /// The decimal mark itself, on the one figure that has one: a comma here
+    /// would be a locale-aware formatter having reached the prompt.
+    func testADecimalFigureUsesAPeriod() throws {
+        let prompt = make([run(daysAgo: 1, id: "strava:1", meters: 5_500, seconds: 1_800)])
+        let endurance = try section(prompt, "## Endurance, last 4 weeks")
+
+        XCTAssertTrue(endurance.contains("Total distance: 5.5 km"))
+        XCTAssertFalse(endurance.contains("5,5"))
     }
 
     func testTheSameDataProducesTheSamePrompt() {
@@ -297,41 +372,220 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertEqual(make(summaries), make(summaries))
     }
 
-    // MARK: - Strava sessions (US-5, #144)
+    // MARK: - Domain sections (US-15 AC2, #183)
 
-    /// A run is not a strength session: passed through, it would count as a
-    /// training day with 0 kg and be read under rule 5 as bodyweight work.
-    /// It stays out of every figure and out of the session list.
-    func testStravaSessionsAreLeftOutOfEveryFigure() {
+    /// The filter that used to drop them was about rule 5, not about Strava:
+    /// a run counted as a strength session would read as "0 kg" and produce a
+    /// volume collapse that never happened. It stays out of the strength
+    /// figures — and now lands in a section of its own.
+    func testEnduranceSessionsStayOutOfTheStrengthFigures() throws {
         let prompt = make([
             workout(daysAgo: 1, volume: 3_000, id: "hevy-1", title: "Push Day"),
-            workout(daysAgo: 2, volume: 0, id: "strava:1", title: "Morning Run", source: .strava),
-            workout(daysAgo: 3, volume: 0, id: "strava:2", title: "Evening Run", source: .strava),
+            run(daysAgo: 2, id: "strava:1"),
+            run(daysAgo: 3, id: "strava:2", title: "Evening Run"),
         ])
+        let strength = try section(prompt, "## Last 4 weeks")
 
-        XCTAssertTrue(prompt.user.contains("Sessions: 1"))
-        XCTAssertTrue(prompt.user.contains("Training days: 1"))
-        XCTAssertTrue(prompt.user.contains("Push Day"))
-        XCTAssertFalse(prompt.user.contains("Run"))
+        XCTAssertTrue(strength.contains("Sessions: 1"))
+        XCTAssertTrue(strength.contains("Training days: 1"))
+        XCTAssertFalse(strength.contains("Run"))
+        XCTAssertTrue(try section(prompt, "## Sessions (newest first)").contains("Push Day"))
+        XCTAssertTrue(try section(prompt, "## Endurance, last 4 weeks").contains("Sessions: 2"))
     }
 
-    func testPolarSessionsAreLeftOutOfEveryFigure() {
+    /// The flip of #183 in one case: the sport decides, not the source. A
+    /// Strava strength session is strength work however it reached the cache.
+    func testAStravaStrengthSessionLandsInTheStrengthSection() throws {
         let prompt = make([
             workout(daysAgo: 1, volume: 3_000, id: "hevy-1", title: "Push Day"),
-            workout(daysAgo: 2, volume: 0, id: "polar:1", title: "Cycling", source: .polar),
+            workout(daysAgo: 2, volume: 2_000, id: "strava:1", title: "Gym", source: .strava, kind: .strength),
         ])
+        let strength = try section(prompt, "## Last 4 weeks")
 
-        XCTAssertTrue(prompt.user.contains("Sessions: 1"))
-        XCTAssertTrue(prompt.user.contains("Training days: 1"))
-        XCTAssertFalse(prompt.user.contains("Cycling"))
+        XCTAssertTrue(strength.contains("Sessions: 2"))
+        XCTAssertTrue(strength.contains("Total volume: 5000 kg"))
+        XCTAssertTrue(try section(prompt, "## Sessions (newest first)").contains("Gym"))
+        XCTAssertFalse(prompt.user.contains("## Endurance"))
     }
 
-    func testAWindowHoldingOnlyStravaSessionsReadsAsEmpty() {
+    /// And the other direction: a Hevy session of treadmill sets carries the
+    /// model's default `.strength`, moves no load and logged distance and
+    /// time — `WorkoutSummary.isCardio` calls that endurance, so the prompt
+    /// does too.
+    func testAHevyCardioSessionLandsInTheEnduranceSection() throws {
         let prompt = make([
-            workout(daysAgo: 2, volume: 0, id: "strava:1", title: "Morning Run", source: .strava),
+            workout(daysAgo: 1, volume: 3_000, id: "hevy-1", title: "Push Day"),
+            workout(
+                daysAgo: 2,
+                volume: 0,
+                id: "hevy-2",
+                title: "Treadmill",
+                distanceMeters: 5_000,
+                durationSeconds: 1_800
+            ),
         ])
 
-        XCTAssertTrue(prompt.user.contains("No workouts are recorded in this window"))
+        XCTAssertTrue(try section(prompt, "## Last 4 weeks").contains("Sessions: 1"))
+        let endurance = try section(prompt, "## Endurance, last 4 weeks")
+        XCTAssertTrue(endurance.contains("Sessions: 1"))
+        XCTAssertTrue(endurance.contains("Total distance: 5 km"))
+        // No sport was mapped, so the row says what is known and no more.
+        XCTAssertTrue(endurance.contains("- Other: 1 session, 5 km, 30 min"))
+    }
+
+    /// AC3 of the issue: only endurance data, so no strength section and not
+    /// one kilogram anywhere.
+    func testAWindowWithoutStrengthHasNoStrengthSectionAndNoKilograms() {
+        let prompt = make([run(daysAgo: 2), run(daysAgo: 4, id: "strava:2", title: "Evening Run")])
+
+        XCTAssertFalse(prompt.user.contains("## Last 4 weeks"))
+        XCTAssertFalse(prompt.user.contains("## Volume per week"))
+        XCTAssertFalse(prompt.user.contains("## Muscle groups"))
+        XCTAssertFalse(prompt.user.contains("## Sessions (newest first)"))
+        XCTAssertFalse(prompt.user.contains("kg"))
+        XCTAssertFalse(prompt.user.contains("No workouts are recorded in this window"))
+        XCTAssertTrue(prompt.user.contains("## Endurance, last 4 weeks"))
+    }
+
+    /// AC1: a Hevy-only cache produces exactly the prompt it produced before
+    /// the split — no empty endurance section, no week structure, and the same
+    /// text as the builder that never knew about domains.
+    func testAHevyOnlyWindowProducesNeitherAnEnduranceNorAWeekStructureSection() {
+        let prompt = make([
+            workout(daysAgo: 1, volume: 3_000, id: "hevy-1", title: "Push Day", loads: [
+                MuscleLoad(group: .chest, volumeKg: 3_000, setCount: 9),
+            ]),
+            workout(daysAgo: 4, volume: 4_000, id: "hevy-2", title: "Pull Day"),
+        ])
+
+        XCTAssertFalse(prompt.user.contains("## Endurance"))
+        XCTAssertFalse(prompt.user.contains("## Week structure"))
+        XCTAssertFalse(prompt.user.contains("km"))
+        XCTAssertTrue(prompt.user.contains("## Last 4 weeks"))
+    }
+
+    /// The endurance figures AC2 asks for: weekly kilometres and hours, heart
+    /// rate, pace, and the trend against the previous window.
+    func testTheEnduranceSectionStatesDistanceTimeHeartRateAndPace() throws {
+        let prompt = make([
+            run(daysAgo: 1, id: "strava:1", meters: 10_000, seconds: 3_000, heartRate: 150),
+            run(daysAgo: 3, id: "strava:2", title: "Evening Run", meters: 5_000, seconds: 1_500, heartRate: 144),
+            run(daysAgo: 31, id: "strava:3", title: "Old Run", meters: 8_000, seconds: 2_400),
+        ])
+        let endurance = try section(prompt, "## Endurance, last 4 weeks")
+
+        XCTAssertTrue(endurance.contains("Sessions: 2"))
+        XCTAssertTrue(endurance.contains("Training days: 2 (0.5 days per week)"))
+        XCTAssertTrue(endurance.contains("Total distance: 15 km"))
+        XCTAssertTrue(endurance.contains("Total time: 1 h 15 min"))
+        XCTAssertTrue(endurance.contains("Mean heart rate: 147 bpm"))
+        XCTAssertTrue(endurance.contains("Longest session: 10 km, 50 min on"))
+        XCTAssertTrue(endurance.contains("- Run: 2 sessions, 15 km, 1 h 15 min, mean pace 5:00 min/km"))
+        XCTAssertTrue(endurance.contains("mean heart rate 147 bpm"))
+
+        let previous = try section(prompt, "## Previous 4 weeks (")
+        XCTAssertTrue(previous.contains("endurance, for comparison"))
+        XCTAssertTrue(previous.contains("Total distance: 8 km"))
+    }
+
+    /// One row per sport, so "nine sessions" cannot read as nine runs. A ride
+    /// is stated in km/h — a pace per kilometre is not the unit anybody reads
+    /// a ride in.
+    func testEachSportGetsItsOwnRowAndRidesAreStatedInSpeed() throws {
+        let prompt = make([
+            run(daysAgo: 1, id: "strava:1", meters: 10_000, seconds: 3_000),
+            run(daysAgo: 2, id: "strava:2", title: "Commute", kind: .ride, meters: 24_000, seconds: 3_600),
+            run(daysAgo: 3, id: "polar:1", title: "Pool", source: .polar, kind: .swim, meters: 1_500, seconds: 2_100),
+        ])
+        let endurance = try section(prompt, "## Endurance, last 4 weeks")
+
+        XCTAssertTrue(endurance.contains("- Run: 1 session, 10 km, 50 min, mean pace 5:00 min/km"))
+        XCTAssertTrue(endurance.contains("- Ride: 1 session, 24 km, 1 h, mean speed 24 km/h"))
+        XCTAssertTrue(endurance.contains("- Swim: 1 session, 1.5 km, 35 min"))
+        XCTAssertFalse(endurance.contains("Ride: 1 session, 24 km, 1 h, mean pace"))
+    }
+
+    /// US-15 AC7 in the prompt: a figure the source did not record is left
+    /// out, never printed as a zero the model would read as a measurement.
+    func testUnrecordedEnduranceFiguresAreLeftOutRatherThanZeroed() throws {
+        let prompt = make([
+            run(daysAgo: 1, id: "strava:1", title: "Indoor Ride", kind: .ride, meters: nil, seconds: 3_600),
+        ])
+        let endurance = try section(prompt, "## Endurance, last 4 weeks")
+
+        XCTAssertFalse(endurance.contains("Total distance"))
+        XCTAssertFalse(endurance.contains("0 km"))
+        XCTAssertFalse(endurance.contains("Mean heart rate"))
+        XCTAssertTrue(endurance.contains("Total time: 1 h"))
+        XCTAssertTrue(endurance.contains("- Ride: 1 session, 1 h"))
+    }
+
+    /// An empty previous window is a break or the start of the history, and
+    /// the prompt must not decide which.
+    func testAnEmptyEnduranceComparisonWindowSaysWhatItDoesNotKnow() throws {
+        let prompt = make([run(daysAgo: 2)])
+        let previous = try section(prompt, "## Previous 4 weeks (")
+
+        XCTAssertTrue(previous.contains("No endurance sessions recorded"))
+        XCTAssertTrue(previous.contains("do not assume which"))
+    }
+
+    /// The per-week rows the strength half has, in endurance units.
+    func testTheEnduranceWeeklySectionHasOneRowPerWeekOfTheWindow() throws {
+        let prompt = make([run(daysAgo: 2, meters: 12_000, seconds: 3_600)])
+        let weekly = try section(prompt, "## Endurance per week")
+        let rows = weekly.split(separator: "\n").filter { $0.hasPrefix("- Week starting ") }
+
+        XCTAssertEqual(rows.count, 4)
+        XCTAssertTrue(weekly.contains("(most recent): 1 sessions, 12 km, 1 h"))
+        XCTAssertTrue(weekly.contains("(2 weeks back): 0 sessions"))
+    }
+
+    // MARK: - Week structure (US-15 AC2, #183)
+
+    /// The section exists to relate the two domains, so it appears exactly
+    /// when there are two of them.
+    func testTheWeekStructureSectionAppearsOnlyWhenBothDomainsHaveSessions() {
+        let both = make([workout(daysAgo: 1, volume: 3_000), run(daysAgo: 2)])
+        let strengthOnly = make([workout(daysAgo: 1, volume: 3_000)])
+        let enduranceOnly = make([run(daysAgo: 2)])
+
+        XCTAssertTrue(both.user.contains("## Week structure (last 4 weeks)"))
+        XCTAssertFalse(strengthOnly.user.contains("## Week structure"))
+        XCTAssertFalse(enduranceOnly.user.contains("## Week structure"))
+    }
+
+    func testTheWeekStructureCountsDaysPerDomainAndTheLongestStreak() throws {
+        let prompt = make([
+            workout(daysAgo: 1, volume: 3_000, id: "h1"),
+            workout(daysAgo: 2, volume: 3_000, id: "h2"),
+            // Same day as the lift above — one training day carrying both.
+            run(daysAgo: 2, id: "s1"),
+            run(daysAgo: 3, id: "s2", title: "Evening Run"),
+            run(daysAgo: 9, id: "s3", title: "Long Run"),
+        ])
+        let structure = try section(prompt, "## Week structure")
+
+        XCTAssertTrue(structure.contains("Training days: 4 of 28 (1.0 days per week)"))
+        XCTAssertTrue(structure.contains("Days with strength only: 1"))
+        XCTAssertTrue(structure.contains("Days with endurance only: 2"))
+        XCTAssertTrue(structure.contains("Days with both: 1"))
+        XCTAssertTrue(structure.contains("Rest days: 24"))
+        XCTAssertTrue(structure.contains("Longest streak of consecutive training days: 3 days ("))
+    }
+
+    /// The week structure counts days, not sessions: two sessions on one day
+    /// are one training day, in both domains and in the streak.
+    func testTwoSessionsOnOneDayAreOneTrainingDayInTheWeekStructure() throws {
+        let prompt = make([
+            workout(daysAgo: 1, volume: 3_000, id: "h1"),
+            workout(daysAgo: 1, volume: 2_000, id: "h2"),
+            run(daysAgo: 5, id: "s1"),
+        ])
+        let structure = try section(prompt, "## Week structure")
+
+        XCTAssertTrue(structure.contains("Training days: 2 of 28"))
+        XCTAssertTrue(structure.contains("Longest streak of consecutive training days: 1 day ("))
     }
 
     // MARK: - Exercises (#173)
@@ -858,14 +1112,29 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertFalse(experienceOnly.contains("Goal:"))
     }
 
-    /// The analysis reads strength sessions only. A goal like "improve
-    /// endurance" invites the model to reason about training the prompt does
-    /// not carry, so the section says so — every time it appears.
+    /// With strength data alone, a goal like "improve endurance" invites the
+    /// model to reason about training the prompt does not carry, so the
+    /// section says what is in it — every time it appears.
     func testTheProfileSectionStatesThatOnlyStrengthSessionsFollow() throws {
         let section = try XCTUnwrap(AnalysisPromptBuilder.profileSection(TrainingProfile(goal: .improveEndurance)))
 
         XCTAssertTrue(section.contains("strength sessions only"))
         XCTAssertTrue(section.contains("do not assume anything about other training"))
+    }
+
+    /// And once the window carries endurance work, the same line has to say
+    /// so: "strength sessions only" over an endurance section would be the
+    /// prompt contradicting itself (#183).
+    func testTheProfileSectionNamesBothDomainsWhenTheWindowCarriesThem() {
+        let mixed = make(
+            [workout(daysAgo: 1, volume: 3_000), run(daysAgo: 2)],
+            profile: fullProfile
+        ).user
+        let strengthOnly = make([workout(daysAgo: 1, volume: 3_000)], profile: fullProfile).user
+
+        XCTAssertTrue(mixed.contains("covers my strength and endurance sessions"))
+        XCTAssertFalse(mixed.contains("strength sessions only"))
+        XCTAssertTrue(strengthOnly.contains("covers my strength sessions only"))
     }
 
     /// Context about the person is context whether or not there is data — an
@@ -936,6 +1205,229 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertLessThan(cards.lowerBound, order.lowerBound)
         XCTAssertLessThan(order.lowerBound, placeholder.lowerBound)
         XCTAssertFalse(system[cards.upperBound..<order.lowerBound].contains("Never write placeholder"))
+    }
+
+    // MARK: - Review round on #183
+
+    /// AC1 pinned as a whole, not as a list of absences: a Hevy-only cache has
+    /// to produce this exact user turn, so a reworded line inside
+    /// `StrengthPromptSection` fails here rather than silently changing what
+    /// every existing analysis is built from.
+    ///
+    /// Deliberate deviation, and the reason this is "a Hevy-only cache" and
+    /// not "a Hevy-only install": a Hevy session of treadmill sets is
+    /// endurance since #183 and leaves these figures. A prompt built from a
+    /// cache holding one is not byte-identical to the pre-#183 one, and should
+    /// not be — that session was being read as "1 exercise, 1 working set,
+    /// 0 kg" strength work.
+    func testAHevyOnlyUserTurnIsUnchangedByTheDomainSplit() {
+        let prompt = make([
+            workout(daysAgo: 2, volume: 5_000, id: "w-1", title: "Push Day", loads: [
+                MuscleLoad(group: .chest, volumeKg: 3_000, setCount: 9),
+                MuscleLoad(group: .arms, volumeKg: 2_000, setCount: 6),
+            ]),
+            workout(daysAgo: 9, volume: 4_000, id: "w-2", title: "Pull Day", loads: [
+                MuscleLoad(group: .back, volumeKg: 4_000, setCount: 12),
+            ]),
+        ])
+
+        XCTAssertEqual(prompt.user, """
+        Here is my own training data. Analyse it and tell me what to do next.
+
+        ## Last 4 weeks (2025-05-19 to 2025-06-15)
+        Sessions: 2
+        Training days: 2 (0.5 days per week)
+        Total volume: 9000 kg
+
+        ## Volume per week
+        - Week starting 2025-06-09 (most recent): 1 sessions, 5000 kg
+        - Week starting 2025-06-02 (2 weeks back): 1 sessions, 4000 kg
+        - Week starting 2025-05-26 (3 weeks back): 0 sessions, 0 kg
+        - Week starting 2025-05-19 (4 weeks back): 0 sessions, 0 kg
+
+        ## Muscle groups (last 4 weeks)
+        - Back: 4000 kg (44% of volume), 12 working sets, trained in 1 session (0.3 per week)
+        - Chest: 3000 kg (33% of volume), 9 working sets, trained in 1 session (0.3 per week)
+        - Arms: 2000 kg (22% of volume), 6 working sets, trained in 1 session (0.3 per week)
+
+        ## Previous 4 weeks (2025-04-21 to 2025-05-19), for comparison
+        No workouts recorded. This may be a break, or simply the start of the recorded history \
+        — do not assume which.
+
+        ## Sessions (newest first)
+        - 2025-06-13 Push Day: 5000 kg, 4 exercises, 12 working sets
+        - 2025-06-06 Pull Day: 4000 kg, 4 exercises, 12 working sets
+
+        ## Exercises (last 4 weeks)
+        No exercise-level data is available for this window. Do not name exercises or weights.
+        """)
+    }
+
+    /// The reviewer's probe: a sport whose sessions do not all carry a
+    /// distance. Dividing the row's own totals would divide 10 km by 110 min
+    /// and report 11:00 min/km for a runner holding 5:00, because the
+    /// treadmill session's hour has no kilometres to go with it.
+    func testMeanPaceIgnoresSessionsThatRecordedNoDistance() throws {
+        let prompt = make([
+            run(daysAgo: 1, id: "strava:1", meters: 10_000, seconds: 3_000),
+            run(daysAgo: 2, id: "hevy-1", title: "Treadmill", source: .hevy, meters: nil, seconds: 3_600),
+        ])
+        let endurance = try section(prompt, "## Endurance, last 4 weeks")
+
+        XCTAssertTrue(endurance.contains("mean pace 5:00 min/km"))
+        XCTAssertFalse(endurance.contains("11:00"))
+        // The totals still describe the sport truthfully — only the ratio
+        // between them was never a pace.
+        XCTAssertTrue(endurance.contains("Total distance: 10 km"))
+        XCTAssertTrue(endurance.contains("Total time: 1 h 50 min"))
+    }
+
+    /// With no paired session at all the row falls back to the speed the
+    /// source reported, rather than going silent about the pace.
+    func testMeanPaceFallsBackToTheReportedSpeed() throws {
+        let prompt = make([
+            workout(
+                daysAgo: 1,
+                volume: 0,
+                id: "strava:1",
+                title: "Treadmill",
+                source: .strava,
+                kind: .run,
+                durationSeconds: 3_600,
+                cardio: CardioMetrics(averageSpeedMetersPerSecond: 3.125)
+            ),
+        ])
+        let endurance = try section(prompt, "## Endurance, last 4 weeks")
+
+        XCTAssertTrue(endurance.contains("mean pace 5:20 min/km"))
+    }
+
+    /// Ranking by distance alone hid every duration-only session as soon as
+    /// one session carried a distance — a 2 h indoor ride is the longer effort
+    /// and simply disappeared. Both are named when they are different
+    /// sessions.
+    func testTheLongestSessionByDistanceAndByTimeAreBothNamed() throws {
+        let prompt = make([
+            run(daysAgo: 1, id: "strava:1", meters: 10_000, seconds: 3_000),
+            run(daysAgo: 2, id: "strava:2", title: "Indoor Ride", kind: .ride, meters: nil, seconds: 7_200),
+        ])
+        let endurance = try section(prompt, "## Endurance, last 4 weeks")
+
+        XCTAssertTrue(endurance.contains("Longest session by distance: 10 km, 50 min on 2025-06-14 (Morning Run)"))
+        XCTAssertTrue(endurance.contains("Longest session by time: 2 h on 2025-06-13 (Indoor Ride)"))
+        XCTAssertFalse(endurance.contains("Longest session: "))
+    }
+
+    /// One line where one session is both, so the common case does not read as
+    /// two findings.
+    func testOneLongestSessionWhenDistanceAndTimeAgree() throws {
+        let prompt = make([
+            run(daysAgo: 1, id: "strava:1", meters: 10_000, seconds: 3_000),
+            run(daysAgo: 2, id: "strava:2", title: "Evening Run", meters: 5_000, seconds: 1_500),
+        ])
+        let endurance = try section(prompt, "## Endurance, last 4 weeks")
+
+        XCTAssertTrue(endurance.contains("Longest session: 10 km, 50 min on 2025-06-14 (Morning Run)"))
+        XCTAssertFalse(endurance.contains("Longest session by"))
+    }
+
+    /// The reviewer's payload: a Strava `WeightTraining` session is strength
+    /// work and belongs in these figures, but it arrives with no set data at
+    /// all. Listed like a Hevy session it would claim twelve working sets
+    /// nobody logged and a 0 kg total rule 5 invites the model to explain as
+    /// bodyweight work — while its duration and heart rate appeared nowhere.
+    func testASetlessStrengthSessionIsListedHonestlyWithWhatItsSourceRecorded() throws {
+        let prompt = make([
+            workout(daysAgo: 1, volume: 3_000, id: "hevy-1", title: "Push Day"),
+            workout(
+                daysAgo: 2,
+                volume: 0,
+                id: "strava:1",
+                title: "Gym",
+                source: .strava,
+                kind: .strength,
+                durationSeconds: 2_880,
+                cardio: CardioMetrics(averageHeartRate: 132)
+            ),
+        ])
+        let sessions = try section(prompt, "## Sessions (newest first)")
+
+        XCTAssertTrue(sessions.contains(
+            "- 2025-06-13 Gym: no sets logged (Strava records whole sessions), 48 min, mean heart rate 132 bpm"
+        ))
+        XCTAssertFalse(sessions.contains("Gym: 0 kg"))
+        XCTAssertFalse(sessions.contains("Gym: no sets logged (Strava records whole sessions), 0 kg"))
+        // The Hevy row is untouched.
+        XCTAssertTrue(sessions.contains("- 2025-06-14 Push Day: 3000 kg, 4 exercises, 12 working sets"))
+    }
+
+    /// And the gap is stated next to the total it is missing from, so the
+    /// count and the volume cannot read as a light week.
+    func testTheWindowHeaderNamesTheSessionsThatLoggedNoSets() throws {
+        let prompt = make([
+            workout(daysAgo: 1, volume: 3_000, id: "hevy-1", title: "Push Day"),
+            workout(daysAgo: 2, volume: 0, id: "strava:1", title: "Gym", source: .strava, kind: .strength),
+        ])
+        let header = try section(prompt, "## Last 4 weeks")
+
+        XCTAssertTrue(header.contains("Sessions: 2"))
+        XCTAssertTrue(header.contains("Total volume: 3000 kg"))
+        XCTAssertTrue(header.contains(
+            "Of these, 1 session logged no sets — their source records whole sessions, "
+                + "so their load is not in the volume above."
+        ))
+    }
+
+    /// Rule 5 has to say what a set-less row is, or the model explains the
+    /// missing kilograms as bodyweight work — the very misreading the old
+    /// source filter existed to prevent.
+    func testSystemPromptExplainsASessionWithoutLoggedSets() {
+        let system = AnalysisPromptBuilder.systemPrompt.lowercased()
+
+        XCTAssertTrue(system.contains("a session listed as \"no sets logged\" recorded no set data at all"))
+        XCTAssertTrue(system.contains("it is not bodyweight work"))
+    }
+
+    /// The coordinator's guard: rule 7 names heart rate as a load measure and
+    /// rule 2 allows intensity-distribution principles, which together make
+    /// "keep 80 % of your volume in zone 2" plausible — and a heart-rate zone
+    /// is a population-derived norm (US-3 AC3).
+    func testSystemPromptForbidsHeartRateZonesAndTargets() {
+        let system = AnalysisPromptBuilder.systemPrompt.lowercased()
+
+        XCTAssertTrue(system.contains("never name a heart-rate zone, a target heart rate, or a "
+            + "percentage of maximum heart rate"))
+        XCTAssertTrue(system.contains("derived from population norms"))
+    }
+
+    /// The same ban as a property of the user turn: the prompt must not hand
+    /// the model a zone to reason with either.
+    func testAMixedPromptNamesNoHeartRateZoneOrTarget() {
+        let prompt = make([
+            workout(daysAgo: 1, volume: 3_000),
+            run(daysAgo: 2, id: "strava:1", heartRate: 150),
+        ])
+
+        for term in ["zone", "target heart rate", "max hr", "maximum heart rate", "% of max"] {
+            XCTAssertFalse(prompt.user.lowercased().contains(term), "must not carry \(term)")
+        }
+    }
+
+    /// A provider clock running fast, or a time zone the cache and the window
+    /// disagree about, puts a session after `now` — "29 of 28 training days"
+    /// and a negative rest count would be the prompt reporting an impossible
+    /// week.
+    func testTheWeekStructureClampsTrainingDaysToTheWindow() throws {
+        let prompt = make(
+            [workout(daysAgo: 1, volume: 3_000, id: "h1"), run(daysAgo: 2, id: "s1")]
+                + (0..<8).map { run(daysAgo: -$0, id: "future-\($0)", title: "Future Run") },
+            window: AnalysisWindow(weeks: 1)
+        )
+        let structure = try section(prompt, "## Week structure")
+
+        XCTAssertTrue(structure.contains("Training days: 7 of 7"))
+        XCTAssertTrue(structure.contains("Rest days: 0"))
+        XCTAssertFalse(structure.contains("Rest days: -"))
     }
 
     // MARK: - Helpers
@@ -1020,7 +1512,11 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         id: String = "w-1",
         title: String = "Session",
         source: ConnectorSource = .hevy,
-        loads: [MuscleLoad] = []
+        kind: ActivityKind = .strength,
+        loads: [MuscleLoad] = [],
+        distanceMeters: Double? = nil,
+        durationSeconds: Int? = nil,
+        cardio: CardioMetrics? = nil
     ) -> WorkoutSummary {
         WorkoutSummary(
             id: id,
@@ -1030,10 +1526,47 @@ final class AnalysisPromptBuilderTests: XCTestCase {
             startTime: calendar.startOfDay(for: reference)
                 .addingTimeInterval(Double(-daysAgo) * 86_400 + 43_200),
             source: source,
+            kind: kind,
             volumeKg: volume,
             exerciseCount: 4,
             countedSetCount: 12,
-            muscleLoads: loads
+            muscleLoads: loads,
+            distanceMeters: distanceMeters,
+            durationSeconds: durationSeconds,
+            cardio: cardio
         )
+    }
+
+    /// An endurance session as a source delivers one: a mapped sport, no
+    /// volume, distance and time on the session.
+    private func run(
+        daysAgo: Int,
+        id: String = "strava:1",
+        title: String = "Morning Run",
+        source: ConnectorSource = .strava,
+        kind: ActivityKind = .run,
+        meters: Double? = 10_000,
+        seconds: Int? = 3_000,
+        heartRate: Int? = nil
+    ) -> WorkoutSummary {
+        workout(
+            daysAgo: daysAgo,
+            volume: 0,
+            id: id,
+            title: title,
+            source: source,
+            kind: kind,
+            distanceMeters: meters,
+            durationSeconds: seconds,
+            cardio: heartRate.map { CardioMetrics(averageHeartRate: $0) }
+        )
+    }
+
+    /// One "## " section of the user turn, header included.
+    private func section(_ prompt: AnalysisPrompt, _ header: String) throws -> String {
+        let range = try XCTUnwrap(prompt.user.range(of: header), "no \(header) section")
+        let rest = prompt.user[range.lowerBound...]
+        guard let next = rest.dropFirst().range(of: "\n\n## ") else { return String(rest) }
+        return String(rest[..<next.lowerBound])
     }
 }
