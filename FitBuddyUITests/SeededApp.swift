@@ -132,6 +132,14 @@ struct SeededApp {
         app.descendants(matching: .any).matching(identifier: AccessibilityID.Analysis.recoveryCard)
     }
 
+    var metricCards: XCUIElementQuery {
+        app.descendants(matching: .any).matching(identifier: AccessibilityID.Analysis.metricCard)
+    }
+
+    var interferenceCards: XCUIElementQuery {
+        app.descendants(matching: .any).matching(identifier: AccessibilityID.Analysis.interferenceCard)
+    }
+
     var analysisLead: XCUIElement {
         app.descendants(matching: .any)[AccessibilityID.Analysis.lead]
     }

@@ -56,4 +56,31 @@ final class PaceFormatterTests: XCTestCase {
         XCTAssertEqual(PaceFormatter.plain(metersPerSecond: 2.5), "6:40 min/km")
         XCTAssertNil(PaceFormatter.plain(metersPerSecond: 0))
     }
+
+    /// A pace the caller already holds in minutes per kilometre — what a
+    /// model states on a metric card (#186) — enters the same clock rule.
+    func testAPaceGivenInMinutesPerKilometre() {
+        XCTAssertEqual(PaceFormatter.perKilometer(minutesPerKilometer: 5 + 20.0 / 60), "5:20 /km")
+        XCTAssertEqual(PaceFormatter.perKilometer(minutesPerKilometer: 6), "6:00 /km")
+        XCTAssertEqual(PaceFormatter.plain(minutesPerKilometer: 5.5), "5:30 min/km")
+    }
+
+    /// The same bounds as the speed form: nothing at or below zero, nothing
+    /// that is not a number, nothing slower than 99:59.
+    func testAnImpossiblePaceInMinutesPerKilometreIsNil() {
+        XCTAssertNil(PaceFormatter.perKilometer(minutesPerKilometer: 0))
+        XCTAssertNil(PaceFormatter.perKilometer(minutesPerKilometer: -5))
+        XCTAssertNil(PaceFormatter.perKilometer(minutesPerKilometer: .nan))
+        XCTAssertNil(PaceFormatter.perKilometer(minutesPerKilometer: .infinity))
+        XCTAssertEqual(PaceFormatter.perKilometer(minutesPerKilometer: 99 + 59.0 / 60), "99:59 /km")
+        XCTAssertNil(PaceFormatter.perKilometer(minutesPerKilometer: 100))
+    }
+
+    /// Both entry points describe the same pace with the same digits.
+    func testTheSpeedAndTheMinuteFormAgree() {
+        XCTAssertEqual(
+            PaceFormatter.perKilometer(metersPerSecond: 1_000 / 320),
+            PaceFormatter.perKilometer(minutesPerKilometer: 320 / 60)
+        )
+    }
 }

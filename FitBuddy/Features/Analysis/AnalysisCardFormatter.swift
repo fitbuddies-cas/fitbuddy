@@ -92,6 +92,58 @@ enum AnalysisCardFormatter {
         "\(hours) h"
     }
 
+    // MARK: - Metric card (#186)
+
+    /// The chip title of a metric card: `"Increase"`, `"Reduce"`, `"Faster"`,
+    /// `"Easier"`.
+    ///
+    /// The **title follows the number**, the colour follows the meaning — the
+    /// two are separate on purpose (#186 asks colour to follow the meaning).
+    /// "Reduce" over a pace would read as a step backwards, so a lower-is-
+    /// better unit gets its own pair of words for the same two directions.
+    static func metricChipTitle(from: Double, to: Double, unit: MetricUnit) -> String {
+        if unit.isLowerBetter {
+            return to < from ? "Faster" : "Easier"
+        }
+        return to > from ? "Increase" : "Reduce"
+    }
+
+    /// `"arrow.up"` or `"arrow.down"` — the direction of the figure, not of
+    /// the judgement.
+    static func metricChipSymbol(from: Double, to: Double) -> String {
+        to < from ? "arrow.down" : "arrow.up"
+    }
+
+    // MARK: - Interference card (#186)
+
+    /// `"Strength and endurance shared 3 of the last 7 days."` — the
+    /// interference card's headline, from the app's own day counts.
+    ///
+    /// The no-overlap case is a finding of its own and is stated as one: the
+    /// card exists because both domains are in the week, and that they never
+    /// met is what the model is reasoning about.
+    static func interferenceHeadline(_ metrics: InterferenceMetrics) -> String {
+        guard metrics.overlapDays > 0 else {
+            return "Strength and endurance never shared a day in the last \(metrics.days)."
+        }
+        return "Strength and endurance shared \(metrics.overlapDays) of the last \(metrics.days) days."
+    }
+
+    /// The card's three cells: strength days, endurance days, days carrying
+    /// both.
+    ///
+    /// Always all three, where the recovery card leaves a cell out (US-15
+    /// AC7). The difference is what a zero means: a week with no RPE recorded
+    /// nothing, while "no day carried both" is a count the app made and the
+    /// finding the card may be about.
+    static func interferenceCells(_ metrics: InterferenceMetrics) -> [RecoveryMetricCell] {
+        [
+            RecoveryMetricCell(label: "Strength / \(metrics.days)d", value: "\(metrics.strengthDays)"),
+            RecoveryMetricCell(label: "Cardio / \(metrics.days)d", value: "\(metrics.cardioDays)"),
+            RecoveryMetricCell(label: "Both", value: "\(metrics.overlapDays)")
+        ]
+    }
+
     /// `value` with between `decimals` fraction digits, in `locale`. Callers
     /// round first, so Foundation's own rounding never decides a digit.
     private static func number(_ value: Double, decimals: ClosedRange<Int>, locale: Locale) -> String {

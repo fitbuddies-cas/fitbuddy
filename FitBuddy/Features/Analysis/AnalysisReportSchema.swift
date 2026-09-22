@@ -9,6 +9,8 @@ import Foundation
 /// - `type`, `properties`, `required`, `items`, `description`
 /// - `enum` of strings (not `const`: Gemini's dialect does not list it)
 /// - `anyOf` for the card variants, discriminated by a one-value `kind` enum
+///   — six of them since #186, the last two generic over a unit rather than
+///   specific to a sport
 /// - `additionalProperties: false` on every object, and every property
 ///   required — Claude rejects any other `additionalProperties`, and Mistral's
 ///   strict mode expects the same
@@ -112,6 +114,22 @@ enum AnalysisReportSchema {
                 field(.perWeekB, "number", "Its sessions per week in the recent window."),
                 field(.reasoning, "string", "One sentence on how to even out the two.")
             ]
+        case .metric:
+            return [
+                field(.label, "string", "What the figure is, e.g. Weekly distance, Long run, Weekly volume."),
+                field(.from, "number", "The figure as the data stands, in the unit below."),
+                field(.to, "number", "The figure you recommend, in the same unit."),
+                unitField,
+                field(.source, "string", "A short label for the header, e.g. Run, Ride, Strength. Empty string when none fits."),
+                field(.reasoning, "string", "One sentence explaining the change.")
+            ]
+        case .interference:
+            return [
+                field(.strengthDays, "integer", "Days of the last 7 carrying a strength session, as the Week structure section states."),
+                field(.cardioDays, "integer", "Days of the last 7 carrying an endurance session."),
+                field(.overlapDays, "integer", "Days of the last 7 carrying both."),
+                field(.reasoning, "string", "One sentence on how to separate the two.")
+            ]
         case .note:
             return [
                 field(.title, "string", "A short title."),
@@ -119,6 +137,25 @@ enum AnalysisReportSchema {
             ]
         }
     }
+
+    /// The unit of a metric card, as an `enum` of the raw values `MetricUnit`
+    /// decodes — one of the two places the schema constrains a value rather
+    /// than a type, next to `verdict`.
+    ///
+    /// Generated from `MetricUnit.modelStatableCases`, not from `allCases`: a
+    /// unit added to the enum cannot be left out of the schema by accident,
+    /// and `beatsPerMinute` is left out **on purpose**. A metric card states a
+    /// figure and a target for it, so offering that unit would be offering the
+    /// model a way to prescribe a heart rate, which ground rule 7 forbids —
+    /// see `MetricUnit.isStatableByTheModel`.
+    private static let unitField = JSONValue.Member(
+        key: AnalysisCard.CodingKeys.unit.rawValue,
+        value: [
+            "type": "string",
+            "enum": .array(MetricUnit.modelStatableCases.map { .string($0.rawValue) }),
+            "description": "The unit of both figures. kilograms for a weight or a weekly volume, kilometers for a distance, minutesPerKilometer for a pace (5.5 means 5:30 per km), hours for a duration (4.5 means 4 h 30 min)."
+        ]
+    )
 
     private static func field(_ key: AnalysisCard.CodingKeys, _ type: String, _ description: String) -> JSONValue.Member {
         .init(key: key.rawValue, value: ["type": .string(type), "description": .string(description)])

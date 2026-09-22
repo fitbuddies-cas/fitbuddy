@@ -696,6 +696,8 @@ function FBAnalyzeLoadingScreen({ longWait = false, onCancel }) {
 //   Card = { kind: 'progression', …ProgressionRecCard props }
 //        | { kind: 'recovery',    …RecoveryRecCard props }
 //        | { kind: 'imbalance',   …ImbalanceRecCard props }
+//        | { kind: 'metric',      …MetricRecCard props }        — #186
+//        | { kind: 'interference', …InterferenceRecCard props }  — #186
 //        | { kind: 'note',        title, text }  — not drawn here, not actionable
 //
 // "Show full analysis" starts expanded when no actionable card (progression,
@@ -761,17 +763,81 @@ const REPORT_THIN = {
   cards: [],
 };
 
+// Endurance profile (3.4c, US-15 AC5): the analysis was asked about running
+// only, so every figure is a `metric` card in an endurance unit — km, min/km,
+// bpm, h — and not one kilogram appears on the screen. The unit is the card's,
+// not the card type's: the same `metric` card carries a weekly volume in kg
+// under the Strength profile.
+const REPORT_ENDURANCE = {
+  verdict: 'progress',
+  lead: 'Your weekly distance held at 32 km for three weeks at an easy heart rate. 35 km is the next step.',
+  summary: 'Over the last four weeks you ran nine times for 84 km. Weekly distance sat at 30 to 32 km for the last three of them, and your mean heart rate on the easy runs fell from 152 to 148 bpm at the same pace — the same work is costing you less. Add about 3 km next week, all of it to the long run, and keep the easy pace where it is. Your one faster session held 5:20 /km; leave it there until the higher distance feels settled.',
+  cards: [
+    {
+      kind: 'metric',
+      label: 'Weekly distance', unit: 'km', source: 'Run',
+      from: '32 km', to: '35 km', delta: '+3 km',
+      reasoning: '32 km held for three weeks at an unchanged easy heart rate — room for roughly 10 % more.',
+    },
+    {
+      kind: 'metric',
+      label: 'Long run', unit: 'km', source: 'Run',
+      from: '14 km', to: '17 km', delta: '+3 km',
+      reasoning: 'Put the extra distance in the long run rather than in a fourth session.',
+    },
+    {
+      kind: 'metric',
+      label: 'Easy pace', unit: 'min/km', source: 'Run',
+      from: '6:05 /km', to: '6:05 /km', delta: 'hold',
+      reasoning: 'Keep the easy runs where they are while the distance goes up.',
+    },
+  ],
+};
+
+// Overall load (3.4d, US-15 AC2/AC7): both domains in one report. The
+// interference card is the one card neither domain could have produced — it is
+// about how the two sit in the same week. Colour follows meaning: the metric
+// card that adds load is green, the one that asks for less and the interference
+// card are orange.
+const REPORT_OVERALL = {
+  verdict: 'hold',
+  lead: 'Strength and running landed on the same three days last week. Separate them before adding anything.',
+  summary: 'Across the last four weeks you trained 22 times: 13 strength sessions and 9 runs. Weekly distance rose to 32 km while your strength volume held at about 12 400 kg, so the running is what grew. On three of the last seven days a run and a lifting session shared the day, twice with the run first. That is the pattern to change before either side goes up: move one run to a rest day, keep this week at the volume it is, and reassess next week.',
+  cards: [
+    {
+      kind: 'interference',
+      headline: 'Strength and running shared 3 of the last 7 days.',
+      reasoning: 'Move one run onto a day without lifting — the overlap costs you more than the extra session gains.',
+      strengthDays: 4, cardioDays: 4, overlapDays: 3, days: 7,
+    },
+    {
+      kind: 'metric',
+      label: 'Weekly volume', unit: 'kg', source: 'Strength',
+      from: '12 400 kg', to: '12 400 kg', delta: 'hold',
+      reasoning: 'Hold the volume for a week while the running days move apart.',
+    },
+    {
+      kind: 'metric',
+      label: 'Weekly running time', unit: 'h', source: 'Run',
+      from: '3 h 20 min', to: '2 h 50 min', delta: '−30 min',
+      reasoning: 'Half an hour less running this week, taken off the day before you lift.',
+    },
+  ],
+};
+
 function FBAnalysisResultScreen({
   variant = 'progression', sources = [{ name: 'Hevy', count: 14 }, { name: 'Strava', count: 9 }],
   sessionCount = 23, weeks = 4,
   profile = null, provider = 'Claude', age = 'just now',
   onClose, onHistory,
 }) {
-  // variant: 'progression' | 'recovery' | 'thin'
+  // variant: 'progression' | 'recovery' | 'thin' | 'endurance' | 'overall'
   // No cooldown after a run: "New analysis" is always available once a result
   // shows (the 60 s lock of #117 and its state 3.6 are removed).
   const report = variant === 'recovery' ? REPORT_RECOVER
     : variant === 'thin' ? REPORT_THIN
+    : variant === 'endurance' ? REPORT_ENDURANCE
+    : variant === 'overall' ? REPORT_OVERALL
     : REPORT_PROGRESS;
 
   return (
@@ -827,7 +893,7 @@ function FBIconButton({ children, onClick, label }) {
   );
 }
 
-const ACTIONABLE_KINDS = ['progression', 'recovery', 'imbalance'];
+const ACTIONABLE_KINDS = ['progression', 'recovery', 'imbalance', 'metric', 'interference'];
 
 // Headline verdict, context line (US-6), lead, 0–4 cards, "Show full
 // analysis", disclaimer (US-14 AC1). Shared by the fresh result (3.4/3.4b/3.5)
@@ -856,6 +922,8 @@ function FBAnalysisReportBody({ report, sources, sessionCount, weeks, profile })
             if (card.kind === 'progression') return <ProgressionRecCard key={i} {...card} />;
             if (card.kind === 'recovery') return <RecoveryRecCard key={i} {...card} />;
             if (card.kind === 'imbalance') return <ImbalanceRecCard key={i} {...card} />;
+            if (card.kind === 'metric') return <MetricRecCard key={i} {...card} />;
+            if (card.kind === 'interference') return <InterferenceRecCard key={i} {...card} />;
             return null;
           })}
         </div>
@@ -1015,6 +1083,150 @@ function ProgressionRecCard({ exercise, muscle, from, to, delta, reasoning }) {
         paddingTop: 10, borderTop: `1px solid ${FB.divider}`,
       }}>
         {reasoning}
+      </div>
+    </FBCard>
+  );
+}
+
+/**
+ * Metric card (US-15 AC5, #186) — the generic one.
+ *
+ * One figure of the training week, from where it stands to where the model
+ * recommends it goes, in whatever unit that figure is measured in: kg, km,
+ * min/km, bpm, h. It replaces "a card type per sport": a weekly distance and a
+ * weekly volume are the same card with a different unit, and nothing about the
+ * layout is endurance- or strength-specific.
+ *
+ * Colour follows the **meaning**, never the source or the direction of the
+ * number: green where the change is an improvement in that unit — more
+ * kilometres, a *lower* min/km — orange where the card asks for less. The
+ * source is a small muted label on the right of the header, the same weight as
+ * the muscle group on the progression card, only moved so the chip and the
+ * label do not compete on the left.
+ *
+ * @prop label      string  what the figure is, e.g. 'Weekly distance'
+ * @prop unit       string  'kg' | 'km' | 'min/km' | 'h' — the enum the schema
+ *                          carries; the app formats the value with it.
+ *                          **No heart-rate unit:** a card is a figure and a
+ *                          target for it, and ground rule 7 forbids the model
+ *                          naming a target heart rate. The app may still build
+ *                          a heart-rate card from its own figure.
+ * @prop source     string? small right-hand label ('Run', 'Strength', 'Chest').
+ *                          Absent → no label, never an empty pill
+ * @prop from       string  the app's own current figure — checked against the
+ *                          weekly aggregate (same figure, at the prompt's precision), the model's is replaced
+ * @prop to         string  the recommended figure
+ * @prop delta      string  signed difference, 'hold' where the card asks for
+ *                          none
+ * @prop reasoning  string  one sentence
+ */
+function MetricRecCard({ label, unit, source, from, to, delta, reasoning }) {
+  const holding = delta === 'hold';
+  const tone = holding ? FB.muted : FB.accent;
+  return (
+    <FBCard pad={16}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <div style={{
+          padding: '3px 8px', borderRadius: 999,
+          background: holding ? FB.cardSubtle : FB.accentSoft,
+          fontSize: 11, fontWeight: 600,
+          color: holding ? FB.ink2 : FB.accentInk, letterSpacing: 0.2,
+          textTransform: 'uppercase',
+          boxShadow: `inset 0 0 0 1px ${holding ? FB.border : FB.accentBorder}`,
+        }}>{holding ? '= Hold' : '↑ Increase'}</div>
+        {source && (
+          <div style={{ fontSize: 11, color: FB.muted, fontWeight: 500, marginLeft: 'auto' }}>
+            {source}
+          </div>
+        )}
+      </div>
+
+      <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: -0.3 }}>{label}</div>
+
+      <div style={{
+        marginTop: 10, display: 'flex', alignItems: 'baseline', gap: 8,
+        fontVariantNumeric: 'tabular-nums',
+      }}>
+        <span style={{ fontSize: 14, color: FB.muted, textDecoration: holding ? 'none' : 'line-through' }}>{from}</span>
+        {!holding && (
+          <>
+            <svg width="14" height="14" viewBox="0 0 14 14"><path d="M2 7h10M8 3l4 4-4 4" stroke={FB.muted} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <span style={{ fontSize: 22, fontWeight: 700, letterSpacing: -0.5, color: tone }}>{to}</span>
+          </>
+        )}
+        <span style={{ fontSize: 12, color: FB.muted, marginLeft: 'auto', fontWeight: 500 }}>
+          {holding ? 'unchanged' : delta}
+        </span>
+      </div>
+
+      <div style={{
+        marginTop: 10, fontSize: 13, color: FB.ink2, lineHeight: 1.45,
+        paddingTop: 10, borderTop: `1px solid ${FB.divider}`,
+      }}>
+        {reasoning}
+      </div>
+    </FBCard>
+  );
+}
+
+/**
+ * Interference card (US-15 AC2, #186).
+ *
+ * The one card neither domain could have produced on its own: how strength and
+ * endurance sit in the same week. Orange like the recovery card, because it
+ * warns rather than adds — and, like the recovery card, every figure on it is
+ * the app's count over the last seven days, never the model's.
+ *
+ * Three cells, always all three: unlike the recovery card's RPE and heart rate
+ * these are counts the app can always make, and a zero here is a statement
+ * ("no day carried both") rather than a missing measurement. The card is only
+ * built when the week actually holds both domains.
+ *
+ * @prop headline      string  e.g. 'Strength and running shared 3 of the last 7 days.'
+ * @prop reasoning     string  what to do about it
+ * @prop strengthDays  number  days of the last 7 carrying a strength session
+ * @prop cardioDays    number  days carrying an endurance session
+ * @prop overlapDays   number  days carrying both
+ * @prop days          number  the window, 7
+ */
+function InterferenceRecCard({ headline, reasoning, strengthDays, cardioDays, overlapDays, days = 7 }) {
+  const metrics = [
+    [`Strength / ${days}d`, String(strengthDays)],
+    [`Cardio / ${days}d`, String(cardioDays)],
+    ['Both', String(overlapDays)],
+  ];
+  return (
+    <FBCard pad={16} style={{ background: FB.warnSoft, boxShadow: `0 0 0 1px ${FB.warn}40` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <div style={{
+          padding: '3px 8px', borderRadius: 999, background: '#fff',
+          fontSize: 11, fontWeight: 600, color: FB.warn, letterSpacing: 0.2,
+          textTransform: 'uppercase',
+          boxShadow: `inset 0 0 0 1px ${FB.warn}40`,
+        }}>⇄ Interference</div>
+        <div style={{ fontSize: 11, color: FB.muted, fontWeight: 500, marginLeft: 'auto' }}>
+          Strength + endurance
+        </div>
+      </div>
+
+      <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: -0.3, lineHeight: 1.3 }}>
+        {headline}
+      </div>
+
+      <div style={{ marginTop: 10, fontSize: 13, color: FB.ink2, lineHeight: 1.5 }}>
+        {reasoning}
+      </div>
+
+      <div style={{
+        marginTop: 14, padding: 12, borderRadius: 10, background: '#fff',
+        display: 'grid', gridTemplateColumns: `repeat(${metrics.length}, 1fr)`, gap: 10,
+      }}>
+        {metrics.map(([k, v]) => (
+          <div key={k}>
+            <div style={{ fontSize: 10, color: FB.muted, fontWeight: 500, letterSpacing: 0.4, textTransform: 'uppercase' }}>{k}</div>
+            <div style={{ marginTop: 2, fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums', letterSpacing: -0.4 }}>{v}</div>
+          </div>
+        ))}
       </div>
     </FBCard>
   );

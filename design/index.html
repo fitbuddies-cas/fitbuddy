@@ -60,6 +60,8 @@
       analyzeLong:    { label: '3.3 Long wait · cancel', render: () => <Phone><FBAnalyzeLoadingScreen longWait /></Phone> },
       resultProg:     { label: '3.4 Result · progression', render: () => <Phone><FBAnalysisResultScreen variant="progression" profile={PROFILE} /></Phone> },
       resultThin:     { label: '3.4b Result · thin data', render: () => <Phone><FBAnalysisResultScreen variant="thin" sources={[{ name: 'Hevy', count: 2 }]} provider="Mistral" /></Phone> },
+      resultEndur:    { label: '3.4c Result · endurance', render: () => <Phone><FBAnalysisResultScreen variant="endurance" sources={[{ name: 'Strava', count: 9 }]} profile={{ goal: 'Run a half marathon' }} /></Phone> },
+      resultOverall:  { label: '3.4d Result · overall load', render: () => <Phone><FBAnalysisResultScreen variant="overall" sources={[{ name: 'Hevy', count: 13 }, { name: 'Strava', count: 9 }]} /></Phone> },
       resultRec:      { label: '3.5 Result · recovery',  render: () => <Phone><FBAnalysisResultScreen variant="recovery" /></Phone> },
       history:        { label: '3.7 Saved analyses',     render: () => <Phone><FBAnalysisHistoryScreen swipedIndex={1} /></Phone> },
       historyDetail:  { label: '3.7b Saved analysis · detail', render: () => <Phone><FBAnalysisHistoryDetailScreen /></Phone> },

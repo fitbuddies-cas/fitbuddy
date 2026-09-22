@@ -14,7 +14,7 @@ final class DistanceFormatterTests: XCTestCase {
     }
 
     func testAKilometreAndUpIsReadToATenth() {
-        XCTAssertEqual(DistanceFormatter.display(1_000, locale: english), "1.0 km")
+        XCTAssertEqual(DistanceFormatter.display(1_000, locale: english), "1 km")
         XCTAssertEqual(DistanceFormatter.display(8_400, locale: english), "8.4 km")
         XCTAssertEqual(DistanceFormatter.display(42_195, locale: english), "42.2 km")
     }
@@ -30,7 +30,7 @@ final class DistanceFormatterTests: XCTestCase {
     /// prints a figure that already reads as a kilometre.
     func testJustUnderAKilometreRoundsIntoKilometres() {
         XCTAssertEqual(DistanceFormatter.display(999, locale: english), "999 m")
-        XCTAssertEqual(DistanceFormatter.display(999.6, locale: english), "1.0 km")
+        XCTAssertEqual(DistanceFormatter.display(999.6, locale: english), "1 km")
     }
 
     /// A corrupted row is not a distance; the caller decides whether to show
@@ -59,9 +59,30 @@ final class DistanceFormatterTests: XCTestCase {
                 "display and plain disagree at \(meters) m"
             )
         }
-        XCTAssertEqual(DistanceFormatter.display(100_450, locale: english), "101 km")
+        XCTAssertEqual(DistanceFormatter.display(100_450, locale: english), "100 km")
         XCTAssertEqual(DistanceFormatter.display(102_500, locale: english), "103 km")
         XCTAssertEqual(DistanceFormatter.display(104_500, locale: english), "105 km")
+    }
+
+    /// Past 100 km the whole-kilometre figure is rounded from the distance
+    /// itself, never from a copy already rounded to a tenth (#186).
+    ///
+    /// `123.456 km` rounded to a tenth is `123.5`, and rounding *that* half
+    /// away from zero reports `"124 km"` — half a kilometre the person never
+    /// covered. The tenth decides only which range the distance falls in.
+    func testAWholeKilometreFigureIsNotRoundedTwice() {
+        XCTAssertEqual(DistanceFormatter.display(123_456, locale: english), "123 km")
+        XCTAssertEqual(DistanceFormatter.plain(123_456), "123 km")
+        XCTAssertEqual(DistanceFormatter.plain(100_450), "100 km")
+    }
+
+    /// A tenth that carries no digit is not printed, in either form: the
+    /// metric card reads `"32 km → 35 km"`, not `"32.0 km → 35.0 km"` (#186).
+    func testATrailingZeroIsDroppedInBothForms() {
+        XCTAssertEqual(DistanceFormatter.display(32_000, locale: english), "32 km")
+        XCTAssertEqual(DistanceFormatter.display(32_000, locale: german), "32 km")
+        XCTAssertEqual(DistanceFormatter.plain(32_000), "32 km")
+        XCTAssertEqual(DistanceFormatter.display(8_400, locale: english), "8.4 km")
     }
 
     /// A corrupted row can hold a value that is not a number; neither form

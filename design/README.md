@@ -7,6 +7,7 @@ High-fidelity iOS screen designs for the Must-Have user stories US-1 to US-3 and
 - **US-3** · AI-Analyse auf Knopfdruck (8 screen states, inkl. gespeicherte Analysen; 3.6 «60 s lock» entfernt, die Nummern 3.7/3.7b bleiben)
 - **US-13** · Trainingsprofil in der Kontextzeile der Analyse (3.4)
 - **US-14** · AI-Empfehlung als strukturierte Karten (3.4, 3.4b, 3.5, 3.7b)
+- **US-15** · Quellenübergreifende AI-Analyse: generische Karten (3.4c, 3.4d)
 - **Interactive Prototype** — clickable full-flow walkthrough
 
 ## Run it locally
@@ -26,7 +27,7 @@ Open `index.html` directly in a modern browser. No build step, no install. All d
 |---|---|
 | `index.html` | Entry. Loads scripts and sets up the DesignCanvas. |
 | `fb-atoms.jsx` | FitBuddy design tokens (colors, type) + reusable primitives (`FBButton`, `FBCard`, `FBStat`, `FBBar`, `FBSpinner`). |
-| `fb-screens.jsx` | All screen components (`FBWelcomeScreen`, `FBKeyEntryScreen`, `FBDashboardScreen`, `FBWorkoutDetailScreen`, `FBAnalyzeLoadingScreen`, `FBAnalysisResultScreen`, `FBAnalysisHistoryScreen`, `FBAnalysisHistoryDetailScreen`). Die Karten-Props (`ProgressionRecCard`, `RecoveryRecCard`, `ImbalanceRecCard`) und das `AnalysisReport`-Format sind dort als Kommentar dokumentiert — Vorlage für das JSON-Schema (#174). |
+| `fb-screens.jsx` | All screen components (`FBWelcomeScreen`, `FBKeyEntryScreen`, `FBDashboardScreen`, `FBWorkoutDetailScreen`, `FBAnalyzeLoadingScreen`, `FBAnalysisResultScreen`, `FBAnalysisHistoryScreen`, `FBAnalysisHistoryDetailScreen`). Die Karten-Props (`ProgressionRecCard`, `RecoveryRecCard`, `ImbalanceRecCard`, `MetricRecCard`, `InterferenceRecCard`) und das `AnalysisReport`-Format sind dort als Kommentar dokumentiert — Vorlage für das JSON-Schema (#174, #186). |
 | `ios-frame.jsx` | iOS 26 device frame (status bar, dynamic island, keyboard, home indicator). |
 | `design-canvas.jsx` | Pan/zoom canvas wrapper. Sections + artboards. |
 
@@ -36,6 +37,7 @@ Open `index.html` directly in a modern browser. No build step, no install. All d
 - **Ink:** near-black `#0E0E0E` foreground, `#3C3C43` secondary
 - **Accent (Progress):** `oklch(0.62 0.14 150)` — training green
 - **Accent (Recovery / Warn):** `oklch(0.66 0.16 55)` — warm orange
+- **Kartenfarbe folgt der Bedeutung, nicht der Quelle:** Grün = mehr Last empfohlen, Orange = warnen oder erholen. Die Quelle ist ein kleines graues Label rechts im Header («Run», «Strength», «Chest»), nie eine eigene Farbe.
 - **Type:** SF Pro / system-ui, tabular nums on all numbers
 - **Radii:** 14 (controls), 18 (cards), 26 (grouped lists)
 
@@ -44,6 +46,7 @@ Open `index.html` directly in a modern browser. No build step, no install. All d
 - Keep all files at the same flat level inside this folder — `index.html` loads scripts as `src="fb-atoms.jsx"`.
 - Don't rename files without updating the `<script>` tags in `index.html`.
 - Each screen component is pure (props in, JSX out). Add a new screen by writing a new function in `fb-screens.jsx`, exposing it on `window`, registering it in the `SCREENS` map in `index.html`.
+- Die Karten-Nummerierung folgt der Reihenfolge, in der die Varianten dazugekommen sind: 3.4 Progression, 3.4b wenig Daten (US-14), 3.4c Ausdauer, 3.4d Gesamtbelastung (US-15). 3.4b wurde **nicht** umbenannt — der Name steht in `AnalysisReportValidator` und in mehreren Testkommentaren.
 
 ## Acceptance criteria coverage
 
@@ -67,6 +70,9 @@ Open `index.html` directly in a modern browser. No build step, no install. All d
 | US-14 AC2 (Übung, Muskelgruppe, von → nach, Delta, Begründung) | 3.4 Progression-Karten |
 | US-14 AC4 (Recovery-Kennzahlen aus der App, Ø RPE optional) | 3.5 Recovery-Karte |
 | US-14 AC6 (alte Prosa-Einträge bleiben lesbar) | 3.7 Eintrag «Text» |
+| US-15 AC5 (Profil «Endurance»: Ausdauer-Einheiten, keine Kilogramm) | 3.4c — drei Metrik-Karten in km und min/km, kein kg auf dem Screen |
+| US-15 AC2 (Wochenstruktur über beide Domänen) | 3.4d — Interferenz-Karte «Strength and running shared 3 of the last 7 days» |
+| US-15 AC7 (fehlende Kennzahl: Zelle entfällt, kein «—») | 3.5 ohne Ø RPE · 3.4c ohne `source`-Label, wo die Quelle fehlt |
 | US-9 AC1–AC3 (Progressionskurve, Plateau-Label, Session-Historie) | noch kein Mock — Screen ist mit #42/#163 dazugekommen |
 
 ---

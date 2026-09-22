@@ -31,6 +31,29 @@ enum AnalysisReportValidator {
     /// Title of a downgraded recovery card.
     static let recoveryNoteTitle = "Recovery"
 
+    /// Title of a downgraded interference card.
+    static let interferenceNoteTitle = "Training load"
+
+    /// How far a metric card's `to` may sit from the app's figure, as a share
+    /// of it.
+    ///
+    /// A fifth of the week's own figure. Past that the card is a number rather
+    /// than a recommendation — no week's distance doubles on advice. The same
+    /// bound in both directions, for the same reason prompt rule 6 caps a
+    /// barbell step: the app has to be able to say why the figure is the one
+    /// it prints.
+    ///
+    /// **`from` has no tolerance at all.** It used to allow 5 % — 620 kg of
+    /// slack at a weekly volume of 12 400 kg, which let the card print one
+    /// number while its own reasoning sentence argued from another. It is now
+    /// an equality, at the precision the prompt printed the figure with
+    /// (`MetricUnit.statesTheSameFigure(_:as:)`), which is the rule the
+    /// imbalance card already follows: the model is quoting a figure it was
+    /// given, so it must quote it. Where it does not, the card is downgraded
+    /// to a note and its sentence still reaches the screen — the conservative
+    /// failure, not a wrong measurement.
+    static let metricStepShare = 0.2
+
     /// The headline of a report the app turned into a recovery verdict
     /// (US-14 AC4).
     static let recoveryHeadline = "Recover this week."
@@ -94,7 +117,7 @@ enum AnalysisReportValidator {
         // Model progressions that did not come out of their own validation as
         // a progression — downgraded to a note, or dropped for a blank reason.
         let rejectedProgressions = report.cards.filter { card in
-            card.kind == .progression && validate(card, against: evidence)?.kind != .progression
+            progressKinds.contains(card.kind) && validate(card, against: evidence)?.kind != card.kind
         }.count
         var cards = report.cards.compactMap { validate($0, against: evidence) }
         var verdict = report.verdict
@@ -129,26 +152,35 @@ enum AnalysisReportValidator {
         }
 
         let kept = capped(cards)
-        let cutProgressions = cards.filter { $0.kind == .progression }.count
-            - kept.filter { $0.kind == .progression }.count
+        let cutProgressions = cards.filter(\.backsProgress).count - kept.filter(\.backsProgress).count
 
-        // "You're ready to progress." over cards that name no progression
+        // "You're ready to progress." over cards that name no step forward
         // would contradict the screen it heads (#177), so the verdict the cards
         // support is to hold. A recovery verdict forced above is never touched.
-        // The lead is replaced only when the app took a progression away — a
+        // The lead is replaced only when the app took such a card away — a
         // downgrade or the cap — because only then did the model's lead argue
-        // for a load increase no card backs (#170). A progress verdict over
-        // notes alone keeps the model's lead: the app overruled nothing in it.
+        // for a step no card backs (#170). A progress verdict over notes alone
+        // keeps the model's lead: the app overruled nothing in it.
         //
-        // Only where the run covered strength (#185). A progression card is a
-        // load increase on an exercise from the Exercises section, and an
-        // endurance analysis is given no such section — so no progression card
-        // can survive, and reading their absence as "the cards do not back the
-        // verdict" would rewrite *every* endurance progress verdict to "Hold
-        // steady this week." over the model's own argument for progressing.
+        // "A step forward" is `backsProgress` since #186, not "a progression
+        // card": a metric card that adds kilometres is exactly the card an
+        // endurance report puts a progress verdict on, and reading only
+        // progressions would rewrite it.
+        //
+        // Rewritten only where the app *had* a card type that could have
+        // backed the verdict, so that an absence means something (#185, #186).
+        //
+        // Under "Endurance" there is no Exercises section and a progression
+        // card is impossible by construction; reading its absence as "the
+        // cards do not back the verdict" would rewrite every endurance
+        // progress verdict over the model's own argument, which is what #185
+        // fixed. But #186 gave that profile a card that *can* back it — so as
+        // soon as a metric card survived, its failure to argue for more is
+        // evidence again, and a deload metric card under "You're ready to
+        // progress." is exactly the contradiction this rule exists to stop.
         if verdict == .progress,
-           evidence.analysisProfile.covers(.strength),
-           !kept.contains(where: { $0.kind == .progression }) {
+           evidence.analysisProfile.covers(.strength) || kept.contains(where: { $0.kind == .metric }),
+           !kept.contains(where: \.backsProgress) {
             verdict = .hold
             headline = holdHeadline
             if rejectedProgressions + cutProgressions > 0 {
@@ -170,7 +202,13 @@ enum AnalysisReportValidator {
     static func validate(_ card: AnalysisCard, against evidence: AnalysisReportEvidence) -> AnalysisReportCard? {
         switch card {
         case let .progression(exercise, _, fromKg, toKg, reasoning):
+            // A load in kilograms is a strength figure, so an analysis that
+            // was not about strength does not show one (US-15 AC5). In
+            // practice such a prompt carried no exercise list either and the
+            // card would fail below anyway — stated here so the rule is one
+            // line rather than a consequence.
             if !isBlank(reasoning),
+               evidence.analysisProfile.covers(.strength),
                let valid = progression(
                    exercise: exercise,
                    fromKg: fromKg,
@@ -215,10 +253,102 @@ enum AnalysisReportValidator {
             }
             return note(title: fallbackNoteTitle, text: reasoning)
 
+        case let .metric(label, from, to, unit, reasoning, source):
+            if !isBlank(reasoning),
+               let valid = metric(
+                   label: label,
+                   from: from,
+                   to: to,
+                   unit: unit,
+                   reasoning: reasoning,
+                   source: source,
+                   evidence: evidence
+               ) {
+                return valid
+            }
+            return note(title: trimmed(label), text: reasoning)
+
+        case let .interference(_, _, _, reasoning):
+            // The model's three counts are ignored, exactly as its
+            // suggestedRestHours is: the app counted the week and the card
+            // shows what it counted. What the model is checked on is whether
+            // there was an interference to write about at all — a week with no
+            // endurance session in it has none, whatever the card claims.
+            //
+            // And whether *this* analysis may talk about it: the card is a
+            // statement about both domains at once, so a single-domain profile
+            // has no card here. Under "Strength" it would put four running
+            // days on a screen that says the running was left out, with no
+            // sentence to explain them — the leak the recovery card avoids by
+            // saying so in its own reasoning (#185).
+            guard !isBlank(reasoning),
+                  evidence.analysisProfile.coversBothDomains,
+                  evidence.interference.hasBothDomains
+            else {
+                return note(title: interferenceNoteTitle, text: reasoning)
+            }
+            return .interference(metrics: evidence.interference, reasoning: reasoning)
+
         case let .note(title, text):
             guard !isBlank(text) else { return nil }
             return .note(title: title, text: text)
         }
+    }
+
+    // MARK: - Metric
+
+    /// The metric card with the app's own current figure, or `nil` when the
+    /// week does not back it:
+    ///
+    /// - the model is allowed to state the unit at all
+    ///   (`MetricUnit.isStatableByTheModel`) — a heart rate is not a figure it
+    ///   may set a target for, whatever schema a provider actually honoured,
+    /// - the unit belongs to a domain this analysis covers — no kilograms
+    ///   under "Endurance", no kilometres under "Strength" (US-15 AC5). A unit
+    ///   both domains record passes under any profile, and its *anchor* is
+    ///   already restricted to the covered sessions,
+    /// - the app has a figure for that unit in the last seven days. Without
+    ///   one there is nothing to check the card against, and a "from" nobody
+    ///   measured is the invented measurement #175 exists to catch,
+    /// - `from` is **the same figure** as the app's, at the precision the
+    ///   prompt printed it (`MetricUnit.statesTheSameFigure(_:as:)`),
+    /// - `to` is a figure the unit can state, differs from the app's, and sits
+    ///   within `metricStepShare` of it,
+    /// - both figures, and the step between them, have a reading in the unit —
+    ///   a card whose delta rounds to nothing is not a recommendation.
+    ///
+    /// `from` is replaced by the app's figure, as the progression card's
+    /// struck-through weight is: what the card states as a measurement is the
+    /// cache's, and only the target and the sentence are the model's.
+    private static func metric(
+        label: String,
+        from: Double,
+        to: Double,
+        unit: MetricUnit,
+        reasoning: String,
+        source: String,
+        evidence: AnalysisReportEvidence
+    ) -> AnalysisReportCard? {
+        let title = trimmed(label)
+        guard !title.isEmpty, unit.isStatableByTheModel else { return nil }
+        if let domain = unit.domain, !evidence.analysisProfile.covers(domain) { return nil }
+        guard let app = evidence.weeklyMetrics[unit], app > 0, app.isFinite else { return nil }
+        guard unit.statesTheSameFigure(from, as: app) else { return nil }
+        guard to.isFinite, to > 0 else { return nil }
+        let step = to - app
+        guard abs(step) > epsilon, abs(step) <= app * metricStepShare + epsilon else { return nil }
+        guard unit.display(app) != nil,
+              unit.display(to) != nil,
+              unit.delta(from: app, to: to) != nil
+        else { return nil }
+        return .metric(
+            label: title,
+            from: app,
+            to: to,
+            unit: unit,
+            reasoning: reasoning,
+            source: trimmed(source)
+        )
     }
 
     // MARK: - Progression
@@ -343,6 +473,10 @@ enum AnalysisReportValidator {
     }
 
     // MARK: - Helpers
+
+    /// Card kinds whose card argues for adding load, and whose loss therefore
+    /// leaves a "progress" lead without anything behind it.
+    private static let progressKinds: Set<AnalysisCard.Kind> = [.progression, .metric]
 
     /// Absorbs floating-point noise in comparisons of figures that are equal
     /// on paper.

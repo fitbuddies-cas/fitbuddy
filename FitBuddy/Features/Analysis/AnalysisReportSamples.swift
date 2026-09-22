@@ -1,7 +1,7 @@
 import Foundation
 
 #if DEBUG
-/// Validated reports shaped like design 3.4, 3.4b and 3.5, for the card
+/// Validated reports shaped like design 3.4, 3.4b, 3.4c, 3.4d and 3.5, for the card
 /// previews and for the analysis a UI test seeds (#177, #170).
 ///
 /// Built directly as `ValidatedAnalysisReport`s: a live preview has no exercise
@@ -108,6 +108,62 @@ enum AnalysisReportSamples {
             adaptation: take two rest days before the next hard session.
             """,
         metrics: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: 8.2, averageHeartRate: 148)
+    )
+
+    /// Design 3.4c: the Endurance profile, stated in kilometres.
+    static let weeklyDistanceCard = AnalysisReportCard.metric(
+        label: "Weekly distance",
+        from: 32,
+        to: 35,
+        unit: .kilometers,
+        reasoning: "32 km held for three weeks at an unchanged easy heart rate — room for roughly 10 % more.",
+        source: "Run"
+    )
+
+    /// The same card in a unit where a lower figure is the better one, and
+    /// without a source label — a card with nothing to put there draws none.
+    static let easyPaceCard = AnalysisReportCard.metric(
+        label: "Easy pace",
+        from: 6,
+        to: 5 + 20.0 / 60,
+        unit: .minutesPerKilometer,
+        reasoning: "The easy runs have drifted quick; hold them slower while the distance goes up.",
+        source: ""
+    )
+
+    /// Design 3.4d: both domains in the same week.
+    static let interferenceCard = AnalysisReportCard.interference(
+        metrics: InterferenceMetrics(strengthDays: 4, cardioDays: 4, overlapDays: 3),
+        reasoning: """
+            Move one run onto a day without lifting — the overlap costs you \
+            more than the extra session gains.
+            """
+    )
+
+    /// Design 3.4c: an endurance analysis, with no kilogram on the screen
+    /// (US-15 AC5).
+    static let endurance = ValidatedAnalysisReport(
+        headline: "You're ready to progress.",
+        verdict: .progress,
+        lead: "Your weekly distance held at 32 km for three weeks at an easy heart rate. 35 km is the next step.",
+        cards: [weeklyDistanceCard, easyPaceCard],
+        summary: """
+            Weekly distance sat at 30 to 32 km for three weeks while your mean \
+            heart rate on the easy runs fell. Add about 3 km next week, all of \
+            it to the long run, and keep the easy pace where it is.
+            """
+    )
+
+    /// Design 3.4d: the overall-load analysis, led by the interference card.
+    static let overallLoad = ValidatedAnalysisReport(
+        headline: "Hold steady this week.",
+        verdict: .hold,
+        lead: "Strength and running landed on the same three days last week. Separate them before adding anything.",
+        cards: [interferenceCard, weeklyDistanceCard],
+        summary: """
+            On three of the last seven days a run and a lifting session shared \
+            the day. That is the pattern to change before either side goes up.
+            """
     )
 
     static let noteCard = AnalysisReportCard.note(

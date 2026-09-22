@@ -83,6 +83,43 @@ final class AnalysisResultUITests: XCTestCase {
         XCTAssertFalse(sut.analysisProse.exists)
     }
 
+    /// Design 3.4c (US-15 AC5, #186): an endurance report renders as metric
+    /// cards and shows no progression card, i.e. no weight on the screen.
+    ///
+    /// Rendering only, like the tests above: the report is stored directly.
+    /// **Not run locally** — CI runs the UI suite (#120, #148).
+    @MainActor
+    func testASeededEnduranceReportShowsMetricCards() {
+        let sut = SeededApp(
+            profile: LaunchArgument.Profile.personB,
+            analysisReport: LaunchArgument.Report.endurance
+        ).launch()
+
+        openResult(in: sut)
+
+        XCTAssertEqual(sut.analysisHeadline.label, "You're ready to progress.")
+        sut.firstRow(of: sut.metricCards)
+        XCTAssertEqual(sut.progressionCards.count, 0)
+        XCTAssertFalse(sut.analysisProse.exists)
+    }
+
+    /// Design 3.4d: the overall-load report is led by the interference card,
+    /// with a metric card under it.
+    @MainActor
+    func testASeededOverallLoadReportShowsTheInterferenceCard() {
+        let sut = SeededApp(
+            profile: LaunchArgument.Profile.personB,
+            analysisReport: LaunchArgument.Report.overallLoad
+        ).launch()
+
+        openResult(in: sut)
+
+        XCTAssertEqual(sut.analysisHeadline.label, "Hold steady this week.")
+        sut.firstRow(of: sut.interferenceCards)
+        sut.firstRow(of: sut.metricCards)
+        XCTAssertFalse(sut.analysisProse.exists)
+    }
+
     // MARK: - Helpers
 
     /// Dashboard → analysis tab → the restored result and its headline.

@@ -134,6 +134,80 @@ final class AnalysisResultRenderingTests: XCTestCase {
         try assertRenders(AnalysisReportCardView(card: AnalysisReportSamples.noteCard))
     }
 
+    // MARK: - Generic cards (US-15, #186)
+
+    /// One metric card per unit, so no unit's figure fails to lay out.
+    func testMetricCardRendersInEveryUnit() throws {
+        let figures: [MetricUnit: (Double, Double)] = [
+            .kilograms: (12_400, 13_000),
+            .kilometers: (32, 35),
+            .minutesPerKilometer: (6, 5 + 40.0 / 60),
+            .beatsPerMinute: (152, 148),
+            .hours: (6.5, 7),
+        ]
+        for unit in MetricUnit.allCases {
+            let figure = try XCTUnwrap(figures[unit])
+            try assertRenders(
+                MetricCardView(
+                    label: "Weekly figure",
+                    from: figure.0,
+                    to: figure.1,
+                    unit: unit,
+                    reasoning: "One sentence about the change.",
+                    source: "Run"
+                )
+            )
+        }
+    }
+
+    /// A card without a source label draws none — and is no taller for it, so
+    /// the header did not keep an empty row (US-15 AC7).
+    func testAMetricCardWithoutASourceIsTheSameHeight() throws {
+        func card(source: String) -> some View {
+            MetricCardView(
+                label: "Weekly distance",
+                from: 32,
+                to: 35,
+                unit: .kilometers,
+                reasoning: "32 km held for three weeks.",
+                source: source
+            )
+            .padding(.horizontal, 16)
+        }
+
+        let withSource = try render(card(source: "Run"))
+        let without = try render(card(source: "   "))
+
+        XCTAssertGreaterThan(without.size.height, 0)
+        XCTAssertEqual(withSource.size.height, without.size.height, accuracy: 0.5)
+    }
+
+    func testInterferenceCardRenders() throws {
+        try assertRenders(AnalysisReportCardView(card: AnalysisReportSamples.interferenceCard))
+    }
+
+    /// Both domains in the week, never on the same day — the three cells stay,
+    /// the headline changes.
+    func testInterferenceCardRendersWithoutAnOverlap() throws {
+        let metrics = InterferenceMetrics(strengthDays: 3, cardioDays: 3, overlapDays: 0)
+        XCTAssertEqual(AnalysisCardFormatter.interferenceCells(metrics).count, 3)
+
+        try assertRenders(InterferenceCardView(metrics: metrics, reasoning: "Six days, no rest between them."))
+    }
+
+    /// The endurance report of design 3.4c: every card renders and not one
+    /// figure on the screen is a weight (US-15 AC5).
+    func testTheEnduranceReportCarriesNoKilograms() throws {
+        for card in AnalysisReportSamples.endurance.cards {
+            try assertRenders(AnalysisReportCardView(card: card))
+            guard case let .metric(_, _, _, unit, _, _) = card else {
+                return XCTFail("the endurance sample must be metric cards only")
+            }
+            XCTAssertNotEqual(unit, .kilograms)
+            XCTAssertEqual(unit.domain, .endurance)
+        }
+    }
+
     func testHeadlineRendersForEveryVerdict() throws {
         for verdict in AnalysisVerdict.allCases {
             try assertRenders(AnalysisHeadlineView(verdict: verdict))
@@ -148,6 +222,8 @@ final class AnalysisResultRenderingTests: XCTestCase {
             AnalysisReportSamples.recover,
             AnalysisReportSamples.hold,
             AnalysisReportSamples.thin,
+            AnalysisReportSamples.endurance,
+            AnalysisReportSamples.overallLoad,
         ] {
             try assertRenders(
                 AnalysisResultView(

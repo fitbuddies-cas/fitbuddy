@@ -24,6 +24,17 @@ struct AnalysisReportCardView: View {
                 perWeekB: perWeekB,
                 reasoning: reasoning
             )
+        case let .metric(label, from, to, unit, reasoning, source):
+            MetricCardView(
+                label: label,
+                from: from,
+                to: to,
+                unit: unit,
+                reasoning: reasoning,
+                source: source
+            )
+        case let .interference(metrics, reasoning):
+            InterferenceCardView(metrics: metrics, reasoning: reasoning)
         case let .note(title, text):
             NoteCardView(title: title, text: text)
         }
@@ -38,6 +49,8 @@ struct AnalysisReportCardView: View {
                 AnalysisReportCardView(card: item.element)
             }
             AnalysisReportCardView(card: AnalysisReportSamples.recoveryCard)
+            AnalysisReportCardView(card: AnalysisReportSamples.weeklyDistanceCard)
+            AnalysisReportCardView(card: AnalysisReportSamples.interferenceCard)
             AnalysisReportCardView(card: AnalysisReportSamples.noteCard)
         }
         .padding(16)

@@ -90,16 +90,62 @@ final class AnalysisReportSchemaTests: XCTestCase {
         }
     }
 
-    /// Numbers stay numbers in the schema — the screen formats them.
+    /// Numbers stay numbers in the schema — the screen formats them. A day
+    /// count is an `integer`, because the card decodes it as one and 3.0 days
+    /// would fail to decode (#186).
     func testNumericCardFieldsAreNumbers() throws {
-        let numeric: Set<String> = ["fromKg", "toKg", "suggestedRestHours", "perWeekA", "perWeekB"]
+        let numeric: Set<String> = ["fromKg", "toKg", "suggestedRestHours", "perWeekA", "perWeekB", "from", "to"]
+        let integers: Set<String> = ["strengthDays", "cardioDays", "overlapDays"]
         for variant in try variants() {
             let properties = try XCTUnwrap(variant["properties"] as? [String: Any])
             for (key, value) in properties {
                 let type = (value as? [String: Any])?["type"] as? String
-                XCTAssertEqual(type, numeric.contains(key) ? "number" : "string", key)
+                let expected = numeric.contains(key) ? "number" : integers.contains(key) ? "integer" : "string"
+                XCTAssertEqual(type, expected, key)
             }
         }
+    }
+
+    /// The unit of a metric card is one of the schema's two enum-valued
+    /// properties, next to `verdict`. It lists every `MetricUnit` the model
+    /// may state — a case added to the enum and left out of the schema would
+    /// be one the model can never use (#186).
+    ///
+    /// `beatsPerMinute` is deliberately not among them: see
+    /// `testTheUnitEnumOffersNoHeartRate`.
+    func testTheUnitEnumListsEveryMetricUnit() throws {
+        let variant = try XCTUnwrap(
+            try variants().first {
+                let properties = $0["properties"] as? [String: Any]
+                let kind = (properties?["kind"] as? [String: Any])?["enum"] as? [String]
+                return kind == ["metric"]
+            }
+        )
+        let properties = try XCTUnwrap(variant["properties"] as? [String: Any])
+        let unit = try XCTUnwrap(properties["unit"] as? [String: Any])
+
+        XCTAssertEqual(unit["enum"] as? [String], MetricUnit.modelStatableCases.map(\.rawValue))
+    }
+
+    /// The blocker of #186's review: a metric card is a figure **and a target
+    /// for it**, so offering `beatsPerMinute` would offer the model a way to
+    /// prescribe a heart rate — which ground rule 7 forbids (US-3 AC3). The
+    /// schema does not list the unit, and the description does not name it.
+    func testTheUnitEnumOffersNoHeartRate() throws {
+        let variant = try XCTUnwrap(
+            try variants().first {
+                let properties = $0["properties"] as? [String: Any]
+                let kind = (properties?["kind"] as? [String: Any])?["enum"] as? [String]
+                return kind == ["metric"]
+            }
+        )
+        let properties = try XCTUnwrap(variant["properties"] as? [String: Any])
+        let unit = try XCTUnwrap(properties["unit"] as? [String: Any])
+        let cases = try XCTUnwrap(unit["enum"] as? [String])
+
+        XCTAssertFalse(cases.contains(MetricUnit.beatsPerMinute.rawValue))
+        XCTAssertFalse(try XCTUnwrap(unit["description"] as? String).contains("beatsPerMinute"))
+        XCTAssertFalse(try XCTUnwrap(unit["description"] as? String).contains("heart rate"))
     }
 
     // MARK: - Dialect

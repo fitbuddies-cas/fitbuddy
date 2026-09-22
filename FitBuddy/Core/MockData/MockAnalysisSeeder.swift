@@ -16,8 +16,8 @@ import SwiftData
 /// also covers its persistence and the restore path.
 ///
 /// `-fbSeedAnalysis` turns it on and stores the progress report of design 3.4;
-/// `-fbSeedAnalysis recover` (or `progress`, `hold`, `thin`) picks the report
-/// (#179, #170).
+/// `-fbSeedAnalysis recover` (or `progress`, `hold`, `thin`, `endurance`,
+/// `overall`) picks the report (#179, #170, #186).
 /// Without the argument nothing here runs.
 enum MockAnalysisSeeder {
     static let launchArgument = "-fbSeedAnalysis"
@@ -32,6 +32,11 @@ enum MockAnalysisSeeder {
         "hold": AnalysisReportSamples.hold,
         // Design 3.4b: no cards, the full analysis open (#170).
         "thin": AnalysisReportSamples.thin,
+        // Design 3.4c/3.4d: the generic cards of #186 — an endurance report
+        // whose figures are all in endurance units (US-15 AC5), and an
+        // overall-load one led by the interference card.
+        "endurance": AnalysisReportSamples.endurance,
+        "overall": AnalysisReportSamples.overallLoad,
     ]
 
     /// Sessions the context line of a seeded report names. 14 as in design
