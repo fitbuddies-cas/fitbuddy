@@ -30,9 +30,14 @@ struct RecoveryCardView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 10)
 
-                HStack(alignment: .top, spacing: 10) {
-                    ForEach(RecoveryMetricCell.cells(for: metrics), id: \.label) { cell in
-                        FBStat(label: cell.label, value: cell.value, size: .compact)
+                let cells = RecoveryMetricCell.cells(for: metrics)
+                // A mixed week that logged both an RPE and a heart rate fills
+                // four columns where design 3.5 drew three, so the gap gives
+                // way before the labels do (#184). `FBStat.compact` already
+                // keeps a label on one line and scales it down.
+                HStack(alignment: .top, spacing: cells.count > 3 ? 8 : 10) {
+                    ForEach(cells, id: \.label) { cell in
+                        FBStat(label: cell.label, value: cell.value, unit: cell.unit, size: .compact)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
@@ -65,6 +70,27 @@ struct RecoveryCardView: View {
     RecoveryCardView(
         reasoning: "Take two rest days before the next heavy session.",
         metrics: RecoveryMetrics(sessions: 7, trainingDays: 7, averageRPE: nil)
+    )
+    .padding(16)
+    .background(Color.fbBackground)
+}
+
+/// Four strength sessions and two runs on six days (#184): the count spans
+/// both domains, and the week logged both means, so the row is four cells wide.
+#Preview("Mixed week") {
+    RecoveryCardView(
+        reasoning: "Four strength sessions and two runs on six days leave no day for adaptation.",
+        metrics: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: 8.2, averageHeartRate: 148)
+    )
+    .padding(16)
+    .background(Color.fbBackground)
+}
+
+/// Runs only: nothing logged an RPE, the strap recorded a heart rate.
+#Preview("Endurance only") {
+    RecoveryCardView(
+        reasoning: "Six running days in a row: take a rest day before the next hard session.",
+        metrics: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: nil, averageHeartRate: 151)
     )
     .padding(16)
     .background(Color.fbBackground)

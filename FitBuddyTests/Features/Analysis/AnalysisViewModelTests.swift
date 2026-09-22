@@ -262,6 +262,35 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(details.callCount, 6)
     }
 
+    /// US-15 AC3 end to end: four strength sessions and two runs on six days
+    /// insert the recovery card, where before #184 the four lifts left the run
+    /// days uncounted and no hint appeared.
+    ///
+    /// The details are read for the four strength sessions only — a run logs no
+    /// RPE, so fetching it would cost a round trip and risk dropping the RPE of
+    /// the whole week over an unreadable one.
+    func testAMixedWeekInsertsTheRecoveryCardAndReadsOnlyTheStrengthDetails() async throws {
+        cache.summaries = (0...3).map { Self.workout(daysAgo: $0) }
+            + [
+                Self.workout(daysAgo: 4, title: "Morning Run", source: .strava, kind: .run),
+                Self.workout(daysAgo: 5, title: "Evening Run", source: .strava, kind: .run),
+            ]
+        let details = StubWorkoutDetailCache()
+        details.details = (0...3).map { Self.detail(daysAgo: $0, rpe: 8) }
+        await streamer.setReport(Self.noteOnlyReport)
+        let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache(), detailCache: details)
+
+        await sut.start()
+
+        let report = try XCTUnwrap(sut.state.outcome?.report)
+        XCTAssertEqual(report.verdict, .recover)
+        XCTAssertEqual(report.cards.first, .recovery(
+            reasoning: AnalysisReportValidator.insertedRecoveryReasoning,
+            metrics: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: 8)
+        ))
+        XCTAssertEqual(details.callCount, 4)
+    }
+
     /// A failing detail read costs the RPE, not the paid-for answer.
     func testADetailReadFailureValidatesWithoutRPE() async throws {
         cache.summaries = (0...5).map { Self.workout(daysAgo: $0) }

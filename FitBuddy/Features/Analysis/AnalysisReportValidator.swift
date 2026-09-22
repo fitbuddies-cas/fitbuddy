@@ -38,8 +38,14 @@ enum AnalysisReportValidator {
     /// The lead of a report the app turned into a recovery verdict (US-14 AC4,
     /// #170). Replaces the model's, which was written for the verdict the app
     /// overruled and would contradict the headline right above it.
+    ///
+    /// `trainingDays` counts strength and endurance together since #184, and
+    /// so does the sentence: "before adding load" was strength wording that
+    /// said nothing to a week of six runs, and the app now points this lead at
+    /// exactly such weeks.
     static func recoveryLead(trainingDays: Int) -> String {
-        "You trained on \(trainingDays) of the last 7 days. Take the suggested rest before adding load."
+        "You trained on \(trainingDays) of the last 7 days. "
+            + "Take the suggested rest before your next hard session."
     }
 
     /// The headline of a progress report the app turned into a hold verdict,
@@ -54,8 +60,12 @@ enum AnalysisReportValidator {
 
     /// The reasoning of a recovery card the app inserts when the model left it
     /// out, or sent it without a reason (US-14 AC4).
+    ///
+    /// Domain-neutral since #184: the card is now inserted for a week of runs
+    /// as readily as for a week of lifts, and "before adding load to any
+    /// exercise" named neither the training nor the advice of such a week.
     static let insertedRecoveryReasoning =
-        "Recovery comes before progression: take the suggested rest before adding load to any exercise."
+        "Recovery comes before progression: take the suggested rest before your next hard session."
 
     /// Validates every card and enforces the recovery hint.
     ///
@@ -76,11 +86,14 @@ enum AnalysisReportValidator {
         var headline = report.headline
         var lead = report.lead
 
-        // US-3 AC6 / US-14 AC4: at 6 of 7 days no progression is shown without
-        // the recovery hint, and the headline says so. A model recovery card
-        // always survives at that count, so a missing one means the model left
-        // it out. An overruled verdict takes the model's lead with it: that
-        // lead argues for the verdict the app just replaced (#170).
+        // US-3 AC6 / US-14 AC4 / US-15 AC3: at 6 of 7 days no progression is
+        // shown without the recovery hint, and the headline says so. The count
+        // spans every source and both domains since #184, so four strength
+        // sessions and two runs on six days trigger the hint just as six
+        // strength sessions do. A model recovery card always survives at that
+        // count, so a missing one means the model left it out. An overruled
+        // verdict takes the model's lead with it: that lead argues for the
+        // verdict the app just replaced (#170).
         if evidence.recovery.needsRecovery {
             if !cards.contains(where: { $0.kind == .recovery }) {
                 cards.insert(

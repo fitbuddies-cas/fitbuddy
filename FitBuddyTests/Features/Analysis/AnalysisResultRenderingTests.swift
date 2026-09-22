@@ -32,6 +32,76 @@ final class AnalysisResultRenderingTests: XCTestCase {
         try assertRenders(AnalysisReportCardView(card: AnalysisReportSamples.recoveryCardWithoutRPE))
     }
 
+    /// A mixed week fills four columns (#184), one more than design 3.5 drew.
+    /// It still lays out, and no label wraps: the row is the height of the
+    /// three-cell one.
+    func testRecoveryCardRendersFourCellsForAMixedWeek() throws {
+        guard case let .recovery(reasoning, metrics) = AnalysisReportSamples.recoveryCardMixedWeek else {
+            return XCTFail("The sample must be a recovery card")
+        }
+        XCTAssertEqual(RecoveryMetricCell.cells(for: metrics).count, 4)
+
+        try assertRenders(AnalysisReportCardView(card: AnalysisReportSamples.recoveryCardMixedWeek))
+
+        let four = try render(
+            RecoveryCardView(reasoning: reasoning, metrics: metrics).padding(.horizontal, 16)
+        )
+        let three = try render(
+            RecoveryCardView(
+                reasoning: reasoning,
+                metrics: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: 8.2)
+            )
+            .padding(.horizontal, 16)
+        )
+
+        XCTAssertEqual(four.size.height, three.size.height, accuracy: 0.5)
+    }
+
+    /// Truncation preserves height, so the height check above cannot see it
+    /// (#184 review, finding 2). Every label of a row has to fit its column at
+    /// the smallest scale `FBStat.compact` will apply — which "SUGGESTED REST"
+    /// does not in a four-column row, hence the short "Rest" form there.
+    ///
+    /// The column widths are derived the way `RecoveryCardView` lays them out,
+    /// at the 390 pt the other tests render at: 390 − 2×16 screen gutter −
+    /// 2×16 `FBCard` − 2×12 row padding = 302 pt, less the gaps between cells.
+    func testNoRecoveryLabelTruncatesInItsColumn() {
+        let rows: [(metrics: RecoveryMetrics, spacing: CGFloat)] = [
+            (RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: 8.2), 10),
+            (RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: nil, averageHeartRate: 151), 10),
+            (RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: 8.2, averageHeartRate: 148), 8),
+        ]
+
+        for row in rows {
+            let cells = RecoveryMetricCell.cells(for: row.metrics)
+            let count = CGFloat(cells.count)
+            let column = (302 - row.spacing * (count - 1)) / count
+            for cell in cells {
+                let needed = Self.compactLabelWidth(cell.label) * FBStat.Size.compact.labelMinimumScaleFactor
+                XCTAssertLessThanOrEqual(
+                    needed,
+                    column,
+                    "\(cell.label) needs \(needed) pt in a \(column) pt column of a \(cells.count)-cell row"
+                )
+            }
+        }
+    }
+
+    /// The width `FBStat.compact` needs for `label`: uppercased, caption2 at
+    /// medium weight, with the tracking the size applies.
+    private static func compactLabelWidth(_ label: String) -> CGFloat {
+        let base = UIFont.preferredFont(forTextStyle: .caption2)
+        let descriptor = base.fontDescriptor.addingAttributes([
+            .traits: [UIFontDescriptor.TraitKey.weight: UIFont.Weight.medium],
+        ])
+        let font = UIFont(descriptor: descriptor, size: base.pointSize)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .kern: FBStat.Size.compact.labelTracking,
+        ]
+        return (label.uppercased() as NSString).size(withAttributes: attributes).width
+    }
+
     /// Three cells or two, the metrics row keeps one line of labels: a
     /// wrapped "SUGGESTED REST" would push its value down and make the card
     /// taller than the one without the RPE cell.

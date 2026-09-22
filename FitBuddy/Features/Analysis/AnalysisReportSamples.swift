@@ -100,6 +100,16 @@ enum AnalysisReportSamples {
         metrics: RecoveryMetrics(sessions: 7, trainingDays: 7, averageRPE: nil)
     )
 
+    /// A mixed week (#184): four strength sessions and two runs on six days,
+    /// with both means recorded — the widest the metrics row ever gets.
+    static let recoveryCardMixedWeek = AnalysisReportCard.recovery(
+        reasoning: """
+            Four strength sessions and two runs on six days leave no day for \
+            adaptation: take two rest days before the next hard session.
+            """,
+        metrics: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: 8.2, averageHeartRate: 148)
+    )
+
     static let noteCard = AnalysisReportCard.note(
         title: "Rows",
         text: "Add a rep on rows before adding weight — the last two sessions stalled at 8."

@@ -415,6 +415,36 @@ final class AnalysisReportValidatorTests: XCTestCase {
         ])
     }
 
+    /// US-15 AC3 through the validator: the mixed week of four strength
+    /// sessions and two runs on six days is 6 of 7 training days, so the hint
+    /// is inserted and the progression is overruled exactly as a strength-only
+    /// week's would be. The metrics carried into the card are the app's,
+    /// heart rate included.
+    func testAMixedWeekTriggersTheRecoveryHint() {
+        let metrics = RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: 8.2, averageHeartRate: 148)
+        let validated = validate([benchPress(from: 60, to: 62.5)], evidence: evidence(recovery: metrics))
+
+        XCTAssertEqual(validated.cards.first, .recovery(
+            reasoning: AnalysisReportValidator.insertedRecoveryReasoning,
+            metrics: metrics
+        ))
+        XCTAssertEqual(validated.verdict, .recover)
+        XCTAssertEqual(validated.lead, "You trained on 6 of the last 7 days. Take the suggested rest before your next hard session.")
+    }
+
+    /// A week of runs alone: before #184 it counted zero training days and no
+    /// hint was possible. The lead names no domain, so it reads correctly here.
+    func testAnEnduranceOnlyWeekTriggersTheRecoveryHint() {
+        let metrics = RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: nil, averageHeartRate: 151)
+        let validated = validate([], evidence: evidence(recovery: metrics))
+
+        XCTAssertEqual(validated.cards, [
+            .recovery(reasoning: AnalysisReportValidator.insertedRecoveryReasoning, metrics: metrics),
+        ])
+        XCTAssertEqual(validated.verdict, .recover)
+        XCTAssertEqual(validated.headline, "Recover this week.")
+    }
+
     func testRecoveryTurnsTheVerdictAndHeadline() {
         let validated = validate(
             [benchPress(from: 60, to: 62.5)],
@@ -425,7 +455,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
         XCTAssertEqual(validated.headline, "Recover this week.")
         XCTAssertEqual(
             validated.lead,
-            "You trained on 6 of the last 7 days. Take the suggested rest before adding load.",
+            "You trained on 6 of the last 7 days. Take the suggested rest before your next hard session.",
             "An overruled verdict gets the app's lead, not the model's"
         )
         XCTAssertEqual(validated.summary, "Summary")

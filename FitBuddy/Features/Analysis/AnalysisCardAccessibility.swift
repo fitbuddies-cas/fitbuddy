@@ -21,6 +21,11 @@ enum AnalysisCardAccessibility {
             if let averageRPE = metrics.averageRPE {
                 figures.append("average RPE \(AnalysisCardFormatter.rpe(averageRPE))")
             }
+            // Spelled out, unlike the card's "Avg HR": VoiceOver reads an
+            // abbreviation letter by letter (#184).
+            if let averageHeartRate = metrics.averageHeartRate {
+                figures.append("average heart rate \(averageHeartRate) beats per minute")
+            }
             figures.append("suggested rest \(metrics.suggestedRestHours) hours")
             return """
             Recovery. \(AnalysisCardFormatter.recoveryHeadline(metrics)) \(reasoning) \
