@@ -35,14 +35,21 @@ final class PolarExerciseDTOTests: XCTestCase {
         XCTAssertEqual(activity.endTime, activity.startTime.addingTimeInterval(2 * 3600 + 44 * 60 + 30))
         XCTAssertTrue(activity.exercises.isEmpty)
 
-        let metrics = try XCTUnwrap(activity.metrics)
+        let metrics = try XCTUnwrap(activity.cardio)
         XCTAssertEqual(metrics.averageHeartRate, 129)
-        XCTAssertEqual(metrics.maximumHeartRate, 147)
+        XCTAssertEqual(metrics.maxHeartRate, 147)
         XCTAssertEqual(metrics.activeCalories, 530)
         XCTAssertEqual(metrics.distanceMeters, 1600.2)
         XCTAssertEqual(metrics.durationSeconds, 9870)
         XCTAssertEqual(metrics.trainingLoad, 143.22)
-        XCTAssertEqual(metrics.sport, "TREADMILL_RUNNING")
+        // Derived, not reported: Polar sends neither speed nor pace at
+        // session level, but the pair it does send determines them.
+        XCTAssertEqual(
+            try XCTUnwrap(metrics.averageSpeedMetersPerSecond),
+            1600.2 / 9870,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(activity.kind, .run)
     }
 
     func testDropsAnExerciseThatHasNoParseableStartTime() throws {
@@ -71,7 +78,91 @@ final class PolarExerciseDTOTests: XCTestCase {
             try JSONDecoder().decode(PolarExerciseDTO.self, from: json).makeActivity()
         )
 
-        XCTAssertNil(activity.metrics)
+        XCTAssertNil(activity.cardio)
+    }
+
+    /// The derived speed needs both figures; without either, a division would
+    /// be a guess (or a crash).
+    func testAverageSpeedIsOmittedWhenDistanceOrDurationIsMissing() throws {
+        let noDistance = Data(#"""
+        { "id": "x", "start_time": "2020-01-01T12:00:00", "duration": "PT1H", "calories": 100 }
+        """#.utf8)
+        let noDuration = Data(#"""
+        { "id": "x", "start_time": "2020-01-01T12:00:00", "distance": 5000 }
+        """#.utf8)
+
+        for json in [noDistance, noDuration] {
+            let activity = try XCTUnwrap(
+                try JSONDecoder().decode(PolarExerciseDTO.self, from: json).makeActivity()
+            )
+            XCTAssertNil(activity.cardio?.averageSpeedMetersPerSecond)
+        }
+    }
+
+    /// Polar sends `distance: 0.0` for an indoor session it never measured
+    /// spatially. Zero means "not logged", so it must not reach the dashboard
+    /// as "0 m" where the duration belongs.
+    func testAZeroDistanceIsTreatedAsNotLogged() throws {
+        let json = Data(#"""
+        { "id": "x", "start_time": "2020-01-01T12:00:00", "distance": 0, "duration": "PT1H" }
+        """#.utf8)
+
+        let activity = try XCTUnwrap(
+            try JSONDecoder().decode(PolarExerciseDTO.self, from: json).makeActivity()
+        )
+
+        XCTAssertNil(activity.cardio?.distanceMeters)
+        XCTAssertEqual(activity.cardio?.durationSeconds, 3_600)
+    }
+
+    /// And `PT0S` the same way round: a zero duration is one Polar never
+    /// recorded, not a session that lasted no time.
+    func testAZeroDurationIsTreatedAsNotLogged() throws {
+        let json = Data(#"""
+        { "id": "x", "start_time": "2020-01-01T12:00:00", "distance": 5000, "duration": "PT0S" }
+        """#.utf8)
+
+        let activity = try XCTUnwrap(
+            try JSONDecoder().decode(PolarExerciseDTO.self, from: json).makeActivity()
+        )
+
+        XCTAssertNil(activity.cardio?.durationSeconds)
+        XCTAssertEqual(activity.cardio?.distanceMeters, 5000)
+    }
+
+    // MARK: - Sport mapping (#180)
+
+    func testSportLabelsMapOntoTheNormalizedKind() {
+        let cases: [(sport: String?, detailed: String?, expected: ActivityKind)] = [
+            ("RUNNING", nil, .run),
+            ("JOGGING", nil, .run),
+            (nil, "TREADMILL_RUNNING", .run),
+            ("CYCLING", nil, .ride),
+            ("MOUNTAIN_BIKING", nil, .ride),
+            ("SWIMMING", nil, .swim),
+            (nil, "OPEN_WATER_SWIMMING", .swim),
+            ("HIKING", nil, .hike),
+            ("WALKING", nil, .walk),
+            ("NORDIC_WALKING", nil, .walk),
+            ("STRENGTH_TRAINING", nil, .strength),
+            ("OTHER_INDOOR", nil, .other),
+            ("YOGA", nil, .other),
+            (nil, nil, .other),
+            // The detailed label is the finer one and is asked first…
+            ("OTHER", "TREADMILL_RUNNING", .run),
+            // …but an unrecognised one must not throw the coarse label away:
+            // Polar keeps extending `detailed_sport_info`, and this session
+            // belongs in the strength domain either way.
+            ("STRENGTH_TRAINING", "FUNCTIONAL_TRAINING", .strength),
+        ]
+
+        for (sport, detailed, expected) in cases {
+            XCTAssertEqual(
+                PolarExerciseDTO.kind(sport: sport, detailed: detailed),
+                expected,
+                "\(sport ?? "nil") / \(detailed ?? "nil")"
+            )
+        }
     }
 
     func testDurationParserHandlesPartialComponentsAndRejectsGarbage() {

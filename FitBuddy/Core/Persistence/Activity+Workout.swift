@@ -18,7 +18,9 @@ extension Activity {
             endTime: endTime,
             updatedAt: updatedAt,
             source: source,
-            exercises: exercises.map { $0.makeExercise() }
+            kind: kind,
+            exercises: exercises.map { $0.makeExercise() },
+            cardio: cardio
         )
     }
 }

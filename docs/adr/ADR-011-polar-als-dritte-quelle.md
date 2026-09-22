@@ -4,6 +4,8 @@
 **Datum:** 2026-09-16
 **Treiber-QA:** Maintainability (QA-3), Security / Privacy (QA-1)
 
+> **Nachtrag (#180):** `Activity.metrics` / `ActivityMetrics` sind durch `Activity.cardio` / `CardioMetrics` abgelöst und werden seit Schema V5 persistiert — siehe [[ADR-12]]. Der Entscheid unten bleibt als Protokoll unverändert.
+
 ---
 
 ## Kontext

@@ -6,8 +6,9 @@ import OSLog
 ///
 /// Maps Polar AccessLink `GET /v3/exercises` onto the normalized `Activity`
 /// model, so the dashboard and AI analysis read a Polar run exactly the way
-/// they read a Hevy session — the endurance-only numbers (heart rate,
-/// calories, training load) arrive in `Activity.metrics`.
+/// they read a Hevy session — the sport arrives as `Activity.kind` and the
+/// endurance-only numbers (heart rate, calories, training load) as
+/// `Activity.cardio` (ADR-12).
 ///
 /// Built like `StravaConnector` (ADR-11, BYO-app). AccessLink v3 access tokens
 /// last about a year and come without a refresh token, so in practice the

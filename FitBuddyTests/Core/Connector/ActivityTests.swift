@@ -102,4 +102,66 @@ final class ActivityTests: XCTestCase {
 
         XCTAssertNotEqual(hevy, strava)
     }
+
+    // MARK: - Kind & cardio (#180)
+
+    /// US-15 / #180 AC2: nothing about a Hevy workout changed — it is a
+    /// strength session with no cardio block, without the mapping saying so.
+    func testKindDefaultsToStrengthAndCardioToNone() {
+        let activity = Activity(id: "w-1", title: "Leg Day", startTime: .distantPast)
+
+        XCTAssertEqual(activity.kind, .strength)
+        XCTAssertNil(activity.cardio)
+    }
+
+    func testKindAndCardioSurviveTheCodableRoundTrip() throws {
+        let activity = Activity(
+            id: "strava:1",
+            title: "Trail Run",
+            startTime: .distantPast,
+            source: .strava,
+            kind: .run,
+            cardio: CardioMetrics(
+                averageHeartRate: 148,
+                maxHeartRate: 172,
+                elevationGainMeters: 412.5,
+                averageSpeedMetersPerSecond: 2.78,
+                energyKilojoules: 920,
+                perceivedEffort: 64,
+                activeCalories: 530,
+                distanceMeters: 10_400,
+                durationSeconds: 3742,
+                trainingLoad: 143.22
+            )
+        )
+
+        let data = try JSONEncoder().encode(activity)
+        let decoded = try JSONDecoder().decode(Activity.self, from: data)
+
+        XCTAssertEqual(decoded, activity)
+        XCTAssertEqual(decoded.kind, .run)
+        XCTAssertEqual(decoded.cardio?.maxHeartRate, 172)
+    }
+
+    /// A sport a newer build knows and this one does not must not fail the
+    /// whole activity — it reads as an unclassified session.
+    func testAnUnknownKindRawValueDecodesToOther() throws {
+        let json = Data(#"["hyrox","run"]"#.utf8)
+
+        XCTAssertEqual(try JSONDecoder().decode([ActivityKind].self, from: json), [.other, .run])
+    }
+
+    func testOnlyTheEnduranceDisciplinesCountAsEndurance() {
+        XCTAssertEqual(
+            ActivityKind.allCases.filter(\.isEndurance),
+            [.run, .ride, .swim, .hike, .walk]
+        )
+    }
+
+    /// An all-`nil` block is not cardio data: the mapping hands out `nil`
+    /// instead, so `cardio != nil` always means something was recorded.
+    func testAnEmptyCardioBlockIsNotHandedOut() {
+        XCTAssertNil(CardioMetrics().nonEmpty)
+        XCTAssertNotNil(CardioMetrics(averageHeartRate: 120).nonEmpty)
+    }
 }

@@ -89,7 +89,7 @@ final class PolarConnectorTests: XCTestCase {
         )
 
         XCTAssertEqual(activities.map(\.id), ["polar-new"])
-        XCTAssertEqual(activities.first?.metrics?.averageHeartRate, 150)
+        XCTAssertEqual(activities.first?.cardio?.averageHeartRate, 150)
         XCTAssertEqual(activities.first?.title, "Running")
     }
 
