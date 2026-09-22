@@ -138,13 +138,22 @@ ab — nie auf `networkUnavailable`. Der Nutzer sieht:
 | Stelle | Text |
 |---|---|
 | Dashboard-Banner | «connection not trusted» |
-| Refresh-Toast | «This network is intercepting the secure connection. Switch networks and try again.» |
-| Key-Eingabe (Hevy) | «Connection to Hevy not trusted» + Hinweis, auf ein anderes Netz zu wechseln |
+| Refresh-Toast | «The secure connection could not be verified. Check the device's date and time or switch networks, then try again.» |
+| Key-Eingabe (Hevy) | «Connection to Hevy not trusted» + Hinweis, Datum & Uhrzeit zu prüfen oder das Netz zu wechseln |
 | Analyse | «Connection not trusted» + Hinweis, dass nichts gesendet wurde |
 | Strava-/Polar-Connect | «Connection to Strava/Polar not trusted» |
 
 Die Aussage «nichts wurde gesendet» stimmt: Das System bricht den Handshake ab, bevor ein Request
 mit Header die Leitung erreicht.
+
+Die Texte behaupten bewusst keine Interception. Nur `.serverCertificateUntrusted` und
+`.serverCertificateHasUnknownRoot` sind das, was ein fehlgeschlagener Pin-Check tatsächlich auslöst.
+`.serverCertificateHasBadDate` und `.serverCertificateNotYetValid` entstehen in der Praxis meist durch
+eine verstellte Geräteuhr — ein iPhone mit falscher Zeit hält jedes gültige Zertifikat für abgelaufen,
+und ein Netzwechsel hilft dann nicht. `.secureConnectionFailed` ist der generische TLS-Fehler
+(Protokoll- oder Cipher-Mismatch, Captive Portal, abgebrochener Handshake). Alle fünf bleiben
+klassifiziert, weil «nicht vertrauen, nichts gesendet» für jeden gilt; der Text sagt deshalb «could not
+verify» und nennt Datum & Uhrzeit als zweite Handlungsoption neben dem Netzwechsel.
 
 ## 8. Debug-Builds
 

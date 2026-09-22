@@ -13,7 +13,8 @@ enum APIKeyEntryFailure: Equatable {
     /// The provider could not be reached at all (offline, timeout, DNS…).
     case network
     /// The provider answered with a certificate FitBuddy must not trust
-    /// (failed pinning, #153) — the network is intercepting the connection.
+    /// (failed pinning, #153): interception on the network, or a device clock
+    /// far enough off that every certificate looks expired.
     case untrustedConnection
     /// The provider answered, but not with 200/401 (rate limit, outage…) —
     /// the key was not rejected and the connection works.
@@ -59,7 +60,7 @@ enum APIKeyEntryFailure: Equatable {
         case .network:
             return "Check your internet connection and try again."
         case .untrustedConnection:
-            return "Something on this network is intercepting the secure connection to \(Self.inlineName(provider)). Your key was not sent. Switch to another network, for example mobile data, and try again."
+            return "FitBuddy could not verify the secure connection to \(Self.inlineName(provider)). Your key was not sent. Check the device's date and time, or switch to another network, for example mobile data, and try again."
         case .serviceUnavailable:
             return "\(Self.name(provider)) answered with an unexpected error — your key was not rejected. Please try again in a little while."
         case .keychain:

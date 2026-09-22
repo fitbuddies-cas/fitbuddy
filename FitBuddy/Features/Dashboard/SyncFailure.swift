@@ -11,7 +11,8 @@ enum SyncFailure: Equatable {
     /// The request never reached Hevy (no connection, DNS, timeout).
     case offline
     /// The source answered, but with a certificate FitBuddy must not trust
-    /// (failed pinning, #153) — the network, not the source, is the problem.
+    /// (failed pinning, #153) — the network or the device clock, not the
+    /// source, is the problem.
     case untrustedConnection
     /// Hevy answered 5xx — the app is fine, the service is not.
     case serviceUnavailable
@@ -121,7 +122,7 @@ enum SyncFailure: Equatable {
         case .offline:
             return "No connection. Your cached data is still here."
         case .untrustedConnection:
-            return "This network is intercepting the secure connection. Switch networks and try again."
+            return "The secure connection could not be verified. Check the device's date and time or switch networks, then try again."
         case .serviceUnavailable:
             return "Hevy is unavailable right now. Your cached data is still here."
         case .rateLimited(let retryAfter):

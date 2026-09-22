@@ -22,7 +22,8 @@ enum AnalysisFailure: Equatable {
     /// The request never reached the provider.
     case offline(LLMProvider?)
     /// The provider answered with a certificate FitBuddy must not trust
-    /// (failed pinning, #153): the network is intercepting TLS, and the
+    /// (failed pinning, #153): interception on the network, or a device clock
+    /// far enough off that every certificate looks expired. Either way the
     /// prompt with the training data was never sent.
     case untrustedConnection(LLMProvider?)
     /// HTTP 429, with the provider's `Retry-After` in seconds when it sent one.
@@ -121,8 +122,8 @@ enum AnalysisFailure: Equatable {
         case .offline(let provider):
             return "Your device could not reach \(Self.name(provider)). Check your connection and try again."
         case .untrustedConnection(let provider):
-            return "Something on this network is intercepting the secure connection to \(Self.name(provider)). "
-                + "Nothing was sent. Switch to another network and try again."
+            return "FitBuddy could not verify the secure connection to \(Self.name(provider)). Nothing was sent. "
+                + "Check the device's date and time, or switch to another network and try again."
         case .rateLimited(let provider, let retryAfter):
             guard let wait = Self.wait(retryAfter) else {
                 return "\(Self.name(provider)) is rate-limiting your key. Try again in a few minutes."

@@ -20,7 +20,8 @@ enum StravaConnectionFailure: Equatable {
     /// Offline, timeout, DNS.
     case network
     /// The token endpoint answered with a certificate FitBuddy must not
-    /// trust (failed pinning, #153) — the network is intercepting TLS.
+    /// trust (failed pinning, #153): interception on the network, or a
+    /// device clock far enough off that every certificate looks expired.
     case untrustedConnection
     /// Strava answered with an error status.
     case serviceUnavailable
@@ -82,7 +83,7 @@ enum StravaConnectionFailure: Equatable {
         case .network:
             return "Check your internet connection and try again."
         case .untrustedConnection:
-            return "Something on this network is intercepting the secure connection to Strava. Your credentials were not sent. Switch to another network, for example mobile data, and try again."
+            return "FitBuddy could not verify the secure connection to Strava. Your credentials were not sent. Check the device's date and time, or switch to another network, for example mobile data, and try again."
         case .serviceUnavailable:
             return "Strava answered with an unexpected error — nothing was rejected. Please try again in a little while."
         case .keychain:

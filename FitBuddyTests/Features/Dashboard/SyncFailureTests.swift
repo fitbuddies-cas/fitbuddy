@@ -9,8 +9,8 @@ final class SyncFailureTests: XCTestCase {
     }
 
     /// A failed certificate check (pinning, #153) gets its own reason: the
-    /// banner must not say "no connection" when the network is intercepting
-    /// the connection.
+    /// banner must not say "no connection" when the connection could not be
+    /// verified.
     func testUntrustedConnectionKeepsItsOwnReason() {
         XCTAssertEqual(SyncFailure(syncError: WorkoutSyncError.untrustedConnection), .untrustedConnection)
         XCTAssertEqual(WorkoutSyncError(connectorError: .untrustedConnection), .untrustedConnection)

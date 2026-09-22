@@ -16,7 +16,8 @@ enum PolarConnectionFailure: Equatable {
     /// Offline, timeout, DNS.
     case network
     /// Polar answered with a certificate FitBuddy must not trust (failed
-    /// pinning, #153) — the network is intercepting TLS.
+    /// pinning, #153): interception on the network, or a device clock far
+    /// enough off that every certificate looks expired.
     case untrustedConnection
     /// Polar answered with a rate limit or a server error — nothing about the
     /// credentials, so a retry later is the fix.
@@ -81,7 +82,7 @@ enum PolarConnectionFailure: Equatable {
         case .network:
             return "Check your internet connection and try again."
         case .untrustedConnection:
-            return "Something on this network is intercepting the secure connection to Polar. Your credentials were not sent. Switch to another network, for example mobile data, and try again."
+            return "FitBuddy could not verify the secure connection to Polar. Your credentials were not sent. Check the device's date and time, or switch to another network, for example mobile data, and try again."
         case .serviceUnavailable:
             return "Polar answered with an unexpected error — nothing was rejected. Please try again in a little while."
         case .unauthorized:
