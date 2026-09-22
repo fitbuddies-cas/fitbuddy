@@ -43,7 +43,7 @@ Native iOS-App (SwiftUI), die:
 | Quelle | Status |
 |---|---|
 | Hevy (Kraft) | PoC |
-| Strava (Cardio) | PoC |
+| Strava (Cardio) | PoC — Einrichtung: [STRAVA-SETUP.md](docs/STRAVA-SETUP.md) |
 | Polar AccessLink (Ausdauer) | PoC |
 | Apple Health | In Abklärung |
 
@@ -55,7 +55,7 @@ Alle 12 User Stories mit Akzeptanzkriterien, MoSCoW-Priorisierung und Out of Sco
 
 ## Architektur
 
-Native iOS (SwiftUI), kein Backend: Alle API-Keys verbleiben auf dem Gerät im iOS Keychain, die Aufrufe an Hevy- und Claude-API laufen direkt vom Gerät. Ein `FitnessConnector`-Interface kapselt die Datenquellen, damit Strava (v1) ohne Umbau ergänzt werden kann.
+Native iOS (SwiftUI), kein Backend: Alle API-Keys verbleiben auf dem Gerät im iOS Keychain, die Aufrufe an Hevy- und Claude-API laufen direkt vom Gerät. Ein `FitnessConnector`-Interface kapselt die Datenquellen; Strava und Polar sind darüber im BYO-App-Modell angebunden (ADR-010, ADR-011) — der Nutzer bringt seine eigene API-Application mit, siehe [STRAVA-SETUP.md](docs/STRAVA-SETUP.md).
 
 Systemdesign, Tech-Stack, Datenmodell, ADRs und offene Architektur-Fragen: siehe [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

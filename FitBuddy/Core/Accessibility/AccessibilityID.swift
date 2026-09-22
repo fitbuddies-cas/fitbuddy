@@ -52,6 +52,7 @@ enum AccessibilityID {
         static let clientSecretField = "stravaCredentials.clientSecretField"
         static let saveButton = "stravaCredentials.saveButton"
         static let errorBanner = "stravaCredentials.errorBanner"
+        static let setupGuideLink = "stravaCredentials.setupGuideLink"
     }
 
     enum StravaConnection {
@@ -59,6 +60,7 @@ enum AccessibilityID {
         static let connectButton = "stravaConnection.connectButton"
         static let disconnectButton = "stravaConnection.disconnectButton"
         static let credentialsLink = "stravaConnection.credentialsLink"
+        static let setupGuideLink = "stravaConnection.setupGuideLink"
         static let errorBanner = "stravaConnection.errorBanner"
     }
 
