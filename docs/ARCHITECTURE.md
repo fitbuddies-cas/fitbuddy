@@ -1,6 +1,8 @@
 # FitBuddy — Architektur
 
 > *Getrennt geführt: Ziele, Personas, Risiken → [README.md](../README.md) · User Stories, NFRs → [REQUIREMENTS.md](REQUIREMENTS.md) · Architekturentscheide (Detail) → [adr/](adr/)*
+>
+> **Dokumentationsstand:** Stand nach US-15 «Quellenübergreifende AI-Analyse» (Issue #171, Task-Kette #180–#188) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, SwiftData-Schema V5, ADR-001 bis ADR-012.
 
 ---
 
@@ -13,12 +15,9 @@
 - [Bausteinsicht](#bausteinsicht)
   - [L1 — Gesamtsystem (Container)](#l1--gesamtsystem-container)
   - [L2 — iOS App (Schichtenarchitektur)](#l2--ios-app-schichtenarchitektur)
-  - [L3 — Komponenten](#l3--komponenten-folgt-in-modul-5--coding-phase)
-  - [Connector-Interface](#connector-interface)
-  - [Normalisiertes Datenmodell](#normalisiertes-datenmodell)
   - [Datenmodell — Schema-Versionskette](#datenmodell--schema-versionskette)
 - [Laufzeitsicht](#laufzeitsicht)
-  - [Kritischer Datenfluss — «Analysieren» (US-3)](#kritischer-datenfluss--analysieren--us-3)
+  - [Kritischer Datenfluss — «Analysieren» (US-3)](#kritischer-datenfluss--analysieren-us-3)
   - [Caching-Strategie](#caching-strategie)
 - [Querschnittliche Konzepte](#querschnittliche-konzepte)
   - [AI-Einsatzstrategie](#ai-einsatzstrategie)
@@ -41,31 +40,46 @@ flowchart TB
     classDef platform fill:#438dd5,color:#fff,stroke:#2e6295
     classDef excluded fill:#e0e0e0,color:#888,stroke:#bbb,stroke-dasharray:4 4
 
-    subgraph KEY["Key-Beschaffung (einmalig, vor Onboarding)"]
-        HEVYAPP["Hevy-App / Website"]:::ext
-        CONSOLE["Anthropic Console"]:::ext
+    subgraph KEY["Key- und App-Beschaffung (einmalig, vor Onboarding)"]
+        direction LR
+        HEVYAPP["Hevy-App / Website\nAPI-Key"]:::ext
+        BYOAPP["strava.com/settings/api\nadmin.polaraccesslink.com\neigene OAuth-App (ADR-010/011)"]:::ext
+        CONSOLE["Console des LLM-Anbieters\nAnthropic · Google · Mistral"]:::ext
     end
 
     USER["User\n[Endnutzer]"]:::person
     FITBUDDY["FitBuddy\n[Native iOS-App · kein Backend]"]:::system
 
-    subgraph APIS["Externe APIs"]
+    subgraph SOURCES["Datenquellen (ADR-006)"]
         direction LR
-        HEVYAPI["Hevy API\n"]:::ext
-        CLAUDEAPI["Anthropic Claude API\nAI-Empfehlungen"]:::ext
+        HEVYAPI["Hevy API\nKraft · API-Key"]:::ext
+        STRAVAAPI["Strava API\nAusdauer · OAuth · USA"]:::ext
+        POLARAPI["Polar AccessLink\nAusdauer · OAuth · EU"]:::ext
+    end
+
+    subgraph LLMS["LLM-Anbieter · Fallback-Kette (ADR-007)"]
+        direction LR
+        CLAUDEAPI["Anthropic Claude\nUSA"]:::ext
+        GEMINIAPI["Google Gemini\nUSA"]:::ext
+        MISTRALAPI["Mistral AI\nEU"]:::ext
     end
 
     subgraph ONDEVICE["On-Device / Plattform"]
         direction LR
-        KEYCHAIN[("iOS Keychain\nAPI-Keys + Consent")]:::platform
+        KEYCHAIN[("iOS Keychain\nAPI-Keys · OAuth-Token · Consent")]:::platform
         ICLOUD["iCloud-Backup\n✗ ausgeschlossen"]:::excluded
     end
 
     USER -->|"holt Hevy-Key"| HEVYAPP
-    USER -->|"holt Claude-Key"| CONSOLE
+    USER -->|"legt eigene OAuth-App an"| BYOAPP
+    USER -->|"holt LLM-Key"| CONSOLE
     USER -->|"nutzt App"| FITBUDDY
     FITBUDDY -->|"GET /workouts · HTTPS"| HEVYAPI
+    FITBUDDY -->|"GET /athlete/activities · HTTPS"| STRAVAAPI
+    FITBUDDY -->|"GET /exercises · HTTPS"| POLARAPI
     FITBUDDY -->|"Prompt → Empfehlung · HTTPS"| CLAUDEAPI
+    FITBUDDY -->|"Fallback 2"| GEMINIAPI
+    FITBUDDY -->|"Fallback 3"| MISTRALAPI
     FITBUDDY <-->|"liest / schreibt"| KEYCHAIN
 ```
 
@@ -74,13 +88,17 @@ flowchart TB
 | Element | Typ | Scope | Zweck |
 |---|---|---|---|
 | User | Person | — | Endnutzer (Training-Tracking + AI-Analyse) |
-| FitBuddy Team | Person (Betreiber) | — | Entwickelt/betreibt App; kein eigener DPA mit Anthropic nötig (BYO-Key-Modell) |
+| FitBuddy Team | Person (Betreiber) | — | Entwickelt/betreibt App; kein eigener DPA mit den Anbietern nötig (BYO-Key-Modell, ADR-005/007) |
 | **FitBuddy** | Software-System | **PoC** | Native iOS-App, Datenaggregation + On-demand-AI |
-| Hevy API | Externes System | PoC | Primäre Datenquelle (Kraft) |
-| Anthropic Claude API | Externes System | PoC | LLM-Progressionsempfehlung (USA, Drittland) |
+| Hevy API | Externes System | PoC | Primäre Datenquelle (Kraft), API-Key |
+| Strava API | Externes System | PoC | Datenquelle (Ausdauer), OAuth im BYO-App-Modell — USA, Drittland (ADR-010) |
+| Polar AccessLink | Externes System | PoC | Datenquelle (Ausdauer), OAuth im BYO-App-Modell — Finnland/EU (ADR-011) |
+| Anthropic Claude API | Externes System | PoC | LLM-Progressionsempfehlung (USA, Drittland) — Priorität 1 der Fallback-Kette |
+| Google Gemini API | Externes System | PoC | LLM-Progressionsempfehlung (USA, Drittland) — Fallback (ADR-007) |
+| Mistral AI API | Externes System | PoC | LLM-Progressionsempfehlung (EU) — Fallback (ADR-007) |
 | Apple App Store Connect / TestFlight | Externes System | PoC | Distribution + Review-Gate + Privacy Report |
 | iOS Keychain | Plattform-Service | PoC | Sichere Key-/Consent-Speicherung |
-| Apple HealthKit | Plattform-Service | **offen** | Schlaf/HRV/RHR — Scope ungeklärt |
+| Apple HealthKit | Plattform-Service | **nicht im PoC** | Schlaf/HRV/RHR — im v0 nicht angebunden; Entscheid für v1 offen (W-5) |
 | iCloud-Backup | Externes System | **ausgeschlossen** | `isExcludedFromBackup` — kein Datenfluss |
 
 ### Bewusste Leerstellen
@@ -91,24 +109,24 @@ Im PoC absichtlich nicht vorhanden: Auth-Provider/User-Accounts (Auth = Bearer-K
 
 ## Lösungsstrategie
 
-FitBuddy ist eine **on-device iOS-App ohne Server-Tier**: alle Daten bleiben auf dem Gerät, alle API-Calls laufen direkt vom iPhone, und der einzige externe Zustand sind die API-Keys zweier Drittanbieter (Hevy, Anthropic).
+FitBuddy ist eine **on-device iOS-App ohne Server-Tier**: alle Daten bleiben auf dem Gerät, alle API-Calls laufen direkt vom iPhone, und der einzige externe Zustand sind die Zugangsdaten der Drittanbieter, die der User selbst verbindet (Hevy, Strava, Polar als Quellen; Anthropic, Google, Mistral als LLM-Anbieter).
 
 | Schicht | Technologie | Begründung |
 |---|---|---|
 | Plattform | iOS (native Swift / SwiftUI) | API-Key lokal im Keychain; null Drittanbieter-Abhängigkeiten |
-| AI | Claude API (Anthropic) | On-demand, kein eigenes ML-Training |
-| Primäre Datenquelle | Hevy REST API | PoC-Quelle; Pro-User haben API-Key |
+| AI | Claude · Gemini · Mistral (BYO-Key, Fallback-Kette) | On-demand, kein eigenes ML-Training; Reihenfolge bestimmt der User (ADR-007) |
+| Datenquellen | Hevy REST API · Strava API · Polar AccessLink | Hevy als primäre Kraftquelle (Pro-User haben API-Key); Strava und Polar als Ausdauerquellen über OAuth im BYO-App-Modell (ADR-010, ADR-011) |
 | Lokaler Speicher | iOS Keychain + SwiftData (SQLite) | Privacy-First: keine User-Daten auf eigenen Servern |
 
-**Kein Backend im PoC.** Der Claude API-Key wird direkt im Keychain gespeichert — vereinfacht den PoC erheblich, muss vor v1.0-Launch überprüft werden (→ ADR-004). Die Apple-native Technologiewahl (SwiftUI, SwiftData, URLSession, Swift Concurrency, Swift Charts) eliminiert Drittanbieter-Build-Abhängigkeiten und senkt die Einarbeitungshürde für ein gemischtes Team.
+**Kein Backend im PoC.** Die LLM-API-Keys werden direkt im Keychain gespeichert — vereinfacht den PoC erheblich, muss vor v1.0-Launch überprüft werden (→ ADR-004). Die Apple-native Technologiewahl (SwiftUI, SwiftData, URLSession, Swift Concurrency, Swift Charts) eliminiert Drittanbieter-Build-Abhängigkeiten und senkt die Einarbeitungshürde für ein gemischtes Team.
 
 ---
 
 ## Bausteinsicht
 
-### C2 Container Diagram
+### L1 — Gesamtsystem (Container)
 
-FitBuddy besteht aus drei on-device-Bausteinen (iOS App, SwiftData Store, iOS Keychain) und kommuniziert direkt mit zwei externen APIs — kein Backend.
+FitBuddy besteht aus drei on-device-Bausteinen (iOS App, SwiftData Store, iOS Keychain) und kommuniziert direkt mit bis zu sechs externen APIs — drei Datenquellen (ADR-006) und drei LLM-Anbieter (ADR-007). Kein Backend.
 
 ```mermaid
 flowchart TB
@@ -121,21 +139,33 @@ flowchart TB
 
     subgraph IPHONE["FitBuddy — iPhone (iOS 26+)"]
         APP["iOS App\nSwift · SwiftUI · MVVM · Swift Concurrency\nURLSession · Swift Charts"]:::system
-        SWIFTDATA[("SwiftData Store\n[SQLite · on-device]\nActivity-Cache 90 Tage")]:::storage
-        KEYCHAIN[("iOS Keychain\n[Keychain Services]\nAPI-Keys + Consent")]:::storage
+        SWIFTDATA[("SwiftData Store\n[SQLite · on-device]\nActivity-Cache 90 Tage · Schema V5")]:::storage
+        KEYCHAIN[("iOS Keychain\n[Keychain Services]\nAPI-Keys · OAuth-Token · Consent")]:::storage
     end
 
-    subgraph APIS["Externe APIs"]
+    subgraph SRC["Datenquellen [REST]"]
         direction LR
-        HEVY["Hevy API\n[REST]\nGET /workouts"]:::ext
-        CLAUDE["Anthropic Claude API\nMessages API"]:::ext
+        HEVY["Hevy API\nGET /v1/workouts"]:::ext
+        STRAVA["Strava API\nGET /athlete/activities"]:::ext
+        POLAR["Polar AccessLink\nGET /exercises"]:::ext
+    end
+
+    subgraph LLM["LLM-Anbieter [SSE-Streaming]"]
+        direction LR
+        CLAUDE["Anthropic Claude\nMessages API"]:::ext
+        GEMINI["Google Gemini\ngenerateContent"]:::ext
+        MISTRAL["Mistral AI\nChat Completions"]:::ext
     end
 
     USER -->|"nutzt (Touch / SwiftUI)"| APP
     APP <-->|"ModelContext · in-process"| SWIFTDATA
     APP <-->|"Security API · in-process"| KEYCHAIN
-    APP -->|"GET /workouts · HTTPS"| HEVY
+    APP -->|"Sessions lesen · HTTPS"| HEVY
+    APP -->|"Sessions lesen · HTTPS"| STRAVA
+    APP -->|"Sessions lesen · HTTPS"| POLAR
     APP -->|"Prompt → Empfehlung · HTTPS"| CLAUDE
+    APP -->|"Fallback 2"| GEMINI
+    APP -->|"Fallback 3"| MISTRAL
 ```
 
 | Container | Technologie | Kritischstes Risiko |
@@ -155,16 +185,16 @@ flowchart TB
     classDef layer fill:#1168bd,color:#fff,stroke:#0b4884
 
     PRES["Presentation Layer\nSwiftUI Views · @State · @Binding\nDashboard (US-2) · Onboarding (US-4) · AI-Result-View (US-3)"]:::layer
-    VM["ViewModel Layer · @MainActor\n@Observable ViewModels\nDashboardViewModel · AnalysisViewModel · OnboardingViewModel"]:::layer
-    SVC["Service / Domain Layer\nInferenceService · Prompt-Build · Fallback-Kette\nConnectorLayer · FitnessConnector-Protocol · Delta-Sync · Error-Routing"]:::layer
-    DATA["Data Layer\nHevyConnector · URLSession · Pagination\nKeychainService · SecItemAdd / CopyMatching\nSwiftData Store · ModelActor · Activity / Exercise / ExerciseSet\nExerciseTemplateCache · SwiftData"]:::layer
+    VM["ViewModel Layer · @MainActor\nfinal class … ObservableObject · @Published\nWorkoutListViewModel · AnalysisViewModel · OnboardingViewModel"]:::layer
+    SVC["Service / Domain Layer\nInferenceService · AnalysisPromptBuilder · Fallback-Kette\nConnectorRegistry · FitnessConnector-Protocol · Delta-Sync · Error-Routing"]:::layer
+    DATA["Data Layer\nHevyConnector · StravaConnector · PolarConnector · URLSession · Pagination\nKeychainService · SecItemAdd / CopyMatching\nSwiftData Store · ModelActor · Workout / Exercise / ExerciseSet"]:::layer
 
     PRES --> VM --> SVC --> DATA
 ```
 
 **Schichtregeln:**
 - API-Keys berühren ausschliesslich den Data Layer — nie ViewModel oder View.
-- Dashboard und InferenceService lesen ausschliesslich aus dem normalisierten `Activity`-Modell (ADR-006).
+- Dashboard und InferenceService lesen ausschliesslich aus dem normalisierten Modell — `Activity` am Connector-Rand, `Workout` / `WorkoutSummary` im Cache (ADR-006), nie aus einem provider-eigenen DTO.
 - Alle SwiftData-Schreibzugriffe laufen über `ModelActor`, nie direkt auf dem `@MainActor`.
 
 ### Datenmodell — Schema-Versionskette
@@ -263,12 +293,12 @@ die blanke Gesamtzahl.
 
 ### AI-Einsatzstrategie
 
-Systemweite Regel: Claude wird nur dort eingesetzt, wo deterministischer Code keine ausreichende Lösung bietet.
+Systemweite Regel: Ein LLM wird nur dort eingesetzt, wo deterministischer Code keine ausreichende Lösung bietet.
 
 | Bereich | AI? | Begründung |
 |---|---|---|
 | Progressions-Empfehlung | Ja (LLM) | Interpretation von Trainingsdaten erfordert Kontext-Verständnis |
-| Datenabruf (Hevy API) | Nein | Klassische App-Logik |
+| Datenabruf (Hevy, Strava, Polar) | Nein | Klassische App-Logik |
 | Aggregation & Visualisierung | Nein | Deterministisch, kein AI-Mehrwert |
 | Key-Speicherung | Nein | iOS Keychain ist die richtige Lösung |
 
@@ -316,7 +346,7 @@ Alle asynchronen Zugriffe folgen drei fixen Ausführungskontexten — gilt schic
 - ViewModel-Properties nie aus einem background Task ohne `await MainActor.run { }` setzen
 - `HevyConnector` und `InferenceService` sind `async`-only — nie synchron aufgerufen
 
-*`ExerciseTemplateCache` (Implementierungsdetail Data Layer) → folgt in L3 Bausteinsicht.*
+*Ein separater `ExerciseTemplateCache` ist nicht entstanden: Die Template-ID wird mit `Exercise.templateID` direkt am gecachten Workout geführt, womit die offene Frage dazu erledigt ist.*
 
 ---
 
@@ -330,7 +360,7 @@ Alle asynchronen Zugriffe folgen drei fixen Ausführungskontexten — gilt schic
 | [ADR-004](adr/ADR-004-no-backend-proxy-poc.md) | Kein Backend-Proxy im PoC — Direkter API-Call vom iOS-Client | Accepted |
 | [ADR-005](adr/ADR-005-claude-api-usa-with-dpa.md) | Claude API (USA) via Anthropic Commercial Terms im PoC, EU-Hosting vor v1.0 | Accepted |
 | [ADR-006](adr/ADR-006-fitness-connector-protocol.md) | `FitnessConnector`-Protocol als Abstraktion ab Sprint 1 | Accepted |
-| [ADR-007](adr/ADR-007-multi-provider-llm-byo-key.md) | Multi-Provider-LLM (Claude / Gemini / Mistral) im BYO-Key-Modell | Proposed |
+| [ADR-007](adr/ADR-007-multi-provider-llm-byo-key.md) | Multi-Provider-LLM (Claude / Gemini / Mistral) im BYO-Key-Modell | Proposed — umgesetzt (#78/#83/#79), Team-Review und BFH-Datenschutzentscheid ausstehend |
 | [ADR-008](adr/ADR-008-ios26-deployment-target.md) | Mindest-Deployment-Target iOS 26 | Accepted |
 | [ADR-009](adr/ADR-009-self-hosted-ci-runner.md) | CI auf selbst gehostetem macOS-Runner | Accepted |
 | [ADR-010](adr/ADR-010-strava-oauth-byo-app.md) | Strava-OAuth2 im BYO-App-Modell — Client-Credentials des Nutzers statt Backend | Accepted |
@@ -352,7 +382,7 @@ Alle asynchronen Zugriffe folgen drei fixen Ausführungskontexten — gilt schic
 
 ### Technische Schulden
 
-Bekannte Lücken im PoC-Design — vor Sprint 3 (AI-Integration) adressieren.
+Bekannte Lücken im PoC-Design. Stand nach US-15 (#188): TD-1 und TD-2 sind geschlossen, TD-3 und TD-4 offen.
 
 > TD-2 («Cooldown-Write nach API-Call») ist hinfällig: Der 6h-Cooldown wurde mit #117 durch eine
 > 60-s-Doppeltipp-Sperre ersetzt, und auch diese ist inzwischen entfernt — es gibt keinen
@@ -361,8 +391,8 @@ Bekannte Lücken im PoC-Design — vor Sprint 3 (AI-Integration) adressieren.
 
 > **TD-1 («Kein Token-Limit im Prompt-Build») ist mit #187 gelöst.** `AnalysisPromptBudget`
 > definiert die Obergrenze als Konstante: `maxPromptTokens` ist ein Sechzehntel des **kleinsten
-> Kontextfensters der drei Provider** (`mistral-medium-3-5` mit 128 k Tokens; `claude-opus-5`
-> und `gemini-3.6-flash` haben je 1 M). Gemessen wird deterministisch und ohne Netzwerkaufruf
+> Kontextfensters der drei Provider** (Mistral Medium 3.5 mit 128 k Tokens; Claude Opus 5
+> und Gemini 3.6 Flash haben je 1 M). Gemessen wird deterministisch und ohne Netzwerkaufruf
 > über eine Zeichenzahl-Schätzung (vier Zeichen ≈ ein Token); die grosse Reserve bezahlt deren
 > Ungenauigkeit. `AnalysisPromptBuilder.make` baut den Prompt auf der obersten Stufe von
 > `AnalysisPromptDetail.ladder`, die unter das Budget passt: 1) Kraft-Sessionliste auf 20,
@@ -386,7 +416,7 @@ Bekannte Lücken im PoC-Design — vor Sprint 3 (AI-Integration) adressieren.
 
 ### Widersprüche & Unklarheiten
 
-*Vor Sprint 1 auflösen.*
+*Ursprünglich vor Sprint 1 aufzulösen. W-4 und W-6 sind erledigt; W-3 und W-5 sind weiterhin offen und unten auf den aktuellen Stand gebracht.*
 
 > W-4 («6h-Cooldown-Speicherort undefiniert») ist aufgelöst: Mit #117 wurde die Sperre auf 60 s
 > verkürzt und als `fitbuddy.analysis.lastCallTimestamp` in `UserDefaults` abgelegt; inzwischen
@@ -402,14 +432,14 @@ Bekannte Lücken im PoC-Design — vor Sprint 3 (AI-Integration) adressieren.
 
 | # | Widerspruch / Unklarheit | Betroffene Dokumente | Handlungsbedarf |
 |---|---|---|---|
-| W-3 | **Certificate Pinning: als aktiv formuliert, laut ADR noch nicht implementiert.** ADR-004 markiert es als «Pflicht in Sprint 2». | `ADR-004` | Formulierung korrigieren: «geplant, Sprint 2». |
-| W-5 | **HealthKit: Entscheid gefordert, aber nirgends getroffen.** Das `Activity`-Modell ist deshalb noch nicht finalisierbar. | `ADR-006` | Entscheid blockiert Protocol-Design und Datenmodell. Empfehlung: OUT für PoC. |
+| W-3 | **Certificate Pinning ist für keinen Host implementiert** — TD-4 ist die massgebliche Stelle, inzwischen acht Hosts. `CLAUDE.md` und die QA-1-Massnahmen in `REQUIREMENTS.md` führten es als vorhandene Massnahme; beide sind auf «geplant» korrigiert. | `ADR-004`, `CLAUDE.md`, `REQUIREMENTS.md` | Offen bleibt die Umsetzung — fällig vor TestFlight mit externen Testern (ADR-010). |
+| W-5 | **HealthKit: formeller Entscheid nie protokolliert.** Faktisch ist der PoC ohne HealthKit ausgeliefert; `Activity` und Schema V5 stehen (ADR-012), das Datenmodell ist damit nicht mehr blockiert. | `ADR-006` | Nur noch Protokoll-Schuld: den De-facto-Entscheid «OUT für v0» als Nachtrag in ADR-006 festhalten und für v1 neu bewerten. |
 
 ### Offene Architektur-Fragen
 
 | Frage | Priorität |
 |---|---|
-| Apple Health: Schlaf, HRV, Ruheherzrate — IN oder OUT? Wenn IN: passiver HealthKit-Zugriff, kein Connector nötig, aber `Activity`-Modell und Privacy Manifest ändern sich | Hoch — blockiert Sprint 1 |
+| Apple Health: Schlaf, HRV, Ruheherzrate — IN oder OUT? Wenn IN: passiver HealthKit-Zugriff, kein Connector nötig, aber `Activity`-Modell und Privacy Manifest ändern sich | Im v0 nicht angebunden — Entscheid für v1 offen (W-5) |
 | AUP-Status geprüft: Kein AUP-Verbot für BYO-Key / Direct-from-Mobile. Anthropics Best Practice («eigener Key pro User») ist durch den BYO-Ansatz erfüllt. Intern in ADR-004 dokumentiert — kein Support-Gate. | Erledigt (Sprint 1) |
-| Fehlerzustand 401: harter Logout vs. weicher Banner | Mittel — Empfehlung: harter Logout im PoC |
-| `ExerciseTemplateCache`: SwiftData oder In-Memory-Dictionary mit UserDefaults-Persistenz? | Mittel — vor US-2 entscheiden |
+| ~~Fehlerzustand 401: harter Logout vs. weicher Banner~~ | Entschieden und umgesetzt: harter Logout (US-1 AC3, `WorkoutSyncService`) |
+| ~~`ExerciseTemplateCache`: SwiftData oder In-Memory-Dictionary?~~ | Erledigt — kein separater Cache nötig, `Exercise.templateID` hängt am gecachten Workout |
