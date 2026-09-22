@@ -98,6 +98,14 @@ struct StravaCredentialsView: View {
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(Color.fbAccent)
             }
+            NavigationLink {
+                StravaSetupGuideView()
+            } label: {
+                Text("Read the step-by-step setup guide →")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.fbAccent)
+            }
+            .accessibilityIdentifier(AccessibilityID.StravaCredentials.setupGuideLink)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -119,7 +127,10 @@ struct StravaCredentialsView: View {
                 Text("Stored application")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(Color.fbInk)
-                Text("Client ID \(viewModel.storedClientID ?? "") · secret \(viewModel.storedSecretMask ?? "")")
+                Text("Client ID: \(viewModel.storedClientID ?? "")")
+                    .font(.system(.footnote, design: .monospaced))
+                    .foregroundStyle(Color.fbInkSecondary)
+                Text("Secret: \(viewModel.storedSecretMask ?? "")")
                     .font(.system(.footnote, design: .monospaced))
                     .foregroundStyle(Color.fbInkSecondary)
             }
