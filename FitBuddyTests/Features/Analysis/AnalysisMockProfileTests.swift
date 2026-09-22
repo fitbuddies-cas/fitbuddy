@@ -374,6 +374,40 @@ final class AnalysisMockProfileTests: XCTestCase {
         XCTAssertFalse(report.cards.contains { $0.kind == .metric })
     }
 
+    /// The mirror image of the case above (US-15 AC5, #185): the same window
+    /// of twelve lifts and twelve runs, analysed under "Endurance". The
+    /// lifting half is counted on the line and left out of the analysis, so
+    /// the prompt carries no strength section and not a single kilogram — and
+    /// a progression card, which is a load in kilograms by construction, is
+    /// downgraded to a note rather than shown.
+    func testTheMixedWindowUnderEnduranceStatesWhatItLeftOut() async throws {
+        try await seed(.mixed, now: Self.morning)
+
+        let run = try await analyse(
+            answer: AnalysisReportFactory.progressionReady,
+            choosing: .endurance
+        )
+
+        XCTAssertTrue(run.prompt.contains("Analyse my endurance training only"), run.prompt)
+        XCTAssertTrue(run.prompt.contains("I asked about my endurance training only"), run.prompt)
+        XCTAssertTrue(run.prompt.contains("## Endurance, last 4 weeks ("), run.prompt)
+        XCTAssertFalse(run.prompt.contains("## Volume per week"), run.prompt)
+        XCTAssertFalse(run.prompt.contains("## Exercises"), run.prompt)
+        XCTAssertFalse(run.prompt.contains("kg"), run.prompt)
+
+        let context = try XCTUnwrap(run.context)
+        XCTAssertEqual(context.analysisProfile, .endurance)
+        XCTAssertEqual(context.basisDescription, "12 Hevy · 12 Strava sessions")
+        XCTAssertEqual(context.analysedCounts, [.endurance: 12])
+        XCTAssertTrue(context.thinDomains.isEmpty)
+
+        // A load in kilograms has no place under "Endurance" (US-15 AC5): the
+        // card keeps the model's sentence as a note and loses its figures.
+        let report = try XCTUnwrap(run.outcome?.report)
+        XCTAssertFalse(report.cards.contains { $0.kind == .progression })
+        XCTAssertEqual(report.cards.map(\.kind), [.note])
+    }
+
     /// The per-domain thin-data warning of US-15 AC4: a full lifting window
     /// next to an endurance half that has only just started warns about the
     /// endurance half by name, and says nothing about the strength one.
