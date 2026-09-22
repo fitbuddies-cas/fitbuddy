@@ -47,6 +47,15 @@ extension FitBuddySchemaV5 {
         /// plan; a row written before #36 then reads as thin data, which is
         /// the honest answer for a basis nobody recorded.
         var sessionCount: Int = 0
+        /// How those sessions split across the sources, JSON-encoded (US-15
+        /// AC4, #182) — read it through `SessionCountFormat`, never directly.
+        ///
+        /// Stored next to `sessionCount` rather than replacing it: the total is
+        /// what every row since #36 carries, and it is what a row whose map
+        /// this build cannot read falls back to. `nil` on every row written
+        /// before #182, where it means "all of them Hevy's" and not "none" —
+        /// the analysis had no other source to count.
+        var sessionCountsJSON: Data?
         /// The training goal the run was steered by, as `TrainingGoal.rawValue`
         /// (US-13 AC4, #192) — `nil` when the user had not set one. Stored for
         /// the same reason as `sessionCount`: the basis line above a restored
@@ -94,6 +103,7 @@ extension FitBuddySchemaV5 {
             generatedAt: Date,
             windowWeeks: Int,
             sessionCount: Int,
+            sessionCountsJSON: Data? = nil,
             goal: String? = nil,
             experience: String? = nil,
             reportJSON: Data? = nil,
@@ -105,6 +115,7 @@ extension FitBuddySchemaV5 {
             self.generatedAt = generatedAt
             self.windowWeeks = windowWeeks
             self.sessionCount = sessionCount
+            self.sessionCountsJSON = sessionCountsJSON
             self.goal = goal
             self.experience = experience
             self.reportJSON = reportJSON

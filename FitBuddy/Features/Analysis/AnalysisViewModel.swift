@@ -454,15 +454,17 @@ final class AnalysisViewModel: ObservableObject {
             // Read wide enough for the widest rung of the ladder and its
             // comparison window; the cache returns what it has, and the
             // resolved window decides what of it is actually analysed.
-            // Strava sessions are dropped right here, so the window ladder,
-            // the context line and the prompt all describe the same strength
-            // history (US-6 AC1) — a cache holding nothing but runs is "no
-            // training data" for the analysis, not a window to widen.
-            let summaries = AnalysisPromptBuilder.strengthSessions(
-                in: try await cache.workoutSummaries(
-                    since: AnalysisWindow.widest.previousStart(endingAt: reference, calendar: calendar)
-                )
+            let cached = try await cache.workoutSummaries(
+                since: AnalysisWindow.widest.previousStart(endingAt: reference, calendar: calendar)
             )
+            // Endurance sessions are dropped for the window ladder and the
+            // prompt, so both still describe one strength history — a cache
+            // holding nothing but runs is "no training data" for the analysis,
+            // not a window to widen. The context line counts from `cached`
+            // instead (US-15 AC4, #182): dropping a source from the basis is a
+            // statement about the data, and #183 sections the prompt so both
+            // domains reach the model.
+            let summaries = AnalysisPromptBuilder.strengthSessions(in: cached)
             guard !Task.isCancelled else { return nil }
 
             // The comparison window may well be empty — that is a break, and
@@ -496,8 +498,23 @@ final class AnalysisViewModel: ObservableObject {
             // returned: the cache was read wide enough for the widest rung and
             // its comparison window, and reporting those sessions as the data
             // basis would overstate it by a factor of six.
+            let counts = Self.sessionCounts(in: cached, from: start)
+            // The thin-data verdict is about what the model was shown, so the
+            // analysed breakdown is counted over `summaries` — the very array
+            // handed to the prompt builder below — and not over the window
+            // (US-6 AC2, #182). While `strengthSessions(in:)` filters by
+            // source the two genuinely differ, and the difference is the whole
+            // point: a basis half of which never reached the prompt is thin.
+            //
+            // Until #183 sections the prompt, everything handed to the
+            // builder is read as strength work — a Hevy conditioning
+            // session included — so that is the domain it was analysed in.
+            // Splitting `summaries` by domain here would warn about a
+            // thin endurance base the recommendation has no content for.
             context = AnalysisContext(
-                sessionCount: summaries.filter { $0.startTime >= start }.count,
+                sessionCounts: counts.sources,
+                domainCounts: counts.domains,
+                analysedCounts: [.strength: summaries.filter { $0.startTime >= start }.count],
                 window: window,
                 profile: profile
             )
@@ -524,6 +541,36 @@ final class AnalysisViewModel: ObservableObject {
             state = .error(.cacheUnavailable)
             return nil
         }
+    }
+
+    /// The sessions of the resolved window, counted per source for the context
+    /// line and per domain for the thin-data warning (US-15 AC4, #182).
+    ///
+    /// One pass over the same sessions, so the two breakdowns cannot disagree
+    /// about how many there were. They do differ in *where* a session lands:
+    /// the source is where it came from, the domain is what was trained
+    /// (`ActivityKind.isEndurance`, ADR-012 — not `isCardio`, which is how
+    /// the row is displayed), and a Strava strength session is named under
+    /// Strava and counted as strength.
+    ///
+    /// Counted from `start`, not over everything the read returned: the cache
+    /// is read wide enough for the widest rung of the ladder and its comparison
+    /// window, and reporting those sessions as the data basis would overstate
+    /// it by a factor of six.
+    ///
+    /// A source with nothing in the window never enters the dictionary, so a
+    /// connector the user has linked but not used stays out of the line.
+    private static func sessionCounts(
+        in summaries: [WorkoutSummary],
+        from start: Date
+    ) -> (sources: [ConnectorSource: Int], domains: [AnalysisDomain: Int]) {
+        var sources: [ConnectorSource: Int] = [:]
+        var domains: [AnalysisDomain: Int] = [:]
+        for summary in summaries where summary.startTime >= start {
+            sources[summary.source, default: 0] += 1
+            domains[AnalysisDomain(summary: summary), default: 0] += 1
+        }
+        return (sources, domains)
     }
 
     /// The full workouts of the last seven days, for the mean RPE of the
