@@ -429,6 +429,8 @@ Bekannte Lücken im PoC-Design. Stand nach US-15 (#188): TD-1 und TD-2 sind gesc
 > und hinterlegt Client ID und Client Secret im Keychain — kein Secret im Binary, kein Backend,
 > ADR-004 bleibt unverändert. Polar kommt mit [ADR-011](adr/ADR-011-polar-als-dritte-quelle.md)
 > nach demselben BYO-App-Modell als dritte Quelle hinzu.
+> Die Schritt-für-Schritt-Anleitung für Nutzer (Application anlegen, Callback Domain `localhost`,
+> Verbindung, Troubleshooting) steht in [STRAVA-SETUP.md](STRAVA-SETUP.md) (#168).
 
 | # | Widerspruch / Unklarheit | Betroffene Dokumente | Handlungsbedarf |
 |---|---|---|---|
