@@ -531,7 +531,8 @@ final class AnalysisViewModel: ObservableObject {
             window: reads.window,
             now: reads.now,
             calendar: calendar,
-            analysisProfile: reads.analysisProfile
+            analysisProfile: reads.analysisProfile,
+            promptDetail: reads.promptDetail
         )
         return AnalysisOutcome(validated: AnalysisReportValidator.validate(report, against: evidence))
     }
@@ -621,7 +622,7 @@ final class AnalysisViewModel: ObservableObject {
                 analysisProfile: analysisProfile,
                 profile: profile
             )
-            let reads = AnalysisRunReads(
+            var reads = AnalysisRunReads(
                 summaries: cached,
                 exercises: exercises.summaries,
                 progressions: exercises.progressions,
@@ -640,6 +641,10 @@ final class AnalysisViewModel: ObservableObject {
                 profile: profile,
                 analysisProfile: analysisProfile
             )
+            // Which rung the token budget settled on is only known once the
+            // prompt exists, and the validation has to be checked against that
+            // rung rather than against the full read (#187).
+            reads.promptDetail = prompt.detail
             return (prompt, reads)
         } catch {
             guard !Task.isCancelled, !error.isCancellation else { return nil }
@@ -729,6 +734,11 @@ final class AnalysisViewModel: ObservableObject {
     /// would rank by lifts the user may have long moved away from. Progressions
     /// are read only for the movements `AnalysisPromptBuilder` will list, so a
     /// window with forty exercises costs ten reads, not forty.
+    ///
+    /// At the full cap, deliberately: the token budget's rung is decided from
+    /// the prompt these reads produce (#187), so it is not known yet, and a
+    /// read of ten movements the prompt then lists six of costs four reads and
+    /// changes nothing the model or the validator sees.
     private func readExercises(
         since start: Date
     ) async throws -> (summaries: [ExerciseSummary], progressions: [String: ExerciseProgression]) {

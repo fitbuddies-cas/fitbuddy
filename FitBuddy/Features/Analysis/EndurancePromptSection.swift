@@ -23,6 +23,11 @@ enum EndurancePromptSection {
     /// - Parameters:
     ///   - recent: Endurance sessions of the analysed window.
     ///   - previous: Endurance sessions of the equally long window before it.
+    ///   - detail: How long the lists may be (#187). This half has no session
+    ///     list to cap — #183 built it as an aggregate, which is what US-15
+    ///     AC8's "cardio as a weekly aggregate" asks for, so only the per-week
+    ///     rows can still be cut, and each domain cuts at its own weeks that
+    ///     recorded a session — see `AnalysisPromptDetail.weekRows`.
     static func sections(
         recent: [WorkoutSummary],
         previous: [WorkoutSummary],
@@ -31,12 +36,13 @@ enum EndurancePromptSection {
         previousStart: Date,
         now: Date,
         calendar: Calendar,
-        days: PromptDayFormatter
+        days: PromptDayFormatter,
+        detail: AnalysisPromptDetail = .full
     ) -> [String] {
         guard !recent.isEmpty else { return [] }
         return [
             windowSection(recent, window: window, from: recentStart, to: now, calendar: calendar, days: days),
-            weeklySection(recent, window: window, now: now, calendar: calendar, days: days),
+            weeklySection(recent, window: window, now: now, calendar: calendar, days: days, detail: detail),
             comparisonSection(
                 previous,
                 window: window,
@@ -216,12 +222,15 @@ enum EndurancePromptSection {
         window: AnalysisWindow,
         now: Date,
         calendar: Calendar,
-        days: PromptDayFormatter
+        days: PromptDayFormatter,
+        detail: AnalysisPromptDetail = .full
     ) -> String {
-        let weeks = (0..<window.weeks).map { index -> String in
-            let start = AnalysisWindow.weekStart(index, endingAt: now, calendar: calendar)
-            let end = calendar.date(byAdding: .day, value: 7, to: start) ?? start
-            let inWeek = summaries.filter { $0.startTime >= start && $0.startTime < end }
+        // Bucketed once, like the strength half: the rung asks which weeks
+        // recorded anything before it decides which of them to print (#187).
+        let buckets = PromptFigures.weeks(summaries, window: window, now: now, calendar: calendar)
+        let rows = detail.weekRows(in: window) { buckets[$0].sessions.isEmpty }
+        let weeks = rows.indices.map { index -> String in
+            let inWeek = buckets[index].sessions
             let label = index == 0 ? "most recent" : "\(index + 1) weeks back"
             var parts = ["\(inWeek.count) sessions"]
             if let distance = PromptFigures.distance(PromptFigures.distance(of: inWeek)) {
@@ -230,9 +239,11 @@ enum EndurancePromptSection {
             if let time = PromptFigures.duration(PromptFigures.duration(of: inWeek)) {
                 parts.append(time)
             }
-            return "- Week starting \(days.string(start)) (\(label)): \(parts.joined(separator: ", "))"
+            return "- Week starting \(days.string(buckets[index].start)) (\(label)): "
+                + parts.joined(separator: ", ")
         }
-        return (["## Endurance per week"] + weeks).joined(separator: "\n")
+        return (["## Endurance per week"] + weeks + [rows.footer].compactMap { $0 })
+            .joined(separator: "\n")
     }
 
     // MARK: - Comparison

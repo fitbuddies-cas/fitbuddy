@@ -83,6 +83,13 @@ enum AnalysisPromptBuilder {
     ///     which domain sections are built at all. `.overallLoad` — the
     ///     default — is "everything the window holds", i.e. exactly the prompt
     ///     of #183 and #184, so no call site that does not care has to say so.
+    ///   - budgetTokens: The estimated size both turns together have to stay
+    ///     under (#187). The app never passes it: `AnalysisPromptBudget`
+    ///     derives the value from the smallest provider context window, and
+    ///     that is what every call site gets. It is a parameter so the
+    ///     degradation ladder can be driven from a test with an ordinary
+    ///     window instead of a fixture built to be enormous — the rungs are
+    ///     the same either way.
     static func make(
         summaries: [WorkoutSummary],
         exercises: [ExerciseSummary] = [],
@@ -91,21 +98,36 @@ enum AnalysisPromptBuilder {
         now: Date = Date(),
         calendar: Calendar = .current,
         profile: TrainingProfile = TrainingProfile(),
-        analysisProfile: AnalysisProfile = .overallLoad
+        analysisProfile: AnalysisProfile = .overallLoad,
+        budgetTokens: Int = AnalysisPromptBudget.maxPromptTokens
     ) -> AnalysisPrompt {
-        AnalysisPrompt(
-            system: systemPrompt,
-            user: userPrompt(
-                summaries: summaries,
-                exercises: exercises,
-                progressions: progressions,
-                window: window,
-                now: now,
-                calendar: calendar,
-                profile: profile,
-                analysisProfile: analysisProfile
+        // The prompt is built at the widest rung of the ladder that fits the
+        // token budget (TD-1, US-15 AC8, #187). Building it more than once is
+        // string work over data already in memory, and it is the only way to
+        // decide on the size the model will actually be sent rather than on a
+        // guess about it. The last rung goes out whether or not it fits: the
+        // ladder is what the app gives up, not a reason to refuse an analysis.
+        var built = (user: "", detail: AnalysisPromptDetail.full)
+        for detail in AnalysisPromptDetail.ladder {
+            built = (
+                userPrompt(
+                    summaries: summaries,
+                    exercises: exercises,
+                    progressions: progressions,
+                    window: window,
+                    now: now,
+                    calendar: calendar,
+                    profile: profile,
+                    analysisProfile: analysisProfile,
+                    detail: detail
+                ),
+                detail
             )
-        )
+            let estimate = AnalysisPromptBudget.estimatedTokens(in: systemPrompt)
+                + AnalysisPromptBudget.estimatedTokens(in: built.user)
+            if estimate <= budgetTokens { break }
+        }
+        return AnalysisPrompt(system: systemPrompt, user: built.user, detail: built.detail)
     }
 
     // MARK: - Profile
@@ -196,13 +218,24 @@ enum AnalysisPromptBuilder {
     /// title, so the same cache always yields the same prompt — and
     /// bodyweight movements, which carry no kilograms, still rank by how often
     /// they were trained.
-    static func promptedExercises(from exercises: [ExerciseSummary]) -> [ExerciseSummary] {
+    ///
+    /// - Parameter limit: How many the section lists. `maxListedExercises`
+    ///   unless the token budget took the prompt down a rung (#187) — in which
+    ///   case the *same* number has to reach the report validation, or a card
+    ///   could be checked against an exercise the model never saw. The
+    ///   ViewModel still reads progressions at the full cap: the rung is
+    ///   decided after that read, from the prompt it produces, and reading a
+    ///   superset costs nothing.
+    static func promptedExercises(
+        from exercises: [ExerciseSummary],
+        limit: Int = maxListedExercises
+    ) -> [ExerciseSummary] {
         let ranked = exercises.sorted { lhs, rhs in
             if lhs.volumeKg != rhs.volumeKg { return lhs.volumeKg > rhs.volumeKg }
             if lhs.sessionCount != rhs.sessionCount { return lhs.sessionCount > rhs.sessionCount }
             return lhs.title < rhs.title
         }
-        return Array(ranked.prefix(maxListedExercises))
+        return Array(ranked.prefix(max(0, limit)))
     }
 
     // MARK: - System
@@ -218,6 +251,22 @@ enum AnalysisPromptBuilder {
     /// endurance counterpart. Rule 2 was sharpened at the same time: general
     /// training principles are allowed and named as such, while population
     /// comparisons and norm values stay forbidden (US-3 AC3, US-15 AC6).
+    ///
+    /// The `cards:` paragraph was tightened by about 60 words in #187, where
+    /// the two card kinds of #186 had grown it: the per-kind sentences became
+    /// a list of `"kind": what it is` clauses. Rules 1 to 8 are untouched,
+    /// including their numbers, which `AnalysisReportValidator` refers to by
+    /// number.
+    ///
+    /// **The reasoning requirement stays per kind**, in one closing sentence
+    /// rather than five repetitions. A first attempt front-loaded it as "each
+    /// card with its reasoning in one sentence", which the schema contradicts
+    /// twice over: `note` has no `reasoning` field at all — it carries a
+    /// `title` and a `text`, and every card object is `additionalProperties:
+    /// false` with all fields required — and `recovery`'s is documented as one
+    /// or two sentences, which is what the app's own inserted reasoning is.
+    /// The closing sentence names the four kinds the one-sentence rule applies
+    /// to and leaves recovery at one or two.
     static let systemPrompt = """
     You are FitBuddy's training assistant. You analyse one person's own \
     training history — strength work, endurance work, or both — and give them \
@@ -311,30 +360,28 @@ enum AnalysisPromptBuilder {
     - summary: the full analysis as plain prose under 200 words, readable \
     without the cards: first what stands out in the data, then a concrete \
     recommendation for the next block.
-    - cards: zero to four cards, most important first. Add a card only when \
-    the data supports it; when the data is too thin for any, return an empty \
-    array — the lead and the summary carry the answer. Use "progression" for \
-    a load increase on one exercise: fromKg is the weight listed for its most \
-    recent session, toKg the new weight, reasoning one sentence. Use \
-    "recovery" when rest comes before any progression, with the rest you \
-    recommend in suggestedRestHours. Use "imbalance" when two muscle groups \
-    are trained at clearly different frequencies, naming each group and its \
-    sessions per week exactly as the Muscle groups section lists them. Use \
-    "metric" for a figure of the week as a whole rather than of one exercise \
-    — weekly distance, long run, weekly volume, weekly training time: label \
-    names the figure, unit is the unit both numbers are in, from is that \
-    figure written exactly as the last 7 days report it, to is the figure you \
-    recommend, source is a short header label such as Run, Ride or Strength, \
-    or an empty string when none fits. There is no unit for a heart rate: \
-    rule 7 stands, and a card is a target, so a heart rate is not something \
-    to recommend a new value for. Keep to within a fifth of \
-    from: one week of data does not back a larger step. Use "interference" \
-    when strength and endurance sessions shared days in the last 7, taking \
-    the three day counts from the Week structure section. Use \
-    "note" for anything else worth saying, including a rep progression \
-    without a weight change. Every \
-    card follows the ground rules above; a recommendation you cannot ground \
-    in the data does not become a card.
+    - cards: zero to four cards, most important first, each following the \
+    ground rules above; a recommendation you cannot ground in the data does \
+    not become a card, and when the data is too thin for any, return an empty \
+    array — the lead and the summary carry the answer. "progression": a load \
+    increase on one exercise, fromKg the weight listed for its most recent \
+    session, toKg the new weight. "recovery": rest before any progression, \
+    with the rest you recommend in suggestedRestHours. "imbalance": two \
+    muscle groups trained at clearly different frequencies, each group and \
+    its sessions per week exactly as the Muscle groups section lists them. \
+    "metric": a figure of the week as a whole rather than of one exercise — \
+    weekly distance, long run, weekly volume, weekly training time — with \
+    label naming the figure, unit the unit both numbers are in, from that \
+    figure written exactly as the last 7 days report it, to the figure you \
+    recommend and within a fifth of from, and source a short header label \
+    such as Run, Ride or Strength, or an empty string when none fits. There \
+    is no unit for a heart rate: rule 7 stands, and a card is a target, so a \
+    heart rate is not something to recommend a new value for. "interference": \
+    strength and endurance sessions shared days in the last 7, with the three \
+    day counts taken from the Week structure section. "note": anything else \
+    worth saying, including a rep progression without a weight change, as \
+    title and text. Write the reasoning of a progression, imbalance, metric \
+    or interference card in one sentence, a recovery card's in one or two.
 
     Write the fields in this order.
 
@@ -353,7 +400,8 @@ enum AnalysisPromptBuilder {
         now: Date,
         calendar: Calendar,
         profile: TrainingProfile,
-        analysisProfile: AnalysisProfile
+        analysisProfile: AnalysisProfile,
+        detail: AnalysisPromptDetail = .full
     ) -> String {
         let recentStart = window.start(endingAt: now, calendar: calendar)
         let previousStart = window.previousStart(endingAt: now, calendar: calendar)
@@ -431,7 +479,8 @@ enum AnalysisPromptBuilder {
             previousStart: previousStart,
             now: now,
             calendar: calendar,
-            days: days
+            days: days,
+            detail: detail
         )
         sections += EndurancePromptSection.sections(
             recent: recentEndurance,
@@ -441,7 +490,8 @@ enum AnalysisPromptBuilder {
             previousStart: previousStart,
             now: now,
             calendar: calendar,
-            days: days
+            days: days,
+            detail: detail
         )
         if let load = LoadPromptSection.section(
             strength: windowStrength,
@@ -467,15 +517,20 @@ enum AnalysisPromptBuilder {
     /// Walks the same ranking, the same lookup and the same session choice as
     /// the section itself, so a movement is here exactly when it has a line,
     /// and with exactly the weight that line names.
+    ///
+    /// - Parameter detail: The rung the prompt was built at (#187). Its
+    ///   exercise cap is what this list is taken at, so the section and its
+    ///   validation stay one list however far the budget trimmed the prompt.
     static func listedExercises(
         exercises: [ExerciseSummary],
         progressions: [String: ExerciseProgression],
         window: AnalysisWindow,
         now: Date,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        detail: AnalysisPromptDetail = .full
     ) -> [ListedExercise] {
         let start = window.start(endingAt: now, calendar: calendar)
-        return promptedExercises(from: exercises).compactMap { exercise in
+        return promptedExercises(from: exercises, limit: detail.listedExercises).compactMap { exercise in
             guard let progression = progressions[exercise.id],
                   let listing = listing(progression, from: start)
             else { return nil }

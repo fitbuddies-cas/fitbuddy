@@ -188,7 +188,7 @@ bleibt das Spending Limit im Account des Users (BYO-Key, ADR-004).
 
 | Lücke | Konsequenz |
 |---|---|
-| Kein Token-Limit (Schritt 3) | `400 context_length_exceeded` bei 90 Tagen × vollem Trainingsvolumen |
+| ~~Kein Token-Limit (Schritt 3)~~ | geschlossen mit #187 — siehe TD-1 unter «Technische Schulden» |
 | Kein Backgrounding-Handling (Schritt 4) | iOS beendet URLSession-Task nach ~30s — Analyse verloren, kein User-Feedback |
 
 ### Caching-Strategie
@@ -283,9 +283,24 @@ Bekannte Lücken im PoC-Design — vor Sprint 3 (AI-Integration) adressieren.
 > Cooldown-Write mehr. Doppelte Calls verhindert der gesperrte Button während eines laufenden
 > Calls; das Kostenlimit ist das Spending Limit im Account des Users (ADR-004).
 
+> **TD-1 («Kein Token-Limit im Prompt-Build») ist mit #187 gelöst.** `AnalysisPromptBudget`
+> definiert die Obergrenze als Konstante: `maxPromptTokens` ist ein Sechzehntel des **kleinsten
+> Kontextfensters der drei Provider** (`mistral-medium-3-5` mit 128 k Tokens; `claude-opus-5`
+> und `gemini-3.6-flash` haben je 1 M). Gemessen wird deterministisch und ohne Netzwerkaufruf
+> über eine Zeichenzahl-Schätzung (vier Zeichen ≈ ein Token); die grosse Reserve bezahlt deren
+> Ungenauigkeit. `AnalysisPromptBuilder.make` baut den Prompt auf der obersten Stufe von
+> `AnalysisPromptDetail.ladder`, die unter das Budget passt: 1) Kraft-Sessionliste auf 20,
+> 2) Exercises-Sektion auf 6 Übungen, 3) Wochenzeilen beider Domänen auf die letzten 4 Wochen.
+> Jede Kürzung nennt sich im Prompt selbst («N older sessions in this window omitted»), und die
+> Aggregate, gegen die `AnalysisReportValidator` die Karten prüft, bleiben auf jeder Stufe
+> unverändert — die gekürzte Übungsliste reist als `AnalysisPromptDetail` mit den Reads zur
+> Validierung, damit keine Karte gegen eine Übung geprüft wird, die im Prompt nicht mehr steht.
+> Die beiden übrigen Schritte aus #187 (Cardio als Wochenaggregat, Vergleichsfenster nur
+> Headline-Zahlen) sind seit #183 auf **jeder** Stufe erfüllt: die Ausdauer-Sektion führt gar
+> keine Sessionliste, und die Vergleichsfenster bestehen aus vier Zeilen.
+
 | # | Lücke | Konsequenz | Handlungsbedarf |
 |---|---|---|---|
-| TD-1 | **Kein Token-Limit im Prompt-Build** | `400 context_length_exceeded` bei 90 Tagen × vollem Trainingsvolumen | Prompt-Fenster als Konstante definieren (→ W-2); Daten vor API-Call kürzen |
 | TD-3 | **Kein Backgrounding-Handling beim Analyse-Call** | iOS beendet URLSession-Task nach ~30s — Analyse verloren, kein Benutzer-Feedback | `URLSession` mit `background`-Konfiguration oder explizites Timeout + Benutzer-Feedback |
 | TD-4 | **Cert-Pinning für keinen Host umgesetzt** (QA-1, ADR-004) — mit #79 kommen `generativelanguage.googleapis.com` und `api.mistral.ai` zu `api.anthropic.com` und `api.hevyapp.com` dazu, mit ADR-010 und ADR-011 zusätzlich `www.strava.com` sowie `flow.polar.com`, `polarremote.com` und `www.polaraccesslink.com` | MITM im offenen WLAN kann API-Keys und Gesundheitsdaten abgreifen | `URLSessionDelegate` mit Public-Key-Pinning für alle acht Hosts |
 
