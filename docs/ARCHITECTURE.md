@@ -408,7 +408,7 @@ Bekannte Lücken im PoC-Design. Stand nach US-15 (#188): TD-1 und TD-2 sind gesc
 | # | Lücke | Konsequenz | Handlungsbedarf |
 |---|---|---|---|
 | TD-3 | **Kein Backgrounding-Handling beim Analyse-Call** | iOS beendet URLSession-Task nach ~30s — Analyse verloren, kein Benutzer-Feedback | `URLSession` mit `background`-Konfiguration oder explizites Timeout + Benutzer-Feedback |
-| TD-4 | **Cert-Pinning für keinen Host umgesetzt** (QA-1, ADR-004) — mit #79 kommen `generativelanguage.googleapis.com` und `api.mistral.ai` zu `api.anthropic.com` und `api.hevyapp.com` dazu, mit ADR-010 und ADR-011 zusätzlich `www.strava.com` sowie `flow.polar.com`, `polarremote.com` und `www.polaraccesslink.com` | MITM im offenen WLAN kann API-Keys und Gesundheitsdaten abgreifen | `URLSessionDelegate` mit Public-Key-Pinning für alle acht Hosts |
+| TD-4 | **Cert-Pinning für keinen Host umgesetzt** (QA-1, ADR-004) — mit #79 kommen `generativelanguage.googleapis.com` und `api.mistral.ai` zu `api.anthropic.com` und `api.hevyapp.com` dazu, mit ADR-010 und ADR-011 zusätzlich `www.strava.com` sowie `polarremote.com` und `www.polaraccesslink.com`. **`flow.polar.com` gehört nicht dazu**: die Authorize-URL wird an `ASWebAuthenticationSession` übergeben, läuft also im System-Browser — ein `URLSessionDelegate` der App sieht diese Verbindung nie | MITM im offenen WLAN kann API-Keys und Gesundheitsdaten abgreifen | `URLSessionDelegate` mit Public-Key-Pinning für alle sieben Hosts |
 
 ---
 
@@ -434,7 +434,7 @@ Bekannte Lücken im PoC-Design. Stand nach US-15 (#188): TD-1 und TD-2 sind gesc
 
 | # | Widerspruch / Unklarheit | Betroffene Dokumente | Handlungsbedarf |
 |---|---|---|---|
-| W-3 | **Certificate Pinning ist für keinen Host implementiert** — TD-4 ist die massgebliche Stelle, inzwischen acht Hosts. `CLAUDE.md` und die QA-1-Massnahmen in `REQUIREMENTS.md` führten es als vorhandene Massnahme; beide sind auf «geplant» korrigiert. | `ADR-004`, `CLAUDE.md`, `REQUIREMENTS.md` | Offen bleibt die Umsetzung — fällig vor TestFlight mit externen Testern (ADR-010). |
+| W-3 | **Certificate Pinning ist für keinen Host implementiert** — TD-4 ist die massgebliche Stelle, inzwischen sieben Hosts. `CLAUDE.md` und die QA-1-Massnahmen in `REQUIREMENTS.md` führten es als vorhandene Massnahme; beide sind auf «geplant» korrigiert. | `ADR-004`, `CLAUDE.md`, `REQUIREMENTS.md` | Offen bleibt die Umsetzung — fällig vor TestFlight mit externen Testern (ADR-010). |
 | W-5 | **HealthKit: formeller Entscheid nie protokolliert.** Faktisch ist der PoC ohne HealthKit ausgeliefert; `Activity` und Schema V5 stehen (ADR-012), das Datenmodell ist damit nicht mehr blockiert. | `ADR-006` | Nur noch Protokoll-Schuld: den De-facto-Entscheid «OUT für v0» als Nachtrag in ADR-006 festhalten und für v1 neu bewerten. |
 
 ### Offene Architektur-Fragen
