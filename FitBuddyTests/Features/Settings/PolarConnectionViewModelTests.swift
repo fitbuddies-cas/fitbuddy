@@ -238,6 +238,15 @@ final class PolarConnectionViewModelTests: XCTestCase {
             XCTAssertFalse(failure.pointsToCredentials, "\(error)")
         }
     }
+
+    /// A failed certificate check (pinning, #153) is the network's fault,
+    /// not the credentials' — and it must not read as offline.
+    func testUntrustedConnectionIsNeitherOfflineNorACredentialFailure() {
+        let failure = PolarConnectionFailure(ConnectorError.untrustedConnection)
+        XCTAssertEqual(failure, .untrustedConnection)
+        XCTAssertFalse(failure.pointsToCredentials)
+        XCTAssertNotEqual(failure.message, PolarConnectionFailure.network.message)
+    }
 }
 
 /// Records what the reset service was asked to drop.

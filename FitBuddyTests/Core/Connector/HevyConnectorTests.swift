@@ -239,6 +239,13 @@ final class HevyConnectorTests: XCTestCase {
         await assertFetchThrows(.networkUnavailable)
     }
 
+    /// A failed certificate check (pinning, #153) is not "no internet": the
+    /// user has to leave the network, not look for reception.
+    func testCertificateFailureMapsToUntrustedConnection() async {
+        StubURLProtocol.handler = { _ in throw URLError(.serverCertificateUntrusted) }
+        await assertFetchThrows(.untrustedConnection)
+    }
+
     func testMalformedBodyMapsToInvalidResponse() async {
         StubURLProtocol.handler = { request in
             (Self.http(status: 200, for: request, headers: nil), Data("not json".utf8))

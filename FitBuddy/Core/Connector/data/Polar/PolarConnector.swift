@@ -176,7 +176,8 @@ actor PolarConnector: FitnessConnector {
         } catch let error as ConnectorError {
             switch error {
             case .unauthorized: return .rejected
-            case .networkUnavailable, .rateLimited, .serviceUnavailable, .invalidResponse, .notImplemented:
+            case .networkUnavailable, .untrustedConnection, .rateLimited, .serviceUnavailable,
+                 .invalidResponse, .notImplemented:
                 return .failed(error)
             }
         } catch {
