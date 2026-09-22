@@ -73,12 +73,26 @@ enum LLMStreamTransport {
             // same problem as Anthropic's 401 — the key is not usable.
             throw InferenceServiceError.unauthorized
         case 429:
+            // A plan that allows no requests at all also answers 429, but
+            // "try again in a few minutes" is never going to be true for it
+            // (#211). Only Mistral sends the allowance header; the others fall
+            // through to the ordinary rate limit.
+            if allowsNoRequests(http) { throw InferenceServiceError.planExcludesModel }
             throw InferenceServiceError.rateLimited(retryAfter: retryAfter(from: http))
         case 500...599:
             throw InferenceServiceError.serviceUnavailable
         default:
             throw InferenceServiceError.unexpectedStatus(http.statusCode)
         }
+    }
+
+    /// Mistral's per-minute request allowance for the model, as sent on every
+    /// answer. `0` for a workspace whose plan does not include the model.
+    private static let requestAllowanceHeader = "x-ratelimit-limit-req-minute"
+
+    private static func allowsNoRequests(_ http: HTTPURLResponse) -> Bool {
+        guard let raw = http.value(forHTTPHeaderField: requestAllowanceHeader) else { return false }
+        return Int(raw.trimmingCharacters(in: .whitespaces)) == 0
     }
 
     private static func retryAfter(from http: HTTPURLResponse) -> TimeInterval? {

@@ -24,6 +24,11 @@ enum InferenceServiceError: Error, Equatable {
     case unauthorized
     /// HTTP 429, with the provider's `Retry-After` in seconds when it sent one.
     case rateLimited(retryAfter: TimeInterval?)
+    /// HTTP 429 whose allowance header says the account may make *zero*
+    /// requests to this model — a plan restriction, not a limit that lifts by
+    /// waiting (#211). Mistral answers this way for a workspace without
+    /// pay-as-you-go; the other providers send no such header.
+    case planExcludesModel
     /// The provider answered 5xx.
     case serviceUnavailable
     /// The response was not a stream this version can read.

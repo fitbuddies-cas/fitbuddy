@@ -49,6 +49,17 @@ enum LLMProvider: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    /// Where a plan restriction on this provider is lifted (#211). Only
+    /// Mistral reports one: its Limits page shows the zero allowance and the
+    /// current tier, and links on to Billing where pay-as-you-go is switched
+    /// on. `nil` for providers that never answer with a plan restriction.
+    var planURL: URL? {
+        switch self {
+        case .claude, .gemini: return nil
+        case .mistral: return URL(staticString: "https://admin.mistral.ai/plateforme/limits")
+        }
+    }
+
     /// Where-to-find instructions shown on the key entry card (markdown).
     var consoleInstructions: String {
         switch self {

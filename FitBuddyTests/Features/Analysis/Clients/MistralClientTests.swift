@@ -37,6 +37,9 @@ final class MistralClientTests: LLMClientTestCase {
         XCTAssertEqual(json["model"] as? String, MistralClient.model)
         XCTAssertEqual(json["max_tokens"] as? Int, MistralClient.maxTokens)
         XCTAssertEqual(json["stream"] as? Bool, true)
+        // Not sent until it has been seen accepted by Medium 3.5 (#211): on a
+        // model it is not enabled for, Mistral answers the field with a 400.
+        XCTAssertNil(json["reasoning_effort"])
 
         // OpenAI-shaped: the system prompt is the first message, not a field.
         let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])
@@ -45,6 +48,12 @@ final class MistralClientTests: LLMClientTestCase {
         XCTAssertEqual(messages.first?["content"] as? String, "You are FitBuddy.")
         XCTAssertEqual(messages.last?["role"] as? String, "user")
         XCTAssertEqual(messages.last?["content"] as? String, "Analyze my week.")
+    }
+
+    /// The id Mistral documents and bills Medium 3.5 under, not one of its
+    /// undocumented aliases (#211).
+    func testPinsTheDocumentedModelId() {
+        XCTAssertEqual(MistralClient.model, "mistral-medium-3-5")
     }
 
     func testReportsItsProvider() {
@@ -84,6 +93,37 @@ final class MistralClientTests: LLMClientTestCase {
         let chunks = try await collect(try await stream())
 
         XCTAssertEqual(chunks, ["Increase ", "squat ", "by 2.5 kg."])
+    }
+
+    /// With reasoning on, `delta.content` is a chunk array while the model
+    /// thinks. Thinking must not leak into the answer, and the text chunk in
+    /// the same delta must not be dropped (#211).
+    func testThinkingChunksAreDroppedAndTextChunksKept() async throws {
+        stub(body: MistralSSEFactory.bodyWithThinkingChunks(
+            thinking: "The user squats three times a week.",
+            leadingText: "Increase ",
+            textChunks: ["squat ", "by 2.5 kg."]
+        ))
+
+        let chunks = try await collect(try await stream())
+
+        XCTAssertEqual(chunks, ["Increase ", "squat ", "by 2.5 kg."])
+    }
+
+    /// The array is decoded in one go, so one entry the decoder does not
+    /// know must not take the text chunk beside it down with it (#211).
+    func testChunkWithoutATypeDoesNotDropTheTextChunkBesideIt() async throws {
+        stub(body: MistralSSEFactory.bodyWithContentChunks(
+            [
+                ["thinking": [["type": "text", "text": "Hmm."]]],
+                ["type": "text", "text": "Increase "]
+            ],
+            textChunks: ["squat."]
+        ))
+
+        let chunks = try await collect(try await stream())
+
+        XCTAssertEqual(chunks, ["Increase ", "squat."])
     }
 
     func testStopsAtTheDoneSentinel() async throws {
@@ -132,6 +172,32 @@ final class MistralClientTests: LLMClientTestCase {
             XCTFail("expected rateLimited")
         } catch let error as InferenceServiceError {
             XCTAssertEqual(error, .rateLimited(retryAfter: 45))
+        }
+    }
+
+    /// The 429 a workspace without pay-as-you-go gets on every call: the
+    /// allowance header reads 0, and no amount of waiting changes that (#211).
+    func testZeroAllowanceIsAPlanRestrictionNotARateLimit() async throws {
+        stub(statusCode: 429, headers: ["x-ratelimit-limit-req-minute": "0"])
+
+        do {
+            _ = try await stream()
+            XCTFail("expected planExcludesModel")
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .planExcludesModel)
+        }
+    }
+
+    /// A real burst limit keeps the allowance header above zero and stays an
+    /// ordinary rate limit.
+    func testNonZeroAllowanceStaysARateLimit() async throws {
+        stub(statusCode: 429, headers: ["x-ratelimit-limit-req-minute": "750"])
+
+        do {
+            _ = try await stream()
+            XCTFail("expected rateLimited")
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .rateLimited(retryAfter: nil))
         }
     }
 

@@ -1,4 +1,5 @@
 import Foundation
+@testable import FitBuddy
 
 /// Builds Mistral chat-completion SSE bodies in the real wire format, so tests
 /// exercise `MistralClient`'s actual parsing path instead of a shortcut.
@@ -8,6 +9,30 @@ enum MistralSSEFactory {
     /// the `[DONE]` sentinel.
     static func body(textChunks: [String]) -> Data {
         var lines = [line(payload(role: "assistant", content: nil, finishReason: nil))]
+        lines += textChunks.map { line(payload(role: nil, content: $0, finishReason: nil)) }
+        lines.append(line(payload(role: nil, content: nil, finishReason: "stop")))
+        lines.append("data: [DONE]\n")
+        return Data(lines.joined(separator: "\n").utf8)
+    }
+
+    /// A stream answered with reasoning on: `delta.content` arrives as a chunk
+    /// array — a `thinking` chunk, then a `text` chunk — before the plain
+    /// string deltas of `textChunks` (#211).
+    static func bodyWithThinkingChunks(thinking: String, leadingText: String, textChunks: [String]) -> Data {
+        bodyWithContentChunks(
+            [
+                ["type": "thinking", "thinking": [["type": "text", "text": thinking]]],
+                ["type": "text", "text": leadingText]
+            ],
+            textChunks: textChunks
+        )
+    }
+
+    /// A stream whose first content delta carries `chunkArray` verbatim as
+    /// `delta.content`, followed by the plain string deltas of `textChunks`.
+    static func bodyWithContentChunks(_ chunkArray: [[String: Any]], textChunks: [String]) -> Data {
+        var lines = [line(payload(role: "assistant", content: nil, finishReason: nil))]
+        lines.append(line(payload(role: nil, content: chunkArray, finishReason: nil)))
         lines += textChunks.map { line(payload(role: nil, content: $0, finishReason: nil)) }
         lines.append(line(payload(role: nil, content: nil, finishReason: "stop")))
         lines.append("data: [DONE]\n")
@@ -30,13 +55,14 @@ enum MistralSSEFactory {
         return Data(line(String(decoding: data, as: UTF8.self)).utf8)
     }
 
-    private static func payload(role: String?, content: String?, finishReason: String?) -> String {
+    /// `content` is a `String` or, with reasoning on, a chunk array.
+    private static func payload(role: String?, content: Any?, finishReason: String?) -> String {
         var delta: [String: Any] = [:]
         if let role { delta["role"] = role }
         if let content { delta["content"] = content }
         var choice: [String: Any] = ["index": 0, "delta": delta]
         if let finishReason { choice["finish_reason"] = finishReason }
-        let json: [String: Any] = ["id": "cmpl_test", "model": "mistral-medium-2604", "choices": [choice]]
+        let json: [String: Any] = ["id": "cmpl_test", "model": MistralClient.model, "choices": [choice]]
         let data = try! JSONSerialization.data(withJSONObject: json)
         return String(decoding: data, as: UTF8.self)
     }
