@@ -17,9 +17,10 @@ struct DashboardView: View {
     /// dependencies is one no preview can stand up.
     private let makeWorkoutDetailViewModel: (String) -> WorkoutDetailViewModel
 
-    /// Builds the ViewModel behind the exercise list (#37) — same reasoning,
-    /// and likewise called once per push rather than once per render.
-    private let makeExerciseListViewModel: () -> ExerciseListViewModel
+    /// Builds the ViewModel behind a movement's progression curve (#42, #162)
+    /// — same reasoning, and likewise called once per push rather than once
+    /// per render. The exercise list itself lives on its own tab since #264;
+    /// this stack only reaches the curve through a card inside a session.
     private let makeExerciseProgressionViewModel: (ExerciseIdentity) -> ExerciseProgressionViewModel
 
     /// Changes whenever something outside the dashboard invalidated the cache —
@@ -44,8 +45,6 @@ struct DashboardView: View {
     ///     parent's `body` does not rebuild it on every render.
     ///   - makeWorkoutDetailViewModel: Called once per push, not per rendered
     ///     row — see `.navigationDestination` below.
-    ///   - makeExerciseListViewModel: Called once per push of the exercise
-    ///     list (#37).
     ///   - makeExerciseProgressionViewModel: Called once per pushed movement
     ///     (#42).
     ///   - reloadToken: Defaults to a constant, so a preview or a test that
@@ -55,14 +54,12 @@ struct DashboardView: View {
     init(
         viewModel: @autoclosure @escaping () -> WorkoutListViewModel,
         makeWorkoutDetailViewModel: @escaping (String) -> WorkoutDetailViewModel,
-        makeExerciseListViewModel: @escaping () -> ExerciseListViewModel,
         makeExerciseProgressionViewModel: @escaping (ExerciseIdentity) -> ExerciseProgressionViewModel,
         reloadToken: Int = 0,
         onRenewSource: @escaping (ConnectorSource) -> Void = { _ in }
     ) {
         _viewModel = StateObject(wrappedValue: viewModel())
         self.makeWorkoutDetailViewModel = makeWorkoutDetailViewModel
-        self.makeExerciseListViewModel = makeExerciseListViewModel
         self.makeExerciseProgressionViewModel = makeExerciseProgressionViewModel
         self.reloadToken = reloadToken
         self.onRenewSource = onRenewSource
@@ -100,24 +97,14 @@ struct DashboardView: View {
             .navigationDestination(for: WorkoutSummary.self) { workout in
                 WorkoutDetailView(viewModel: makeWorkoutDetailViewModel(workout.id))
             }
-            // Registered at the stack's root rather than on the screens that
-            // push it: a movement's statistics are reachable from the exercise
-            // list *and* from a card inside a session (#162), and a
-            // destination declared on a pushed screen only resolves while that
-            // screen is the one on top.
+            // Registered at the stack's root rather than on the session screen
+            // that pushes it: a destination declared on a pushed screen only
+            // resolves while that screen is the one on top (#162). The same
+            // destination hangs off the exercises tab's own stack, so a
+            // movement opens the same curve from either place.
             .navigationDestination(for: ExerciseIdentity.self) { identity in
                 ExerciseProgressionView(viewModel: makeExerciseProgressionViewModel(identity))
             }
-            .navigationDestination(for: DashboardRoute.self) { route in
-                switch route {
-                case .exercises:
-                    ExerciseListView(
-                        viewModel: makeExerciseListViewModel(),
-                        makeProgressionViewModel: makeExerciseProgressionViewModel
-                    )
-                }
-            }
-            .toolbar { exercisesLink }
             // The gesture's own spinner retracts when this returns, and
             // `retry()` returns only once the Hevy call has answered — so it
             // stands for the sync, not just for the cache read underneath it
@@ -139,21 +126,6 @@ struct DashboardView: View {
             guard loadedToken != reloadToken else { return }
             loadedToken = reloadToken
             await viewModel.reload()
-        }
-    }
-
-    /// Opens the searchable exercise list (US-7). Only with data behind it:
-    /// over an empty or unreadable cache the list has nothing to search, and
-    /// the dashboard underneath already explains why.
-    @ToolbarContentBuilder
-    private var exercisesLink: some ToolbarContent {
-        if case .loaded = viewModel.state {
-            ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink(value: DashboardRoute.exercises) {
-                    Label("Exercises", systemImage: "list.bullet")
-                }
-                .accessibilityIdentifier(AccessibilityID.Dashboard.exercisesLink)
-            }
         }
     }
 
@@ -226,7 +198,6 @@ struct DashboardView: View {
         makeWorkoutDetailViewModel: { id in
             WorkoutDetailViewModel(cache: PreviewWorkoutDetailCache.filled, workoutID: id)
         },
-        makeExerciseListViewModel: { ExerciseListViewModel(cache: PreviewExerciseCache.filled) },
         makeExerciseProgressionViewModel: { _ in PreviewProgressionCache.rising }
     )
 }
@@ -237,7 +208,6 @@ struct DashboardView: View {
         makeWorkoutDetailViewModel: { id in
             WorkoutDetailViewModel(cache: PreviewWorkoutDetailCache.filled, workoutID: id)
         },
-        makeExerciseListViewModel: { ExerciseListViewModel(cache: PreviewExerciseCache.filled) },
         makeExerciseProgressionViewModel: { _ in PreviewProgressionCache.rising }
     )
 }

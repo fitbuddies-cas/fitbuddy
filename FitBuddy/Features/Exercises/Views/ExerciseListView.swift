@@ -7,6 +7,13 @@ import SwiftUI
 /// pure cache read — the dashboard owns the sync, so opening this screen never
 /// costs a Hevy request.
 ///
+/// The root of its own tab since #264. Inside a `TabView` the `.task` below
+/// re-runs on every return to the tab, which is what keeps the list current
+/// after a sync on the dashboard or a replaced key in the settings; the view
+/// model keeps the rows on screen while that re-read is under way. Over an
+/// empty or unreadable cache the tab shows the same empty and failure cards
+/// the pushed screen used to.
+///
 /// The muscle-group filter (US-7 AC2) sits above the list as `ExerciseFilterView`
 /// and combines with the search field (AC3); both hang off the same view model.
 struct ExerciseListView: View {

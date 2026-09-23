@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The tab bar shown once onboarding is complete (#107): Dashboard, Analysis
-/// and Settings, each with its own `NavigationStack`.
+/// The tab bar shown once onboarding is complete (#107): Dashboard, Exercises
+/// (#264), Analysis and Settings, each with its own `NavigationStack`.
 ///
 /// Pure layout. The ViewModels are wired up in `RootView`, which owns the
 /// SwiftData container; this view only holds the one that has to outlive a
@@ -51,10 +51,11 @@ struct MainTabView: View {
     ///   - makeStravaConnectionViewModel: Handed on to `SettingsView`, called
     ///     once per push of the Strava connection screen (#140).
     ///   - makeWorkoutDetailViewModel: Called once per pushed session (#98).
-    ///   - makeExerciseListViewModel: Called once per push of the exercise
-    ///     list (#37).
+    ///   - makeExerciseListViewModel: Handed to `ExerciseListView` on the
+    ///     exercises tab, which keeps the result as its own state (#37, #264).
     ///   - makeExerciseProgressionViewModel: Called once per pushed movement
-    ///     (#42).
+    ///     (#42) — from the exercises tab and from a card inside a session on
+    ///     the dashboard tab (#162).
     ///   - makeAnalysisHistoryViewModel: Called once per push of the saved
     ///     analyses (#117).
     ///   - reloadToken: Defaults to a constant, so a preview never re-syncs.
@@ -99,11 +100,24 @@ struct MainTabView: View {
                 DashboardView(
                     viewModel: makeDashboardViewModel(),
                     makeWorkoutDetailViewModel: makeWorkoutDetailViewModel,
-                    makeExerciseListViewModel: makeExerciseListViewModel,
                     makeExerciseProgressionViewModel: makeExerciseProgressionViewModel,
                     reloadToken: reloadToken,
                     onRenewSource: onRenewSource
                 )
+            }
+            Tab("Exercises", systemImage: "list.bullet", value: MainTab.exercises) {
+                NavigationStack {
+                    ExerciseListView(
+                        viewModel: makeExerciseListViewModel(),
+                        makeProgressionViewModel: makeExerciseProgressionViewModel
+                    )
+                    // On the stack root, as on the dashboard tab (#162): a
+                    // destination declared on a pushed screen only resolves
+                    // while that screen is the one on top.
+                    .navigationDestination(for: ExerciseIdentity.self) { identity in
+                        ExerciseProgressionView(viewModel: makeExerciseProgressionViewModel(identity))
+                    }
+                }
             }
             Tab("Analysis", systemImage: "sparkles", value: MainTab.analysis) {
                 AnalysisView(
@@ -123,7 +137,7 @@ struct MainTabView: View {
         }
         // No `.tabBarMinimizeBehavior`: on iOS 26 the minimized bar collapses
         // into a pill on the leading edge while scrolling, which reads as the
-        // bar sliding away. The three tabs stay put instead.
+        // bar sliding away. The four tabs stay put instead.
         .tint(Color.fbAccent)
         // The recommendation on the analysis tab was built from the cache that
         // was just discarded, and that view model outlives the tab — without

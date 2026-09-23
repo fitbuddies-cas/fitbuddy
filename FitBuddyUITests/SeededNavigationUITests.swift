@@ -1,8 +1,8 @@
 import XCTest
 
 /// End-to-end tests for the app's reading path over a seeded window (#148):
-/// dashboard → session detail, and dashboard → exercise list → progression
-/// curve.
+/// dashboard → session detail, and exercises tab → exercise list → progression
+/// curve (#264).
 ///
 /// What no unit test can see. Each of these screens has its own view-model
 /// tests; what none of them cover is that the screens are *connected* — that a
@@ -28,15 +28,14 @@ final class SeededNavigationUITests: XCTestCase {
         sut.assertAppears(sut.workoutDetail)
     }
 
-    /// The path US-9 lives at the end of: the exercise list is reachable from
-    /// the dashboard, and a movement opens its progression curve (#42).
+    /// The path US-9 lives at the end of: the exercise list is its own tab
+    /// (#264), and a movement opens its progression curve (#42).
     @MainActor
     func testTappingAnExerciseOpensItsProgressionCurve() {
         let sut = SeededApp().launch()
 
         sut.assertAppears(sut.dashboard)
-        sut.assertAppears(sut.exercisesLink)
-        sut.exercisesLink.tap()
+        sut.select(sut.exercisesTab)
 
         sut.assertAppears(sut.exerciseList)
         let row = sut.firstRow(of: sut.exerciseRows)
@@ -120,8 +119,7 @@ final class SeededNavigationUITests: XCTestCase {
         let sut = SeededApp().launch()
 
         sut.assertAppears(sut.dashboard)
-        sut.assertAppears(sut.exercisesLink)
-        sut.exercisesLink.tap()
+        sut.select(sut.exercisesTab)
         sut.assertAppears(sut.exerciseList)
         sut.firstRow(of: sut.exerciseRows).tap()
         sut.assertAppears(sut.progression)
@@ -143,8 +141,7 @@ final class SeededNavigationUITests: XCTestCase {
         let sut = SeededApp().launch()
 
         sut.assertAppears(sut.dashboard)
-        sut.assertAppears(sut.exercisesLink)
-        sut.exercisesLink.tap()
+        sut.select(sut.exercisesTab)
         sut.assertAppears(sut.exerciseList)
         sut.firstRow(of: sut.exerciseRows).tap()
         sut.assertAppears(sut.progression)

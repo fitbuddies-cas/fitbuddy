@@ -73,6 +73,51 @@ final class ExerciseListViewModelTests: XCTestCase {
 
     /// The failure card offers "Try again", so a second `load()` has to be
     /// able to succeed.
+    /// The list is a tab root (#264): its `.task` re-runs on every return to
+    /// the tab. The rows must stay on screen while the fresh read is under
+    /// way, or every tab switch would flash a spinner and drop the search.
+    func testReloadingOverALoadedWindowKeepsTheRowsUntilTheFreshReadLands() async {
+        let sut = makeSUT()
+        await sut.load()
+        let updated = Array(Self.catalogue.dropFirst())
+        await cache.setExercises(updated)
+        await cache.setHoldsReads(true)
+
+        let reload = Task { await sut.load() }
+        await awaitHeldRead()
+
+        XCTAssertEqual(sut.state, .loaded(Self.catalogue), "Still the old rows while the read is pending")
+        await cache.releaseReads()
+        await reload.value
+        XCTAssertEqual(sut.state, .loaded(updated))
+    }
+
+    /// The other half of the rule above: a retry from the failure card is
+    /// visible as a retry.
+    func testRetryAfterAFailureShowsTheSpinnerWhileReading() async {
+        await cache.setError(StubExerciseCache.Failure())
+        let sut = makeSUT()
+        await sut.load()
+        XCTAssertEqual(sut.state, .failed)
+        await cache.setError(nil)
+        await cache.setHoldsReads(true)
+
+        let retry = Task { await sut.load() }
+        await awaitHeldRead()
+
+        XCTAssertEqual(sut.state, .loading)
+        await cache.releaseReads()
+        await retry.value
+        XCTAssertEqual(sut.state, .loaded(Self.catalogue))
+    }
+
+    /// Blocks until the view model's read has reached the held cache.
+    private func awaitHeldRead() async {
+        while await cache.heldReadCount == 0 {
+            await Task.yield()
+        }
+    }
+
     func testRetryAfterAFailureLoadsTheExercises() async {
         await cache.setError(StubExerciseCache.Failure())
         let sut = makeSUT()

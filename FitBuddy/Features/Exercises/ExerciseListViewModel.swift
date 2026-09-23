@@ -95,10 +95,17 @@ final class ExerciseListViewModel: ObservableObject {
     /// again" button of the failure card.
     ///
     /// Never throws: every outcome lands in `state`, so the screen always says
-    /// something. Publishes `.loading` first, so a retry that fails again is
-    /// visible as a retry instead of leaving the screen untouched.
+    /// something. Publishes `.loading` first unless the rows are already on
+    /// screen: the list is a tab root since #264, and its `.task` re-runs on
+    /// every return to the tab so a sync in between shows up — dropping to a
+    /// spinner each time would flash the screen and dismiss the search field.
+    /// A retry after a failure still goes through `.loading`, so a retry that
+    /// fails again is visible as a retry instead of leaving the screen
+    /// untouched.
     func load() async {
-        state = .loading
+        if case .loaded = state {} else {
+            state = .loading
+        }
         let windowStart = TrainingWindow.start(endingAt: now(), calendar: calendar)
         do {
             let exercises = try await cache.exerciseSummaries(since: windowStart)
