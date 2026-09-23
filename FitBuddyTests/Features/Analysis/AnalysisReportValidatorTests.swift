@@ -275,8 +275,9 @@ final class AnalysisReportValidatorTests: XCTestCase {
     }
 
     /// Any other exercise moves by the step its line lists, under the small
-    /// group's 5 % ceiling: a 2 kg dumbbell step allows 10 → 12 kg, not
-    /// 10 → 12.5 kg and not 10 → 14 kg.
+    /// group's 5 % ceiling: a 2 kg dumbbell step allows 10 → 12 kg. 12.5 is
+    /// a rounding of that step and reads as 12; 13 is off the step; 14 is
+    /// over the ceiling.
     func testListedStepCapsANonBarbellIncrease() {
         let evidence = evidence(exercises: [
             ListedExercise(
@@ -294,6 +295,10 @@ final class AnalysisReportValidatorTests: XCTestCase {
         )
         XCTAssertEqual(
             validate([progression("Lateral Raise", from: 10, to: 12.5)], evidence: evidence).cards,
+            [.progression(exercise: "Lateral Raise", muscleGroup: .shoulders, fromKg: 10, toKg: 12, reasoning: "Reps held.")]
+        )
+        XCTAssertEqual(
+            validate([progression("Lateral Raise", from: 10, to: 13)], evidence: evidence).cards,
             [.note(title: "Lateral Raise", text: "Reps held.")]
         )
         XCTAssertEqual(
