@@ -136,6 +136,24 @@ final class AnalysisReportValidatorTests: XCTestCase {
         XCTAssertEqual(check(benchPress(from: 60, to: 66)), .rejected(.aboveRange))
     }
 
+    /// Inside the range but off the step: 63 kg on a 2.5 kg bar is not a
+    /// load anyone can put on, so it is rejected — and logged apart, since a
+    /// model that lands between the plates is its own finding (#233 review).
+    func testAnIncreaseOffTheStepIsRejected() {
+        XCTAssertEqual(check(benchPress(from: 60, to: 63)), .rejected(.offStep))
+        XCTAssertEqual(validate([benchPress(from: 60, to: 63)]).cards, [.note(title: "Bench Press", text: "Clean overload.")])
+    }
+
+    /// A rounding within the tolerance — 62 for 62.5 — is the model's step,
+    /// and the card states the step, not the rounding: the figure on a card
+    /// is one the equipment offers.
+    func testAModelRoundingWithinToleranceSnapsToTheStep() {
+        XCTAssertEqual(validate([benchPress(from: 60, to: 62)]).cards, [
+            .progression(exercise: "Bench Press", muscleGroup: .chest, fromKg: 60, toKg: 62.5, reasoning: "Clean overload."),
+        ])
+        XCTAssertEqual(validate([benchPress(from: 60, to: 65.4)]).cards.first?.kind, .progression)
+    }
+
     /// A barbell exercise ("(Barbell)" in the Hevy title) moves in steps of
     /// 2.5 kg whatever step its line lists — up to the group's ceiling, so a
     /// 60 kg bench may take two of them.

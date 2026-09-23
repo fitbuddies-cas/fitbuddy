@@ -39,4 +39,29 @@ struct ListedExercise: Equatable, Sendable {
         self.smallestStepKg = smallestStepKg
         self.twoForTwo = twoForTwo
     }
+
+    /// The listed exercise a prompt line describes, from the same listing
+    /// the line is rendered from (#232).
+    ///
+    /// The one place the working set, the step and the 2-for-2 verdict are
+    /// derived: `AnalysisPromptBuilder.listedExercises` builds the evidence
+    /// through it and `StrengthPromptSection` the line, so the range the
+    /// model is shown and the range a card is checked against (#233) cannot
+    /// drift apart.
+    static func make(
+        title: String,
+        muscleGroup: MuscleGroup,
+        listing: (inWindow: ExerciseProgression, last: ExerciseHistoryEntry)
+    ) -> ListedExercise {
+        let working = listing.last.heaviestWorkingSet
+        return ListedExercise(
+            title: title,
+            muscleGroup: muscleGroup,
+            workingSet: working,
+            smallestStepKg: working.flatMap {
+                AnalysisPromptBuilder.smallestStep(in: listing.inWindow.sessions, latest: $0)
+            },
+            twoForTwo: TwoForTwoCondition.evaluate(sessions: listing.inWindow.sessions)
+        )
+    }
 }
