@@ -86,7 +86,9 @@ final class AnalysisReportValidatorTests: XCTestCase {
     /// figure, not the rounding.
     func testStartingWeightWithinToleranceIsReplacedByTheListedWeight() {
         let evidence = evidence(exercises: [
-            ListedExercise(title: "Row (Dumbbell)", muscleGroup: .back, workingSet: WorkingSet(weightKg: 26.25, reps: 8), smallestStepKg: 1.25),
+            ListedExercise(
+                title: "Row (Dumbbell)", muscleGroup: .back, workingSet: WorkingSet(weightKg: 26.25, reps: 8), smallestStepKg: 1.25, twoForTwo: .met
+            ),
         ])
         let validated = validate([
             .progression(exercise: "Row (Dumbbell)", muscleGroup: "Back", fromKg: 26, toKg: 27.5, reasoning: "Reps held."),
@@ -116,23 +118,59 @@ final class AnalysisReportValidatorTests: XCTestCase {
         ])
     }
 
-    /// The step is capped like prompt rule 6: the 2.5 kg step the line lists
-    /// — no share of the working weight on top.
-    func testLoadIncreaseIsCappedAtTheAllowedStep() {
+    /// The increase is checked against the range the prompt line named
+    /// (ADR-013, #233): bench at 60 kg, chest, 10 % ceiling, 2.5 kg steps —
+    /// 62.5 and 65 kg are in, 66 kg and 100 kg are over the ceiling.
+    func testLoadIncreaseIsCheckedAgainstTheRangeAtBothEnds() {
         XCTAssertEqual(validate([benchPress(from: 60, to: 62.5)]).cards.first?.kind, .progression)
+        XCTAssertEqual(validate([benchPress(from: 60, to: 65)]).cards.first?.kind, .progression)
         XCTAssertEqual(validate([benchPress(from: 60, to: 66)]).cards, [.note(title: "Bench Press", text: "Clean overload.")])
         XCTAssertEqual(validate([benchPress(from: 60, to: 100)]).cards, [.note(title: "Bench Press", text: "Clean overload.")])
     }
 
-    /// A barbell exercise ("(Barbell)" in the Hevy title) goes up in steps of
-    /// 2.5 kg, even where its line lists a larger step.
-    func testBarbellIncreaseIsCappedAtTwoAndAHalfKilograms() {
+    /// Under the lower end is not a step the bar can take: 60 → 61 kg on a
+    /// 2.5 kg step is rejected, and logged apart from an overshoot.
+    func testAnIncreaseUnderOneStepIsRejectedAsBelowTheRange() {
+        XCTAssertEqual(validate([benchPress(from: 60, to: 61)]).cards, [.note(title: "Bench Press", text: "Clean overload.")])
+        XCTAssertEqual(check(benchPress(from: 60, to: 61)), .rejected(.belowRange))
+        XCTAssertEqual(check(benchPress(from: 60, to: 66)), .rejected(.aboveRange))
+    }
+
+    /// Inside the range but off the step: 64 kg on a 2.5 kg bar is not a
+    /// load anyone can put on, so it is rejected — and logged apart, since a
+    /// model that lands between the plates is its own finding (#233 review).
+    func testAnIncreaseOffTheStepIsRejected() {
+        XCTAssertEqual(check(benchPress(from: 60, to: 64)), .rejected(.offStep))
+        XCTAssertEqual(check(benchPress(from: 60, to: 63.75)), .rejected(.offStep))
+        XCTAssertEqual(validate([benchPress(from: 60, to: 64)]).cards, [.note(title: "Bench Press", text: "Clean overload.")])
+    }
+
+    /// A rounding within the tolerance — 62 or 63 for 62.5 — is the model's
+    /// step, and the card states the step, not the rounding: the figure on a
+    /// card is one the equipment offers. The range is judged on the model's
+    /// figure, so 62 is a rounding of the lower end, not a value under it.
+    func testAModelRoundingWithinToleranceSnapsToTheStep() {
+        for rounded in [62.0, 63.0] {
+            XCTAssertEqual(validate([benchPress(from: 60, to: rounded)]).cards, [
+                .progression(exercise: "Bench Press", muscleGroup: .chest, fromKg: 60, toKg: 62.5, reasoning: "Clean overload."),
+            ], "\(rounded)")
+        }
+        XCTAssertEqual(validate([benchPress(from: 60, to: 65.4)]).cards, [
+            .progression(exercise: "Bench Press", muscleGroup: .chest, fromKg: 60, toKg: 65, reasoning: "Clean overload."),
+        ])
+    }
+
+    /// A barbell exercise ("(Barbell)" in the Hevy title) moves in steps of
+    /// 2.5 kg whatever step its line lists — up to the group's ceiling, so a
+    /// 60 kg bench may take two of them.
+    func testBarbellIncreaseMovesInTwoAndAHalfKilogramSteps() {
         let evidence = evidence(exercises: [
             ListedExercise(
                 title: "Bench Press (Barbell)",
                 muscleGroup: .chest,
                 workingSet: WorkingSet(weightKg: 60, reps: 5),
-                smallestStepKg: 5
+                smallestStepKg: 5,
+                twoForTwo: .met
             ),
         ])
 
@@ -141,20 +179,113 @@ final class AnalysisReportValidatorTests: XCTestCase {
             .progression
         )
         XCTAssertEqual(
-            validate([progression("Bench Press (Barbell)", from: 60, to: 65)], evidence: evidence).cards,
+            validate([progression("Bench Press (Barbell)", from: 60, to: 65)], evidence: evidence).cards.first?.kind,
+            .progression
+        )
+        XCTAssertEqual(
+            validate([progression("Bench Press (Barbell)", from: 60, to: 67.5)], evidence: evidence).cards,
             [.note(title: "Bench Press (Barbell)", text: "Reps held.")]
         )
     }
 
-    /// Any other exercise goes up by at most the step its line lists: a 2 kg
-    /// dumbbell step allows 10 → 12 kg, not 10 → 12.5 kg.
+    // MARK: - 2-for-2 (ADR-013, #233)
+
+    /// A load increase is only on where the rule is met: not met and not
+    /// checkable both turn the card into a note, whatever the weights say.
+    func testAProgressionNeedsTheTwoForTwoRuleMet() {
+        for (condition, reason) in [
+            (TwoForTwoCondition.notMet, AnalysisReportValidator.ProgressionRejection.conditionNotMet),
+            (.notCheckable, .conditionNotCheckable),
+        ] {
+            let evidence = evidence(exercises: [
+                ListedExercise(
+                    title: "Bench Press",
+                    muscleGroup: .chest,
+                    workingSet: WorkingSet(weightKg: 60, reps: 5),
+                    smallestStepKg: 2.5,
+                    twoForTwo: condition
+                ),
+            ])
+
+            XCTAssertEqual(
+                validate([benchPress(from: 60, to: 62.5)], evidence: evidence).cards,
+                [.note(title: "Bench Press", text: "Clean overload.")],
+                "\(condition)"
+            )
+            XCTAssertEqual(check(benchPress(from: 60, to: 62.5), evidence: evidence), .rejected(reason), "\(condition)")
+        }
+    }
+
+    /// The condition is read before the range: a card that fails both is
+    /// logged for the rule, which is the finding #229 wants to count.
+    func testTheConditionIsCheckedBeforeTheRange() {
+        let evidence = evidence(exercises: [
+            ListedExercise(
+                title: "Bench Press",
+                muscleGroup: .chest,
+                workingSet: WorkingSet(weightKg: 60, reps: 5),
+                smallestStepKg: 2.5,
+                twoForTwo: .notCheckable
+            ),
+        ])
+
+        XCTAssertEqual(check(benchPress(from: 60, to: 100), evidence: evidence), .rejected(.conditionNotCheckable))
+    }
+
+    /// A progress verdict over a card the rule struck is a hold verdict with
+    /// the app's lead, exactly as over any other rejected progression (#177).
+    func testARejectedProgressionUnderTheRuleTurnsProgressIntoHold() {
+        let evidence = evidence(exercises: [
+            ListedExercise(
+                title: "Bench Press",
+                muscleGroup: .chest,
+                workingSet: WorkingSet(weightKg: 60, reps: 5),
+                smallestStepKg: 2.5,
+                twoForTwo: .notMet
+            ),
+        ])
+        let report = AnalysisReport(
+            headline: "You're ready to progress.",
+            verdict: .progress,
+            lead: "Bench press can go up.",
+            cards: [benchPress(from: 60, to: 62.5)],
+            summary: "Bench press is ready."
+        )
+
+        let validated = AnalysisReportValidator.validate(report, against: evidence)
+
+        XCTAssertEqual(validated.verdict, .hold)
+        XCTAssertEqual(validated.headline, AnalysisReportValidator.holdHeadline)
+        XCTAssertEqual(validated.lead, AnalysisReportValidator.holdLead)
+    }
+
+    func testEveryRejectionNamesItsReason() {
+        XCTAssertEqual(check(progression("Incline Press", from: 60, to: 62.5)), .rejected(.notListed))
+        XCTAssertEqual(check(benchPress(from: 57.5, to: 60)), .rejected(.wrongStartingWeight))
+        XCTAssertEqual(check(benchPress(from: 60, to: 60)), .rejected(.noIncrease))
+        XCTAssertEqual(check(benchPress(from: 60, to: 55)), .rejected(.noIncrease))
+        let bodyweight = evidence(exercises: [
+            ListedExercise(title: "Pull Up", muscleGroup: .back, workingSet: nil, twoForTwo: .met),
+        ])
+        XCTAssertEqual(check(progression("Pull Up", from: 0, to: 5), evidence: bodyweight), .rejected(.noWorkingWeight))
+        let noStep = evidence(exercises: [
+            ListedExercise(title: "Lateral Raise", muscleGroup: .shoulders, workingSet: WorkingSet(weightKg: 8, reps: 12), twoForTwo: .met),
+        ])
+        XCTAssertEqual(check(progression("Lateral Raise", from: 8, to: 10), evidence: noStep), .rejected(.noLoadStep))
+    }
+
+    /// Any other exercise moves by the step its line lists, under the small
+    /// group's 5 % ceiling: a 2 kg dumbbell step allows 10 → 12 kg. 12.5 is
+    /// a rounding of that step and reads as 12; 13 is off the step; 14 is
+    /// over the ceiling.
     func testListedStepCapsANonBarbellIncrease() {
         let evidence = evidence(exercises: [
             ListedExercise(
                 title: "Lateral Raise",
                 muscleGroup: .shoulders,
                 workingSet: WorkingSet(weightKg: 10, reps: 12),
-                smallestStepKg: 2
+                smallestStepKg: 2,
+                twoForTwo: .met
             ),
         ])
 
@@ -164,15 +295,25 @@ final class AnalysisReportValidatorTests: XCTestCase {
         )
         XCTAssertEqual(
             validate([progression("Lateral Raise", from: 10, to: 12.5)], evidence: evidence).cards,
+            [.progression(exercise: "Lateral Raise", muscleGroup: .shoulders, fromKg: 10, toKg: 12, reasoning: "Reps held.")]
+        )
+        XCTAssertEqual(
+            validate([progression("Lateral Raise", from: 10, to: 13)], evidence: evidence).cards,
+            [.note(title: "Lateral Raise", text: "Reps held.")]
+        )
+        XCTAssertEqual(
+            validate([progression("Lateral Raise", from: 10, to: 14)], evidence: evidence).cards,
             [.note(title: "Lateral Raise", text: "Reps held.")]
         )
     }
 
     /// A non-barbell line without a listed step allows no heavier target:
-    /// rule 6 progresses reps there.
+    /// rule 6 progresses reps there, even with the 2-for-2 rule met.
     func testWithoutAListedStepANonBarbellIncreaseBecomesANote() {
         let evidence = evidence(exercises: [
-            ListedExercise(title: "Lateral Raise", muscleGroup: .shoulders, workingSet: WorkingSet(weightKg: 8, reps: 12)),
+            ListedExercise(
+                title: "Lateral Raise", muscleGroup: .shoulders, workingSet: WorkingSet(weightKg: 8, reps: 12), twoForTwo: .met
+            ),
         ])
 
         XCTAssertEqual(
@@ -195,7 +336,9 @@ final class AnalysisReportValidatorTests: XCTestCase {
         let latest = WorkingSet(weightKg: 40, reps: 12)
         let step = AnalysisPromptBuilder.smallestStep(in: sessions, latest: latest)
         let evidence = evidence(exercises: [
-            ListedExercise(title: "Leg Extension (Machine)", muscleGroup: .legs, workingSet: latest, smallestStepKg: step),
+            ListedExercise(
+                title: "Leg Extension (Machine)", muscleGroup: .legs, workingSet: latest, smallestStepKg: step, twoForTwo: .met
+            ),
         ])
 
         XCTAssertNil(step)
@@ -236,8 +379,8 @@ final class AnalysisReportValidatorTests: XCTestCase {
 
     func testDuplicateTitleMatchesTheEntryWhoseWeightFits() {
         let evidence = evidence(exercises: [
-            ListedExercise(title: "Curl", muscleGroup: .arms, workingSet: WorkingSet(weightKg: 12, reps: 10), smallestStepKg: 2.5),
-            ListedExercise(title: "curl", muscleGroup: .arms, workingSet: WorkingSet(weightKg: 30, reps: 8), smallestStepKg: 2.5),
+            ListedExercise(title: "Curl", muscleGroup: .arms, workingSet: WorkingSet(weightKg: 12, reps: 10), smallestStepKg: 2.5, twoForTwo: .met),
+            ListedExercise(title: "curl", muscleGroup: .arms, workingSet: WorkingSet(weightKg: 30, reps: 8), smallestStepKg: 2.5, twoForTwo: .met),
         ])
         let validated = validate([
             .progression(exercise: "Curl", muscleGroup: "Arms", fromKg: 30, toKg: 32.5, reasoning: "Reps held."),
@@ -585,8 +728,12 @@ final class AnalysisReportValidatorTests: XCTestCase {
             [benchPress(from: 60, to: 62.5), squat, chestVersusLegs(3, 1), squat],
             evidence: evidence(
                 exercises: [
-                    ListedExercise(title: "Bench Press", muscleGroup: .chest, workingSet: WorkingSet(weightKg: 60, reps: 5), smallestStepKg: 2.5),
-                    ListedExercise(title: "Squat", muscleGroup: .legs, workingSet: WorkingSet(weightKg: 80, reps: 5), smallestStepKg: 2.5),
+                    ListedExercise(
+                        title: "Bench Press", muscleGroup: .chest, workingSet: WorkingSet(weightKg: 60, reps: 5), smallestStepKg: 2.5, twoForTwo: .met
+                    ),
+                    ListedExercise(
+                        title: "Squat", muscleGroup: .legs, workingSet: WorkingSet(weightKg: 80, reps: 5), smallestStepKg: 2.5, twoForTwo: .met
+                    ),
                 ],
                 recovery: metrics
             )
@@ -1129,7 +1276,8 @@ final class AnalysisReportValidatorTests: XCTestCase {
                 title: "Bench Press",
                 muscleGroup: .chest,
                 workingSet: WorkingSet(weightKg: 60, reps: 5),
-                smallestStepKg: 2.5
+                smallestStepKg: 2.5,
+                twoForTwo: .met
             ),
         ],
         perWeek: [MuscleGroup: Double] = [.chest: 3, .legs: 1],
@@ -1147,6 +1295,20 @@ final class AnalysisReportValidatorTests: XCTestCase {
             recoveryCountsUnanalysedTraining: countsUnanalysedTraining,
             interference: interference,
             weeklyMetrics: weeklyMetrics
+        )
+    }
+
+    /// The check behind the card, for asserting the reason a card failed.
+    private func check(_ card: AnalysisCard, evidence: AnalysisReportEvidence? = nil) -> AnalysisReportValidator.ProgressionCheck {
+        guard case let .progression(exercise, _, fromKg, toKg, reasoning) = card else {
+            return .rejected(.notListed)
+        }
+        return AnalysisReportValidator.checkProgression(
+            exercise: exercise,
+            fromKg: fromKg,
+            toKg: toKg,
+            reasoning: reasoning,
+            listed: (evidence ?? self.evidence()).exercises
         )
     }
 

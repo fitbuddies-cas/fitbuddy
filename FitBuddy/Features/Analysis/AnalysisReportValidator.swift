@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Checks the cards of a model's `AnalysisReport` against the cache (US-14
 /// AC3/AC4, #175).
@@ -17,10 +18,12 @@ enum AnalysisReportValidator {
     /// weight: rounding by the model, e.g. `61.25` written as `61`.
     static let weightToleranceKg = 0.5
 
-    /// The barbell step prompt rule 6 names (#173): the load increase a
-    /// barbell exercise is allowed, whatever step is listed for it. The
+    /// The barbell step prompt rule 6 names (#173): the granularity a barbell
+    /// exercise's range is rounded to, whatever step is listed for it. The
     /// prompt's own constant, so the two cannot drift apart.
     static let minimumStepKg = AnalysisPromptBuilder.minimumStepKg
+
+    private static let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "Analysis")
 
     /// Cards the result screen shows at most (design 3.4/3.4b/3.5: zero to four).
     static let maxCards = 4
@@ -353,20 +356,52 @@ enum AnalysisReportValidator {
 
     // MARK: - Progression
 
+    /// Why a progression card was not backed (#233).
+    ///
+    /// Each case is one line in the log, so the rate of each reason can be
+    /// read over live runs (#228, #229): a window in which most cards fail as
+    /// `conditionNotCheckable` is a window of users without routines — a
+    /// finding for ADR-013, not a model problem. `belowRange` is kept apart
+    /// from `aboveRange` for the same reason: too cautious is a finding too.
+    enum ProgressionRejection: String, Equatable, Sendable {
+        /// No listed exercise carries the card's title.
+        case notListed
+        /// The listed exercise has no working weight a load change could
+        /// start from — a bodyweight movement.
+        case noWorkingWeight
+        /// `fromKg` is not the working weight the prompt named.
+        case wrongStartingWeight
+        /// `toKg` is at or under the working weight.
+        case noIncrease
+        /// The 2-for-2 rule is not met: no load increase is on (ADR-013).
+        case conditionNotMet
+        /// The 2-for-2 rule could not be applied for want of a rep target —
+        /// not the same as met (ADR-013).
+        case conditionNotCheckable
+        /// The rule is met, but the exercise has no step to move by: reps are
+        /// the lever there (#234).
+        case noLoadStep
+        /// `toKg` is above the working weight but under one step: not a load
+        /// the equipment offers.
+        case belowRange
+        /// `toKg` is over the ceiling of `ProgressionBand`.
+        case aboveRange
+        /// `toKg` is inside the range but not on a step the equipment offers
+        /// — 64 kg on a 2.5 kg bar — beyond the rounding `weightToleranceKg`
+        /// forgives.
+        case offStep
+    }
+
+    /// The outcome of checking a progression card against the listed
+    /// exercises.
+    enum ProgressionCheck: Equatable, Sendable {
+        case accepted(AnalysisReportCard)
+        case rejected(ProgressionRejection)
+    }
+
     /// The progression as the app states it, or `nil` when the cache does not
-    /// back it:
-    ///
-    /// - the exercise is listed in the prompt (trimmed, case-insensitive),
-    /// - its listed working weight exists and `fromKg` is within
-    ///   `weightToleranceKg` of it,
-    /// - `toKg` is above that working weight, by at most the step prompt
-    ///   rule 6 allows (#173), see `maxStepKg(for:)`. No share of the working
-    ///   weight on top: 60 → 66 kg is no step the prompt offered.
-    ///
-    /// Title, muscle group and `fromKg` are replaced by the listed values, so
-    /// the struck-through figure on the card is the cache's, not the model's
-    /// rounding of it. Where two listed exercises share a title, the first
-    /// whose weight matches wins.
+    /// back it — see `checkProgression(...)` for the rules, and the log for
+    /// the reason.
     private static func progression(
         exercise: String,
         fromKg: Double,
@@ -374,9 +409,57 @@ enum AnalysisReportValidator {
         reasoning: String,
         listed: [ListedExercise]
     ) -> AnalysisReportCard? {
+        switch checkProgression(exercise: exercise, fromKg: fromKg, toKg: toKg, reasoning: reasoning, listed: listed) {
+        case let .accepted(card):
+            return card
+        case let .rejected(reason):
+            // The title and the figures are the user's training data.
+            logger.notice(
+                "Progression card rejected (\(reason.rawValue, privacy: .public)): \(exercise, privacy: .private) \(fromKg, privacy: .private) → \(toKg, privacy: .private) kg"
+            )
+            return nil
+        }
+    }
+
+    /// Checks a progression card against the listed exercises (#175, #233):
+    ///
+    /// - the exercise is listed in the prompt (trimmed, case-insensitive),
+    /// - its listed working weight exists and `fromKg` is within
+    ///   `weightToleranceKg` of it,
+    /// - `toKg` is above that working weight,
+    /// - the 2-for-2 rule is **met** for the exercise (ADR-013): not met and
+    ///   not checkable both reject, since a load increase is not on either
+    ///   way — the card falls back to a note, and to rep progression once
+    ///   #234 lands,
+    /// - the exercise has a step to move by, and `toKg` lies within
+    ///   `ProgressionBand.range(for:)` — the range the prompt line named,
+    ///   both ends inclusive. 60 → 66 kg on a bench at 60 is over the 10 %
+    ///   ceiling; 60 → 61 kg is under the one step the bar can take,
+    /// - `toKg` sits on a step: a whole number of steps above the working
+    ///   weight, within `weightToleranceKg` — the same rounding `fromKg` is
+    ///   forgiven. 64 kg on a 2.5 kg bar is a weight nobody can load, and a
+    ///   card must not show one. The range is checked on the model's figure
+    ///   first, so 66 kg reads as over the ceiling rather than as off the
+    ///   step, and 62 kg as a rounding of 62.5 rather than as under it.
+    ///
+    /// Title, muscle group and `fromKg` are replaced by the listed values, so
+    /// the struck-through figure on the card is the cache's, not the model's
+    /// rounding of it; `toKg` is the model's choice of step, snapped to the
+    /// step itself (62 for 62.5 reads 62.5 kg), because every figure a card
+    /// states as a load is one the equipment offers. Where two listed
+    /// exercises share a title, the first whose weight matches wins.
+    static func checkProgression(
+        exercise: String,
+        fromKg: Double,
+        toKg: Double,
+        reasoning: String,
+        listed: [ListedExercise]
+    ) -> ProgressionCheck {
         let name = folded(exercise)
-        let match = listed.lazy
-            .filter { folded($0.title) == name }
+        let candidates = listed.filter { folded($0.title) == name }
+        guard !candidates.isEmpty else { return .rejected(.notListed) }
+        guard candidates.contains(where: { $0.workingSet != nil }) else { return .rejected(.noWorkingWeight) }
+        let match = candidates.lazy
             .compactMap { listed -> (exercise: ListedExercise, workingKg: Double)? in
                 guard let working = listed.workingSet?.roundedWeightKg,
                       abs(fromKg - working) <= weightToleranceKg + epsilon
@@ -384,33 +467,28 @@ enum AnalysisReportValidator {
                 return (listed, working)
             }
             .first
-        guard let match else { return nil }
-        guard toKg > match.workingKg,
-              let maxStep = maxStepKg(for: match.exercise),
-              toKg - match.workingKg <= maxStep + epsilon
-        else { return nil }
-        return .progression(
+        guard let match else { return .rejected(.wrongStartingWeight) }
+        guard toKg > match.workingKg + epsilon else { return .rejected(.noIncrease) }
+        switch match.exercise.twoForTwo {
+        case .notMet: return .rejected(.conditionNotMet)
+        case .notCheckable: return .rejected(.conditionNotCheckable)
+        case .met: break
+        }
+        guard let step = ProgressionBand.stepKg(for: match.exercise),
+              let range = ProgressionBand.range(for: match.exercise)
+        else { return .rejected(.noLoadStep) }
+        guard toKg >= range.lowerBound - weightToleranceKg - epsilon else { return .rejected(.belowRange) }
+        guard toKg <= range.upperBound + weightToleranceKg + epsilon else { return .rejected(.aboveRange) }
+        let steps = ((toKg - match.workingKg) / step).rounded()
+        let onStep = PlainWeightFormatter.rounded(match.workingKg + steps * step)
+        guard abs(toKg - onStep) <= weightToleranceKg + epsilon else { return .rejected(.offStep) }
+        return .accepted(.progression(
             exercise: match.exercise.title,
             muscleGroup: match.exercise.muscleGroup,
             fromKg: match.workingKg,
-            toKg: toKg,
+            toKg: onStep,
             reasoning: reasoning
-        )
-    }
-
-    /// The largest load increase prompt rule 6 allows for a listed exercise,
-    /// or `nil` when it allows none:
-    ///
-    /// - a barbell exercise (`AnalysisPromptBuilder.isBarbell(title:)`):
-    ///   `minimumStepKg`, even when a larger step is listed,
-    /// - any other exercise: the smallest step its line lists,
-    /// - any other exercise without a listed step: none — rule 6 progresses
-    ///   reps there, so a heavier target is not backed.
-    static func maxStepKg(for exercise: ListedExercise) -> Double? {
-        if AnalysisPromptBuilder.isBarbell(title: exercise.title) {
-            return minimumStepKg
-        }
-        return exercise.smallestStepKg
+        ))
     }
 
     // MARK: - Imbalance
