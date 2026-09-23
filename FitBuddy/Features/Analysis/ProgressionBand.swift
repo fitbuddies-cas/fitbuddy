@@ -2,7 +2,7 @@ import Foundation
 
 /// The load range a progression may move an exercise to (ADR-013, #232).
 ///
-/// A ceiling in percent of the working weight, staffed by muscle group, and
+/// A ceiling in percent of the working weight, tiered by muscle group, and
 /// a floor of one equipment step. The prompt names the range per exercise
 /// and the report validation (#233) checks a progression card against the
 /// same range, so both read it from here.

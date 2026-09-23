@@ -538,15 +538,7 @@ enum AnalysisPromptBuilder {
             guard let progression = progressions[exercise.id],
                   let listing = listing(progression, from: start)
             else { return nil }
-            return ListedExercise(
-                title: exercise.title,
-                muscleGroup: exercise.muscleGroup,
-                workingSet: listing.last.heaviestWorkingSet,
-                smallestStepKg: listing.last.heaviestWorkingSet.flatMap {
-                    smallestStep(in: listing.inWindow.sessions, latest: $0)
-                },
-                twoForTwo: TwoForTwoCondition.evaluate(sessions: listing.inWindow.sessions)
-            )
+            return ListedExercise.make(title: exercise.title, muscleGroup: exercise.muscleGroup, listing: listing)
         }
     }
 

@@ -40,8 +40,22 @@ final class TwoForTwoConditionTests: XCTestCase {
         XCTAssertEqual(verdict, .notMet)
     }
 
-    func testNoSessionsIsNotMet() {
-        XCTAssertEqual(TwoForTwoCondition.evaluate(sessions: []), .notMet)
+    /// Nothing attempted, nothing to check — and nothing to name as a target.
+    func testNoWorkingSetAtAllIsNotCheckable() {
+        XCTAssertEqual(TwoForTwoCondition.evaluate(sessions: []), .notCheckable)
+        XCTAssertEqual(
+            TwoForTwoCondition.evaluate(sessions: [session(1, sets: [set(0, type: .warmup, reps: 10, target: 8)])]),
+            .notCheckable
+        )
+    }
+
+    /// A single session without a target is not checkable, not "not met":
+    /// the not-met line names the target, and there is none (#232 review).
+    func testASingleSessionWithoutATargetIsNotCheckable() {
+        let verdict = TwoForTwoCondition.evaluate(sessions: [
+            session(1, sets: [set(0, reps: 15, target: nil)]),
+        ])
+        XCTAssertEqual(verdict, .notCheckable)
     }
 
     /// A missing target is a state of its own, never read as met — even
