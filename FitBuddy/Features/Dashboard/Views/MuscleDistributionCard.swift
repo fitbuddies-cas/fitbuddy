@@ -50,7 +50,10 @@ struct MuscleDistributionCard: View {
                 x: .value("Volume", load.volumeKg),
                 y: .value("Muscle group", load.group.displayName)
             )
-            .foregroundStyle(Color.fbAccent)
+            // The heaviest group carries the full accent, the rest step back:
+            // the chart is sorted heaviest first, so one strong bar on top
+            // reads as the ranking without a legend.
+            .foregroundStyle(load.id == weighted.first?.id ? Color.fbAccent : Color.fbAccent.opacity(0.45))
             .cornerRadius(4)
             .annotation(position: .trailing, alignment: .leading) {
                 Text(VolumeFormatter.compact(load.volumeKg))

@@ -34,6 +34,15 @@ final class DashboardRenderingTests: XCTestCase {
         XCTAssertGreaterThan(image.size.height, 0)
     }
 
+    /// The sparkline builds its scales from the weekly buckets — an all-zero
+    /// window must still yield a valid domain.
+    func testVolumeSparklineRendersWithAndWithoutVolume() throws {
+        let rising = (0..<13).map { Double($0) * 800 }
+        XCTAssertGreaterThan(try render(VolumeSparkline(weeklyVolumesKg: rising)).size.height, 0)
+        XCTAssertGreaterThan(try render(VolumeSparkline(weeklyVolumesKg: Array(repeating: 0, count: 13))).size.height, 0)
+        XCTAssertGreaterThan(try render(VolumeSparkline(weeklyVolumesKg: [])).size.height, 0)
+    }
+
     func testRecentSessionsCardRenders() throws {
         let workouts = (0..<14).map { index in
             WorkoutSummary(

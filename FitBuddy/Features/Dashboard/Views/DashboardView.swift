@@ -89,6 +89,10 @@ struct DashboardView: View {
             }
             .background(Color.fbBackground)
             .navigationTitle("Dashboard")
+            // The window the whole screen describes, next to the title as in
+            // design 2.1 — rather than as a label that scrolls away with the
+            // first card.
+            .navigationSubtitle("Last 90 days")
             // The UI tests' proof that onboarding let the app through (#120).
             .accessibilityIdentifier(AccessibilityID.Dashboard.root)
             // By value, so the destination is built when a row is tapped

@@ -196,7 +196,7 @@ final class WorkoutListViewModel: ObservableObject {
                 ? (keepingSpinnerWhenEmpty ? .loading : .empty)
                 : .loaded(
                     workouts: summaries,
-                    metrics: DashboardMetrics(summaries: summaries, calendar: calendar)
+                    metrics: DashboardMetrics(summaries: summaries, endingAt: now(), calendar: calendar)
                 )
         } catch {
             // A read the caller interrupted says nothing about the store, so
