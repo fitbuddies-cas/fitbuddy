@@ -408,18 +408,15 @@ enum AnalysisReportValidator {
         case belowRange
         /// `toKg` is over the ceiling of `ProgressionBand`.
         case aboveRange
-<<<<<<< HEAD
+        /// `toKg` is inside the range but not on a step the equipment offers
+        /// — 63 kg on a 2.5 kg bar — beyond the rounding `weightToleranceKg`
+        /// forgives.
+        case offStep
         /// A rep progression's `fromReps` is not the reps the prompt listed
         /// with the working weight (#234).
         case wrongStartingReps
         /// A rep progression adds more than `maxRepStep` reps at once (#234).
         case aboveRepStep
-=======
-        /// `toKg` is inside the range but not on a step the equipment offers
-        /// — 63 kg on a 2.5 kg bar — beyond the rounding `weightToleranceKg`
-        /// forgives.
-        case offStep
->>>>>>> feature/task-233-validator-range-two-for-two
     }
 
     /// The outcome of checking a progression card against the listed
