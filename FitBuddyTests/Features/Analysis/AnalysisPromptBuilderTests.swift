@@ -945,103 +945,207 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertTrue(prompt.user.contains("Plateau: no."))
     }
 
-    /// The increment the system prompt caps a load increase at, taken from
-    /// the user's own log — warm-ups excluded: counting the 26 kg warm-up
-    /// would make the step 1 kg.
-    func testSmallestLoggedStepComesFromTheWorkingWeights() {
+    /// The step the range is rounded to is taken from the user's own log —
+    /// warm-ups excluded: counting the 26 kg warm-up would make the step 1 kg
+    /// and the next weight 33.5 kg. A shoulder press is a small group, so the
+    /// 5 % ceiling (34.1 kg) sits under one step and the range is that step.
+    func testTheRangeStepComesFromTheWorkingWeights() throws {
         let press = exercise("Shoulder Press (Machine)", volume: 3_000, sessions: 2)
         let single = exercise("Row", volume: 1_000, sessions: 1)
         let prompt = makeWithExercises([
             (press, progression(press, sessions: [
-                session(daysAgo: 9, sets: [set(0, .warmup, 26, 10), set(1, .normal, 25, 8)]),
-                session(daysAgo: 2, sets: [set(0, .normal, 27.5, 8), set(1, .normal, 32.5, 6)]),
+                session(daysAgo: 9, sets: [set(0, .warmup, 26, 10), set(1, .normal, 25, 8, target: 6)]),
+                session(daysAgo: 2, sets: [set(0, .normal, 27.5, 8, target: 6), set(1, .normal, 32.5, 6, target: 4)]),
             ])),
-            (single, progression(single, sessions: [session(daysAgo: 1, sets: working(50, 10))])),
+            (single, progression(single, sessions: [session(daysAgo: 1, sets: working(50, 10, target: 8))])),
         ])
 
-        XCTAssertTrue(prompt.user.contains("Smallest logged step: 2.5 kg."))
-        XCTAssertEqual(prompt.user.components(separatedBy: "Smallest logged step").count, 2)
+        let rows = try exerciseRows(prompt)
+        XCTAssertTrue(rows[0].hasSuffix("Rep target 4, beaten by 2+ reps in the last 2 sessions. Next: 35 kg."), rows[0])
+        // One session is not two: the rule is not met, whatever the reps.
+        XCTAssertTrue(rows[1].hasSuffix("Rep target 8, not yet beaten by 2+ reps in 2 consecutive sessions. Next: progress reps, not weight."), rows[1])
+    }
+
+    // MARK: - Progression band (ADR-013, #232)
+
+    /// The ADR's own example: bench at 60 kg, chest is a large group, the
+    /// 10 % ceiling is 66 kg, and in 2.5 kg barbell steps that is 62.5–65 kg.
+    func testAMetTwoForTwoNamesTheRangeUpToTheGroupCeiling() throws {
+        let bench = exercise("Bench Press (Barbell)", volume: 5_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (bench, progression(bench, sessions: [
+                session(daysAgo: 9, sets: working(60, 12, target: 10)),
+                session(daysAgo: 2, sets: working(60, 12, target: 10)),
+            ])),
+        ])
+
+        let row = try XCTUnwrap(exerciseRows(prompt).first)
+        XCTAssertTrue(row.hasSuffix("Rep target 10, beaten by 2+ reps in the last 2 sessions. Next: 62.5–65 kg."), row)
+        XCTAssertFalse(prompt.user.contains("Smallest logged step"))
+    }
+
+    /// A squat at 100 kg: legs, 10 %, four barbell steps up to 110 kg.
+    func testALargeGroupGetsSeveralStepsOfRange() throws {
+        let squat = exercise("Squat (Barbell)", volume: 8_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (squat, progression(squat, sessions: [
+                session(daysAgo: 9, sets: working(100, 7, target: 5)),
+                session(daysAgo: 2, sets: working(100, 8, target: 5)),
+            ])),
+        ])
+
+        let row = try XCTUnwrap(exerciseRows(prompt).first)
+        XCTAssertTrue(row.hasSuffix("Next: 102.5–110 kg."), row)
+    }
+
+    /// Beaten in the last session only: the rule wants two in a row, so the
+    /// line tells the model to progress reps and names no range.
+    func testAnUnmetTwoForTwoProgressesRepsNotWeight() throws {
+        let bench = exercise("Bench Press (Barbell)", volume: 5_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (bench, progression(bench, sessions: [
+                session(daysAgo: 9, sets: working(60, 11, target: 10)),
+                session(daysAgo: 2, sets: working(60, 12, target: 10)),
+            ])),
+        ])
+
+        let row = try XCTUnwrap(exerciseRows(prompt).first)
+        XCTAssertTrue(row.hasSuffix("Rep target 10, not yet beaten by 2+ reps in 2 consecutive sessions. Next: progress reps, not weight."), row)
+        XCTAssertFalse(row.contains("Next: 62.5"), "no range where the rule is not met: \(row)")
+    }
+
+    /// No routine, no target: the rule cannot be applied, and the line says
+    /// so rather than treating a free session as a met condition.
+    func testAMissingTargetIsNotCheckableAndSaysSo() throws {
+        let bench = exercise("Bench Press (Barbell)", volume: 5_000, sessions: 2)
+        let mixed = exercise("Squat (Barbell)", volume: 4_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (bench, progression(bench, sessions: [
+                session(daysAgo: 9, sets: working(60, 12)),
+                session(daysAgo: 2, sets: working(60, 12)),
+            ])),
+            (mixed, progression(mixed, sessions: [
+                session(daysAgo: 9, sets: working(100, 8)),
+                session(daysAgo: 2, sets: working(100, 8, target: 5)),
+            ])),
+        ])
+
+        let rows = try exerciseRows(prompt)
+        XCTAssertTrue(rows[0].hasSuffix("No rep target on file. Next: progress reps, not weight."), rows[0])
+        // A target on the latest session alone is not enough to check the pair.
+        XCTAssertTrue(rows[1].hasSuffix("Rep target 5, not on file for both of the last 2 sessions. Next: progress reps, not weight."), rows[1])
+    }
+
+    /// The rule reads the *last* working set of a session: a first set that
+    /// beat the target does not count when the last one did not.
+    func testTheLastWorkingSetOfASessionIsWhatCounts() throws {
+        let bench = exercise("Bench Press (Barbell)", volume: 5_000, sessions: 2)
+        let prompt = makeWithExercises([
+            (bench, progression(bench, sessions: [
+                session(daysAgo: 9, sets: working(60, 12, target: 10)),
+                session(daysAgo: 2, sets: [
+                    set(0, .normal, 60, 12, target: 10),
+                    set(1, .normal, 60, 11, target: 10),
+                    set(2, .warmup, 40, 15, target: 10),
+                ]),
+            ])),
+        ])
+
+        let row = try XCTUnwrap(exerciseRows(prompt).first)
+        XCTAssertTrue(row.contains("not yet beaten by 2+ reps"), row)
     }
 
     /// A gap larger than `maxStepShare` of the working weight is a change of
     /// equipment, not an increment: 8 → 12 kg would be +33 % in one session.
-    /// The step is left out, and rule 6 falls back to reps.
-    func testALargeGapBetweenLoggedWeightsIsNoStep() {
+    /// No step, no range — even with the rule met, the line falls back to
+    /// reps and says why. A non-barbell bench with a real 2.5 kg step gets
+    /// its range.
+    func testALargeGapBetweenLoggedWeightsIsNoStep() throws {
         let raise = exercise("Lateral Raise (Dumbbell)", volume: 1_000, sessions: 2)
         let machine = exercise("Chest Press (Machine)", volume: 3_000, sessions: 2)
         let bench = exercise("Bench Press", volume: 5_000, sessions: 2)
         let prompt = makeWithExercises([
             (raise, progression(raise, sessions: [
-                session(daysAgo: 9, sets: working(8, 15)),
-                session(daysAgo: 2, sets: working(12, 10)),
+                session(daysAgo: 9, sets: working(8, 15, target: 12)),
+                session(daysAgo: 2, sets: working(12, 10, target: 8)),
             ])),
             (machine, progression(machine, sessions: [
-                session(daysAgo: 9, sets: working(40, 12)),
-                session(daysAgo: 2, sets: working(70, 8)),
+                session(daysAgo: 9, sets: working(40, 12, target: 10)),
+                session(daysAgo: 2, sets: working(70, 8, target: 6)),
             ])),
             (bench, progression(bench, sessions: [
-                session(daysAgo: 9, sets: working(60, 5)),
-                session(daysAgo: 2, sets: working(62.5, 5)),
+                session(daysAgo: 9, sets: working(60, 7, target: 5)),
+                session(daysAgo: 2, sets: working(62.5, 7, target: 5)),
             ])),
         ])
 
-        XCTAssertEqual(prompt.user.components(separatedBy: "Smallest logged step").count, 2)
-        XCTAssertTrue(prompt.user.contains("Smallest logged step: 2.5 kg."))
-        XCTAssertFalse(prompt.user.contains("Smallest logged step: 4 kg"))
-        XCTAssertFalse(prompt.user.contains("Smallest logged step: 30 kg"))
+        let rows = try exerciseRows(prompt)
+        // Ranked by volume: bench, machine, raise.
+        XCTAssertTrue(rows[0].hasSuffix("Next: 65–67.5 kg."), rows[0])
+        XCTAssertTrue(rows[1].hasSuffix("Next: progress reps, no load step is logged for this exercise."), rows[1])
+        XCTAssertTrue(rows[2].hasSuffix("Next: progress reps, no load step is logged for this exercise."), rows[2])
     }
 
     /// Below the share, the floor keeps a light dumbbell's real step: 2 kg on
-    /// a 10 kg lateral raise is 20 %, but no more than one plate pair.
-    func testASmallStepOnALightWeightIsKeptByTheFloor() {
+    /// a 10 kg lateral raise is 20 %, but no more than one plate pair — and
+    /// the 5 % ceiling of a small group is under that step, so the range is
+    /// exactly the step.
+    func testASmallStepOnALightWeightIsKeptByTheFloor() throws {
         let raise = exercise("Lateral Raise (Dumbbell)", volume: 1_000, sessions: 2)
         let prompt = makeWithExercises([
             (raise, progression(raise, sessions: [
-                session(daysAgo: 9, sets: working(8, 15)),
-                session(daysAgo: 2, sets: working(10, 12)),
+                session(daysAgo: 9, sets: working(8, 15, target: 12)),
+                session(daysAgo: 2, sets: working(10, 12, target: 10)),
             ])),
         ])
 
-        XCTAssertTrue(prompt.user.contains("Smallest logged step: 2 kg."))
+        let row = try XCTUnwrap(exerciseRows(prompt).first)
+        XCTAssertTrue(row.hasSuffix("Next: 12 kg."), row)
     }
 
     /// The floor does not turn a change of dumbbells into a step: 8 → 12 kg
     /// is 4 kg, past both the share and the floor.
-    func testTheFloorStillDropsAChangeOfEquipment() {
+    func testTheFloorStillDropsAChangeOfEquipment() throws {
         let raise = exercise("Lateral Raise (Dumbbell)", volume: 1_000, sessions: 2)
         let prompt = makeWithExercises([
             (raise, progression(raise, sessions: [
-                session(daysAgo: 9, sets: working(8, 15)),
-                session(daysAgo: 2, sets: working(12, 10)),
+                session(daysAgo: 9, sets: working(8, 15, target: 12)),
+                session(daysAgo: 2, sets: working(12, 10, target: 8)),
             ])),
         ])
 
-        XCTAssertFalse(prompt.user.contains("Smallest logged step"))
+        let row = try XCTUnwrap(exerciseRows(prompt).first)
+        XCTAssertTrue(row.hasSuffix("Next: progress reps, no load step is logged for this exercise."), row)
     }
 
     /// A step exactly at the share still counts: 2.5 kg on 25 kg is 10 %.
-    func testAStepAtTheShareIsKept() {
+    /// Arms are a small group, so the 5 % ceiling (26.25 kg) allows that one
+    /// step and no more.
+    func testAStepAtTheShareIsKept() throws {
         let curl = exercise("Bicep Curl (Cable)", volume: 1_000, sessions: 2)
         let prompt = makeWithExercises([
             (curl, progression(curl, sessions: [
-                session(daysAgo: 9, sets: working(22.5, 10)),
-                session(daysAgo: 2, sets: working(25, 10)),
+                session(daysAgo: 9, sets: working(22.5, 12, target: 10)),
+                session(daysAgo: 2, sets: working(25, 12, target: 10)),
             ])),
         ])
 
-        XCTAssertTrue(prompt.user.contains("Smallest logged step: 2.5 kg."))
+        let row = try XCTUnwrap(exerciseRows(prompt).first)
+        XCTAssertTrue(row.hasSuffix("Next: 27.5 kg."), row)
     }
 
     /// A set with weight but no reps — a loaded carry — is not a working set:
-    /// it neither sets the working weight nor a step. Counted, 102.5 kg would
-    /// make the step 2.5 kg.
-    func testASetWithWeightButNoRepsIsNoWorkingSet() {
+    /// it neither sets the working weight nor is it the set the 2-for-2 rule
+    /// reads. Counted, the 102.5 kg carry without a target would make the
+    /// rule not checkable; read correctly, the 105 × 5 set beats its target
+    /// and the barbell range runs from 107.5 kg to the 10 % ceiling.
+    func testASetWithWeightButNoRepsIsNoWorkingSet() throws {
         let deadlift = exercise("Deadlift (Barbell)", volume: 5_000, sessions: 2)
         let prompt = makeWithExercises([
             (deadlift, progression(deadlift, sessions: [
-                session(daysAgo: 9, sets: working(100, 5)),
+                session(daysAgo: 9, sets: working(100, 5, target: 3)),
                 session(daysAgo: 2, sets: [
-                    set(0, .normal, 105, 5),
+                    set(0, .normal, 105, 5, target: 3),
                     SetDetail(index: 1, type: .normal, weightKg: 120, reps: nil,
                               distanceMeters: 40, durationSeconds: nil, rpe: nil),
                     SetDetail(index: 2, type: .normal, weightKg: 102.5, reps: nil,
@@ -1050,8 +1154,9 @@ final class AnalysisPromptBuilderTests: XCTestCase {
             ])),
         ])
 
-        XCTAssertTrue(prompt.user.contains("- Deadlift (Barbell): 105 kg × 5 "))
-        XCTAssertTrue(prompt.user.contains("Smallest logged step: 5 kg."))
+        let row = try XCTUnwrap(exerciseRows(prompt).first)
+        XCTAssertTrue(row.hasPrefix("- Deadlift (Barbell): 105 kg × 5 "), row)
+        XCTAssertTrue(row.hasSuffix("Next: 107.5–115 kg."), row)
     }
 
     /// Only weighted sets without reps: the line says what is missing
@@ -1181,19 +1286,24 @@ final class AnalysisPromptBuilderTests: XCTestCase {
     }
 
     /// Rule 6: recommendations name only what the Exercises section lists,
-    /// in the increments the user can actually load.
+    /// within the range each line names (ADR-013, #232) — and no weight at
+    /// all where the line says to progress reps.
     func testSystemPromptLimitsRecommendationsToTheExerciseSection() {
         let system = AnalysisPromptBuilder.systemPrompt.lowercased()
 
         XCTAssertTrue(system.contains("name only exercises and weights from the exercises section"))
         XCTAssertTrue(system.contains("exactly as it is listed"))
-        XCTAssertTrue(system.contains("steps of 2.5 kg"))
-        XCTAssertTrue(system.contains("at most the smallest step listed"))
-        // The starting weight must be listed; the target is one step above it,
-        // so the rule no longer forbids the weight it asks for.
+        // The starting weight must be listed; the target is within the range
+        // the line names, so the rule no longer forbids the weight it asks for.
         XCTAssertTrue(system.contains("or a weight it does not list as a starting point"))
-        XCTAssertTrue(system.contains("a new target weight is always the listed weight of the most recent session plus one step"))
+        XCTAssertTrue(system.contains("within the range the line names after \"next:\""))
+        XCTAssertTrue(system.contains("never above the upper one"))
+        XCTAssertTrue(system.contains("where the line says \"progress reps, not weight\", do not recommend a heavier weight"))
+        // A rule that cannot be applied is not a rule that was met.
+        XCTAssertTrue(system.contains("which is not the same as it being met"))
         XCTAssertFalse(system.contains("a weight that section does not contain"))
+        XCTAssertFalse(system.contains("plus one step"))
+        XCTAssertFalse(system.contains("steps of 2.5 kg"))
     }
 
     // MARK: - Training profile (US-13 AC3, #192)
@@ -1791,11 +1901,17 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         )
     }
 
-    private func working(_ weightKg: Double, _ reps: Int, count: Int = 3, rpe: Double? = nil) -> [SetDetail] {
-        (0..<count).map { set($0, .normal, weightKg, reps, rpe: rpe) }
+    /// - Parameter target: The routine's rep target on every set (#240) —
+    ///   what the 2-for-2 rule reads. `nil` is a freely logged session.
+    private func working(
+        _ weightKg: Double, _ reps: Int, count: Int = 3, rpe: Double? = nil, target: Int? = nil
+    ) -> [SetDetail] {
+        (0..<count).map { set($0, .normal, weightKg, reps, rpe: rpe, target: target) }
     }
 
-    private func set(_ index: Int, _ type: SetType, _ weightKg: Double?, _ reps: Int?, rpe: Double? = nil) -> SetDetail {
+    private func set(
+        _ index: Int, _ type: SetType, _ weightKg: Double?, _ reps: Int?, rpe: Double? = nil, target: Int? = nil
+    ) -> SetDetail {
         SetDetail(
             index: index,
             type: type,
@@ -1803,7 +1919,8 @@ final class AnalysisPromptBuilderTests: XCTestCase {
             reps: reps,
             distanceMeters: nil,
             durationSeconds: nil,
-            rpe: rpe
+            rpe: rpe,
+            targetReps: target
         )
     }
 

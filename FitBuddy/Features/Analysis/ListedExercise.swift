@@ -20,11 +20,23 @@ struct ListedExercise: Equatable, Sendable {
     /// exercise (reps instead); a barbell exercise always gets 2.5 kg,
     /// whatever is listed here.
     let smallestStepKg: Double?
+    /// Whether the exercise has earned a load increase (ADR-013, #232) — what
+    /// the line says after the rep target, and what a progression card is
+    /// checked against (#233). The load range itself is derived from the
+    /// fields above by `ProgressionBand.range(for:)`.
+    let twoForTwo: TwoForTwoCondition
 
-    init(title: String, muscleGroup: MuscleGroup, workingSet: WorkingSet?, smallestStepKg: Double? = nil) {
+    init(
+        title: String,
+        muscleGroup: MuscleGroup,
+        workingSet: WorkingSet?,
+        smallestStepKg: Double? = nil,
+        twoForTwo: TwoForTwoCondition = .notCheckable
+    ) {
         self.title = title
         self.muscleGroup = muscleGroup
         self.workingSet = workingSet
         self.smallestStepKg = smallestStepKg
+        self.twoForTwo = twoForTwo
     }
 }

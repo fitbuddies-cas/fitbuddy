@@ -35,14 +35,16 @@ final class AnalysisReportEvidenceTests: XCTestCase {
         let evidence = makeEvidence(summaries: [summary(daysAgo: 2)], exercises: [bench], progressions: progressions)
 
         XCTAssertTrue(prompt.user.contains("- Bench Press: 60 kg × 6"))
-        // The step as well: the validator caps a card at the step the line names.
-        XCTAssertTrue(prompt.user.contains("Smallest logged step: 2.5 kg."))
+        // The step and the 2-for-2 verdict as well: the range a card is
+        // checked against is derived from exactly these (#233).
+        XCTAssertTrue(prompt.user.contains("No rep target on file. Next: progress reps, not weight."))
         XCTAssertEqual(evidence.exercises, [
             ListedExercise(
                 title: "Bench Press",
                 muscleGroup: .chest,
                 workingSet: WorkingSet(weightKg: 60, reps: 6),
-                smallestStepKg: 2.5
+                smallestStepKg: 2.5,
+                twoForTwo: .notCheckable
             ),
         ])
     }
@@ -65,8 +67,8 @@ final class AnalysisReportEvidenceTests: XCTestCase {
         )
         let evidence = makeEvidence(summaries: [summary(daysAgo: 2)], exercises: [raise], progressions: progressions)
 
-        XCTAssertTrue(prompt.user.contains("Smallest logged step: 2 kg."))
         XCTAssertEqual(evidence.exercises.map(\.smallestStepKg), [2])
+        XCTAssertEqual(ProgressionBand.range(for: evidence.exercises[0]), 12...12)
     }
 
     /// Only what the prompt lists: past the cap, without a progression, or

@@ -68,7 +68,9 @@ final class AnalysisMockProfileTests: XCTestCase {
         )
         XCTAssertTrue(bench.contains("Chest, "), bench)
         XCTAssertTrue(bench.contains("Plateau: no"), bench)
-        XCTAssertTrue(bench.contains("Smallest logged step: 2.5 kg"), bench)
+        // The fixtures carry no routine targets, so the 2-for-2 rule is not
+        // checkable and the line says so (ADR-013).
+        XCTAssertTrue(bench.contains("No rep target on file. Next: progress reps, not weight."), bench)
         XCTAssertTrue(prompt.contains("(most recent): 3 sessions"))
     }
 

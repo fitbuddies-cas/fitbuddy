@@ -271,7 +271,10 @@ enum StrengthPromptSection {
         let legend = "Each line starts with the exercise name exactly as logged, then the "
             + "heaviest working set (weight × reps) of its most recent session with working "
             + "sets. e1RM is the Epley estimate from a session's best set, at the first and at "
-            + "the most recent session in this window that has one."
+            + "the most recent session in this window that has one. Each line ends with the "
+            + "rep target of my routine for the exercise, whether I beat it by two or more reps "
+            + "in the last two sessions, and after \"Next:\" the load range a progression may "
+            + "move to — or the instruction to progress reps instead of weight."
         // Counted against the cap, not against the rows: a listed exercise
         // skipped for want of a progression was not cut by the cap, and
         // calling it "omitted" would misstate why it is missing.
@@ -313,11 +316,60 @@ enum StrengthPromptSection {
             }
             parts.append(plateauVerdict(inWindow))
         }
-        if let latest = last.heaviestWorkingSet,
-           let step = AnalysisPromptBuilder.smallestStep(in: inWindow.sessions, latest: latest) {
-            parts.append("Smallest logged step: \(PlainWeightFormatter.string(step)) kg")
-        }
+        parts.append(contentsOf: progressionParts(exercise, listing: listing))
         return parts.joined(separator: ". ") + "."
+    }
+
+    /// The rep target, the 2-for-2 verdict and what may come next (ADR-013,
+    /// #232): the load range where the rule is met and a step exists, and
+    /// "progress reps, not weight" everywhere else.
+    ///
+    /// Read from the same `ListedExercise` the validation of #233 is handed,
+    /// built here from the same listing: the range the model is shown and the
+    /// range a card is checked against are one computation.
+    ///
+    /// The missing target is stated as such, not skipped: rule 6 tells the
+    /// model that an unapplicable rule is not a met one, and it can only act
+    /// on that if the line says which of the two it is.
+    private static func progressionParts(
+        _ exercise: ExerciseSummary,
+        listing: (inWindow: ExerciseProgression, last: ExerciseHistoryEntry)
+    ) -> [String] {
+        let (inWindow, last) = listing
+        let listed = ListedExercise(
+            title: exercise.title,
+            muscleGroup: exercise.muscleGroup,
+            workingSet: last.heaviestWorkingSet,
+            smallestStepKg: last.heaviestWorkingSet.flatMap {
+                AnalysisPromptBuilder.smallestStep(in: inWindow.sessions, latest: $0)
+            },
+            twoForTwo: TwoForTwoCondition.evaluate(sessions: inWindow.sessions)
+        )
+        let target = TwoForTwoCondition.latestTarget(in: inWindow.sessions)
+            .map { "Rep target \($0)" }
+        let reps = "Next: progress reps, not weight"
+        switch listed.twoForTwo {
+        case .met:
+            let next = ProgressionBand.range(for: listed).map { "Next: \(ProgressionBand.text($0))" }
+                ?? "Next: progress reps, no load step is logged for this exercise"
+            return [
+                (target ?? "Rep target on file") + ", beaten by \(TwoForTwoCondition.requiredMargin)+ reps "
+                    + "in the last \(TwoForTwoCondition.requiredSessions) sessions",
+                next,
+            ]
+        case .notMet:
+            return [
+                (target ?? "Rep target on file") + ", not yet beaten by \(TwoForTwoCondition.requiredMargin)+ "
+                    + "reps in \(TwoForTwoCondition.requiredSessions) consecutive sessions",
+                reps,
+            ]
+        case .notCheckable:
+            // A target on the latest session alone is stated as such: "no
+            // target" would be untrue, and "not met" would be a verdict the
+            // rule never reached.
+            let onFile = target.map { "\($0), not on file for both of the last \(TwoForTwoCondition.requiredSessions) sessions" }
+            return [onFile ?? "No rep target on file", reps]
+        }
     }
 
     /// The session's working weight, and the mean RPE over the counted sets
