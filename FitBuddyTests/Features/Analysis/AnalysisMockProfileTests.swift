@@ -205,7 +205,10 @@ final class AnalysisMockProfileTests: XCTestCase {
         for now in [Self.morning, Self.evening] {
             let metrics = try await recoveryMetrics(for: .overreached, now: now)
 
-            XCTAssertEqual(metrics, RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: 8.5))
+            // Six lifts, four runs and two rides on six days (#262): the RPE
+            // is the lifts' alone, the heart rate the mean over the six
+            // endurance sessions (4 × 140, 2 × 150).
+            XCTAssertEqual(metrics, RecoveryMetrics(sessions: 12, trainingDays: 6, averageRPE: 8.5, averageHeartRate: 143))
             XCTAssertTrue(metrics.needsRecovery)
             XCTAssertEqual(metrics.suggestedRestHours, 48)
         }
@@ -226,13 +229,32 @@ final class AnalysisMockProfileTests: XCTestCase {
         XCTAssertEqual(report.cards, [
             .recovery(
                 reasoning: AnalysisReportValidator.insertedRecoveryReasoning,
-                metrics: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: 8.5)
+                metrics: RecoveryMetrics(sessions: 12, trainingDays: 6, averageRPE: 8.5, averageHeartRate: 143)
             ),
             // The profile logs freely — no routine, no rep target — so the
             // 2-for-2 rule is not checkable and the load increase is a note
             // (ADR-013, #233), not a progression next to a recovery card.
             .note(title: "Bench Press (Barbell)", text: "Two sessions at 70 kg × 5 this week."),
         ])
+    }
+
+    // MARK: - Every analysis profile carries all three sources (#262)
+
+    /// The strength profiles are analysed over Hevy, Strava and Polar: the
+    /// context line counts all three, the prompt carries the endurance
+    /// section, and the profile choice is offered — while each profile's own
+    /// story (the bench card, the six-day week, the plateau cases) holds, as
+    /// the tests above show.
+    func testTheStrengthProfilesAreAnalysedOverAllThreeSources() async throws {
+        for profile in [MockWorkoutProfile.progressionReady, .overreached, .plateau] {
+            let run = try await run(profile, answer: AnalysisReportFactory.thin)
+
+            let context = try XCTUnwrap(run.context, profile.rawValue)
+            XCTAssertEqual(context.countedSources, [.hevy, .strava, .polar], profile.rawValue)
+            XCTAssertEqual(context.analysisProfile, .overallLoad, profile.rawValue)
+            XCTAssertTrue(run.prompt.contains("## Endurance, last 4 weeks ("), profile.rawValue)
+            XCTAssertTrue(run.prompt.contains("## Exercises"), profile.rawValue)
+        }
     }
 
     // MARK: - Thin data (#170)

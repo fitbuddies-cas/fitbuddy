@@ -17,9 +17,17 @@ import Foundation
 /// disciplines side by side, and one whose overall load calls for recovery
 /// although no single source shows it.
 ///
-/// **Every session of the three cross-source profiles starts at 12:00 UTC**,
-/// whichever source recorded it, as every session of `overreached` starts at
-/// the same time of day. A profile whose sources sit at different hours is
+/// Since #262 every analysis profile carries all three sources: the strength
+/// profiles (`progressionReady`, `overreached`, `plateau`) log a Strava run
+/// or a Polar ride on days that already carry a lift, so the analysis shows
+/// the profile choice, the three-source context line and the week structure
+/// of US-15 over exactly the strength story each profile exists for — and
+/// no profile gains a training day it did not have.
+///
+/// **Every session of a multi-source profile starts at one time of day**,
+/// whichever source recorded it — 12:00 UTC for the cross-source profiles
+/// and `plateau`, 17:30 UTC for `progressionReady` and `overreached`, whose
+/// lifts were recorded at that hour. A profile whose sources sit at different hours is
 /// only stable near UTC: shift the time zone far enough and one source crosses
 /// the local date line while the others do not, which moves overlap days and
 /// training-day counts without moving a single date. One wall clock makes the
@@ -41,12 +49,15 @@ enum MockWorkoutProfile: String, CaseIterable, Sendable {
     /// lower-body day, every lift progressing. Bench press ends on three
     /// sessions at 60 kg × 5 with every working set at RPE 7 or lower, the
     /// newest at RPE 7 throughout — the clean overload signal of US-14 AC2.
+    /// Two easy runs and one ride a week on lift days (#262): three training
+    /// days a week, well clear of the recovery threshold.
     case progressionReady = "progression-ready"
     /// Seven weeks of push/pull/legs at three sessions a week, then six days in
     /// a row with every working set at RPE 8, 8.5 and 9, and one rest day
     /// before them. Trains on six of the last seven days, so the recovery hint
     /// of US-14 AC4 is mandatory. The rest day sits where the re-anchoring
-    /// keeps the count at six whatever the time of day.
+    /// keeps the count at six whatever the time of day. A run or a ride on
+    /// every lift day (#262): the six days stay six, the sessions double.
     case overreached = "overreached"
     /// Eight weeks of one full-body session twice a week, logged against a
     /// routine with rep targets — the three cases of US-17 in one window
@@ -58,7 +69,8 @@ enum MockWorkoutProfile: String, CaseIterable, Sendable {
     /// of 10 by two, but 10 kg is the only dumbbell ever logged, so there is
     /// no step to move by and reps are the lever (AC3). Seated row is not in
     /// the routine at all — swapped in on the day — so its rule is not
-    /// checkable (AC7). Every session starts at 12:00 UTC.
+    /// checkable (AC7). A run on each Thursday and a ride on each Monday
+    /// beside the lifts (#262). Every session starts at 12:00 UTC.
     case plateau
     /// Strava only: four runs a week for eight weeks — an easy run, a tempo
     /// session, a shake-out run and a long trail run, on four of the seven
@@ -96,8 +108,16 @@ enum MockWorkoutProfile: String, CaseIterable, Sendable {
     /// cached — one per source, each in that source's wire format (#188).
     var payloads: [MockWorkoutPayload] {
         switch self {
-        case .personA, .personB, .progressionReady, .overreached, .plateau:
+        case .personA, .personB:
             return [MockWorkoutPayload(source: .hevy, resourceName: "mock-workouts-\(rawValue)")]
+        case .progressionReady, .overreached, .plateau:
+            // The lifts keep their original file; the endurance halves sit
+            // beside it (#262).
+            return [
+                MockWorkoutPayload(source: .hevy, resourceName: "mock-workouts-\(rawValue)"),
+                MockWorkoutPayload(source: .strava, resourceName: "mock-workouts-\(rawValue)-strava"),
+                MockWorkoutPayload(source: .polar, resourceName: "mock-workouts-\(rawValue)-polar"),
+            ]
         case .runner:
             return [MockWorkoutPayload(source: .strava, resourceName: "mock-workouts-runner-strava")]
         case .mixed:
