@@ -7,13 +7,14 @@ import Foundation
 /// fallback — the same tolerance the logged sets get.
 struct HevyRoutineSetDTO: Decodable, Equatable, Sendable {
     let type: String?
-    let weightKg: Double?
     let reps: Int?
     let repRange: HevyRepRangeDTO?
 
+    // `weight_kg` is on the wire too, and deliberately not decoded: nothing
+    // reads a prescribed weight (the 2-for-2 rule compares reps), and a
+    // field nobody reads is a field nobody notices going wrong.
     private enum CodingKeys: String, CodingKey {
         case type
-        case weightKg = "weight_kg"
         case reps
         case repRange = "rep_range"
     }
@@ -21,12 +22,12 @@ struct HevyRoutineSetDTO: Decodable, Equatable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         type = try container.decodeIfPresent(String.self, forKey: .type)
-        weightKg = try container.decodeIfPresent(Double.self, forKey: .weightKg)
         reps = try container.decodeLooseIntIfPresent(forKey: .reps)
         repRange = try container.decodeIfPresent(HevyRepRangeDTO.self, forKey: .repRange)
     }
 
-    /// Typed view of `type`.
+    /// Typed view of `type` — what the per-kind matching of
+    /// `HevyRoutineExerciseDTO.targetReps(forSet:warmUp:)` reads.
     var setType: SetType {
         SetType.from(type)
     }

@@ -246,6 +246,27 @@ final class HevyWorkoutDTOTests: XCTestCase {
         XCTAssertEqual(activity.exercises.first?.sets.map(\.targetReps), [10, 12])
     }
 
+    /// A warm-up skipped on the day does not shift the working targets: the
+    /// routine prescribes a warm-up and a working set, the user logged the
+    /// working set only, and it still gets the working target.
+    func testASkippedWarmUpDoesNotShiftTheWorkingTargets() throws {
+        var payload = HevyPayloadFactory.workout(id: "w-1", start: Date(timeIntervalSince1970: 1_750_000_000), routineID: "r-1")
+        var exercises = try XCTUnwrap(payload["exercises"] as? [[String: Any]])
+        var sets = try XCTUnwrap(exercises[0]["sets"] as? [[String: Any]])
+        sets.removeFirst()
+        exercises[0]["sets"] = sets
+        payload["exercises"] = exercises
+        let routineData = try JSONSerialization.data(
+            withJSONObject: HevyPayloadFactory.routine(id: "r-1", updatedAt: Date(timeIntervalSince1970: 1_750_000_000))
+        )
+        let routine = try JSONDecoder.hevy.decode(HevyRoutineDTO.self, from: routineData)
+
+        let activity = try decode(payload).makeActivity(routine: routine)
+
+        XCTAssertEqual(activity.exercises.first?.sets.map(\.type), [.normal])
+        XCTAssertEqual(activity.exercises.first?.sets.map(\.targetReps), [12])
+    }
+
     /// The id is kept even when the routine could not be fetched (deleted
     /// at the source): the session still says what it was logged against,
     /// and the empty targets say the plan is gone.
