@@ -68,9 +68,10 @@ final class AnalysisMockProfileTests: XCTestCase {
         )
         XCTAssertTrue(bench.contains("Chest, "), bench)
         XCTAssertTrue(bench.contains("Plateau: no"), bench)
-        // The fixtures carry no routine targets, so the 2-for-2 rule is not
-        // checkable and the line says so (ADR-013).
-        XCTAssertTrue(bench.contains("No rep target on file. Next: progress reps, not weight."), bench)
+        // Prescribed at 3 × 3 and closed at 60 kg × 5 three times: the 2-for-2
+        // rule is met, and the line names the barbell range up to the chest
+        // ceiling (ADR-013, #233).
+        XCTAssertTrue(bench.hasSuffix("Rep target 3, beaten by 2+ reps in the last 2 sessions. Next: 62.5–65 kg."), bench)
         XCTAssertTrue(prompt.contains("(most recent): 3 sessions"))
     }
 
@@ -147,13 +148,10 @@ final class AnalysisMockProfileTests: XCTestCase {
                 reasoning: AnalysisReportValidator.insertedRecoveryReasoning,
                 metrics: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: 8.5)
             ),
-            .progression(
-                exercise: "Bench Press (Barbell)",
-                muscleGroup: .chest,
-                fromKg: 70,
-                toKg: 72.5,
-                reasoning: "Two sessions at 70 kg × 5 this week."
-            ),
+            // The profile logs freely — no routine, no rep target — so the
+            // 2-for-2 rule is not checkable and the load increase is a note
+            // (ADR-013, #233), not a progression next to a recovery card.
+            .note(title: "Bench Press (Barbell)", text: "Two sessions at 70 kg × 5 this week."),
         ])
     }
 

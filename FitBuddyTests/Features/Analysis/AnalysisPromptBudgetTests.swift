@@ -518,7 +518,10 @@ final class AnalysisPromptBudgetTests: XCTestCase {
                                     reps: 8,
                                     distanceMeters: nil,
                                     durationSeconds: nil,
-                                    rpe: 8
+                                    rpe: 8,
+                                    // Beaten by two: every line carries the
+                                    // longest ending, the range (#232).
+                                    targetReps: 6
                                 )
                             }
                         )

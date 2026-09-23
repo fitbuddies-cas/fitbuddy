@@ -11,6 +11,9 @@ import Foundation
 /// A payload file holds nothing but the sessions of one source, in that
 /// source's own wire format: Hevy's `{"workouts": [...]}`, and the bare arrays
 /// Strava's `GET /athlete/activities` and Polar's `GET /v3/exercises` return.
+/// A Hevy file may carry a `routines` array beside its workouts — the entries
+/// of `GET /v1/routines` its workouts name by `routine_id` — so a profile can
+/// have rep targets (#240, #233); the join is the connector's own.
 /// Each is decoded through that source's own DTO — `HevyWorkoutDTO`,
 /// `StravaActivityDTO`, `PolarExerciseDTO` — so anything built against them
 /// (SwiftUI previews, dashboard metrics, an analysis run, a stubbed
@@ -104,7 +107,10 @@ struct MockWorkoutLoader {
         let data = try serialized(entries, for: payload)
         switch source {
         case .hevy:
-            return try decodeHevy(data, name: payload.resourceName).workouts.map { $0.makeActivity() }
+            let routines = try routines(of: payload)
+            return try decodeHevy(data, name: payload.resourceName).workouts.map { workout in
+                workout.makeActivity(routine: workout.routineID.flatMap { routines[$0] })
+            }
         case .strava:
             guard let activities = try? JSONDecoder.strava.decode([StravaActivityDTO].self, from: data)
             else { throw MockWorkoutError.invalidPayload(payload.resourceName) }
@@ -219,6 +225,42 @@ struct MockWorkoutLoader {
         return offset
     }
 
+    /// The routines a Hevy fixture carries next to its workouts, keyed by id
+    /// — in the shape `GET /v1/routines` returns them, decoded through the
+    /// real DTO like everything else here (#233).
+    ///
+    /// Optional: a fixture without a `routines` key is a user who logs
+    /// freely, and its sessions carry no rep targets. The routine's
+    /// `updated_at` is not re-anchored; it is a snapshot date the analysis
+    /// never compares against the window.
+    private func routines(of payload: MockWorkoutPayload) throws -> [String: HevyRoutineDTO] {
+        guard payload.source == .hevy else { return [:] }
+        if let cached = cache.routines[payload] { return cached }
+        let root = try rawRoot(of: payload)
+        var routines: [String: HevyRoutineDTO] = [:]
+        if let raw = root["routines"] {
+            guard let entries = raw as? [[String: Any]],
+                  let data = try? JSONSerialization.data(withJSONObject: entries),
+                  let decoded = try? JSONDecoder.hevy.decode([HevyRoutineDTO].self, from: data)
+            else { throw MockWorkoutError.invalidPayload(payload.resourceName) }
+            for routine in decoded { routines[routine.id] = routine }
+        }
+        cache.routines[payload] = routines
+        return routines
+    }
+
+    /// A Hevy fixture's root object.
+    private func rawRoot(of payload: MockWorkoutPayload) throws -> [String: Any] {
+        guard let url = bundle.url(forResource: payload.resourceName, withExtension: "json"),
+              let data = try? Data(contentsOf: url) else {
+            throw MockWorkoutError.missingPayload(payload.resourceName)
+        }
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw MockWorkoutError.invalidPayload(payload.resourceName)
+        }
+        return root
+    }
+
     private func rawEntries(of payload: MockWorkoutPayload) throws -> [[String: Any]] {
         if let cached = cache.raw[payload] { return cached }
         guard let url = bundle.url(forResource: payload.resourceName, withExtension: "json"),
@@ -297,6 +339,7 @@ struct MockWorkoutLoader {
         var raw: [MockWorkoutPayload: [[String: Any]]] = [:]
         var shifted: [MockWorkoutPayload: [[String: Any]]] = [:]
         var offsets: [MockWorkoutProfile: TimeInterval] = [:]
+        var routines: [MockWorkoutPayload: [String: HevyRoutineDTO]] = [:]
     }
 }
 

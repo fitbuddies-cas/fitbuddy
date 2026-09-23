@@ -253,17 +253,17 @@ final class MockWorkoutLoaderTests: XCTestCase {
     /// loader builds Hevy's envelope per request anyway.
     ///
     /// Each file is in its own source's wire shape — Hevy's `workouts` object,
-    /// and the bare arrays Strava and Polar return (#188).
+    /// optionally with the `routines` its workouts name (#233), and the bare
+    /// arrays Strava and Polar return (#188).
     func testPayloadFilesCarryTheirSourcesWireShape() throws {
         for payload in MockWorkoutProfile.allCases.flatMap(\.payloads) {
             let root = try json(of: payload)
             switch payload.source {
             case .hevy:
                 let object = try XCTUnwrap(root as? [String: Any], payload.resourceName)
-                XCTAssertEqual(
-                    Set(object.keys),
-                    ["workouts"],
-                    "\(payload.resourceName) stores more than its workouts"
+                XCTAssertTrue(
+                    Set(object.keys).isSubset(of: ["workouts", "routines"]) && object["workouts"] != nil,
+                    "\(payload.resourceName) stores more than its workouts and routines"
                 )
             case .strava, .polar:
                 XCTAssertNotNil(root as? [[String: Any]], "\(payload.resourceName) is not an array")
@@ -278,6 +278,39 @@ final class MockWorkoutLoaderTests: XCTestCase {
     func testEveryPayloadIsNamedForTheReleaseExclusion() {
         for payload in MockWorkoutProfile.allCases.flatMap(\.payloads) {
             XCTAssertTrue(payload.resourceName.hasPrefix("mock-workouts-"), payload.resourceName)
+        }
+    }
+
+    /// The progression-ready profile logs against two routines (#233): every
+    /// session names one, and bench press is prescribed at 3 × 3 — so the
+    /// three closing sessions of 60 kg × 5 meet the 2-for-2 rule of ADR-013,
+    /// and only they do.
+    func testProgressionReadySessionsCarryTheirRoutineTargets() throws {
+        let activities = try loader.activities(for: .progressionReady, from: .hevy)
+
+        XCTAssertFalse(activities.isEmpty)
+        XCTAssertTrue(activities.allSatisfy { $0.routineID != nil }, "a session without a routine")
+        XCTAssertTrue(activities.allSatisfy { $0.routineUpdatedAt != nil }, "a routine without a snapshot date")
+        let bench = try XCTUnwrap(
+            activities.first { $0.title == "Upper Body" }?.exercises.first { $0.title == "Bench Press (Barbell)" }
+        )
+        XCTAssertEqual(bench.sets.map(\.targetReps), [8, 3, 3, 3])
+        let row = try XCTUnwrap(
+            activities.first { $0.title == "Upper Body" }?.exercises.first { $0.title == "Bent Over Row (Barbell)" }
+        )
+        XCTAssertEqual(row.sets.map(\.targetReps), [8, 8, 8])
+    }
+
+    /// The other Hevy profiles log freely: no routine, no targets — the
+    /// common case, and the one the rule reads as not checkable.
+    func testTheOtherHevyProfilesCarryNoTargets() throws {
+        for profile in [MockWorkoutProfile.personA, .personB, .overreached, .mixed, .overreachedMixed] {
+            let activities = try loader.activities(for: profile, from: .hevy)
+            XCTAssertTrue(activities.allSatisfy { $0.routineID == nil }, profile.rawValue)
+            XCTAssertTrue(
+                activities.flatMap(\.exercises).flatMap(\.sets).allSatisfy { $0.targetReps == nil },
+                profile.rawValue
+            )
         }
     }
 

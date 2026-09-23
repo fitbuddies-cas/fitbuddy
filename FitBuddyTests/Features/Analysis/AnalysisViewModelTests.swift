@@ -555,6 +555,9 @@ final class AnalysisViewModelTests: XCTestCase {
         )
     }
 
+    /// Two sessions at the same weight, a week apart, each beating its
+    /// routine target by two reps — so the 2-for-2 rule of ADR-013 is met and
+    /// a progression card on the movement is one the validator can keep.
     private static func progression(
         _ summary: ExerciseSummary,
         weightKg: Double,
@@ -569,19 +572,20 @@ final class AnalysisViewModelTests: XCTestCase {
                 reps: reps,
                 distanceMeters: nil,
                 durationSeconds: nil,
-                rpe: nil
+                rpe: nil,
+                targetReps: reps - TwoForTwoCondition.requiredMargin
             )
         }
         return ExerciseProgression(
             id: summary.id,
             title: summary.title,
-            sessions: [
+            sessions: [daysAgo + 7, daysAgo].map { day in
                 ExerciseHistoryEntry(
-                    workoutID: "w-\(daysAgo)",
-                    sessionStart: reference.addingTimeInterval(-Double(daysAgo) * 86_400),
+                    workoutID: "w-\(day)",
+                    sessionStart: reference.addingTimeInterval(-Double(day) * 86_400),
                     sets: sets
-                ),
-            ]
+                )
+            }
         )
     }
 
