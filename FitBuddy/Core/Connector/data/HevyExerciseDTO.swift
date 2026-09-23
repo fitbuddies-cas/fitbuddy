@@ -56,7 +56,7 @@ struct HevyExerciseDTO: Decodable, Equatable, Sendable {
                 targetReps: prescribed?.targetReps(forSet: ordinal, warmUp: warmUp)
             )
         }
-        ActivityExercise(
+        return ActivityExercise(
             index: position,
             // An untitled exercise is not worth dropping the workout for; the
             // template id still identifies the movement for US-9.
