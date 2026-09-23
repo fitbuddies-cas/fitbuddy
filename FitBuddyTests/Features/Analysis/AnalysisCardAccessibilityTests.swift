@@ -17,6 +17,26 @@ final class AnalysisCardAccessibilityTests: XCTestCase {
         XCTAssertEqual(label, "Increase. Bench Press (Barbell), Chest. From 60 kg to 62.5 kg, +2.5 kg. Reps held.")
     }
 
+    /// The weight that stays is spoken with the reps, so the sentence says
+    /// what moves and what does not (#234).
+    func testRepProgressionSaysTheRepsMoveAndTheWeightStays() {
+        let label = AnalysisCardAccessibility.label(
+            for: .repProgression(
+                exercise: "Lateral Raise (Dumbbell)",
+                muscleGroup: .shoulders,
+                weightKg: 10,
+                fromReps: 12,
+                toReps: 14,
+                reasoning: "Earn the next dumbbell with reps."
+            )
+        )
+
+        XCTAssertEqual(
+            label,
+            "More reps. Lateral Raise (Dumbbell), Shoulders. From 12 reps to 14 reps at 10 kg, +2 reps. Earn the next dumbbell with reps."
+        )
+    }
+
     /// The heart rate is spoken out, so VoiceOver does not spell "HR" (#184).
     func testRecoveryReadsTheHeartRateOfAMixedWeek() {
         let label = AnalysisCardAccessibility.label(

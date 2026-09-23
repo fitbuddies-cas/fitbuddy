@@ -14,6 +14,15 @@ struct AnalysisReportCardView: View {
                 toKg: toKg,
                 reasoning: reasoning
             )
+        case let .repProgression(exercise, muscleGroup, weightKg, fromReps, toReps, reasoning):
+            RepProgressionCardView(
+                exercise: exercise,
+                muscleGroup: muscleGroup,
+                weightKg: weightKg,
+                fromReps: fromReps,
+                toReps: toReps,
+                reasoning: reasoning
+            )
         case let .recovery(reasoning, metrics):
             RecoveryCardView(reasoning: reasoning, metrics: metrics)
         case let .imbalance(groupA, perWeekA, groupB, perWeekB, reasoning):
@@ -48,6 +57,7 @@ struct AnalysisReportCardView: View {
             ForEach(Array(AnalysisReportSamples.progress.cards.enumerated()), id: \.offset) { item in
                 AnalysisReportCardView(card: item.element)
             }
+            AnalysisReportCardView(card: AnalysisReportSamples.repProgressionCard)
             AnalysisReportCardView(card: AnalysisReportSamples.recoveryCard)
             AnalysisReportCardView(card: AnalysisReportSamples.weeklyDistanceCard)
             AnalysisReportCardView(card: AnalysisReportSamples.interferenceCard)

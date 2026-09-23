@@ -694,6 +694,7 @@ function FBAnalyzeLoadingScreen({ longWait = false, onCancel }) {
 //   }
 //
 //   Card = { kind: 'progression', …ProgressionRecCard props }
+//        | { kind: 'repProgression', …RepProgressionRecCard props }  — #234
 //        | { kind: 'recovery',    …RecoveryRecCard props }
 //        | { kind: 'imbalance',   …ImbalanceRecCard props }
 //        | { kind: 'metric',      …MetricRecCard props }        — #186
@@ -736,6 +737,14 @@ const REPORT_PROGRESS = {
         { label: 'Chest', perWeek: 3, pct: 88 },
         { label: 'Legs', perWeek: 1, pct: 32 },
       ],
+    },
+    // US-17 AC3 (#234): the lever where no load step fits — the next
+    // dumbbell is a 20 % jump, so the reps go up at the same weight.
+    {
+      kind: 'repProgression',
+      exercise: 'Lateral Raise', muscle: 'Shoulders',
+      weight: '10 kg', from: '12 reps', to: '14 reps', delta: '+2 reps',
+      reasoning: 'Twelve clean reps for three sessions and the next dumbbell is a 20 % jump — earn it with reps first.',
     },
   ],
 };
@@ -893,7 +902,7 @@ function FBIconButton({ children, onClick, label }) {
   );
 }
 
-const ACTIONABLE_KINDS = ['progression', 'recovery', 'imbalance', 'metric', 'interference'];
+const ACTIONABLE_KINDS = ['progression', 'repProgression', 'recovery', 'imbalance', 'metric', 'interference'];
 
 // Headline verdict, context line (US-6), lead, 0–4 cards, "Show full
 // analysis", disclaimer (US-14 AC1). Shared by the fresh result (3.4/3.4b/3.5)
@@ -920,6 +929,7 @@ function FBAnalysisReportBody({ report, sources, sessionCount, weeks, profile })
         <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
           {report.cards.map((card, i) => {
             if (card.kind === 'progression') return <ProgressionRecCard key={i} {...card} />;
+            if (card.kind === 'repProgression') return <RepProgressionRecCard key={i} {...card} />;
             if (card.kind === 'recovery') return <RecoveryRecCard key={i} {...card} />;
             if (card.kind === 'imbalance') return <ImbalanceRecCard key={i} {...card} />;
             if (card.kind === 'metric') return <MetricRecCard key={i} {...card} />;
@@ -1076,6 +1086,67 @@ function ProgressionRecCard({ exercise, muscle, from, to, delta, reasoning }) {
         <svg width="14" height="14" viewBox="0 0 14 14"><path d="M2 7h10M8 3l4 4-4 4" stroke={FB.muted} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
         <span style={{ fontSize: 22, fontWeight: 700, letterSpacing: -0.5, color: FB.accent }}>{to}</span>
         <span style={{ fontSize: 12, color: FB.muted, marginLeft: 'auto', fontWeight: 500 }}>{delta}</span>
+      </div>
+
+      <div style={{
+        marginTop: 10, fontSize: 13, color: FB.ink2, lineHeight: 1.45,
+        paddingTop: 10, borderTop: `1px solid ${FB.divider}`,
+      }}>
+        {reasoning}
+      </div>
+    </FBCard>
+  );
+}
+
+/**
+ * Rep progression card (US-17 AC3, #234) — the progression card's sibling.
+ *
+ * More repetitions at the same weight, for the movements the 2-for-2 rule of
+ * ADR-013 holds back (target not beaten twice, or no target on file) and for
+ * equipment with no fitting step (the next dumbbell is too big a jump). Same
+ * family as the progression card on purpose — chip, muscle, exercise, the
+ * struck-through figure and the target, the delta on the right — so the two
+ * read as one kind of advice. The weight that stays is the line *under* the
+ * reps: it is the one number here that does not move, and in the figure row
+ * it would read as a target.
+ *
+ * @prop exercise   string  exercise name as in Hevy — must be listed in the
+ *                          prompt, otherwise the card becomes a note (#233)
+ * @prop muscle     string  primary muscle group
+ * @prop weight     string  the working weight, unchanged — must equal the last
+ *                          working weight in the cache (#233)
+ * @prop from       string  the reps listed with that weight, struck through —
+ *                          must equal the cache (#233)
+ * @prop to         string  target reps, at most two more
+ * @prop delta      string  signed difference, e.g. '+2 reps'
+ * @prop reasoning  string  one sentence
+ */
+function RepProgressionRecCard({ exercise, muscle, weight, from, to, delta, reasoning }) {
+  return (
+    <FBCard pad={16}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <div style={{
+          padding: '3px 8px', borderRadius: 999, background: FB.accentSoft,
+          fontSize: 11, fontWeight: 600, color: FB.accentInk, letterSpacing: 0.2,
+          textTransform: 'uppercase',
+          boxShadow: `inset 0 0 0 1px ${FB.accentBorder}`,
+        }}>↑ More reps</div>
+        <div style={{ fontSize: 11, color: FB.muted, fontWeight: 500 }}>{muscle}</div>
+      </div>
+
+      <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: -0.3 }}>{exercise}</div>
+
+      <div style={{
+        marginTop: 10, display: 'flex', alignItems: 'baseline', gap: 8,
+        fontVariantNumeric: 'tabular-nums',
+      }}>
+        <span style={{ fontSize: 14, color: FB.muted, textDecoration: 'line-through' }}>{from}</span>
+        <svg width="14" height="14" viewBox="0 0 14 14"><path d="M2 7h10M8 3l4 4-4 4" stroke={FB.muted} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        <span style={{ fontSize: 22, fontWeight: 700, letterSpacing: -0.5, color: FB.accent }}>{to}</span>
+        <span style={{ fontSize: 12, color: FB.muted, marginLeft: 'auto', fontWeight: 500 }}>{delta}</span>
+      </div>
+      <div style={{ marginTop: 4, fontSize: 12, color: FB.muted, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
+        at {weight}
       </div>
 
       <div style={{

@@ -135,6 +135,8 @@ enum AccessibilityID {
         /// Every card of a kind carries its kind's identifier — the tests ask
         /// whether a kind is on screen, not which of its cards.
         static let progressionCard = "analysis.progressionCard"
+        /// The rep progression card (US-17 AC3, #234).
+        static let repProgressionCard = "analysis.repProgressionCard"
         static let recoveryCard = "analysis.recoveryCard"
         static let imbalanceCard = "analysis.imbalanceCard"
         /// The generic metric card and the interference card (US-15, #186).

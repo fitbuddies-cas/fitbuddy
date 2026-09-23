@@ -321,7 +321,8 @@ enum AnalysisPromptBuilder {
     line names after "Next:", inclusive of both ends and never above the \
     upper one. Where the line says "progress reps, not weight", do not \
     recommend a heavier weight for that exercise: recommend more \
-    repetitions at the listed weight instead, as a note. That line is the \
+    repetitions at the listed weight instead, as a repProgression card. \
+    That line is the \
     2-for-2 rule applied to this person's own log — the rep target of their \
     routine beaten by two or more reps in two consecutive sessions — and \
     where no rep target is on file the rule cannot be applied, which is not \
@@ -369,7 +370,11 @@ enum AnalysisPromptBuilder {
     not become a card, and when the data is too thin for any, return an empty \
     array — the lead and the summary carry the answer. "progression": a load \
     increase on one exercise, fromKg the weight listed for its most recent \
-    session, toKg the new weight. "recovery": rest before any progression, \
+    session, toKg the new weight. "repProgression": more repetitions at the \
+    listed weight on one exercise — the card for a line that says to \
+    progress reps, not weight; weightKg the weight listed for its most \
+    recent session, fromReps the reps listed with it, toReps one or two \
+    more. "recovery": rest before any progression, \
     with the rest you recommend in suggestedRestHours. "imbalance": two \
     muscle groups trained at clearly different frequencies, each group and \
     its sessions per week exactly as the Muscle groups section lists them. \
@@ -383,8 +388,7 @@ enum AnalysisPromptBuilder {
     heart rate is not something to recommend a new value for. "interference": \
     strength and endurance sessions shared days in the last 7, with the three \
     day counts taken from the Week structure section. "note": anything else \
-    worth saying, including a rep progression without a weight change, as \
-    title and text. Write the reasoning of a progression, imbalance, metric \
+    worth saying, as title and text. Write the reasoning of a progression, imbalance, metric \
     or interference card in one sentence, a recovery card's in one or two.
 
     Write the fields in this order.

@@ -9,8 +9,8 @@ import Foundation
 /// - `type`, `properties`, `required`, `items`, `description`
 /// - `enum` of strings (not `const`: Gemini's dialect does not list it)
 /// - `anyOf` for the card variants, discriminated by a one-value `kind` enum
-///   — six of them since #186, the last two generic over a unit rather than
-///   specific to a sport
+///   — seven of them since #234: the two generic ones of #186 over a unit
+///   rather than a sport, and the rep progression next to the load one
 /// - `additionalProperties: false` on every object, and every property
 ///   required — Claude rejects any other `additionalProperties`, and Mistral's
 ///   strict mode expects the same
@@ -100,6 +100,15 @@ enum AnalysisReportSchema {
                 field(.fromKg, "number", "The weight listed for its most recent session, in kg."),
                 field(.toKg, "number", "The recommended new weight, in kg."),
                 field(.reasoning, "string", "One sentence explaining the increase.")
+            ]
+        case .repProgression:
+            return [
+                field(.exercise, "string", "The exercise name exactly as listed in the Exercises section."),
+                field(.muscleGroup, "string", "The muscle group listed for that exercise."),
+                field(.weightKg, "number", "The weight listed for its most recent session, in kg — unchanged."),
+                field(.fromReps, "integer", "The reps listed for that weight in its most recent session."),
+                field(.toReps, "integer", "The recommended new reps at that weight, at most two more."),
+                field(.reasoning, "string", "One sentence explaining the rep increase.")
             ]
         case .recovery:
             return [

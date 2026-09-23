@@ -188,6 +188,92 @@ final class AnalysisReportValidatorTests: XCTestCase {
         )
     }
 
+    // MARK: - Rep progression (US-17 AC3, #234)
+
+    /// The card is kept with the cache's weight and starting reps, and the
+    /// model's target — one or two more.
+    func testAValidRepProgressionIsKeptWithTheCachesFigures() {
+        let evidence = evidence(exercises: [
+            ListedExercise(
+                title: "Lateral Raise (Dumbbell)",
+                muscleGroup: .shoulders,
+                workingSet: WorkingSet(weightKg: 10, reps: 12),
+                twoForTwo: .notMet
+            ),
+        ])
+
+        XCTAssertEqual(
+            validate([repProgression("lateral raise (dumbbell)", weight: 10.25, from: 12, to: 14)], evidence: evidence).cards,
+            [.repProgression(exercise: "Lateral Raise (Dumbbell)", muscleGroup: .shoulders, weightKg: 10, fromReps: 12, toReps: 14, reasoning: "Reps first.")]
+        )
+        XCTAssertEqual(
+            validate([repProgression("Lateral Raise (Dumbbell)", weight: 10, from: 12, to: 13)], evidence: evidence).cards.first?.kind,
+            .repProgression
+        )
+    }
+
+    /// Not gated on the 2-for-2 rule: the card is for the movements the rule
+    /// holds back, and harmless where it does not.
+    func testARepProgressionIsAllowedUnderEveryTwoForTwoVerdict() {
+        for condition in [TwoForTwoCondition.met, .notMet, .notCheckable] {
+            let evidence = evidence(exercises: [
+                ListedExercise(
+                    title: "Bench Press", muscleGroup: .chest, workingSet: WorkingSet(weightKg: 60, reps: 5), twoForTwo: condition
+                ),
+            ])
+            XCTAssertEqual(
+                validate([repProgression("Bench Press", weight: 60, from: 5, to: 7)], evidence: evidence).cards.first?.kind,
+                .repProgression,
+                "\(condition)"
+            )
+        }
+    }
+
+    /// Same rule as the weight: the starting figures have to be the ones the
+    /// prompt listed, and the step is bounded.
+    func testARepProgressionIsCheckedAgainstTheListedWorkingSet() {
+        XCTAssertEqual(checkReps("Incline Press", weight: 60, from: 5, to: 7), .rejected(.notListed))
+        XCTAssertEqual(checkReps("Bench Press", weight: 57.5, from: 5, to: 7), .rejected(.wrongStartingWeight))
+        XCTAssertEqual(checkReps("Bench Press", weight: 60, from: 6, to: 8), .rejected(.wrongStartingReps))
+        XCTAssertEqual(checkReps("Bench Press", weight: 60, from: 5, to: 5), .rejected(.noIncrease))
+        XCTAssertEqual(checkReps("Bench Press", weight: 60, from: 5, to: 4), .rejected(.noIncrease))
+        XCTAssertEqual(checkReps("Bench Press", weight: 60, from: 5, to: 8), .rejected(.aboveRepStep))
+        XCTAssertEqual(
+            validate([repProgression("Bench Press", weight: 60, from: 5, to: 8)]).cards,
+            [.note(title: "Bench Press", text: "Reps first.")]
+        )
+        let bodyweight = evidence(exercises: [ListedExercise(title: "Pull Up", muscleGroup: .back, workingSet: nil)])
+        XCTAssertEqual(checkReps("Pull Up", weight: 0, from: 8, to: 10, evidence: bodyweight), .rejected(.noWorkingWeight))
+    }
+
+    /// A progress verdict backed only by a rep progression stays a progress
+    /// verdict: more reps at the same weight is a step forward (#177).
+    func testARepProgressionBacksAProgressVerdict() {
+        let report = AnalysisReport(
+            headline: "You're ready to progress.",
+            verdict: .progress,
+            lead: "Two more reps on bench.",
+            cards: [repProgression("Bench Press", weight: 60, from: 5, to: 7)],
+            summary: "Bench press: 7 reps next time."
+        )
+
+        let validated = AnalysisReportValidator.validate(report, against: evidence())
+
+        XCTAssertEqual(validated.verdict, .progress)
+        XCTAssertEqual(validated.lead, "Two more reps on bench.")
+    }
+
+    /// No kilograms under "Endurance", and no reps at a kilogram weight
+    /// either: a strength card is a strength card (US-15 AC5).
+    func testNoRepProgressionSurvivesTheEnduranceProfile() {
+        let validated = validate(
+            [repProgression("Bench Press", weight: 60, from: 5, to: 7)],
+            evidence: evidence(analysisProfile: .endurance)
+        )
+
+        XCTAssertEqual(validated.cards, [.note(title: "Bench Press", text: "Reps first.")])
+    }
+
     // MARK: - 2-for-2 (ADR-013, #233)
 
     /// A load increase is only on where the rule is met: not met and not
@@ -1308,6 +1394,23 @@ final class AnalysisReportValidatorTests: XCTestCase {
             fromKg: fromKg,
             toKg: toKg,
             reasoning: reasoning,
+            listed: (evidence ?? self.evidence()).exercises
+        )
+    }
+
+    private func repProgression(_ exercise: String, weight: Double, from: Int, to: Int) -> AnalysisCard {
+        .repProgression(exercise: exercise, muscleGroup: "Shoulders", weightKg: weight, fromReps: from, toReps: to, reasoning: "Reps first.")
+    }
+
+    private func checkReps(
+        _ exercise: String, weight: Double, from: Int, to: Int, evidence: AnalysisReportEvidence? = nil
+    ) -> AnalysisReportValidator.ProgressionCheck {
+        AnalysisReportValidator.checkRepProgression(
+            exercise: exercise,
+            weightKg: weight,
+            fromReps: from,
+            toReps: to,
+            reasoning: "Reps first.",
             listed: (evidence ?? self.evidence()).exercises
         )
     }
