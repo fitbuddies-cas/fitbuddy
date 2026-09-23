@@ -48,6 +48,18 @@ enum MockWorkoutProfile: String, CaseIterable, Sendable {
     /// of US-14 AC4 is mandatory. The rest day sits where the re-anchoring
     /// keeps the count at six whatever the time of day.
     case overreached = "overreached"
+    /// Eight weeks of one full-body session twice a week, logged against a
+    /// routine with rep targets — the three cases of US-17 in one window
+    /// (#235, ADR-013). Squat rises 2.5 kg a week and beats its target of 3
+    /// by two reps every session: the 2-for-2 rule is met and a load
+    /// increase within the band is on (AC1, AC2, AC7). Bench press sits at
+    /// 60 kg × 5 for the whole window and never beats its target of 5: a
+    /// plateau, and reps before weight (AC7). Lateral raise beats its target
+    /// of 10 by two, but 10 kg is the only dumbbell ever logged, so there is
+    /// no step to move by and reps are the lever (AC3). Seated row is not in
+    /// the routine at all — swapped in on the day — so its rule is not
+    /// checkable (AC7). Every session starts at 12:00 UTC.
+    case plateau
     /// Strava only: four runs a week for eight weeks — an easy run, a tempo
     /// session, a shake-out run and a long trail run, on four of the seven
     /// days. The shake-out run is the one without a heart rate, so the
@@ -84,7 +96,7 @@ enum MockWorkoutProfile: String, CaseIterable, Sendable {
     /// cached — one per source, each in that source's wire format (#188).
     var payloads: [MockWorkoutPayload] {
         switch self {
-        case .personA, .personB, .progressionReady, .overreached:
+        case .personA, .personB, .progressionReady, .overreached, .plateau:
             return [MockWorkoutPayload(source: .hevy, resourceName: "mock-workouts-\(rawValue)")]
         case .runner:
             return [MockWorkoutPayload(source: .strava, resourceName: "mock-workouts-runner-strava")]
@@ -115,6 +127,7 @@ enum MockWorkoutProfile: String, CaseIterable, Sendable {
         case .personB: return "Person B · 2 sessions/week"
         case .progressionReady: return "Progression-ready · bench 60 kg × 5"
         case .overreached: return "Overreached · 6 of the last 7 days"
+        case .plateau: return "Plateau · squat rising, bench stalled, raise out of steps"
         case .runner: return "Runner · 4 runs/week, Strava only"
         case .mixed: return "Mixed · 3 lifts + 3 endurance sessions/week"
         case .overreachedMixed: return "Overreached mixed · 6 of 7 days, 3 sources"

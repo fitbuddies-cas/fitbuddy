@@ -105,6 +105,86 @@ final class AnalysisMockProfileTests: XCTestCase {
         }
     }
 
+    // MARK: - plateau (US-17 AC1–AC3, AC7, #235)
+
+    /// The four exercise lines, one per case of ADR-013: the range where the
+    /// rule is met and a step exists, reps where it is not met, reps where it
+    /// is met but no step is logged, and reps where no target is on file.
+    func testPlateauPromptNamesTheRangeAndTheThreeTwoForTwoCases() async throws {
+        let prompt = try await run(.plateau, answer: AnalysisReportFactory.plateau).prompt
+
+        let squat = try row(startingWith: "- Squat (Barbell): ", in: prompt)
+        XCTAssertTrue(squat.hasPrefix("- Squat (Barbell): 97.5 kg × 5, mean RPE 7.5 (most recent session, "), squat)
+        XCTAssertTrue(squat.contains("Plateau: no"), squat)
+        // Legs, 10 % of 97.5 is 107.25: three barbell steps, 100 to 105 kg.
+        XCTAssertTrue(squat.hasSuffix("Rep target 3, beaten by 2+ reps in the last 2 sessions. Next: 100–105 kg."), squat)
+
+        let bench = try row(startingWith: "- Bench Press (Barbell): ", in: prompt)
+        XCTAssertTrue(bench.hasPrefix("- Bench Press (Barbell): 60 kg × 5, mean RPE 8 (most recent session, "), bench)
+        XCTAssertTrue(bench.contains("Plateau: yes, no new e1RM best in the last 3 sessions"), bench)
+        XCTAssertTrue(bench.hasSuffix("Rep target 5, not yet beaten by 2+ reps in 2 consecutive sessions. Next: progress reps, not weight."), bench)
+
+        let raise = try row(startingWith: "- Lateral Raise (Dumbbell): ", in: prompt)
+        XCTAssertTrue(raise.hasSuffix("Rep target 10, beaten by 2+ reps in the last 2 sessions. Next: progress reps, no load step is logged for this exercise."), raise)
+
+        let seatedRow = try row(startingWith: "- Seated Row (Cable): ", in: prompt)
+        XCTAssertTrue(seatedRow.hasSuffix("No rep target on file. Next: progress reps, not weight."), seatedRow)
+    }
+
+    /// End to end (#235): the squat step within the band survives with the
+    /// cache's starting weight, the rep progression survives with the cache's
+    /// weight, and the two load increases the rule holds back — not met, not
+    /// checkable — become notes. The verdict keeps the model's lead: two
+    /// cards still back it.
+    func testPlateauKeepsTheCardsTheRuleAllowsAndNotesTheOthers() async throws {
+        let outcome = try await run(.plateau, answer: AnalysisReportFactory.plateau).outcome
+
+        let report = try XCTUnwrap(outcome?.report)
+        XCTAssertEqual(report.verdict, .progress)
+        XCTAssertEqual(report.lead, AnalysisReportFactory.plateau.lead)
+        XCTAssertEqual(report.cards, [
+            .progression(
+                exercise: "Squat (Barbell)",
+                muscleGroup: .legs,
+                fromKg: AnalysisReportFactory.plateauSquatKg,
+                toKg: 105,
+                reasoning: "Every session beat the 3-rep target by two — take the full step to 105 kg."
+            ),
+            .repProgression(
+                exercise: "Lateral Raise (Dumbbell)",
+                muscleGroup: .shoulders,
+                weightKg: 10,
+                fromReps: 12,
+                toReps: 14,
+                reasoning: "Twelve clean reps on the only dumbbell you log — earn the next one with reps."
+            ),
+            .note(title: "Bench Press (Barbell)", text: "Eight weeks at 60 kg — time to move on."),
+            .note(title: "Seated Row (Cable)", text: "Rows rose every other week; keep going."),
+        ])
+    }
+
+    /// Over the ceiling the step is a note, and a progress verdict with no
+    /// card left behind it holds with the app's lead (#177, #233).
+    func testPlateauRejectsAStepOverTheBandAndHolds() async throws {
+        let outcome = try await run(.plateau, answer: AnalysisReportFactory.plateauOvershoot).outcome
+
+        let report = try XCTUnwrap(outcome?.report)
+        XCTAssertEqual(report.cards, [.note(title: "Squat (Barbell)", text: "A big jump, but the reps are there.")])
+        XCTAssertEqual(report.verdict, .hold)
+        XCTAssertEqual(report.headline, AnalysisReportValidator.holdHeadline)
+        XCTAssertEqual(report.lead, AnalysisReportValidator.holdLead)
+    }
+
+    /// Two sessions a week: no recovery hint gets in the way of the cards.
+    func testPlateauNeedsNoRecoveryAtAnyTimeOfDay() async throws {
+        for now in [Self.morning, Self.evening] {
+            let metrics = try await recoveryMetrics(for: .plateau, now: now)
+
+            XCTAssertEqual(metrics.trainingDays, 2)
+            XCTAssertFalse(metrics.needsRecovery)
+        }
+    }
+
     // MARK: - overreached (US-14 AC4)
 
     func testOverreachedPromptShowsTheSixSessionWeek() async throws {

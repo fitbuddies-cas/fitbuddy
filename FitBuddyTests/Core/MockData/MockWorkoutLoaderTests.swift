@@ -301,6 +301,31 @@ final class MockWorkoutLoaderTests: XCTestCase {
         XCTAssertEqual(row.sets.map(\.targetReps), [8, 8, 8])
     }
 
+    /// The plateau profile (#235) logs every session against one routine
+    /// that prescribes three of its four exercises — the fourth is the
+    /// not-checkable case, so it has no targets by design.
+    func testPlateauSessionsCarryTargetsForThreeOfFourExercises() throws {
+        let activities = try loader.activities(for: .plateau, from: .hevy)
+
+        XCTAssertEqual(activities.count, 16)
+        XCTAssertTrue(activities.allSatisfy { $0.routineID != nil }, "a session without a routine")
+        let newest = try XCTUnwrap(activities.first)
+        let targets = Dictionary(uniqueKeysWithValues: newest.exercises.map { ($0.title, $0.sets.map(\.targetReps)) })
+        XCTAssertEqual(targets["Squat (Barbell)"], [8, 3, 3, 3, 3])
+        XCTAssertEqual(targets["Bench Press (Barbell)"], [5, 5, 5])
+        XCTAssertEqual(targets["Lateral Raise (Dumbbell)"], [10, 10, 10])
+        XCTAssertEqual(targets["Seated Row (Cable)"], [nil, nil, nil])
+    }
+
+    /// Every plateau session starts at 12:00 UTC, like the cross-source
+    /// profiles: one wall clock keeps the day counts in every zone.
+    func testThePlateauProfileSharesOneWallClock() throws {
+        let clocks = Set(try loader.activities(for: .plateau, from: .hevy).map {
+            Calendar(identifier: .gregorian).dateComponents(in: .gmt, from: $0.startTime).hour
+        })
+        XCTAssertEqual(clocks, [12])
+    }
+
     /// The other Hevy profiles log freely: no routine, no targets — the
     /// common case, and the one the rule reads as not checkable.
     func testTheOtherHevyProfilesCarryNoTargets() throws {

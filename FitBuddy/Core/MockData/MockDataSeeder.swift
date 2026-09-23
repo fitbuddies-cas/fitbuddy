@@ -21,8 +21,8 @@ import SwiftData
 /// each is written the way its own sync would write it.
 ///
 /// `-fbSeedMockData person-a` (or `person-b`, `progression-ready`,
-/// `overreached`, `runner`, `mixed`, `overreached-mixed`) turns it on; without
-/// the argument nothing here runs.
+/// `overreached`, `plateau`, `runner`, `mixed`, `overreached-mixed`) turns it
+/// on; without the argument nothing here runs.
 enum MockDataSeeder {
     static let launchArgument = "-fbSeedMockData"
 
