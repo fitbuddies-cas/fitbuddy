@@ -2,7 +2,7 @@
 *Strukturierte Zusammenfassung für CAS ADAI 2026, Modul 3.
 Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 
-> **Dokumentationsstand:** Stand nach US-15 «Quellenübergreifende AI-Analyse» (Issue #171, Task-Kette #180–#188) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, SwiftData-Schema V5, ADR-001 bis ADR-012.
+> **Dokumentationsstand:** Stand nach US-17 «Steigerungsempfehlung passt zur Übung und zur Last» (Issue #225, Task-Kette #231–#240) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, SwiftData-Schema V6, ADR-001 bis ADR-013.
 
 
 # 1. User Stories mit Acceptance Criteria
@@ -184,6 +184,25 @@ Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 | AC1 | Dashboard zeigt gecachte Daten (API war down) | User zieht Liste nach unten | Neuer API-Call zu `GET /workouts` wird ausgelöst. Bei Erfolg: Daten aktualisiert, Sync-Zeitstempel erneuert. |
 | AC2 | Pull-to-Refresh wurde ausgelöst | API gibt erneut einen Fehler zurück | Fehlermeldung erscheint, gecachte Daten bleiben sichtbar, Spinner verschwindet. |
 
+### 1.3.4 US-17 · Steigerungsempfehlung passt zur Übung und zur Last
+**Als** Nutzer **möchte ich** eine Steigerung vorgeschlagen bekommen, die zur Übung und zu meinem Trainingsstand passt, **damit** die Empfehlung weder unrealistisch noch trivial ist.
+
+| # | Given | When | Then |
+|---|---|---|---|
+| AC1 | Eine Übung steht im Prompt | Prompt wird gebaut | Der Prompt nennt pro Übung eine **erlaubte Spanne** («Next: 62.5–65 kg»), nicht einen einzelnen Zielwert — berechnet aus dem Band in [ADR-013](adr/ADR-013-progressionsband-je-muskelgruppe.md), gerundet auf die Granularität der Übung (Langhantel 2.5 kg, sonst der kleinste geloggte Schritt) |
+| AC2 | Das Modell schlägt einen Wert innerhalb der Spanne vor | Report wird validiert | Die Karte bleibt eine Progression; Übung, Muskelgruppe und Ausgangsgewicht kommen weiterhin aus dem Cache der App (US-14 AC3) |
+| AC3 | Eine Übung stagniert und hat keinen passenden Gewichtsschritt (z. B. Kurzhantel-Sprung zu gross, einzige geloggte Hantel) | Karte wird gebaut | Die Empfehlung progressiert **Wiederholungen** statt Gewicht: eigene Kartenart «More reps» («12 reps → 14 reps at 10 kg»), geprüft gegen Arbeitsgewicht und Wiederholungen aus dem Cache, höchstens zwei Wiederholungen mehr |
+| AC4 | Die Spanne wird festgelegt | Review | Herkunft und Begründung des Prozentbands sind in ADR-013 dokumentiert — inkl. der Aussage, worauf es **nicht** beruht (nicht Geräte-Granularität, nicht Normwerte, nicht Erfahrungsstufe) |
+| AC5 | Eine Übung steht im Prompt | Spanne wird berechnet | Die Spanne richtet sich **nach der Muskelgruppe** (`MuscleGroup`): +10 % Obergrenze für Beine, Rücken, Brust; +5 % für Schultern, Arme, Rumpf und Unklassifiziertes. Die Trainingserfahrung aus US-13 ist **kein** Modifikator (ADR-013, Entscheidung 4). Ein Geräteschritt ist immer erlaubt, auch wo die Obergrenze darunter liegt |
+| AC6 | Das Modell schlägt etwas oberhalb der Spanne vor — oder unterhalb eines Geräteschritts | Report wird validiert | Die Karte wird zur Notiz abgestuft; der Fall wird mit seinem Grund protokolliert (`aboveRange` bzw. `belowRange`), damit die Trefferquote über mehrere Läufe messbar ist (US-16) |
+| AC7 | Der User hat das Zielrepertoire der Übung in den letzten zwei Einheiten **nicht** um mindestens 2 Wiederholungen überschritten (letzter Arbeitssatz, Ziel aus der Hevy-Routine) | Karte wird gebaut | Es wird **keine** Gewichtsprogression vorgeschlagen: die Spanne hängt an der 2-for-2-Bedingung. Der Prompt sagt es der Übungszeile an («progress reps, not weight»), der Validator stuft eine Gewichtsprogression trotzdem ab (`conditionNotMet`). Fehlt das Ziel (keine Routine, `rep_range` und `reps` leer), gilt die Bedingung als **nicht prüfbar** — nie als erfüllt (`conditionNotCheckable`) — und die Karte fällt auf Rep-Progression oder Notiz zurück |
+
+> **Hinweis:** v1. Bis US-17 liess der Validator pro Übung genau **einen** Zielwert zu (Langhantel `minimumStepKg`, sonst der kleinste gelistete Schritt) — Geräte-Granularität als Trainingslehre. Die Spanne, ihre Staffelung nach Muskelgruppe und die 2-for-2-Bedingung sind in [ADR-013](adr/ADR-013-progressionsband-je-muskelgruppe.md) festgelegt; dort steht auch, dass nichts davon an FitBuddy-Nutzern validiert ist. Setzt US-14 (#170) und US-15 (#171) voraus, nutzt die Trainingserfahrung aus US-13 bewusst nicht. Grenzt an US-16 ab: dort geht es um die **Stabilität des Verdicts**, hier um die **Dosierung einer Steigerung**. Umsetzung und Tasks: Issue #225.
+>
+> **Datengrundlage der Bedingung:** Das Ziel ist die obere Kante des Wiederholungsbereichs der Hevy-Routine, gegen die das Workout geloggt wurde (`rep_range.end` → `rep_range.start` → `reps` → kein Ziel). Der `HevyConnector` liest `GET /v1/routines` beim Sync und **snapshottet** das Ziel pro Satz in den Cache (Schema V6: `Workout.routineID`, `.routineUpdatedAt`, `ExerciseSet.targetReps`) — Routinen sind veränderlich und unversioniert, ein Live-Join würde vergangene Sessions gegen einen Plan vergleichen, der damals nicht galt. «Kein Ziel» ist ein modellierter Zustand, kein Fehler.
+>
+> **Konsequenz für frei loggende User:** Ohne Routine gibt es kein Ziel, ohne Ziel keine Gewichtsprogression. Die App sagt das in der Übungszeile («No rep target on file») und bietet Rep-Progression an — das ist die bewusste Konsequenz aus ADR-013, nicht ein Defekt. Das Mock-Profil «plateau» (#235) zeigt alle Fälle in einem Fenster.
+
 
 ## 1.4 Won't Have — Bewusst ausgeschlossen für diesen PoC
 
@@ -212,6 +231,7 @@ Out of Scope — siehe Abschnitt 4.
 | US-15 | Quellenübergreifende AI-Analyse | **Should** | Löst das Versprechen aus US-5 ein: Kraft und Ausdauer werden zusammen beurteilt statt nebeneinander angezeigt. Der PoC funktioniert auch ohne — ohne die Story bleibt die Analyse auf Kraftdaten beschränkt, wie sie es heute ist, und Cardio-Sessions erscheinen weiterhin nur im Dashboard. |
 | US-9 | Progressionskurven pro Übung | **Could** | US-3 deckt den Hauptnutzen ab. Epley-Formel + Plateau-Detection sind nicht-trivial. |
 | US-10 | Daten manuell neu laden | **Could** | iOS-Pattern, das User erwarten — kein Showstopper. 1–2 Tage Aufwand, ergänzt US-2 AC2. |
+| US-17 | Steigerungsempfehlung passt zur Übung und zur Last | **Could** | Verbessert die Dosierung der Progression-Karte aus US-14, ohne dass etwas davon abhängt: Spanne statt Einzelwert (ADR-013), 2-for-2 als Vorbedingung, Rep-Progression als eigene Karte. Braucht Hevy-Routinen mit Zielwerten — wer frei loggt, bekommt Rep- statt Gewichtsprogression. v1-Material, im v0-Code umgesetzt, weil der Live-Test zu US-15 zeigte, dass der Validator sinnvolle Vorschläge verwarf. |
 | US-11 | Wochenübersicht als Push-Notification | **Won't** | iOS-Permission-Flow + Background-Scheduling + LLM-Call-Fallback ist eigenes Sub-System. Relevant ab v1.2. |
 | US-12 | Trainingsvorschlag zurück in Hevy schreiben | **Won't** | Setzt Hevy PRO voraus, erfordert UX-Klärung (Write-Target, Undo). Risiko: Empfehlung falsch übernommen. Relevant ab v1.2. |
 
