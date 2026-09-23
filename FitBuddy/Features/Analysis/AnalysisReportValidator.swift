@@ -387,7 +387,7 @@ enum AnalysisReportValidator {
         /// `toKg` is over the ceiling of `ProgressionBand`.
         case aboveRange
         /// `toKg` is inside the range but not on a step the equipment offers
-        /// — 63 kg on a 2.5 kg bar — beyond the rounding `weightToleranceKg`
+        /// — 64 kg on a 2.5 kg bar — beyond the rounding `weightToleranceKg`
         /// forgives.
         case offStep
     }
@@ -437,8 +437,10 @@ enum AnalysisReportValidator {
     ///   ceiling; 60 → 61 kg is under the one step the bar can take,
     /// - `toKg` sits on a step: a whole number of steps above the working
     ///   weight, within `weightToleranceKg` — the same rounding `fromKg` is
-    ///   forgiven. 63 kg on a 2.5 kg bar is a weight nobody can load, and a
-    ///   card must not show one.
+    ///   forgiven. 64 kg on a 2.5 kg bar is a weight nobody can load, and a
+    ///   card must not show one. The range is checked on the model's figure
+    ///   first, so 66 kg reads as over the ceiling rather than as off the
+    ///   step, and 62 kg as a rounding of 62.5 rather than as under it.
     ///
     /// Title, muscle group and `fromKg` are replaced by the listed values, so
     /// the struck-through figure on the card is the cache's, not the model's
@@ -475,8 +477,8 @@ enum AnalysisReportValidator {
         guard let step = ProgressionBand.stepKg(for: match.exercise),
               let range = ProgressionBand.range(for: match.exercise)
         else { return .rejected(.noLoadStep) }
-        guard toKg >= range.lowerBound - epsilon else { return .rejected(.belowRange) }
-        guard toKg <= range.upperBound + epsilon else { return .rejected(.aboveRange) }
+        guard toKg >= range.lowerBound - weightToleranceKg - epsilon else { return .rejected(.belowRange) }
+        guard toKg <= range.upperBound + weightToleranceKg + epsilon else { return .rejected(.aboveRange) }
         let steps = ((toKg - match.workingKg) / step).rounded()
         let onStep = PlainWeightFormatter.rounded(match.workingKg + steps * step)
         guard abs(toKg - onStep) <= weightToleranceKg + epsilon else { return .rejected(.offStep) }

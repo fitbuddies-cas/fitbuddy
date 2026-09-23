@@ -136,22 +136,28 @@ final class AnalysisReportValidatorTests: XCTestCase {
         XCTAssertEqual(check(benchPress(from: 60, to: 66)), .rejected(.aboveRange))
     }
 
-    /// Inside the range but off the step: 63 kg on a 2.5 kg bar is not a
+    /// Inside the range but off the step: 64 kg on a 2.5 kg bar is not a
     /// load anyone can put on, so it is rejected — and logged apart, since a
     /// model that lands between the plates is its own finding (#233 review).
     func testAnIncreaseOffTheStepIsRejected() {
-        XCTAssertEqual(check(benchPress(from: 60, to: 63)), .rejected(.offStep))
-        XCTAssertEqual(validate([benchPress(from: 60, to: 63)]).cards, [.note(title: "Bench Press", text: "Clean overload.")])
+        XCTAssertEqual(check(benchPress(from: 60, to: 64)), .rejected(.offStep))
+        XCTAssertEqual(check(benchPress(from: 60, to: 63.75)), .rejected(.offStep))
+        XCTAssertEqual(validate([benchPress(from: 60, to: 64)]).cards, [.note(title: "Bench Press", text: "Clean overload.")])
     }
 
-    /// A rounding within the tolerance — 62 for 62.5 — is the model's step,
-    /// and the card states the step, not the rounding: the figure on a card
-    /// is one the equipment offers.
+    /// A rounding within the tolerance — 62 or 63 for 62.5 — is the model's
+    /// step, and the card states the step, not the rounding: the figure on a
+    /// card is one the equipment offers. The range is judged on the model's
+    /// figure, so 62 is a rounding of the lower end, not a value under it.
     func testAModelRoundingWithinToleranceSnapsToTheStep() {
-        XCTAssertEqual(validate([benchPress(from: 60, to: 62)]).cards, [
-            .progression(exercise: "Bench Press", muscleGroup: .chest, fromKg: 60, toKg: 62.5, reasoning: "Clean overload."),
+        for rounded in [62.0, 63.0] {
+            XCTAssertEqual(validate([benchPress(from: 60, to: rounded)]).cards, [
+                .progression(exercise: "Bench Press", muscleGroup: .chest, fromKg: 60, toKg: 62.5, reasoning: "Clean overload."),
+            ], "\(rounded)")
+        }
+        XCTAssertEqual(validate([benchPress(from: 60, to: 65.4)]).cards, [
+            .progression(exercise: "Bench Press", muscleGroup: .chest, fromKg: 60, toKg: 65, reasoning: "Clean overload."),
         ])
-        XCTAssertEqual(validate([benchPress(from: 60, to: 65.4)]).cards.first?.kind, .progression)
     }
 
     /// A barbell exercise ("(Barbell)" in the Hevy title) moves in steps of
