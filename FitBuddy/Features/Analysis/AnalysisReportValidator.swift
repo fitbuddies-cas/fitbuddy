@@ -28,6 +28,11 @@ enum AnalysisReportValidator {
     /// Cards the result screen shows at most (design 3.4/3.4b/3.5: zero to four).
     static let maxCards = 4
 
+    /// The most reps a rep progression may add at once (#234): the margin
+    /// the 2-for-2 rule wants over the target, so two more reps at the same
+    /// weight is exactly the reserve that earns the next load step (ADR-013).
+    static let maxRepStep = TwoForTwoCondition.requiredMargin
+
     /// Title of a downgraded card that has no better one.
     static let fallbackNoteTitle = "Recommendation"
 
@@ -223,6 +228,23 @@ enum AnalysisReportValidator {
             }
             return note(title: trimmed(exercise), text: reasoning)
 
+        case let .repProgression(exercise, _, weightKg, fromReps, toReps, reasoning):
+            // A strength card like the load progression (US-15 AC5), checked
+            // against the same listed exercises (#234).
+            if !isBlank(reasoning),
+               evidence.analysisProfile.covers(.strength),
+               case let .accepted(valid) = checkRepProgression(
+                   exercise: exercise,
+                   weightKg: weightKg,
+                   fromReps: fromReps,
+                   toReps: toReps,
+                   reasoning: reasoning,
+                   listed: evidence.exercises
+               ) {
+                return valid
+            }
+            return note(title: trimmed(exercise), text: reasoning)
+
         case let .recovery(reasoning, _):
             // Kept only when the app's own count calls for recovery. The issue
             // also accepts "the model explains it", but the schema forces a
@@ -386,6 +408,11 @@ enum AnalysisReportValidator {
         case belowRange
         /// `toKg` is over the ceiling of `ProgressionBand`.
         case aboveRange
+        /// A rep progression's `fromReps` is not the reps the prompt listed
+        /// with the working weight (#234).
+        case wrongStartingReps
+        /// A rep progression adds more than `maxRepStep` reps at once (#234).
+        case aboveRepStep
     }
 
     /// The outcome of checking a progression card against the listed
@@ -475,6 +502,53 @@ enum AnalysisReportValidator {
         ))
     }
 
+    // MARK: - Rep progression (#234)
+
+    /// Checks a rep progression card against the listed exercises, by the
+    /// same rule as the load one: the exercise is listed, `weightKg` is its
+    /// working weight (within `weightToleranceKg`), `fromReps` is the reps the
+    /// prompt listed with it, and `toReps` adds between one and `maxRepStep`
+    /// reps.
+    ///
+    /// **Not gated on the 2-for-2 rule.** The card exists for the exercises
+    /// the rule holds back — not met, not checkable, no load step — and it is
+    /// harmless where the rule is met: more reps at the same weight is never
+    /// a load the log does not back. Title, muscle group, weight and starting
+    /// reps are replaced by the listed values; `toReps` stays the model's.
+    static func checkRepProgression(
+        exercise: String,
+        weightKg: Double,
+        fromReps: Int,
+        toReps: Int,
+        reasoning: String,
+        listed: [ListedExercise]
+    ) -> ProgressionCheck {
+        let name = folded(exercise)
+        let candidates = listed.filter { folded($0.title) == name }
+        guard !candidates.isEmpty else { return .rejected(.notListed) }
+        guard candidates.contains(where: { $0.workingSet != nil }) else { return .rejected(.noWorkingWeight) }
+        let match = candidates.lazy
+            .compactMap { listed -> (exercise: ListedExercise, working: WorkingSet)? in
+                guard let working = listed.workingSet,
+                      abs(weightKg - working.roundedWeightKg) <= weightToleranceKg + epsilon
+                else { return nil }
+                return (listed, working)
+            }
+            .first
+        guard let match else { return .rejected(.wrongStartingWeight) }
+        guard fromReps == match.working.reps else { return .rejected(.wrongStartingReps) }
+        guard toReps > fromReps else { return .rejected(.noIncrease) }
+        guard toReps - fromReps <= maxRepStep else { return .rejected(.aboveRepStep) }
+        return .accepted(.repProgression(
+            exercise: match.exercise.title,
+            muscleGroup: match.exercise.muscleGroup,
+            weightKg: match.working.roundedWeightKg,
+            fromReps: match.working.reps,
+            toReps: toReps,
+            reasoning: reasoning
+        ))
+    }
+
     // MARK: - Imbalance
 
     /// The imbalance with the app's figures, or `nil` when the cache does not
@@ -538,7 +612,7 @@ enum AnalysisReportValidator {
 
     /// Card kinds whose card argues for adding load, and whose loss therefore
     /// leaves a "progress" lead without anything behind it.
-    private static let progressKinds: Set<AnalysisCard.Kind> = [.progression, .metric]
+    private static let progressKinds: Set<AnalysisCard.Kind> = [.progression, .repProgression, .metric]
 
     /// Absorbs floating-point noise in comparisons of figures that are equal
     /// on paper.

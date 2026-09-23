@@ -318,7 +318,7 @@ System-Prompt definiert: Verbotene Termini (Fachjargon), Ausgabeformat («1 Satz
 
 **Karten (US-14 / US-15).** Die Antwort kommt als JSON-Schema-Report und wird von
 `AnalysisReportValidator` gegen den Cache geprüft, bevor eine Karte gerendert wird
-(`AnalysisReportCard`). Nach US-15 gibt es sechs Kartenarten:
+(`AnalysisReportCard`). Nach US-15 und US-17 gibt es sieben Kartenarten:
 
 | Karte | Inhalt |
 |---|---|
@@ -327,6 +327,7 @@ System-Prompt definiert: Verbotene Termini (Fachjargon), Ausgabeformat («1 Satz
 | `imbalance` | Zwei Muskelgruppen mit ihren Sätzen pro Woche |
 | `metric` | Eine Wochenkennzahl von → nach, mit Einheit — `MetricUnit`: km · min/km · h · kg (#186) |
 | `interference` | Kraft- und Ausdauertage derselben Woche gegeneinander (US-15 AC2, #186) |
+| `repProgression` | Mehr Wiederholungen beim gelisteten Arbeitsgewicht einer Übung — der Hebel, wo die 2-for-2-Regel keine Laststeigerung zulässt oder kein Geräteschritt passt (US-17 AC3, ADR-013, #234) |
 | `note` | Modellnotiz — und das, worauf eine gescheiterte Karte reduziert wird |
 
 **Jede Zahl auf einer Karte ist die der App.** Der Validator ersetzt die Zahlen des Modells durch

@@ -94,8 +94,8 @@ final class AnalysisReportSchemaTests: XCTestCase {
     /// count is an `integer`, because the card decodes it as one and 3.0 days
     /// would fail to decode (#186).
     func testNumericCardFieldsAreNumbers() throws {
-        let numeric: Set<String> = ["fromKg", "toKg", "suggestedRestHours", "perWeekA", "perWeekB", "from", "to"]
-        let integers: Set<String> = ["strengthDays", "cardioDays", "overlapDays"]
+        let numeric: Set<String> = ["fromKg", "toKg", "weightKg", "suggestedRestHours", "perWeekA", "perWeekB", "from", "to"]
+        let integers: Set<String> = ["strengthDays", "cardioDays", "overlapDays", "fromReps", "toReps"]
         for variant in try variants() {
             let properties = try XCTUnwrap(variant["properties"] as? [String: Any])
             for (key, value) in properties {

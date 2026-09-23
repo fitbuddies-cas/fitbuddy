@@ -35,6 +35,15 @@ enum AnalysisReportFactory {
           "reasoning": "3 sessions at 60 kg x 5 with RPE 7 or lower."
         },
         {
+          "kind": "repProgression",
+          "exercise": "Lateral Raise (Dumbbell)",
+          "muscleGroup": "Shoulders",
+          "weightKg": 10,
+          "fromReps": 12,
+          "toReps": 14,
+          "reasoning": "Twelve clean reps for three sessions; the next dumbbell is too big a jump."
+        },
+        {
           "kind": "recovery",
           "reasoning": "Take a rest day before the next heavy session.",
           "suggestedRestHours": 48
@@ -129,6 +138,15 @@ enum AnalysisReportFactory {
                 toKg: 62.5,
                 reasoning: "3 sessions at 60 kg x 5 with RPE 7 or lower."
             )
+        case .repProgression:
+            return .repProgression(
+                exercise: "Lateral Raise (Dumbbell)",
+                muscleGroup: "Shoulders",
+                weightKg: 10,
+                fromReps: 12,
+                toReps: 14,
+                reasoning: "Twelve clean reps for three sessions; the next dumbbell is too big a jump."
+            )
         case .recovery:
             return .recovery(reasoning: "Take a rest day before the next heavy session.", suggestedRestHours: 48)
         case .imbalance:
@@ -182,6 +200,7 @@ enum AnalysisReportFactory {
         cards: [
             validatedCard(.recovery),
             validatedCard(.progression),
+            validatedCard(.repProgression),
             validatedCard(.imbalance),
             validatedCard(.metric),
             validatedCard(.interference),
@@ -200,6 +219,15 @@ enum AnalysisReportFactory {
                 fromKg: 60,
                 toKg: 62.5,
                 reasoning: "Five sessions at 60 kg with the reps held."
+            )
+        case .repProgression:
+            return .repProgression(
+                exercise: "Lateral Raise (Dumbbell)",
+                muscleGroup: .shoulders,
+                weightKg: 10,
+                fromReps: 12,
+                toReps: 14,
+                reasoning: "Twelve clean reps for three sessions; the next dumbbell is too big a jump."
             )
         case .recovery:
             return .recovery(

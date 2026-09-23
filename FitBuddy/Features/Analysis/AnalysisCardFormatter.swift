@@ -92,6 +92,25 @@ enum AnalysisCardFormatter {
         "\(hours) h"
     }
 
+    // MARK: - Rep progression card (#234)
+
+    /// `8` → `"8 reps"`, `1` → `"1 rep"`.
+    static func reps(_ reps: Int) -> String {
+        "\(reps) \(reps == 1 ? "rep" : "reps")"
+    }
+
+    /// The signed step from `fromReps` to `toReps`: `"+2 reps"`, `"+1 rep"`.
+    static func repDelta(fromReps: Int, toReps: Int) -> String {
+        let step = toReps - fromReps
+        let sign = step < 0 ? "\u{2212}" : "+"
+        return "\(sign)\(reps(abs(step)))"
+    }
+
+    /// `"at 22.5 kg"` — the weight a rep progression holds.
+    static func atWeight(_ kilograms: Double, locale: Locale = .current) -> String {
+        "at \(weight(kilograms, locale: locale))"
+    }
+
     // MARK: - Metric card (#186)
 
     /// The chip title of a metric card: `"Increase"`, `"Reduce"`, `"Faster"`,
