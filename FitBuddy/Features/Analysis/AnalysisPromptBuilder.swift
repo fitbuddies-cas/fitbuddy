@@ -317,11 +317,15 @@ enum AnalysisPromptBuilder {
     exercise exactly as it is listed there, and start any load change from \
     the weight listed for its most recent session. Never name an exercise \
     that section does not contain, or a weight it does not list as a \
-    starting point. A new target weight is always the listed weight of the \
-    most recent session plus one step. Increase barbell exercises in steps \
-    of 2.5 kg; for every other exercise increase by at most the smallest \
-    step listed for it, and where none is listed, progress reps rather than \
-    weight.
+    starting point. A new target weight is a value within the range the \
+    line names after "Next:", inclusive of both ends and never above the \
+    upper one. Where the line says "progress reps, not weight", do not \
+    recommend a heavier weight for that exercise: recommend more \
+    repetitions at the listed weight instead, as a note. That line is the \
+    2-for-2 rule applied to this person's own log — the rep target of their \
+    routine beaten by two or more reps in two consecutive sessions — and \
+    where no rep target is on file the rule cannot be applied, which is not \
+    the same as it being met.
 
     7. In the endurance sections, load is distance, time, pace and heart \
     rate. Rule 5 does not apply there: no volume in kilograms is not an \
@@ -534,14 +538,7 @@ enum AnalysisPromptBuilder {
             guard let progression = progressions[exercise.id],
                   let listing = listing(progression, from: start)
             else { return nil }
-            return ListedExercise(
-                title: exercise.title,
-                muscleGroup: exercise.muscleGroup,
-                workingSet: listing.last.heaviestWorkingSet,
-                smallestStepKg: listing.last.heaviestWorkingSet.flatMap {
-                    smallestStep(in: listing.inWindow.sessions, latest: $0)
-                }
-            )
+            return ListedExercise.make(title: exercise.title, muscleGroup: exercise.muscleGroup, listing: listing)
         }
     }
 

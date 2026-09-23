@@ -17,6 +17,11 @@ struct SetDetail: Equatable, Identifiable, Sendable {
     let durationSeconds: Int?
     /// Rate of perceived exertion (6–10) when the user logged it.
     let rpe: Double?
+    /// The reps the routine prescribed for this set (#240), `nil` when there
+    /// was no routine or no target — what the 2-for-2 rule (ADR-013) reads.
+    /// Defaulted, so the many call sites that describe a set without a plan
+    /// stay as they are.
+    var targetReps: Int? = nil
 
     var id: Int { index }
 
@@ -57,7 +62,8 @@ extension SetDetail {
             reps: set.reps,
             distanceMeters: set.distanceMeters,
             durationSeconds: set.durationSeconds,
-            rpe: set.rpe
+            rpe: set.rpe,
+            targetReps: set.targetReps
         )
     }
 }
