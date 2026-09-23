@@ -107,8 +107,8 @@ final class HevyRoutineDTOTests: XCTestCase {
             HevyPayloadFactory.routineExercise(templateID: "SQUAT", sets: [HevyPayloadFactory.routineSet(reps: 10)]),
         ]))
 
-        XCTAssertEqual(routine.exercise(templateID: "SQUAT", occurrence: 0)?.targetReps(atPosition: 0), 5)
-        XCTAssertEqual(routine.exercise(templateID: "SQUAT", occurrence: 1)?.targetReps(atPosition: 0), 10)
+        XCTAssertEqual(routine.exercise(templateID: "SQUAT", occurrence: 0)?.targetReps(forSet: 0, warmUp: false), 5)
+        XCTAssertEqual(routine.exercise(templateID: "SQUAT", occurrence: 1)?.targetReps(forSet: 0, warmUp: false), 10)
         XCTAssertNil(routine.exercise(templateID: "SQUAT", occurrence: 2), "Logged a third time: nothing prescribed")
         XCTAssertNil(routine.exercise(templateID: "ROW", occurrence: 0), "Swapped in on the day: nothing prescribed")
     }
@@ -118,7 +118,26 @@ final class HevyRoutineDTOTests: XCTestCase {
         let routine = try decode(HevyPayloadFactory.routine(id: "r-1", updatedAt: Date()))
         let exercise = try XCTUnwrap(routine.exercises.first)
 
-        XCTAssertEqual(exercise.targetReps(atPosition: 1), 12)
-        XCTAssertNil(exercise.targetReps(atPosition: 2))
+        XCTAssertEqual(exercise.targetReps(forSet: 0, warmUp: true), 10)
+        XCTAssertEqual(exercise.targetReps(forSet: 0, warmUp: false), 12)
+        XCTAssertNil(exercise.targetReps(forSet: 1, warmUp: false))
+        XCTAssertNil(exercise.targetReps(forSet: 1, warmUp: true))
+    }
+
+    /// Matched per kind: the first working set is compared against the
+    /// first prescribed working set, whatever the routine lists before it.
+    func testWorkingSetsAreMatchedToWorkingSetsAcrossTheWarmUps() throws {
+        let routine = try decode(HevyPayloadFactory.routine(id: "r-1", updatedAt: Date(), exercises: [
+            HevyPayloadFactory.routineExercise(templateID: "SQUAT", sets: [
+                HevyPayloadFactory.routineSet(type: "warmup", reps: 8),
+                HevyPayloadFactory.routineSet(type: "warmup", reps: 5),
+                HevyPayloadFactory.routineSet(type: "normal", reps: 3),
+                HevyPayloadFactory.routineSet(type: "normal", reps: 3),
+            ]),
+        ]))
+        let exercise = try XCTUnwrap(routine.exercises.first)
+
+        XCTAssertEqual(exercise.targetReps(forSet: 0, warmUp: false), 3)
+        XCTAssertEqual(exercise.targetReps(forSet: 1, warmUp: true), 5)
     }
 }
