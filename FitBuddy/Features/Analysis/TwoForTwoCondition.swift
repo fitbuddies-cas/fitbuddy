@@ -24,21 +24,28 @@ enum TwoForTwoCondition: Equatable, Sendable {
 
     /// Consecutive sessions of the exercise the rule looks at.
     static let requiredSessions = 2
-    /// Reps over the target each of them has to reach — the rule as its
-    /// source states it: one extra rep is form on the day, two in a row are
-    /// a reserve.
+    /// Reps over the target each of them has to reach. The strict form of
+    /// the rule (NSCA's "2-for-2"); the ACSM position stand says one to two,
+    /// and ADR-013 sets the margin at two on purpose: one extra rep is form
+    /// on the day, two in a row are a reserve.
     static let requiredMargin = 2
 
     /// The verdict over `sessions`, oldest first, as `ExerciseProgression`
     /// holds them.
     ///
     /// Only sessions that logged a working set count towards the pair: one
-    /// holding warm-ups alone is not an attempt at the target. Fewer than
-    /// two such sessions in the window is `.notMet` (ADR-013, decision 5),
-    /// not `.notCheckable`: the data is there, it just does not yet show two
-    /// consecutive successes.
+    /// holding warm-ups alone is not an attempt at the target.
+    ///
+    /// The targets are checked **before** the count: a single session
+    /// without a target is `.notCheckable`, not `.notMet` — the prompt line
+    /// for `.notMet` names the rep target, and there is none to name. Only
+    /// with every attempt carrying a target does fewer than two of them read
+    /// as `.notMet` (ADR-013, decision 5): the data is there, it just does
+    /// not yet show two consecutive successes. No working set at all is
+    /// `.notCheckable` for the same reason — nothing was attempted.
     static func evaluate(sessions: [ExerciseHistoryEntry]) -> TwoForTwoCondition {
         let attempts = sessions.compactMap(lastWorkingSet(in:)).suffix(requiredSessions)
+        guard !attempts.isEmpty, attempts.allSatisfy({ $0.targetReps != nil }) else { return .notCheckable }
         guard attempts.count == requiredSessions else { return .notMet }
         var beaten = true
         for attempt in attempts {

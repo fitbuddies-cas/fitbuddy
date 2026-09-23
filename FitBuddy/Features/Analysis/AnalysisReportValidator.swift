@@ -408,11 +408,18 @@ enum AnalysisReportValidator {
         case belowRange
         /// `toKg` is over the ceiling of `ProgressionBand`.
         case aboveRange
+<<<<<<< HEAD
         /// A rep progression's `fromReps` is not the reps the prompt listed
         /// with the working weight (#234).
         case wrongStartingReps
         /// A rep progression adds more than `maxRepStep` reps at once (#234).
         case aboveRepStep
+=======
+        /// `toKg` is inside the range but not on a step the equipment offers
+        /// — 63 kg on a 2.5 kg bar — beyond the rounding `weightToleranceKg`
+        /// forgives.
+        case offStep
+>>>>>>> feature/task-233-validator-range-two-for-two
     }
 
     /// The outcome of checking a progression card against the listed
@@ -457,13 +464,18 @@ enum AnalysisReportValidator {
     /// - the exercise has a step to move by, and `toKg` lies within
     ///   `ProgressionBand.range(for:)` — the range the prompt line named,
     ///   both ends inclusive. 60 → 66 kg on a bench at 60 is over the 10 %
-    ///   ceiling; 60 → 61 kg is under the one step the bar can take.
+    ///   ceiling; 60 → 61 kg is under the one step the bar can take,
+    /// - `toKg` sits on a step: a whole number of steps above the working
+    ///   weight, within `weightToleranceKg` — the same rounding `fromKg` is
+    ///   forgiven. 63 kg on a 2.5 kg bar is a weight nobody can load, and a
+    ///   card must not show one.
     ///
     /// Title, muscle group and `fromKg` are replaced by the listed values, so
     /// the struck-through figure on the card is the cache's, not the model's
-    /// rounding of it; `toKg` stays the model's, as US-14 leaves the target to
-    /// the model within the app's bounds. Where two listed exercises share a
-    /// title, the first whose weight matches wins.
+    /// rounding of it; `toKg` is the model's choice of step, snapped to the
+    /// step itself (62 for 62.5 reads 62.5 kg), because every figure a card
+    /// states as a load is one the equipment offers. Where two listed
+    /// exercises share a title, the first whose weight matches wins.
     static func checkProgression(
         exercise: String,
         fromKg: Double,
@@ -490,14 +502,19 @@ enum AnalysisReportValidator {
         case .notCheckable: return .rejected(.conditionNotCheckable)
         case .met: break
         }
-        guard let range = ProgressionBand.range(for: match.exercise) else { return .rejected(.noLoadStep) }
+        guard let step = ProgressionBand.stepKg(for: match.exercise),
+              let range = ProgressionBand.range(for: match.exercise)
+        else { return .rejected(.noLoadStep) }
         guard toKg >= range.lowerBound - epsilon else { return .rejected(.belowRange) }
         guard toKg <= range.upperBound + epsilon else { return .rejected(.aboveRange) }
+        let steps = ((toKg - match.workingKg) / step).rounded()
+        let onStep = PlainWeightFormatter.rounded(match.workingKg + steps * step)
+        guard abs(toKg - onStep) <= weightToleranceKg + epsilon else { return .rejected(.offStep) }
         return .accepted(.progression(
             exercise: match.exercise.title,
             muscleGroup: match.exercise.muscleGroup,
             fromKg: match.workingKg,
-            toKg: toKg,
+            toKg: onStep,
             reasoning: reasoning
         ))
     }

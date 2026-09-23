@@ -249,20 +249,27 @@ struct MockWorkoutLoader {
         return routines
     }
 
-    /// A Hevy fixture's root object.
+    /// A Hevy fixture's root object — read once per payload for the workouts
+    /// and the routines alike.
     private func rawRoot(of payload: MockWorkoutPayload) throws -> [String: Any] {
-        guard let url = bundle.url(forResource: payload.resourceName, withExtension: "json"),
-              let data = try? Data(contentsOf: url) else {
-            throw MockWorkoutError.missingPayload(payload.resourceName)
-        }
-        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        guard let root = try rawJSON(of: payload) as? [String: Any] else {
             throw MockWorkoutError.invalidPayload(payload.resourceName)
         }
         return root
     }
 
-    private func rawEntries(of payload: MockWorkoutPayload) throws -> [[String: Any]] {
-        if let cached = cache.raw[payload] { return cached }
+    /// A Strava or Polar fixture's root array.
+    private func rawArray(of payload: MockWorkoutPayload) throws -> [[String: Any]] {
+        guard let array = try rawJSON(of: payload) as? [[String: Any]] else {
+            throw MockWorkoutError.invalidPayload(payload.resourceName)
+        }
+        return array
+    }
+
+    /// The parsed file, cached per payload so the two readers of a Hevy file
+    /// share one read.
+    private func rawJSON(of payload: MockWorkoutPayload) throws -> Any {
+        if let cached = cache.json[payload] { return cached }
         guard let url = bundle.url(forResource: payload.resourceName, withExtension: "json"),
               let data = try? Data(contentsOf: url) else {
             throw MockWorkoutError.missingPayload(payload.resourceName)
@@ -270,10 +277,16 @@ struct MockWorkoutLoader {
         guard let root = try? JSONSerialization.jsonObject(with: data) else {
             throw MockWorkoutError.invalidPayload(payload.resourceName)
         }
+        cache.json[payload] = root
+        return root
+    }
+
+    private func rawEntries(of payload: MockWorkoutPayload) throws -> [[String: Any]] {
+        if let cached = cache.raw[payload] { return cached }
         let entries: [[String: Any]]?
         switch payload.source {
-        case .hevy: entries = (root as? [String: Any])?["workouts"] as? [[String: Any]]
-        case .strava, .polar: entries = root as? [[String: Any]]
+        case .hevy: entries = try rawRoot(of: payload)["workouts"] as? [[String: Any]]
+        case .strava, .polar: entries = try rawArray(of: payload)
         }
         guard let entries else { throw MockWorkoutError.invalidPayload(payload.resourceName) }
         cache.raw[payload] = entries
@@ -336,6 +349,7 @@ struct MockWorkoutLoader {
     /// Shared storage for the copies of one loader — the loader stays a value
     /// type, the parsed payloads are computed once.
     private final class Cache {
+        var json: [MockWorkoutPayload: Any] = [:]
         var raw: [MockWorkoutPayload: [[String: Any]]] = [:]
         var shifted: [MockWorkoutPayload: [[String: Any]]] = [:]
         var offsets: [MockWorkoutProfile: TimeInterval] = [:]

@@ -20,15 +20,18 @@ struct HevyRoutineExerciseDTO: Decodable, Equatable, Sendable {
         sets = try container.decodeIfPresent([HevyRoutineSetDTO].self, forKey: .sets) ?? []
     }
 
-    /// The target of the prescribed set at `position`, or `nil` when the
-    /// routine prescribes fewer sets than the workout logged — an extra set
-    /// the user added on the day had no target to beat.
+    /// The target of the `ordinal`-th prescribed set of its kind — warm-up
+    /// or working — or `nil` when the routine prescribes fewer sets of that
+    /// kind than the workout logged: an extra set the user added on the day
+    /// had no target to beat.
     ///
-    /// By position over *all* sets, warm-ups included: Hevy lists a routine's
-    /// sets in the order the workout logs them, and the logged warm-up sits at
-    /// the same slot as the prescribed one. Dropping warm-ups on one side only
-    /// would shift every target by one.
-    func targetReps(atPosition position: Int) -> Int? {
-        sets.indices.contains(position) ? sets[position].targetReps : nil
+    /// Matched **per kind**, not by raw position: a warm-up the user skipped
+    /// or added on the day would otherwise shift every working target by one
+    /// slot, and the working sets are the ones the 2-for-2 rule reads. The
+    /// k-th logged working set is compared against the k-th prescribed
+    /// working set whatever happened to the warm-ups around them.
+    func targetReps(forSet ordinal: Int, warmUp: Bool) -> Int? {
+        let kind = sets.filter { ($0.setType == .warmup) == warmUp }
+        return kind.indices.contains(ordinal) ? kind[ordinal].targetReps : nil
     }
 }
