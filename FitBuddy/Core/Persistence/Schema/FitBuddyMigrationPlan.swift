@@ -36,8 +36,16 @@ import SwiftData
 /// map as that row's own total from Hevy, and the next sync replaces the window
 /// and fills the workout columns for real.
 ///
+/// V5 → V6 is lightweight as well (#240): `Workout` gains `routineID` and
+/// `routineUpdatedAt`, `ExerciseSet` gains `targetReps`, all optional. `nil`
+/// is the truth for an existing row: no build before this version read a
+/// routine off the API, so no cached session knows what it was logged
+/// against — and the 2-for-2 rule (ADR-013) reads a missing target as not
+/// checkable rather than as met. The next sync replaces the window and fills
+/// the columns for real.
+///
 /// A store from an older version runs the stages in turn; the migration tests
-/// write a V1, a V2, a V3 and a V4 store and open each under the current
+/// write a V1, a V2, a V3, a V4 and a V5 store and open each under the current
 /// version.
 enum FitBuddyMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
@@ -47,11 +55,12 @@ enum FitBuddyMigrationPlan: SchemaMigrationPlan {
             FitBuddySchemaV3.self,
             FitBuddySchemaV4.self,
             FitBuddySchemaV5.self,
+            FitBuddySchemaV6.self,
         ]
     }
 
     static var stages: [MigrationStage] {
-        [migrateV1toV2, migrateV2toV3, migrateV3toV4, migrateV4toV5]
+        [migrateV1toV2, migrateV2toV3, migrateV3toV4, migrateV4toV5, migrateV5toV6]
     }
 
     private static let migrateV1toV2 = MigrationStage.lightweight(
@@ -72,5 +81,10 @@ enum FitBuddyMigrationPlan: SchemaMigrationPlan {
     private static let migrateV4toV5 = MigrationStage.lightweight(
         fromVersion: FitBuddySchemaV4.self,
         toVersion: FitBuddySchemaV5.self
+    )
+
+    private static let migrateV5toV6 = MigrationStage.lightweight(
+        fromVersion: FitBuddySchemaV5.self,
+        toVersion: FitBuddySchemaV6.self
     )
 }

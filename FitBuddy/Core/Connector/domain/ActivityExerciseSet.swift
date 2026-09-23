@@ -22,6 +22,10 @@ struct ActivityExerciseSet: Identifiable, Equatable, Codable, Sendable {
     var durationSeconds: Int?
     /// Rate of perceived exertion (6–10) when the user logged it.
     var rpe: Double?
+    /// The repetitions the routine prescribed for this set (#240), resolved
+    /// at the source from its range or single value; `nil` when the workout
+    /// had no routine or the routine set no target — a state, not a gap.
+    var targetReps: Int?
 
     var id: Int { index }
 
@@ -32,7 +36,8 @@ struct ActivityExerciseSet: Identifiable, Equatable, Codable, Sendable {
         reps: Int? = nil,
         distanceMeters: Double? = nil,
         durationSeconds: Int? = nil,
-        rpe: Double? = nil
+        rpe: Double? = nil,
+        targetReps: Int? = nil
     ) {
         self.index = index
         self.typeRawValue = type.rawValue
@@ -41,6 +46,7 @@ struct ActivityExerciseSet: Identifiable, Equatable, Codable, Sendable {
         self.distanceMeters = distanceMeters
         self.durationSeconds = durationSeconds
         self.rpe = rpe
+        self.targetReps = targetReps
     }
 
     /// Typed view of `typeRawValue`.
