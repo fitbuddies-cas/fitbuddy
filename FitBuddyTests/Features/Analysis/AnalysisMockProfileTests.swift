@@ -127,8 +127,8 @@ final class AnalysisMockProfileTests: XCTestCase {
         let raise = try row(startingWith: "- Lateral Raise (Dumbbell): ", in: prompt)
         XCTAssertTrue(raise.hasSuffix("Rep target 10, beaten by 2+ reps in the last 2 sessions. Next: progress reps, no load step is logged for this exercise."), raise)
 
-        let rows = try row(startingWith: "- Seated Row (Cable): ", in: prompt)
-        XCTAssertTrue(rows.hasSuffix("No rep target on file. Next: progress reps, not weight."), rows)
+        let seatedRow = try row(startingWith: "- Seated Row (Cable): ", in: prompt)
+        XCTAssertTrue(seatedRow.hasSuffix("No rep target on file. Next: progress reps, not weight."), seatedRow)
     }
 
     /// End to end (#235): the squat step within the band survives with the

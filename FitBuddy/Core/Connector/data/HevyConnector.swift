@@ -7,8 +7,9 @@ import OSLog
 /// The connector is the only type that knows Hevy exists: it owns the wire
 /// DTOs, the pagination of `GET /v1/workouts` and `GET /v1/routines`, the
 /// join of a workout with the routine it was logged against (#240), and the
-/// mapping of HTTP status codes onto `ConnectorError`. Everything above it — the sync service, the
-/// dashboard, the prompt builder — sees `Activity` and `ConnectorError` only,
+/// mapping of HTTP status codes onto `ConnectorError`. Everything above it —
+/// the sync service, the dashboard, the prompt builder — sees `Activity` and
+/// `ConnectorError` only,
 /// so a second source (#35) is a new conforming type rather than a refactor of
 /// those layers.
 ///

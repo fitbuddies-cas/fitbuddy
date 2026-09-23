@@ -324,51 +324,40 @@ enum StrengthPromptSection {
     /// #232): the load range where the rule is met and a step exists, and
     /// "progress reps, not weight" everywhere else.
     ///
-    /// Read from the same `ListedExercise` the validation of #233 is handed,
-    /// built here from the same listing: the range the model is shown and the
-    /// range a card is checked against are one computation.
+    /// Read from the same `ListedExercise` the validation of #233 is handed
+    /// — `ListedExercise.make(title:muscleGroup:listing:)` builds both — so
+    /// the range the model is shown and the range a card is checked against
+    /// are one computation.
     ///
     /// The missing target is stated as such, not skipped: rule 6 tells the
     /// model that an unapplicable rule is not a met one, and it can only act
-    /// on that if the line says which of the two it is.
+    /// on that if the line says which of the two it is. `.met` and `.notMet`
+    /// always come with a target (`TwoForTwoCondition.evaluate` checks the
+    /// targets before it counts), so the line never claims one it cannot
+    /// name; the `nil` arm below is the guard for that, not a case.
     private static func progressionParts(
         _ exercise: ExerciseSummary,
         listing: (inWindow: ExerciseProgression, last: ExerciseHistoryEntry)
     ) -> [String] {
-        let (inWindow, last) = listing
-        let listed = ListedExercise(
-            title: exercise.title,
-            muscleGroup: exercise.muscleGroup,
-            workingSet: last.heaviestWorkingSet,
-            smallestStepKg: last.heaviestWorkingSet.flatMap {
-                AnalysisPromptBuilder.smallestStep(in: inWindow.sessions, latest: $0)
-            },
-            twoForTwo: TwoForTwoCondition.evaluate(sessions: inWindow.sessions)
-        )
-        let target = TwoForTwoCondition.latestTarget(in: inWindow.sessions)
-            .map { "Rep target \($0)" }
+        let listed = ListedExercise.make(title: exercise.title, muscleGroup: exercise.muscleGroup, listing: listing)
+        let target = TwoForTwoCondition.latestTarget(in: listing.inWindow.sessions)
+        let margin = TwoForTwoCondition.requiredMargin
+        let pair = TwoForTwoCondition.requiredSessions
         let reps = "Next: progress reps, not weight"
-        switch listed.twoForTwo {
-        case .met:
+        switch (listed.twoForTwo, target) {
+        case let (.met, target?):
             let next = ProgressionBand.range(for: listed).map { "Next: \(ProgressionBand.text($0))" }
                 ?? "Next: progress reps, no load step is logged for this exercise"
-            return [
-                (target ?? "Rep target on file") + ", beaten by \(TwoForTwoCondition.requiredMargin)+ reps "
-                    + "in the last \(TwoForTwoCondition.requiredSessions) sessions",
-                next,
-            ]
-        case .notMet:
-            return [
-                (target ?? "Rep target on file") + ", not yet beaten by \(TwoForTwoCondition.requiredMargin)+ "
-                    + "reps in \(TwoForTwoCondition.requiredSessions) consecutive sessions",
-                reps,
-            ]
-        case .notCheckable:
+            return ["Rep target \(target), beaten by \(margin)+ reps in the last \(pair) sessions", next]
+        case let (.notMet, target?):
+            return ["Rep target \(target), not yet beaten by \(margin)+ reps in \(pair) consecutive sessions", reps]
+        case let (.notCheckable, target?):
             // A target on the latest session alone is stated as such: "no
             // target" would be untrue, and "not met" would be a verdict the
             // rule never reached.
-            let onFile = target.map { "\($0), not on file for both of the last \(TwoForTwoCondition.requiredSessions) sessions" }
-            return [onFile ?? "No rep target on file", reps]
+            return ["Rep target \(target), not on file for both of the last \(pair) sessions", reps]
+        case (_, nil):
+            return ["No rep target on file", reps]
         }
     }
 

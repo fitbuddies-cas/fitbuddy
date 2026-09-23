@@ -48,11 +48,13 @@ extension FitBuddySchemaV6 {
         /// for an endurance source's session, and for every row written
         /// before V6.
         var routineID: String?
-        /// The routine's `updated_at` as it was when this session was synced.
-        /// Snapshotted with the targets on the sets, not joined live: a
-        /// routine the user edits after training has no version history, so
-        /// the only record of what the session was compared against is the
-        /// one taken at sync time.
+        /// The routine's `updated_at` as it was when this session was
+        /// **first** cached. Snapshotted with the targets on the sets, not
+        /// joined live: a routine the user edits after training has no
+        /// version history, so the only record of what the session was
+        /// compared against is the one taken then. A later sync rewrites the
+        /// window but carries this snapshot over —
+        /// `WorkoutStore.replaceCachedWorkouts` — so it never moves.
         var routineUpdatedAt: Date?
 
         /// Session-level endurance metrics, flat — SwiftData stores scalars,

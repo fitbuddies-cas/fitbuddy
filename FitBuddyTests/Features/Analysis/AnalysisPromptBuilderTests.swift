@@ -1036,6 +1036,20 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertTrue(rows[1].hasSuffix("Rep target 5, not on file for both of the last 2 sessions. Next: progress reps, not weight."), rows[1])
     }
 
+    /// One freely logged session: the line says no target is on file, and
+    /// never "Rep target on file, not yet beaten" — a claim the model would
+    /// read as a target it has to invent (#232 review).
+    func testASingleSessionWithoutATargetSaysNoTargetIsOnFile() throws {
+        let row = exercise("Row", volume: 1_000, sessions: 1)
+        let prompt = makeWithExercises([
+            (row, progression(row, sessions: [session(daysAgo: 1, sets: working(50, 10))])),
+        ])
+
+        let line = try XCTUnwrap(exerciseRows(prompt).first)
+        XCTAssertTrue(line.hasSuffix("No rep target on file. Next: progress reps, not weight."), line)
+        XCTAssertFalse(prompt.user.contains("Rep target on file"), prompt.user)
+    }
+
     /// The rule reads the *last* working set of a session: a first set that
     /// beat the target does not count when the last one did not.
     func testTheLastWorkingSetOfASessionIsWhatCounts() throws {
