@@ -1,10 +1,10 @@
 import Foundation
 import SwiftData
 
-/// The current `Workout` model — see `FitBuddySchemaV5`.
-typealias Workout = FitBuddySchemaV5.Workout
+/// The current `Workout` model — see `FitBuddySchemaV6`.
+typealias Workout = FitBuddySchemaV6.Workout
 
-extension FitBuddySchemaV5 {
+extension FitBuddySchemaV6 {
     /// A cached training session — the root of the `Workout → Exercise →
     /// ExerciseSet` hierarchy that backs the offline dashboard (US-2 AC2).
     ///
@@ -43,6 +43,17 @@ extension FitBuddySchemaV5 {
         /// wrong domain. `kind` resolves the gap from the source instead; the
         /// next sync replaces the window and fills the column for real.
         var kindRawValue: String?
+        /// The source's id of the routine this session was logged against
+        /// (Hevy's `routine_id`, #240) — `nil` for a freely logged workout,
+        /// for an endurance source's session, and for every row written
+        /// before V6.
+        var routineID: String?
+        /// The routine's `updated_at` as it was when this session was synced.
+        /// Snapshotted with the targets on the sets, not joined live: a
+        /// routine the user edits after training has no version history, so
+        /// the only record of what the session was compared against is the
+        /// one taken at sync time.
+        var routineUpdatedAt: Date?
 
         /// Session-level endurance metrics, flat — SwiftData stores scalars,
         /// not a nested `CardioMetrics` (#180). Read them through `cardio`,
@@ -106,7 +117,9 @@ extension FitBuddySchemaV5 {
             source: ConnectorSource = .hevy,
             kind: ActivityKind = .strength,
             exercises: [Exercise] = [],
-            cardio: CardioMetrics? = nil
+            cardio: CardioMetrics? = nil,
+            routineID: String? = nil,
+            routineUpdatedAt: Date? = nil
         ) {
             self.id = id
             self.title = title
@@ -117,6 +130,8 @@ extension FitBuddySchemaV5 {
             self.sourceRawValue = source.rawValue
             self.kindRawValue = kind.rawValue
             self.exercises = exercises
+            self.routineID = routineID
+            self.routineUpdatedAt = routineUpdatedAt
             self.cardioAverageHeartRate = cardio?.averageHeartRate
             self.cardioMaxHeartRate = cardio?.maxHeartRate
             self.cardioElevationGainMeters = cardio?.elevationGainMeters

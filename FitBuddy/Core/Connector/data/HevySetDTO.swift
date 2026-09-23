@@ -50,7 +50,10 @@ struct HevySetDTO: Decodable, Equatable, Sendable {
     ///
     /// As for the exercise above: Hevy's own `index` is optional, and mixing it
     /// with a positional fallback yields duplicate ids.
-    func makeActivitySet(position: Int) -> ActivityExerciseSet {
+    ///
+    /// - Parameter targetReps: What the routine prescribed for this slot
+    ///   (#240), `nil` when nothing was.
+    func makeActivitySet(position: Int, targetReps: Int? = nil) -> ActivityExerciseSet {
         ActivityExerciseSet(
             index: position,
             type: SetType.from(type),
@@ -58,7 +61,8 @@ struct HevySetDTO: Decodable, Equatable, Sendable {
             reps: reps,
             distanceMeters: distanceMeters,
             durationSeconds: durationSeconds,
-            rpe: rpe
+            rpe: rpe,
+            targetReps: targetReps
         )
     }
 }

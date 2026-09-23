@@ -5,8 +5,9 @@ import OSLog
 /// (ADR-6, #34).
 ///
 /// The connector is the only type that knows Hevy exists: it owns the wire
-/// DTOs, the pagination of `GET /v1/workouts` and the mapping of HTTP status
-/// codes onto `ConnectorError`. Everything above it — the sync service, the
+/// DTOs, the pagination of `GET /v1/workouts` and `GET /v1/routines`, the
+/// join of a workout with the routine it was logged against (#240), and the
+/// mapping of HTTP status codes onto `ConnectorError`. Everything above it — the sync service, the
 /// dashboard, the prompt builder — sees `Activity` and `ConnectorError` only,
 /// so a second source (#35) is a new conforming type rather than a refactor of
 /// those layers.
@@ -15,13 +16,15 @@ import OSLog
 /// the sync timestamp. Those belong to the app's session, not to the provider,
 /// and `WorkoutSyncService` orchestrates them around this type.
 actor HevyConnector: FitnessConnector {
-    /// Hevy caps `pageSize` at 10 for the workouts endpoint.
+    /// Hevy caps `pageSize` at 10 for the workouts and the routines endpoint.
     private static let pageSize = 10
-    /// Safety stop for the pagination loop, at 10 workouts per page: 1000
-    /// workouts is far more than a 90-day window can hold, so hitting this
-    /// means Hevy is paginating in a way this version does not understand.
+    /// Safety stop for either pagination loop, at 10 entries per page: 1000
+    /// workouts is far more than a 90-day window can hold, and 1000 routines
+    /// far more than a library, so hitting this means Hevy is paginating in a
+    /// way this version does not understand.
     private static let maxPages = 100
     private static let workoutsURL = URL(staticString: "https://api.hevyapp.com/v1/workouts")
+    private static let routinesURL = URL(staticString: "https://api.hevyapp.com/v1/routines")
 
     private let session: URLSession
     /// The key sent with every request, held only in memory — the Keychain
@@ -62,7 +65,7 @@ actor HevyConnector: FitnessConnector {
         // a "no" about a key the user never gave us.
         guard apiKey != nil else { throw ConnectorError.unauthorized }
         do {
-            _ = try await fetchPage(1, pageSize: 1)
+            _ = try await fetchPage(HevyWorkoutsPage.self, from: Self.workoutsURL, page: 1, pageSize: 1)
             return true
         } catch ConnectorError.unauthorized {
             // The one case that is an answer rather than a failure: Hevy has
@@ -71,27 +74,49 @@ actor HevyConnector: FitnessConnector {
         }
     }
 
-    /// Every workout that started at or after `since`, newest first.
+    /// Every workout that started at or after `since`, newest first, each
+    /// carrying the targets of the routine it was logged against (#240).
     ///
     /// Pagination is internal (ADR-6): the caller gets one flat list, never a
-    /// cursor. The walk stops at the first page that lies entirely outside the
-    /// window instead of downloading the user's whole history.
+    /// cursor. The routines are read after the workouts and only when a
+    /// workout names one, so a user who logs freely costs no second endpoint;
+    /// the targets are snapshotted into the `Activity` here, at sync time —
+    /// see `HevyWorkoutDTO.makeActivity(routine:)` for why not later.
     func fetchActivities(since: Date) async throws -> [Activity] {
-        var collected: [Activity] = []
+        let workouts = try await fetchWorkouts(since: since)
+        let routines = try await fetchRoutines(ids: Set(workouts.compactMap(\.routineID)))
+        return workouts.map { workout in
+            workout.makeActivity(routine: workout.routineID.flatMap { routines[$0] })
+        }
+    }
+
+    /// Drops the in-memory key. The stored one stays where it is — clearing
+    /// the Keychain is the caller's decision (`SessionResetService`).
+    func disconnect() async {
+        apiKey = nil
+    }
+
+    // MARK: - Walks
+
+    /// The wire workouts inside the window, newest first. The walk stops at
+    /// the first page that lies entirely outside the window instead of
+    /// downloading the user's whole history.
+    private func fetchWorkouts(since: Date) async throws -> [HevyWorkoutDTO] {
+        var collected: [HevyWorkoutDTO] = []
         var seenIDs: Set<String> = []
         var page = 1
 
         while page <= Self.maxPages {
-            let payload = try await fetchPage(page, pageSize: Self.pageSize)
+            let payload = try await fetchPage(
+                HevyWorkoutsPage.self, from: Self.workoutsURL, page: page, pageSize: Self.pageSize
+            )
             let inWindow = payload.workouts.filter { $0.startTime >= since }
             // Hevy paginates newest first over a live list: a workout logged
             // while the walk is between two pages shifts everything down a slot
             // and hands the entry on the boundary back twice. A duplicate would
             // be cached — and would inflate every count and volume the
             // dashboard derives.
-            collected.append(contentsOf: inWindow.lazy
-                .filter { seenIDs.insert($0.id).inserted }
-                .map { $0.makeActivity() })
+            collected.append(contentsOf: inWindow.filter { seenIDs.insert($0.id).inserted })
 
             // A page that contributes nothing ends the walk: it holds either no
             // workouts at all, or none inside the window — and Hevy serves
@@ -106,23 +131,57 @@ actor HevyConnector: FitnessConnector {
         }
 
         if page > Self.maxPages {
-            logger.error("Pagination stopped at the \(Self.maxPages, privacy: .public)-page cap")
+            logger.error("Workout pagination stopped at the \(Self.maxPages, privacy: .public)-page cap")
         }
         return collected
     }
 
-    /// Drops the in-memory key. The stored one stays where it is — clearing
-    /// the Keychain is the caller's decision (`SessionResetService`).
-    func disconnect() async {
-        apiKey = nil
+    /// The routines named by `ids`, keyed by id — as many of them as Hevy
+    /// still has. Nothing is requested for an empty set.
+    ///
+    /// The endpoint has no filter, so the library is walked from the front
+    /// and the walk stops as soon as every id is found. A routine the user has
+    /// deleted since logging against it is simply absent from the result: the
+    /// workout then carries no targets, which is a state the 2-for-2 rule
+    /// (ADR-013) reads as not checkable — not a reason to fail the sync.
+    private func fetchRoutines(ids: Set<String>) async throws -> [String: HevyRoutineDTO] {
+        var routines: [String: HevyRoutineDTO] = [:]
+        var missing = ids
+        var page = 1
+
+        while !missing.isEmpty, page <= Self.maxPages {
+            let payload = try await fetchPage(
+                HevyRoutinesPage.self, from: Self.routinesURL, page: page, pageSize: Self.pageSize
+            )
+            for routine in payload.routines where missing.remove(routine.id) != nil {
+                routines[routine.id] = routine
+            }
+            // Same guard as the workout walk: an empty page ends it, and a
+            // lenient `page_count` must not send `maxPages` requests on the
+            // user's key for routines that are not there.
+            if payload.routines.isEmpty { break }
+            if page >= max(payload.pageCount, 1) { break }
+            page += 1
+        }
+
+        if page > Self.maxPages {
+            logger.error("Routine pagination stopped at the \(Self.maxPages, privacy: .public)-page cap")
+        }
+        return routines
     }
 
     // MARK: - Requests
 
-    private func fetchPage(_ page: Int, pageSize: Int) async throws -> HevyWorkoutsPage {
+    /// One page of a paginated endpoint, decoded as `Page`.
+    private func fetchPage<Page: Decodable>(
+        _ type: Page.Type,
+        from endpoint: URL,
+        page: Int,
+        pageSize: Int
+    ) async throws -> Page {
         guard let apiKey else { throw ConnectorError.unauthorized }
 
-        var request = URLRequest(url: try pageURL(page, pageSize: pageSize))
+        var request = URLRequest(url: try pageURL(endpoint, page: page, pageSize: pageSize))
         request.httpMethod = "GET"
         request.setValue(apiKey, forHTTPHeaderField: "api-key")
         request.setValue("application/json", forHTTPHeaderField: "accept")
@@ -149,15 +208,15 @@ actor HevyConnector: FitnessConnector {
         try validate(http)
 
         do {
-            return try JSONDecoder.hevy.decode(HevyWorkoutsPage.self, from: data)
+            return try JSONDecoder.hevy.decode(Page.self, from: data)
         } catch {
-            logger.error("Page \(page, privacy: .public) could not be decoded: \(error, privacy: .public)")
+            logger.error("\(endpoint.lastPathComponent, privacy: .public) page \(page, privacy: .public) could not be decoded: \(error, privacy: .public)")
             throw ConnectorError.invalidResponse
         }
     }
 
-    private func pageURL(_ page: Int, pageSize: Int) throws -> URL {
-        var components = URLComponents(url: Self.workoutsURL, resolvingAgainstBaseURL: false)
+    private func pageURL(_ endpoint: URL, page: Int, pageSize: Int) throws -> URL {
+        var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)
         components?.queryItems = [
             URLQueryItem(name: "page", value: String(page)),
             URLQueryItem(name: "pageSize", value: String(pageSize)),

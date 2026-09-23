@@ -64,6 +64,38 @@ final class WorkoutStoreTests: XCTestCase {
 
     /// US-15 / #180 AC2: a Hevy workout is cached as strength training with
     /// no cardio block — the defaults carry it, no mapping has to say so.
+    /// The routine snapshot (#240) travels into the cache as it was taken:
+    /// the id, the routine's timestamp at sync time, and a target per set.
+    func testARoutineBackedActivityCachesItsTargetsAndSnapshot() async throws {
+        let updatedAt = Date(timeIntervalSince1970: 1_749_000_000)
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
+            ActivityFactory.routineActivity(
+                id: "w-1", start: Date(timeIntervalSince1970: 1_750_000_000), routineUpdatedAt: updatedAt
+            ),
+        ])
+
+        let context = ModelContext(container)
+        let workout = try XCTUnwrap(try context.fetch(FetchDescriptor<Workout>()).first)
+        XCTAssertEqual(workout.routineID, "r-1")
+        XCTAssertEqual(workout.routineUpdatedAt, updatedAt)
+        let sets = try XCTUnwrap(workout.exercises.first?.sets.sorted { $0.index < $1.index })
+        XCTAssertEqual(sets.map(\.targetReps), [10, 12])
+    }
+
+    /// A freely logged session says so: no routine, no targets — a state the
+    /// 2-for-2 rule reads as not checkable, and nothing invented in its place.
+    func testAFreelyLoggedActivityCachesNoRoutineAndNoTargets() async throws {
+        try await sut.replaceCachedWorkouts(from: .hevy, with: [
+            ActivityFactory.activity(id: "w-1", start: Date(timeIntervalSince1970: 1_750_000_000)),
+        ])
+
+        let context = ModelContext(container)
+        let workout = try XCTUnwrap(try context.fetch(FetchDescriptor<Workout>()).first)
+        XCTAssertNil(workout.routineID)
+        XCTAssertNil(workout.routineUpdatedAt)
+        XCTAssertEqual(workout.exercises.first?.sets.map(\.targetReps), [nil, nil])
+    }
+
     func testAStrengthActivityCachesAsStrengthWithoutCardio() async throws {
         try await sut.replaceCachedWorkouts(from: .hevy, with: [
             ActivityFactory.activity(id: "w-1", start: Date(timeIntervalSince1970: 1_750_000_000)),

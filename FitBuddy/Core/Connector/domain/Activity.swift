@@ -31,6 +31,13 @@ struct Activity: Identifiable, Equatable, Codable, Sendable {
     /// set for a Strava activity (ADR-10) or a Polar exercise (ADR-11).
     /// Additive — the dashboard stays valid without reading it.
     var cardio: CardioMetrics?
+    /// The source's id of the routine this session was logged against
+    /// (Hevy's `routine_id`, #240); `nil` for a freely logged workout and for
+    /// sources without the concept.
+    var routineID: String?
+    /// The routine's `updated_at` at the time of the sync — a snapshot, since
+    /// the targets on the sets were taken from that state of the routine.
+    var routineUpdatedAt: Date?
 
     /// - Parameter source: Defaults to Hevy, the only source before #141, so
     ///   the mapping and every fixture written against it stay valid. The
@@ -50,7 +57,9 @@ struct Activity: Identifiable, Equatable, Codable, Sendable {
         source: ConnectorSource = .hevy,
         kind: ActivityKind = .strength,
         exercises: [ActivityExercise] = [],
-        cardio: CardioMetrics? = nil
+        cardio: CardioMetrics? = nil,
+        routineID: String? = nil,
+        routineUpdatedAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -62,5 +71,7 @@ struct Activity: Identifiable, Equatable, Codable, Sendable {
         self.kind = kind
         self.exercises = exercises
         self.cardio = cardio
+        self.routineID = routineID
+        self.routineUpdatedAt = routineUpdatedAt
     }
 }

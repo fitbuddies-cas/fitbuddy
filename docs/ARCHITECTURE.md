@@ -2,7 +2,7 @@
 
 > *Getrennt geführt: Ziele, Personas, Risiken → [README.md](../README.md) · User Stories, NFRs → [REQUIREMENTS.md](REQUIREMENTS.md) · Architekturentscheide (Detail) → [adr/](adr/)*
 >
-> **Dokumentationsstand:** Stand nach US-15 «Quellenübergreifende AI-Analyse» (Issue #171, Task-Kette #180–#188) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, SwiftData-Schema V5, ADR-001 bis ADR-012.
+> **Dokumentationsstand:** Stand nach US-15 «Quellenübergreifende AI-Analyse» (Issue #171, Task-Kette #180–#188) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, SwiftData-Schema V6, ADR-001 bis ADR-013.
 
 ---
 
@@ -207,7 +207,8 @@ Der SwiftData-Store ist versioniert (`VersionedSchema`, ADR-001). `FitBuddyMigra
 | V2 | `Workout.sourceRawValue` (Default `"hevy"`) | — |
 | V3 | `AnalysisResult.goal` · `.experience` | #192 |
 | V4 | `AnalysisResult.reportJSON` · `.providerRawValue` · `.reportVersion` | #176 |
-| **V5** | `Workout.kindRawValue` + zehn flache Cardio-Spalten · `AnalysisResult.sessionCountsJSON` · `.analysisProfileRawValue` | #180 · #182 · #185 |
+| V5 | `Workout.kindRawValue` + zehn flache Cardio-Spalten · `AnalysisResult.sessionCountsJSON` · `.analysisProfileRawValue` | #180 · #182 · #185 |
+| **V6** | `Workout.routineID` · `.routineUpdatedAt` · `ExerciseSet.targetReps` | #240 |
 
 **V5 (US-15)** persistiert, was [ADR-012](adr/ADR-012-activitykind-und-cardiometrics.md) normalisiert hat:
 
@@ -216,7 +217,14 @@ Der SwiftData-Store ist versioniert (`VersionedSchema`, ADR-001). `FitBuddyMigra
 
 Alle neuen Spalten sind optional, V4 → V5 ist entsprechend leichtgewichtig: `nil` ist für eine bestehende Zeile die Wahrheit. `Workout.kind` löst eine fehlende Sportart über die Quelle auf (Hevy → `.strength`, Ausdauerquelle → `.other`), statt einen gecachten Lauf als Kraft einzusortieren; `SessionCountFormat` liest eine fehlende Aufteilung als Gesamtzahl der Zeile aus Hevy. Der nächste Sync ersetzt das Fenster und füllt die Workout-Spalten real.
 
-> **V5 darf nur wachsen, bis es `develop` erreicht.** #182 und #185 sind deshalb in dieselbe Version gewandert, statt eine V6 aufzumachen — es gab noch keinen installierten V5-Store, von dem zu migrieren gewesen wäre. Danach ist die nächste Änderung V6: Ein Store, der von einem anderen V5 geschrieben wurde, gilt als «unknown model version» und fällt still auf einen leeren In-Memory-Container zurück.
+**V6 (US-17, #240)** snapshottet das Ziel, gegen das ein Hevy-Workout trainiert wurde — die Datengrundlage der 2-for-2-Regel aus [ADR-013](adr/ADR-013-progressionsband-je-muskelgruppe.md):
+
+- `Workout.routineID` hält Hevys `routine_id`, `routineUpdatedAt` das `updated_at` der Routine zum Sync-Zeitpunkt. Routinen sind veränderlich und unversioniert; ein Live-Join würde eine vergangene Session gegen einen Plan vergleichen, der damals nicht galt. Deshalb liest der `HevyConnector` `GET /v1/routines` nur, wenn ein Workout im Fenster eine Routine nennt, und schreibt die Ziele beim Sync in die `Activity`.
+- `ExerciseSet.targetReps` hält pro Satz die vorgeschriebenen Wiederholungen, an der Quelle aufgelöst nach `rep_range.end` → `rep_range.start` → `reps` → kein Ziel. Zugeordnet wird über `exercise_template_id` (bei Mehrfachvorkommen die n-te Nennung) und Satzposition — Warmup-Sätze eingeschlossen, damit die Positionen nicht verrutschen.
+
+«Kein Ziel» ist ein modellierter Zustand, kein Fehler: frei geloggte Workouts, gelöschte Routinen und Sätze ohne Wiederholungsziel tragen `nil`, und die 2-for-2-Regel liest das als «nicht prüfbar», nie als «erfüllt». V5 → V6 ist leichtgewichtig; für jede bestehende Zeile ist `nil` die Wahrheit, der nächste Sync füllt die Spalten.
+
+> **V6 darf nur wachsen, bis es `develop` erreicht.** V5 war mit US-15 auf `develop` angekommen, also musste #240 eine neue Version aufmachen. Danach ist die nächste Änderung V7: Ein Store, der von einem anderen V6 geschrieben wurde, gilt als «unknown model version» und fällt still auf einen leeren In-Memory-Container zurück.
 
 ---
 

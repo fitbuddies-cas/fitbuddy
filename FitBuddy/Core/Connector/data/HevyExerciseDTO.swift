@@ -33,7 +33,11 @@ struct HevyExerciseDTO: Decodable, Equatable, Sendable {
     /// is this index, so a collision makes `ForEach` drop a card and leaves
     /// the sort by index arbitrary. The position is unique by construction and
     /// is Hevy's order, which is what the index was read for.
-    func makeActivityExercise(position: Int) -> ActivityExercise {
+    ///
+    /// - Parameter prescribed: The routine exercise this one was performed
+    ///   against (#240); its set targets are copied by position. `nil` when
+    ///   the workout had no routine or the routine did not list the movement.
+    func makeActivityExercise(position: Int, prescribed: HevyRoutineExerciseDTO? = nil) -> ActivityExercise {
         ActivityExercise(
             index: position,
             // An untitled exercise is not worth dropping the workout for; the
@@ -42,7 +46,12 @@ struct HevyExerciseDTO: Decodable, Equatable, Sendable {
             notes: notes,
             templateID: exerciseTemplateID,
             supersetID: supersetsID,
-            sets: sets.enumerated().map { $0.element.makeActivitySet(position: $0.offset) }
+            sets: sets.enumerated().map {
+                $0.element.makeActivitySet(
+                    position: $0.offset,
+                    targetReps: prescribed?.targetReps(atPosition: $0.offset)
+                )
+            }
         )
     }
 }
