@@ -576,11 +576,41 @@ final class MockWorkoutLoaderTests: XCTestCase {
     /// still decode and still read correctly near UTC, and would only fail
     /// somewhere in the Pacific.
     func testTheCrossSourceProfilesShareOneWallClock() throws {
-        for profile in [MockWorkoutProfile.runner, .mixed, .overreachedMixed] {
+        for profile in [MockWorkoutProfile.runner, .mixed, .overreachedMixed, .progressionReady, .overreached, .plateau] {
             let clocks = Set(try loader.workouts(for: profile).map {
                 Self.utc.dateComponents([.hour, .minute, .second], from: $0.startTime)
             })
             XCTAssertEqual(clocks.count, 1, "\(profile.rawValue) spreads over \(clocks.count) times of day")
+        }
+    }
+
+    /// The strength profiles carry their endurance sessions on days that
+    /// already carry a lift (#262): no profile gains a training day, so the
+    /// count each one exists to prove — three, six, two — holds in every
+    /// zone and at every hour, and the recovery figures read all three
+    /// sources.
+    func testTheStrengthProfilesKeepTheirTrainingDaysWithCardioOnLiftDays() throws {
+        for (profile, days) in [(MockWorkoutProfile.progressionReady, 3), (.overreached, 6), (.plateau, 2)] {
+            for zone in Self.zones {
+                for hour in [0, 6, 12, 18, 23] {
+                    let calendar = Self.calendar(in: zone)
+                    let reference = calendar.startOfDay(for: now).addingTimeInterval(Double(hour) * 3_600 + 60)
+                    let workouts = try MockWorkoutLoader(bundle: Bundle(for: Workout.self), now: { reference })
+                        .workouts(for: profile)
+                    let week = RecoveryMetrics.lastSevenDaysSessions(
+                        in: workouts.map(WorkoutSummary.init(workout:)),
+                        now: reference,
+                        calendar: calendar
+                    )
+                    let day = { (summary: WorkoutSummary) in calendar.startOfDay(for: summary.startTime) }
+                    let lifts = Set(week.filter { $0.source == .hevy }.map(day))
+                    let cardio = Set(week.filter { $0.source.isEnduranceSource }.map(day))
+                    XCTAssertEqual(lifts.count, days, "\(profile.rawValue) at \(hour):01 in \(zone)")
+                    XCTAssertTrue(cardio.isSubset(of: lifts), "\(profile.rawValue): cardio on a day without a lift, \(zone)")
+                    XCTAssertEqual(Set(week.map(\.source)), [.hevy, .strava, .polar], "\(profile.rawValue) in \(zone)")
+                    XCTAssertNotNil(try recoveryMetrics(of: profile, atHour: hour, in: zone).averageHeartRate, profile.rawValue)
+                }
+            }
         }
     }
 

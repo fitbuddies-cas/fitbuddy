@@ -1,0 +1,122 @@
+[
+  {
+    "id": "2710001",
+    "start_time": "2026-09-13T17:30:00",
+    "start_time_utc_offset": 0,
+    "duration": "PT1H0M0S",
+    "distance": 30000.0,
+    "heart_rate": {
+      "average": 150,
+      "maximum": 170
+    },
+    "calories": 800,
+    "training_load": 120.0,
+    "sport": "CYCLING",
+    "detailed_sport_info": "ROAD_CYCLING"
+  },
+  {
+    "id": "2710004",
+    "start_time": "2026-09-06T17:30:00",
+    "start_time_utc_offset": 0,
+    "duration": "PT1H0M0S",
+    "distance": 30000.0,
+    "heart_rate": {
+      "average": 150,
+      "maximum": 170
+    },
+    "calories": 800,
+    "training_load": 120.0,
+    "sport": "CYCLING",
+    "detailed_sport_info": "ROAD_CYCLING"
+  },
+  {
+    "id": "2710007",
+    "start_time": "2026-08-30T17:30:00",
+    "start_time_utc_offset": 0,
+    "duration": "PT1H0M0S",
+    "distance": 30000.0,
+    "heart_rate": {
+      "average": 150,
+      "maximum": 170
+    },
+    "calories": 800,
+    "training_load": 120.0,
+    "sport": "CYCLING",
+    "detailed_sport_info": "ROAD_CYCLING"
+  },
+  {
+    "id": "2710010",
+    "start_time": "2026-08-23T17:30:00",
+    "start_time_utc_offset": 0,
+    "duration": "PT1H0M0S",
+    "distance": 30000.0,
+    "heart_rate": {
+      "average": 150,
+      "maximum": 170
+    },
+    "calories": 800,
+    "training_load": 120.0,
+    "sport": "CYCLING",
+    "detailed_sport_info": "ROAD_CYCLING"
+  },
+  {
+    "id": "2710013",
+    "start_time": "2026-08-16T17:30:00",
+    "start_time_utc_offset": 0,
+    "duration": "PT1H0M0S",
+    "distance": 30000.0,
+    "heart_rate": {
+      "average": 150,
+      "maximum": 170
+    },
+    "calories": 800,
+    "training_load": 120.0,
+    "sport": "CYCLING",
+    "detailed_sport_info": "ROAD_CYCLING"
+  },
+  {
+    "id": "2710016",
+    "start_time": "2026-08-09T17:30:00",
+    "start_time_utc_offset": 0,
+    "duration": "PT1H0M0S",
+    "distance": 30000.0,
+    "heart_rate": {
+      "average": 150,
+      "maximum": 170
+    },
+    "calories": 800,
+    "training_load": 120.0,
+    "sport": "CYCLING",
+    "detailed_sport_info": "ROAD_CYCLING"
+  },
+  {
+    "id": "2710019",
+    "start_time": "2026-08-02T17:30:00",
+    "start_time_utc_offset": 0,
+    "duration": "PT1H0M0S",
+    "distance": 30000.0,
+    "heart_rate": {
+      "average": 150,
+      "maximum": 170
+    },
+    "calories": 800,
+    "training_load": 120.0,
+    "sport": "CYCLING",
+    "detailed_sport_info": "ROAD_CYCLING"
+  },
+  {
+    "id": "2710022",
+    "start_time": "2026-07-26T17:30:00",
+    "start_time_utc_offset": 0,
+    "duration": "PT1H0M0S",
+    "distance": 30000.0,
+    "heart_rate": {
+      "average": 150,
+      "maximum": 170
+    },
+    "calories": 800,
+    "training_load": 120.0,
+    "sport": "CYCLING",
+    "detailed_sport_info": "ROAD_CYCLING"
+  }
+]
