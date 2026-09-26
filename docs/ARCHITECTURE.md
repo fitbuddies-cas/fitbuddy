@@ -214,7 +214,7 @@ Der SwiftData-Store ist versioniert (`VersionedSchema`, ADR-001). `FitBuddyMigra
 
 **V5 (US-15)** persistiert, was [ADR-012](adr/ADR-012-activitykind-und-cardiometrics.md) normalisiert hat:
 
-- `Workout.kindRawValue` hält die gemappte Sportart (`ActivityKind`), die zehn `cardio*`-Spalten halten `CardioMetrics` flach ausgeschrieben (mittlerer und maximaler Puls, Höhenmeter, Tempo, Energie, Effort, Training Load, aktive Kalorien, Distanz, Dauer) — SwiftData speichert Skalare, gelesen und geschrieben wird nur über `Workout.cardio` (#180).
+- `Workout.kindRawValue` hält die gemappte Sportart (`ActivityKind`), die `cardio*`-Spalten (zehn in V5, seit V8 vierzehn) halten `CardioMetrics` flach ausgeschrieben (mittlerer und maximaler Puls, Höhenmeter, Tempo, Energie, Effort, Training Load, aktive Kalorien, Distanz, Dauer) — SwiftData speichert Skalare, gelesen und geschrieben wird nur über `Workout.cardio` (#180).
 - `AnalysisResult.sessionCountsJSON` merkt sich, wie die Sessions eines Laufs über die Quellen verteilt waren (#182), `analysisProfileRawValue` das Profil, unter dem er entstand (#185).
 
 Alle neuen Spalten sind optional, V4 → V5 ist entsprechend leichtgewichtig: `nil` ist für eine bestehende Zeile die Wahrheit. `Workout.kind` löst eine fehlende Sportart über die Quelle auf (Hevy → `.strength`, Ausdauerquelle → `.other`), statt einen gecachten Lauf als Kraft einzusortieren; `SessionCountFormat` liest eine fehlende Aufteilung als Gesamtzahl der Zeile aus Hevy. Der nächste Sync ersetzt das Fenster und füllt die Workout-Spalten real.
@@ -230,7 +230,7 @@ Alle neuen Spalten sind optional, V4 → V5 ist entsprechend leichtgewichtig: `n
 
 **V8 (US-18, #243, #244)** benennt Stravas `suffer_score` richtig — `cardioRelativeEffort`, übernommen per `@Attribute(originalName: "cardioPerceivedEffort")`, damit gecachte Werte die Migration überleben — und speichert Polars Training Load Pro in vier optionalen Spalten. Fehlt der Block (ältere Uhr), bleiben sie `nil`. V7 → V8 ist leichtgewichtig. Die Skalen bleiben getrennt ([ADR-015](adr/ADR-015-anstrengungsskalen-getrennt.md)).
 
-> **V7 darf nur wachsen, bis es `develop` erreicht.** V6 war mit US-17 auf `develop` angekommen, also musste #228 eine neue Version aufmachen. Danach ist die nächste Änderung V8: Ein Store, der von einem anderen V7 geschrieben wurde, gilt als «unknown model version» und fällt still auf einen leeren In-Memory-Container zurück.
+> **V8 darf nur wachsen, bis es `develop` erreicht.** V8 ist die jüngste Version des Stacks (#243/#244, auf V7 aus #228). Sobald sie auf `develop` liegt, ist die nächste Änderung V9: Ein Store, der von einem anderen V8 geschrieben wurde, gilt als «unknown model version» und fällt still auf einen leeren In-Memory-Container zurück.
 
 ---
 
@@ -253,6 +253,10 @@ Alle neuen Spalten sind optional, V4 → V5 ist entsprechend leichtgewichtig: `n
 **Schritt 7 — Verdict aus der App (US-16).** Das Verdict ist seit #227 keine Modellwahl mehr:
 `AnalysisVerdictRule` leitet es aus den Kennzahlen der App ab (Stufen, Schwellen und deren
 Herkunft: [ADR-014](adr/ADR-014-verdict-regel-der-app.md) — hier bewusst nicht wiederholt).
+Stufe 5, der Anstrengungs-Deckel (#246, ADR-014 §3), läuft nach der ersten greifenden Stufe und
+liest jede Skala für sich ([ADR-015](adr/ADR-015-anstrengungsskalen-getrennt.md)): Steigt eine
+qualifizierte Skala, wird `progress` zu `hold` (unter `.endurance` auch das `insufficientData`,
+das nur aus der fehlenden Kraftdomäne folgt); `recover` erzeugt sie nie.
 `AnalysisReportValidator` arbeitet in fester Reihenfolge:
 
 1. Jede Karte einzeln prüfen — Zahlen aus dem Cache, Band und 2-for-2 ([ADR-013](adr/ADR-013-progressionsband-je-muskelgruppe.md)).
@@ -262,7 +266,8 @@ Herkunft: [ADR-014](adr/ADR-014-verdict-regel-der-app.md) — hier bewusst nicht
    verdict», die die greifende Bedingung nennt. Headline «Not enough data to judge.» und Lead
    sind App-Text. Bleibt keine Karte, zeigt der Screen null Karten.
 4. Auf höchstens vier Karten deckeln.
-5. Weicht das App-Verdict vom Modell-Verdict ab, ersetzt App-Text Headline und Lead.
+5. Weicht das App-Verdict vom Modell-Verdict ab, ersetzt App-Text Headline und Lead; ein `hold`
+   aus Stufe 5 erhält `effortCapLead` statt `holdLead`.
 6. Progress-Lead-Schutz: Stützt keine verbleibende Karte einen Schritt (`repProgression` zählt
    mit), ersetzt `progressLead` den Lead.
 
@@ -271,6 +276,8 @@ angezeigt wird es nie. `insufficientData` wird dem Modell nicht angeboten; ein s
 beim Decodieren auf `hold` normalisiert. Die Eingriffe des Validators werden je Analyse
 protokolliert ([Protokoll der Eingriffe](#protokoll-der-eingriffe-228)). Die verbleibende Streuung über mehrere Läufe misst
 [VERDICT-SPREAD-MEASUREMENT.md](VERDICT-SPREAD-MEASUREMENT.md) (#229).
+
+Der einmalige Anstrengungs-Hinweis (US-18 AC6, #245) erscheint auf dem Ergebnis-Screen genau einmal pro Installation, wenn das Fenster aus keiner Quelle einen Anstrengungswert enthält (dieselbe Regel wie der Prompt, `EffortPromptFigures`); `EffortHintStore` merkt sich das in `UserDefaults`, «Delete all data» (`DataResetService`) setzt es zurück.
 
 > **Grenze:** Das Verdict hängt an der Übungsliste des Prompts (Top 6 nach Volumen, auf einer
 > tieferen Budget-Stufe weniger, #187). Dieselbe Historie kann deshalb auf einer anderen
@@ -499,7 +506,9 @@ Bekannte Lücken im PoC-Design. Stand nach #153: TD-1, TD-2 und TD-4 sind geschl
 > über eine Zeichenzahl-Schätzung (vier Zeichen ≈ ein Token); die grosse Reserve bezahlt deren
 > Ungenauigkeit. `AnalysisPromptBuilder.make` baut den Prompt auf der obersten Stufe von
 > `AnalysisPromptDetail.ladder`, die unter das Budget passt: 1) Kraft-Sessionliste auf 20,
-> 2) Exercises-Sektion auf 6 Übungen, 3) Wochenzeilen beider Domänen auf die letzten 4 Wochen.
+> 2) Exercises-Sektion auf 6 Übungen, 3) Wochenzeilen beider Domänen auf die letzten 4 Wochen,
+> 4) Kraft-Sessionliste auf 10, 5) Ausdauer-Anstrengungszeilen auf die 20 jüngsten Werte je Skala (#245) —
+> Anstrengung wird zuletzt gekürzt.
 > Jede Kürzung nennt sich im Prompt selbst («N older sessions in this window omitted»), und die
 > Aggregate, gegen die `AnalysisReportValidator` die Karten prüft, bleiben auf jeder Stufe
 > unverändert — die gekürzte Übungsliste reist als `AnalysisPromptDetail` mit den Reads zur
