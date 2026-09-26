@@ -341,7 +341,7 @@ enum AnalysisReportValidator {
             text = "No exercise here has the "
                 + "\(ExerciseProgression.plateauSessionCount + 1) sessions the app needs before it can tell "
                 + "a plateau from progress."
-        case .restDays, .plateauMajority, .latestIsWindowBest, .noNewBest:
+        case .restDays, .plateauMajority, .latestIsWindowBest, .noNewBest, .effortRising:
             return nil
         }
         return .note(title: insufficientDataNoteTitle, text: text)

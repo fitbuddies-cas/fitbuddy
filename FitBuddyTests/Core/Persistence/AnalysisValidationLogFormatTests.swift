@@ -40,6 +40,18 @@ final class AnalysisValidationLogFormatTests: XCTestCase {
         XCTAssertEqual(decoded?.interventions, [])
     }
 
+    /// The stage-5 reason of #246 is stored under its own raw value, so the
+    /// tally can count it.
+    func testAnEffortCapRoundTrips() throws {
+        let capped = AnalysisValidationLog(
+            modelVerdict: .progress, appVerdict: .hold, verdictReason: .effortRising, interventions: []
+        )
+        let json = try XCTUnwrap(AnalysisValidationLogFormat.encode(capped))
+
+        XCTAssertEqual(AnalysisValidationLogFormat.decode(json), capped)
+        XCTAssertTrue(try XCTUnwrap(String(data: json, encoding: .utf8)).contains("\"effortRising\""))
+    }
+
     func testNoLogIsNoBlob() {
         XCTAssertNil(AnalysisValidationLogFormat.encode(nil))
         XCTAssertNil(AnalysisValidationLogFormat.decode(nil))
