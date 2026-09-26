@@ -1,7 +1,7 @@
 import XCTest
 @testable import FitBuddy
 
-/// `AnalysisVerdictRule` (#227): the decision tree of ADR-013, stage by stage
+/// `AnalysisVerdictRule` (#227): the decision tree of ADR-014, stage by stage
 /// and at every threshold it names.
 ///
 /// Every number asserted here is the ADR's, not a value read back out of the
@@ -83,7 +83,7 @@ final class AnalysisVerdictRuleTests: XCTestCase {
         XCTAssertEqual(outcome.reason, .tooFewSessions)
     }
 
-    // MARK: - Per profile (ADR-013 §5)
+    // MARK: - Per profile (ADR-014 §5)
 
     /// Stages 2–4 are statements about an estimated 1RM, which endurance has
     /// none of. They are absent, not zero — so the rule says it has no
@@ -225,7 +225,7 @@ final class AnalysisVerdictRuleTests: XCTestCase {
         XCTAssertEqual(outcome, .init(verdict: .hold, reason: .noNewBest))
     }
 
-    // MARK: - No substitute for missing effort (US-16 AC6, ADR-013 §4)
+    // MARK: - No substitute for missing effort (US-16 AC6, ADR-014 §4)
 
     /// Missing effort data is not a reason for `insufficientData`, and no
     /// stand-in value is put in its place: the e1RM stages decide on their

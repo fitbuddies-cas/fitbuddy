@@ -317,11 +317,16 @@ enum AnalysisPromptBuilder {
     exercise exactly as it is listed there, and start any load change from \
     the weight listed for its most recent session. Never name an exercise \
     that section does not contain, or a weight it does not list as a \
-    starting point. A new target weight is always the listed weight of the \
-    most recent session plus one step. Increase barbell exercises in steps \
-    of 2.5 kg; for every other exercise increase by at most the smallest \
-    step listed for it, and where none is listed, progress reps rather than \
-    weight.
+    starting point. A new target weight is a value within the range the \
+    line names after "Next:", inclusive of both ends and never above the \
+    upper one. Where the line says "progress reps, not weight", do not \
+    recommend a heavier weight for that exercise: recommend more \
+    repetitions at the listed weight instead, as a repProgression card. \
+    That line is the \
+    2-for-2 rule applied to this person's own log — the rep target of their \
+    routine beaten by two or more reps in two consecutive sessions — and \
+    where no rep target is on file the rule cannot be applied, which is not \
+    the same as it being met.
 
     7. In the endurance sections, load is distance, time, pace and heart \
     rate. Rule 5 does not apply there: no volume in kilograms is not an \
@@ -365,7 +370,11 @@ enum AnalysisPromptBuilder {
     not become a card, and when the data is too thin for any, return an empty \
     array — the lead and the summary carry the answer. "progression": a load \
     increase on one exercise, fromKg the weight listed for its most recent \
-    session, toKg the new weight. "recovery": rest before any progression, \
+    session, toKg the new weight. "repProgression": more repetitions at the \
+    listed weight on one exercise — the card for a line that says to \
+    progress reps, not weight; weightKg the weight listed for its most \
+    recent session, fromReps the reps listed with it, toReps one or two \
+    more. "recovery": rest before any progression, \
     with the rest you recommend in suggestedRestHours. "imbalance": two \
     muscle groups trained at clearly different frequencies, each group and \
     its sessions per week exactly as the Muscle groups section lists them. \
@@ -379,8 +388,7 @@ enum AnalysisPromptBuilder {
     heart rate is not something to recommend a new value for. "interference": \
     strength and endurance sessions shared days in the last 7, with the three \
     day counts taken from the Week structure section. "note": anything else \
-    worth saying, including a rep progression without a weight change, as \
-    title and text. Write the reasoning of a progression, imbalance, metric \
+    worth saying, as title and text. Write the reasoning of a progression, imbalance, metric \
     or interference card in one sentence, a recovery card's in one or two.
 
     Write the fields in this order.
@@ -534,20 +542,7 @@ enum AnalysisPromptBuilder {
             guard let progression = progressions[exercise.id],
                   let listing = listing(progression, from: start)
             else { return nil }
-            return ListedExercise(
-                title: exercise.title,
-                muscleGroup: exercise.muscleGroup,
-                workingSet: listing.last.heaviestWorkingSet,
-                smallestStepKg: listing.last.heaviestWorkingSet.flatMap {
-                    smallestStep(in: listing.inWindow.sessions, latest: $0)
-                },
-                // The same three facts `plateauVerdict(_:)` prints into the
-                // prompt line and then throws away — ADR-013 stages 2 to 4
-                // read them here instead of recomputing them.
-                progressionPoints: listing.inWindow.points.count,
-                isPlateaued: listing.inWindow.isPlateaued,
-                latestIsWindowBest: listing.inWindow.latestIsWindowBest
-            )
+            return ListedExercise.make(title: exercise.title, muscleGroup: exercise.muscleGroup, listing: listing)
         }
     }
 

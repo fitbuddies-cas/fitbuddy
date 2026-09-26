@@ -45,13 +45,13 @@ extension AnalysisReport {
     }
 
     /// `verdict` if the model was allowed to send it, `hold` otherwise
-    /// (ADR-013 §7).
+    /// (ADR-014 §7).
     ///
     /// The schema offers `AnalysisVerdict.modelChoices`, but the schema is a
     /// request, not a guarantee: a provider without strict structured output,
     /// or a fallback path that parses prose, can still put `insufficientData`
     /// on the wire. Left alone it would do two kinds of damage — the app's
-    /// verdict would equal the model's, so the app text ADR-013 §6 requires
+    /// verdict would equal the model's, so the app text ADR-014 §6 requires
     /// under "Not enough data to judge." would not be substituted, and the
     /// hit rate #228 and #229 measure would record a choice the model was
     /// never given.

@@ -17,7 +17,7 @@ struct ValidatedAnalysisReport: Codable, Equatable, Sendable {
     let cards: [AnalysisReportCard]
     let summary: String
     /// What the model itself answered, before the app overwrote it (#227,
-    /// ADR-013 §7).
+    /// ADR-014 §7).
     ///
     /// Kept rather than dropped because #228 and #229 measure how often the
     /// two agree, and there is nothing to compare without it. Never shown.

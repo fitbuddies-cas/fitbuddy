@@ -20,6 +20,9 @@ enum InferenceServiceError: Error, Equatable {
     case alreadyInProgress
     /// The request never produced an HTTP response (offline, timeout, DNS…).
     case networkUnavailable
+    /// The provider answered with a certificate FitBuddy must not trust
+    /// (failed pinning, #153). Nothing was sent.
+    case untrustedConnection
     /// The provider rejected the key (HTTP 401, or Google's 403).
     case unauthorized
     /// HTTP 429, with the provider's `Retry-After` in seconds when it sent one.

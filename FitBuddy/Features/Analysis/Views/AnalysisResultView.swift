@@ -226,7 +226,7 @@ private let previewContext = AnalysisContext(sessionCount: 14, window: .default)
     .background(Color.fbBackground)
 }
 
-/// #227 / ADR-013 §6: the app found no verdict, says so, and shows the one
+/// #227 / ADR-014 §6: the app found no verdict, says so, and shows the one
 /// note naming why. No progression and no recovery card sit under it.
 #Preview("Report · no verdict") {
     ScrollView {

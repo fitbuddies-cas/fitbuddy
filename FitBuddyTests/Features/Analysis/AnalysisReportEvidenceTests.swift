@@ -35,16 +35,18 @@ final class AnalysisReportEvidenceTests: XCTestCase {
         let evidence = makeEvidence(summaries: [summary(daysAgo: 2)], exercises: [bench], progressions: progressions)
 
         XCTAssertTrue(prompt.user.contains("- Bench Press: 60 kg × 6"))
-        // The step as well: the validator caps a card at the step the line names.
-        XCTAssertTrue(prompt.user.contains("Smallest logged step: 2.5 kg."))
+        // The step and the 2-for-2 verdict as well: the range a card is
+        // checked against is derived from exactly these (#233).
+        XCTAssertTrue(prompt.user.contains("No rep target on file. Next: progress reps, not weight."))
         XCTAssertEqual(evidence.exercises, [
             ListedExercise(
                 title: "Bench Press",
                 muscleGroup: .chest,
                 workingSet: WorkingSet(weightKg: 60, reps: 6),
                 smallestStepKg: 2.5,
+                twoForTwo: .notCheckable,
                 // #227: the same three facts the prompt line states, carried
-                // for ADR-013 stages 2 to 4. Two of the three sessions
+                // for ADR-014 stages 2 to 4. Two of the three sessions
                 // project an e1RM, and the later of them is the higher.
                 progressionPoints: 2,
                 isPlateaued: false,
@@ -71,8 +73,8 @@ final class AnalysisReportEvidenceTests: XCTestCase {
         )
         let evidence = makeEvidence(summaries: [summary(daysAgo: 2)], exercises: [raise], progressions: progressions)
 
-        XCTAssertTrue(prompt.user.contains("Smallest logged step: 2 kg."))
         XCTAssertEqual(evidence.exercises.map(\.smallestStepKg), [2])
+        XCTAssertEqual(ProgressionBand.range(for: evidence.exercises[0]), 12...12)
     }
 
     /// Only what the prompt lists: past the cap, without a progression, or
@@ -336,7 +338,7 @@ final class AnalysisReportEvidenceTests: XCTestCase {
 
     // MARK: - Helpers
 
-    // MARK: - The data basis of the verdict rule (#227, ADR-013 stage 1)
+    // MARK: - The data basis of the verdict rule (#227, ADR-014 stage 1)
 
     /// Counted over the resolved window, not over everything the cache
     /// returned.

@@ -24,6 +24,9 @@ enum WorkoutSyncError: Error, Equatable {
     case rateLimited(retryAfter: TimeInterval?)
     /// The request never produced an HTTP response (offline, timeout, DNS…).
     case networkUnavailable
+    /// The source answered with a certificate FitBuddy must not trust
+    /// (failed pinning, #153).
+    case untrustedConnection
     /// The source answered 5xx.
     case serviceUnavailable
     /// The response was not something this version can read — malformed JSON,
@@ -48,6 +51,8 @@ enum WorkoutSyncError: Error, Equatable {
             self = .rateLimited(retryAfter: retryAfter)
         case .networkUnavailable:
             self = .networkUnavailable
+        case .untrustedConnection:
+            self = .untrustedConnection
         case .serviceUnavailable:
             self = .serviceUnavailable
         case .invalidResponse:

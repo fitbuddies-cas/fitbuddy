@@ -16,6 +16,13 @@ enum AnalysisCardAccessibility {
             From \(AnalysisCardFormatter.weight(fromKg)) to \(AnalysisCardFormatter.weight(toKg)), \
             \(AnalysisCardFormatter.delta(fromKg: fromKg, toKg: toKg)). \(reasoning)
             """
+        case let .repProgression(exercise, muscleGroup, weightKg, fromReps, toReps, reasoning):
+            return """
+            More reps. \(exercise), \(muscleGroup.displayName). \
+            From \(AnalysisCardFormatter.reps(fromReps)) to \(AnalysisCardFormatter.reps(toReps)) \
+            \(AnalysisCardFormatter.atWeight(weightKg)), \
+            \(AnalysisCardFormatter.repDelta(fromReps: fromReps, toReps: toReps)). \(reasoning)
+            """
         case let .recovery(reasoning, metrics):
             var figures = ["\(metrics.sessions) sessions in the last 7 days"]
             if let averageRPE = metrics.averageRPE {

@@ -28,6 +28,7 @@ actor HevyKeyValidator: HevyKeyValidating {
         do {
             (_, response) = try await session.data(for: request)
         } catch {
+            if error.isUntrustedConnection { throw HevyKeyValidationError.untrustedConnection }
             throw HevyKeyValidationError.transport
         }
 

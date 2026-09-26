@@ -68,7 +68,10 @@ final class AnalysisMockProfileTests: XCTestCase {
         )
         XCTAssertTrue(bench.contains("Chest, "), bench)
         XCTAssertTrue(bench.contains("Plateau: no"), bench)
-        XCTAssertTrue(bench.contains("Smallest logged step: 2.5 kg"), bench)
+        // Prescribed at 3 × 3 and closed at 60 kg × 5 three times: the 2-for-2
+        // rule is met, and the line names the barbell range up to the chest
+        // ceiling (ADR-013, #233).
+        XCTAssertTrue(bench.hasSuffix("Rep target 3, beaten by 2+ reps in the last 2 sessions. Next: 62.5–65 kg."), bench)
         XCTAssertTrue(prompt.contains("(most recent): 3 sessions"))
     }
 
@@ -103,6 +106,96 @@ final class AnalysisMockProfileTests: XCTestCase {
         }
     }
 
+    // MARK: - plateau (US-17 AC1–AC3, AC7, #235)
+
+    /// The four exercise lines, one per case of ADR-013: the range where the
+    /// rule is met and a step exists, reps where it is not met, reps where it
+    /// is met but no step is logged, and reps where no target is on file.
+    func testPlateauPromptNamesTheRangeAndTheThreeTwoForTwoCases() async throws {
+        let prompt = try await run(.plateau, answer: AnalysisReportFactory.plateau).prompt
+
+        let squat = try row(startingWith: "- Squat (Barbell): ", in: prompt)
+        XCTAssertTrue(squat.hasPrefix("- Squat (Barbell): 97.5 kg × 5, mean RPE 7.5 (most recent session, "), squat)
+        XCTAssertTrue(squat.contains("Plateau: no"), squat)
+        // Legs, 10 % of 97.5 is 107.25: three barbell steps, 100 to 105 kg.
+        XCTAssertTrue(squat.hasSuffix("Rep target 3, beaten by 2+ reps in the last 2 sessions. Next: 100–105 kg."), squat)
+
+        let bench = try row(startingWith: "- Bench Press (Barbell): ", in: prompt)
+        XCTAssertTrue(bench.hasPrefix("- Bench Press (Barbell): 60 kg × 5, mean RPE 8 (most recent session, "), bench)
+        XCTAssertTrue(bench.contains("Plateau: yes, no new e1RM best in the last 3 sessions"), bench)
+        XCTAssertTrue(bench.hasSuffix("Rep target 5, not yet beaten by 2+ reps in 2 consecutive sessions. Next: progress reps, not weight."), bench)
+
+        let raise = try row(startingWith: "- Lateral Raise (Dumbbell): ", in: prompt)
+        XCTAssertTrue(raise.hasSuffix("Rep target 10, beaten by 2+ reps in the last 2 sessions. Next: progress reps, no load step is logged for this exercise."), raise)
+
+        let seatedRow = try row(startingWith: "- Seated Row (Cable): ", in: prompt)
+        XCTAssertTrue(seatedRow.hasSuffix("No rep target on file. Next: progress reps, not weight."), seatedRow)
+    }
+
+    /// End to end (#235): the squat step within the band survives with the
+    /// cache's starting weight, the rep progression survives with the cache's
+    /// weight, and the two load increases the rule holds back — not met, not
+    /// checkable — become notes.
+    ///
+    /// The verdict is the app's (#227): bench, lateral raise and seated row
+    /// have set no new e1RM best in their last three sessions, so three of
+    /// the four decidable exercises are plateaued — ADR-014 stage 3, `hold`.
+    /// Before the merge with #227 the model's `progress` stood here because
+    /// two cards backed it. The cards themselves are untouched by that: the
+    /// verdict does not decide over them (ADR-014 §7).
+    func testPlateauKeepsTheCardsTheRuleAllowsAndNotesTheOthers() async throws {
+        let outcome = try await run(.plateau, answer: AnalysisReportFactory.plateau).outcome
+
+        let report = try XCTUnwrap(outcome?.report)
+        XCTAssertEqual(report.verdict, .hold)
+        XCTAssertEqual(report.modelVerdict, .progress)
+        XCTAssertEqual(report.headline, AnalysisReportValidator.holdHeadline)
+        XCTAssertEqual(report.lead, AnalysisReportValidator.holdLead)
+        XCTAssertEqual(report.cards, [
+            .progression(
+                exercise: "Squat (Barbell)",
+                muscleGroup: .legs,
+                fromKg: AnalysisReportFactory.plateauSquatKg,
+                toKg: 105,
+                reasoning: "Every session beat the 3-rep target by two — take the full step to 105 kg."
+            ),
+            .repProgression(
+                exercise: "Lateral Raise (Dumbbell)",
+                muscleGroup: .shoulders,
+                weightKg: 10,
+                fromReps: 12,
+                toReps: 14,
+                reasoning: "Twelve clean reps on the only dumbbell you log — earn the next one with reps."
+            ),
+            .note(title: "Bench Press (Barbell)", text: "Eight weeks at 60 kg — time to move on."),
+            .note(title: "Seated Row (Cable)", text: "Rows rose every other week; keep going."),
+        ])
+    }
+
+    /// Over the ceiling the step is a note (#233). The report holds — no
+    /// longer because no card is left behind the model's progress (#177 is
+    /// gone as a verdict rule since #227), but because the profile is a
+    /// plateau majority (ADR-014 stage 3), exactly as with a valid answer.
+    func testPlateauRejectsAStepOverTheBandAndHolds() async throws {
+        let outcome = try await run(.plateau, answer: AnalysisReportFactory.plateauOvershoot).outcome
+
+        let report = try XCTUnwrap(outcome?.report)
+        XCTAssertEqual(report.cards, [.note(title: "Squat (Barbell)", text: "A big jump, but the reps are there.")])
+        XCTAssertEqual(report.verdict, .hold)
+        XCTAssertEqual(report.headline, AnalysisReportValidator.holdHeadline)
+        XCTAssertEqual(report.lead, AnalysisReportValidator.holdLead)
+    }
+
+    /// Two sessions a week: no recovery hint gets in the way of the cards.
+    func testPlateauNeedsNoRecoveryAtAnyTimeOfDay() async throws {
+        for now in [Self.morning, Self.evening] {
+            let metrics = try await recoveryMetrics(for: .plateau, now: now)
+
+            XCTAssertEqual(metrics.trainingDays, 2)
+            XCTAssertFalse(metrics.needsRecovery)
+        }
+    }
+
     // MARK: - overreached (US-14 AC4)
 
     func testOverreachedPromptShowsTheSixSessionWeek() async throws {
@@ -123,7 +216,10 @@ final class AnalysisMockProfileTests: XCTestCase {
         for now in [Self.morning, Self.evening] {
             let metrics = try await recoveryMetrics(for: .overreached, now: now)
 
-            XCTAssertEqual(metrics, RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: 8.5))
+            // Six lifts, four runs and two rides on six days (#262): the RPE
+            // is the lifts' alone, the heart rate the mean over the six
+            // endurance sessions (4 × 140, 2 × 150).
+            XCTAssertEqual(metrics, RecoveryMetrics(sessions: 12, trainingDays: 6, averageRPE: 8.5, averageHeartRate: 143))
             XCTAssertTrue(metrics.needsRecovery)
             XCTAssertEqual(metrics.suggestedRestHours, 48)
         }
@@ -144,23 +240,36 @@ final class AnalysisMockProfileTests: XCTestCase {
         XCTAssertEqual(report.cards, [
             .recovery(
                 reasoning: AnalysisReportValidator.insertedRecoveryReasoning,
-                metrics: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: 8.5)
+                metrics: RecoveryMetrics(sessions: 12, trainingDays: 6, averageRPE: 8.5, averageHeartRate: 143)
             ),
-            .progression(
-                exercise: "Bench Press (Barbell)",
-                muscleGroup: .chest,
-                fromKg: 70,
-                toKg: 72.5,
-                reasoning: "Two sessions at 70 kg × 5 this week."
-            ),
+            // The profile logs freely — no routine, no rep target — so the
+            // 2-for-2 rule is not checkable and the load increase is a note
+            // (ADR-013, #233), not a progression next to a recovery card.
+            .note(title: "Bench Press (Barbell)", text: "Two sessions at 70 kg × 5 this week."),
         ])
+    }
+
+    // MARK: - Every analysis profile carries all three sources (#262)
+
+    /// The strength profiles are analysed over Hevy, Strava and Polar: the
+    /// context line counts all three, the prompt carries the endurance
+    /// section, and the profile choice is offered — while each profile's own
+    /// story (the bench card, the six-day week, the plateau cases) holds, as
+    /// the tests above show.
+    func testTheStrengthProfilesAreAnalysedOverAllThreeSources() async throws {
+        for profile in [MockWorkoutProfile.progressionReady, .overreached, .plateau] {
+            let run = try await run(profile, answer: AnalysisReportFactory.thin)
+
+            let context = try XCTUnwrap(run.context, profile.rawValue)
+            XCTAssertEqual(context.countedSources, [.hevy, .strava, .polar], profile.rawValue)
+            XCTAssertEqual(context.analysisProfile, .overallLoad, profile.rawValue)
+            XCTAssertTrue(run.prompt.contains("## Endurance, last 4 weeks ("), profile.rawValue)
+            XCTAssertTrue(run.prompt.contains("## Exercises"), profile.rawValue)
+        }
     }
 
     // MARK: - Thin data (#170)
 
-    /// A model that finds nothing to put on a card answers with none, and the
-    /// screen gets a report — lead and summary — rather than the prose
-    /// fallback. The disclosure then starts open.
     /// A model answer without cards stays one. Its verdict does not: the
     /// `progression-ready` cache carries the step, so the app's own figures
     /// say "progress" where the model asked to hold (#227). The disclosure
@@ -244,7 +353,7 @@ final class AnalysisMockProfileTests: XCTestCase {
         ).outcome
 
         let report = try XCTUnwrap(outcome?.report)
-        // ADR-013 §5: under "Endurance" the app has no figure that could
+        // ADR-014 §5: under "Endurance" the app has no figure that could
         // carry a verdict in v0, so this run has none — and a metric card,
         // which states a step, cannot stand under a report without one.
         // Before #227 the model's progress verdict and its card both stood
@@ -352,6 +461,14 @@ final class AnalysisMockProfileTests: XCTestCase {
             return XCTFail("The interference card did not survive")
         }
         XCTAssertEqual(metrics, InterferenceMetrics(strengthDays: 3, cardioDays: 3, overlapDays: 2))
+        // The verdict is the app's (#227): under "Overall load" the rule reads
+        // the strength half (ADR-014 §5), where every lift but the curl and
+        // the raise set its window best in the latest session — stage 4.
+        // The model's "hold" goes with its headline and lead.
+        XCTAssertEqual(report.verdict, .progress)
+        XCTAssertEqual(report.modelVerdict, .hold)
+        XCTAssertEqual(report.headline, AnalysisHeadline.text(for: .progress))
+        XCTAssertEqual(report.lead, AnalysisReportValidator.progressLead)
     }
 
     /// Under "Strength" the endurance sessions are counted on the line — the
@@ -384,6 +501,52 @@ final class AnalysisMockProfileTests: XCTestCase {
         // is downgraded rather than shown.
         let report = try XCTUnwrap(run.outcome?.report)
         XCTAssertFalse(report.cards.contains { $0.kind == .metric })
+    }
+
+    /// The mirror image of the case above (US-15 AC5, #185): the same window
+    /// of twelve lifts and twelve runs, analysed under "Endurance". The
+    /// lifting half is counted on the line and left out of the analysis, so
+    /// the prompt carries no strength section and not a single kilogram — and
+    /// a progression card, which is a load in kilograms by construction, is
+    /// downgraded to a note rather than shown.
+    func testTheMixedWindowUnderEnduranceStatesWhatItLeftOut() async throws {
+        try await seed(.mixed, now: Self.morning)
+
+        let run = try await analyse(
+            answer: AnalysisReportFactory.progressionReady,
+            choosing: .endurance
+        )
+
+        XCTAssertTrue(run.prompt.contains("Analyse my endurance training only"), run.prompt)
+        XCTAssertTrue(run.prompt.contains("I asked about my endurance training only"), run.prompt)
+        XCTAssertTrue(run.prompt.contains("## Endurance, last 4 weeks ("), run.prompt)
+        XCTAssertFalse(run.prompt.contains("## Volume per week"), run.prompt)
+        XCTAssertFalse(run.prompt.contains("## Exercises"), run.prompt)
+        XCTAssertFalse(run.prompt.contains("kg"), run.prompt)
+
+        let context = try XCTUnwrap(run.context)
+        XCTAssertEqual(context.analysisProfile, .endurance)
+        XCTAssertEqual(context.basisDescription, "12 Hevy · 12 Strava sessions")
+        XCTAssertEqual(context.analysedCounts, [.endurance: 12])
+        XCTAssertTrue(context.thinDomains.isEmpty)
+
+        // A load in kilograms has no place under "Endurance" (US-15 AC5): the
+        // card keeps the model's sentence as a note and loses its figures.
+        let report = try XCTUnwrap(run.outcome?.report)
+        XCTAssertFalse(report.cards.contains { $0.kind == .progression })
+        // ADR-014 §5: under "Endurance" there is no e1RM, so the run has no
+        // verdict, and the app's note saying why comes first (#227).
+        XCTAssertEqual(report.verdict, .insufficientData)
+        XCTAssertEqual(report.cards, [
+            .note(
+                title: AnalysisReportValidator.insufficientDataNoteTitle,
+                text: "Under Endurance the app has no estimated 1RM to read a trend from — that figure exists for strength only."
+            ),
+            .note(
+                title: "Bench Press (Barbell)",
+                text: "3 sessions at 60 kg × 5 with RPE 7 or lower — clean overload signal."
+            ),
+        ])
     }
 
     /// The per-domain thin-data warning of US-15 AC4: a full lifting window

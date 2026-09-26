@@ -353,12 +353,22 @@ final class StravaConnectionViewModelTests: XCTestCase {
     func testEveryOAuthErrorExceptCancellationHasABanner() {
         let errors: [StravaOAuthError] = [
             .accessDenied, .stateMismatch, .missingScope, .invalidCallback,
-            .invalidClientCredentials, .invalidGrant, .invalidResponse, .transport, .unexpectedStatus(500),
+            .invalidClientCredentials, .invalidGrant, .invalidResponse, .transport, .untrustedConnection,
+            .unexpectedStatus(500),
         ]
         for error in errors {
             XCTAssertNotNil(StravaConnectionFailure(error), "\(error) should have a banner")
         }
         XCTAssertNil(StravaConnectionFailure(.cancelled))
+    }
+
+    /// A failed certificate check (pinning, #153) is the network's fault,
+    /// not the credentials' — and it must not read as offline.
+    func testUntrustedConnectionIsNeitherOfflineNorACredentialFailure() {
+        let failure = StravaConnectionFailure(.untrustedConnection)
+        XCTAssertEqual(failure, .untrustedConnection)
+        XCTAssertFalse(try XCTUnwrap(failure).pointsToCredentials)
+        XCTAssertNotEqual(failure?.message, StravaConnectionFailure.network.message)
     }
 }
 

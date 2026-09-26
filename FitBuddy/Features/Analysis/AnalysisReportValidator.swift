@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Checks the cards of a model's `AnalysisReport` against the cache (US-14
 /// AC3/AC4, #175).
@@ -17,13 +18,20 @@ enum AnalysisReportValidator {
     /// weight: rounding by the model, e.g. `61.25` written as `61`.
     static let weightToleranceKg = 0.5
 
-    /// The barbell step prompt rule 6 names (#173): the load increase a
-    /// barbell exercise is allowed, whatever step is listed for it. The
+    /// The barbell step prompt rule 6 names (#173): the granularity a barbell
+    /// exercise's range is rounded to, whatever step is listed for it. The
     /// prompt's own constant, so the two cannot drift apart.
     static let minimumStepKg = AnalysisPromptBuilder.minimumStepKg
 
+    private static let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "Analysis")
+
     /// Cards the result screen shows at most (design 3.4/3.4b/3.5: zero to four).
     static let maxCards = 4
+
+    /// The most reps a rep progression may add at once (#234): the margin
+    /// the 2-for-2 rule wants over the target, so two more reps at the same
+    /// weight is exactly the reserve that earns the next load step (ADR-013).
+    static let maxRepStep = TwoForTwoCondition.requiredMargin
 
     /// Title of a downgraded card that has no better one.
     static let fallbackNoteTitle = "Recommendation"
@@ -82,24 +90,24 @@ enum AnalysisReportValidator {
         "Your data doesn't back a specific load increase yet. Keep your current weights and read the full analysis below."
 
     /// The lead of a report the app turned into a progress verdict, because
-    /// its own figures carry the step the model argued against (ADR-013 §7).
+    /// its own figures carry the step the model argued against (ADR-014 §7).
     ///
-    /// Says only what stage 4 measured. ADR-013 spells out the text for the
+    /// Says only what stage 4 measured. ADR-014 spells out the text for the
     /// fourth class but not for this case, so the wording is #227's; it was
     /// kept to the one statement the rule actually read.
     static let progressLead =
         "Your most recent session set the best estimated 1RM of the analysed window on at least one exercise. Read the full analysis below before adding load."
 
-    /// The headline of a report without a verdict (ADR-013 §6). Same string
+    /// The headline of a report without a verdict (ADR-014 §6). Same string
     /// `AnalysisHeadline` renders, so the stored report and the screen cannot
     /// say different things.
     static let insufficientDataHeadline = AnalysisHeadline.text(for: .insufficientData)
 
-    /// The lead of a report without a verdict, word for word from ADR-013 §6.
+    /// The lead of a report without a verdict, word for word from ADR-014 §6.
     static let insufficientDataLead =
         "Your logged training doesn't yet support a recommendation for or against more load. Keep training as before — the next analysis will have more to go on."
 
-    /// Title of the note that names why there is no verdict (ADR-013 §6).
+    /// Title of the note that names why there is no verdict (ADR-014 §6).
     static let insufficientDataNoteTitle = "Why there's no verdict"
 
     /// The reasoning of a recovery card the app inserts when the model left it
@@ -131,7 +139,7 @@ enum AnalysisReportValidator {
     /// The verdict is no longer the model's since #227: `AnalysisVerdictRule`
     /// derives it from the evidence, this method applies it — replacing
     /// headline and lead where the two disagree, and taking away the cards a
-    /// fourth-class verdict must not show (ADR-013 §6/§7). The model's own
+    /// fourth-class verdict must not show (ADR-014 §6/§7). The model's own
     /// choice is kept on the report for #228.
     ///
     /// - Parameters:
@@ -152,7 +160,7 @@ enum AnalysisReportValidator {
         // both domains since #184, so four strength sessions and two runs on
         // six days trigger the hint just as six strength sessions do. A model
         // recovery card always survives at that count, so a missing one means
-        // the model left it out. This is the card side of ADR-013 stage 0;
+        // the model left it out. This is the card side of ADR-014 stage 0;
         // the verdict side is in the rule.
         if evidence.recovery.needsRecovery, !cards.contains(where: { $0.kind == .recovery }) {
             cards.insert(
@@ -166,12 +174,14 @@ enum AnalysisReportValidator {
             )
         }
 
-        // ADR-013 §6: without a verdict there is no card that would be one.
-        // A progression card *is* a verdict, a recovery card is `recover`
-        // under another name, and a metric card states a step nobody backed.
-        // They are downgraded to notes rather than dropped, as everywhere else
-        // in this file — the user paid for the sentence. Above them goes the
-        // app's own note naming the condition that fired.
+        // ADR-014 §6: without a verdict there is no card that would be one.
+        // A load or rep progression *is* a verdict, a recovery card is
+        // `recover` under another name, and a metric card states a step
+        // nobody backed. They are downgraded to notes rather than dropped, as
+        // everywhere else in this file — the user paid for the sentence.
+        // Above them goes the app's own note naming the condition that fired.
+        // The card checks of ADR-013 run first and are untouched by this:
+        // a card they struck is already a note (ADR-014 §7).
         if verdict == .insufficientData {
             cards = cards.compactMap(withoutAVerdict)
             if let note = insufficientDataNote(reason: outcome.reason, evidence: evidence) {
@@ -183,7 +193,7 @@ enum AnalysisReportValidator {
 
         // Where the app's verdict differs from the model's, the model's
         // headline and lead argue for the call the app has just replaced, so
-        // they go with it (ADR-013 §7). Where the two agree, the model keeps
+        // they go with it (ADR-014 §7). Where the two agree, the model keeps
         // its wording — the app overruled nothing in it.
         if verdict != report.verdict {
             headline = AnalysisHeadline.text(for: verdict)
@@ -211,7 +221,7 @@ enum AnalysisReportValidator {
         )
     }
 
-    /// The app's lead for a verdict it put over the model's (ADR-013 §7).
+    /// The app's lead for a verdict it put over the model's (ADR-014 §7).
     static func lead(for verdict: AnalysisVerdict, evidence: AnalysisReportEvidence) -> String {
         switch verdict {
         case .progress: return progressLead
@@ -222,16 +232,17 @@ enum AnalysisReportValidator {
     }
 
     /// A validated card with whatever made it a verdict taken out of it, for
-    /// an `insufficientData` report (ADR-013 §6).
+    /// an `insufficientData` report (ADR-014 §6).
     ///
-    /// Imbalance and interference cards stay: every figure on them is one the
-    /// app measured and replaced, and neither argues for or against load.
-    /// A metric card does not stay, although ADR-013 names only progression
-    /// and recovery — its `to` is a step, which is exactly what a report
-    /// without a verdict must not print.
+    /// Progression, rep progression, recovery and metric cards become notes:
+    /// the first two name a step, the recovery card is a verdict of its own,
+    /// and a metric card's `to` is a step too. Imbalance and interference
+    /// cards stay: every figure on them is one the app measured and
+    /// replaced, and neither argues for or against load.
     private static func withoutAVerdict(_ card: AnalysisReportCard) -> AnalysisReportCard? {
         switch card {
-        case let .progression(exercise, _, _, _, reasoning):
+        case let .progression(exercise, _, _, _, reasoning),
+             let .repProgression(exercise, _, _, _, _, reasoning):
             return note(title: trimmed(exercise), text: reasoning)
         case let .recovery(reasoning, _):
             return note(title: recoveryNoteTitle, text: reasoning)
@@ -243,7 +254,7 @@ enum AnalysisReportValidator {
     }
 
     /// The one note the app puts at the top of an `insufficientData` report,
-    /// naming the condition that fired (ADR-013 §6).
+    /// naming the condition that fired (ADR-014 §6).
     ///
     /// `nil` for a reason that never reaches this verdict.
     static func insufficientDataNote(
@@ -287,6 +298,23 @@ enum AnalysisReportValidator {
                    exercise: exercise,
                    fromKg: fromKg,
                    toKg: toKg,
+                   reasoning: reasoning,
+                   listed: evidence.exercises
+               ) {
+                return valid
+            }
+            return note(title: trimmed(exercise), text: reasoning)
+
+        case let .repProgression(exercise, _, weightKg, fromReps, toReps, reasoning):
+            // A strength card like the load progression (US-15 AC5), checked
+            // against the same listed exercises (#234).
+            if !isBlank(reasoning),
+               evidence.analysisProfile.covers(.strength),
+               case let .accepted(valid) = checkRepProgression(
+                   exercise: exercise,
+                   weightKg: weightKg,
+                   fromReps: fromReps,
+                   toReps: toReps,
                    reasoning: reasoning,
                    listed: evidence.exercises
                ) {
@@ -427,20 +455,57 @@ enum AnalysisReportValidator {
 
     // MARK: - Progression
 
+    /// Why a progression card was not backed (#233).
+    ///
+    /// Each case is one line in the log, so the rate of each reason can be
+    /// read over live runs (#228, #229): a window in which most cards fail as
+    /// `conditionNotCheckable` is a window of users without routines — a
+    /// finding for ADR-013, not a model problem. `belowRange` is kept apart
+    /// from `aboveRange` for the same reason: too cautious is a finding too.
+    enum ProgressionRejection: String, Equatable, Sendable {
+        /// No listed exercise carries the card's title.
+        case notListed
+        /// The listed exercise has no working weight a load change could
+        /// start from — a bodyweight movement.
+        case noWorkingWeight
+        /// `fromKg` is not the working weight the prompt named.
+        case wrongStartingWeight
+        /// `toKg` is at or under the working weight.
+        case noIncrease
+        /// The 2-for-2 rule is not met: no load increase is on (ADR-013).
+        case conditionNotMet
+        /// The 2-for-2 rule could not be applied for want of a rep target —
+        /// not the same as met (ADR-013).
+        case conditionNotCheckable
+        /// The rule is met, but the exercise has no step to move by: reps are
+        /// the lever there (#234).
+        case noLoadStep
+        /// `toKg` is above the working weight but under one step: not a load
+        /// the equipment offers.
+        case belowRange
+        /// `toKg` is over the ceiling of `ProgressionBand`.
+        case aboveRange
+        /// `toKg` is inside the range but not on a step the equipment offers
+        /// — 64 kg on a 2.5 kg bar — beyond the rounding `weightToleranceKg`
+        /// forgives.
+        case offStep
+        /// A rep progression's `fromReps` is not the reps the prompt listed
+        /// with the working weight (#234).
+        case wrongStartingReps
+        /// A rep progression adds more than `maxRepStep` reps at once (#234).
+        case aboveRepStep
+    }
+
+    /// The outcome of checking a progression card against the listed
+    /// exercises.
+    enum ProgressionCheck: Equatable, Sendable {
+        case accepted(AnalysisReportCard)
+        case rejected(ProgressionRejection)
+    }
+
     /// The progression as the app states it, or `nil` when the cache does not
-    /// back it:
-    ///
-    /// - the exercise is listed in the prompt (trimmed, case-insensitive),
-    /// - its listed working weight exists and `fromKg` is within
-    ///   `weightToleranceKg` of it,
-    /// - `toKg` is above that working weight, by at most the step prompt
-    ///   rule 6 allows (#173), see `maxStepKg(for:)`. No share of the working
-    ///   weight on top: 60 → 66 kg is no step the prompt offered.
-    ///
-    /// Title, muscle group and `fromKg` are replaced by the listed values, so
-    /// the struck-through figure on the card is the cache's, not the model's
-    /// rounding of it. Where two listed exercises share a title, the first
-    /// whose weight matches wins.
+    /// back it — see `checkProgression(...)` for the rules, and the log for
+    /// the reason.
     private static func progression(
         exercise: String,
         fromKg: Double,
@@ -448,9 +513,57 @@ enum AnalysisReportValidator {
         reasoning: String,
         listed: [ListedExercise]
     ) -> AnalysisReportCard? {
+        switch checkProgression(exercise: exercise, fromKg: fromKg, toKg: toKg, reasoning: reasoning, listed: listed) {
+        case let .accepted(card):
+            return card
+        case let .rejected(reason):
+            // The title and the figures are the user's training data.
+            logger.notice(
+                "Progression card rejected (\(reason.rawValue, privacy: .public)): \(exercise, privacy: .private) \(fromKg, privacy: .private) → \(toKg, privacy: .private) kg"
+            )
+            return nil
+        }
+    }
+
+    /// Checks a progression card against the listed exercises (#175, #233):
+    ///
+    /// - the exercise is listed in the prompt (trimmed, case-insensitive),
+    /// - its listed working weight exists and `fromKg` is within
+    ///   `weightToleranceKg` of it,
+    /// - `toKg` is above that working weight,
+    /// - the 2-for-2 rule is **met** for the exercise (ADR-013): not met and
+    ///   not checkable both reject, since a load increase is not on either
+    ///   way — the card falls back to a note, and to rep progression once
+    ///   #234 lands,
+    /// - the exercise has a step to move by, and `toKg` lies within
+    ///   `ProgressionBand.range(for:)` — the range the prompt line named,
+    ///   both ends inclusive. 60 → 66 kg on a bench at 60 is over the 10 %
+    ///   ceiling; 60 → 61 kg is under the one step the bar can take,
+    /// - `toKg` sits on a step: a whole number of steps above the working
+    ///   weight, within `weightToleranceKg` — the same rounding `fromKg` is
+    ///   forgiven. 64 kg on a 2.5 kg bar is a weight nobody can load, and a
+    ///   card must not show one. The range is checked on the model's figure
+    ///   first, so 66 kg reads as over the ceiling rather than as off the
+    ///   step, and 62 kg as a rounding of 62.5 rather than as under it.
+    ///
+    /// Title, muscle group and `fromKg` are replaced by the listed values, so
+    /// the struck-through figure on the card is the cache's, not the model's
+    /// rounding of it; `toKg` is the model's choice of step, snapped to the
+    /// step itself (62 for 62.5 reads 62.5 kg), because every figure a card
+    /// states as a load is one the equipment offers. Where two listed
+    /// exercises share a title, the first whose weight matches wins.
+    static func checkProgression(
+        exercise: String,
+        fromKg: Double,
+        toKg: Double,
+        reasoning: String,
+        listed: [ListedExercise]
+    ) -> ProgressionCheck {
         let name = folded(exercise)
-        let match = listed.lazy
-            .filter { folded($0.title) == name }
+        let candidates = listed.filter { folded($0.title) == name }
+        guard !candidates.isEmpty else { return .rejected(.notListed) }
+        guard candidates.contains(where: { $0.workingSet != nil }) else { return .rejected(.noWorkingWeight) }
+        let match = candidates.lazy
             .compactMap { listed -> (exercise: ListedExercise, workingKg: Double)? in
                 guard let working = listed.workingSet?.roundedWeightKg,
                       abs(fromKg - working) <= weightToleranceKg + epsilon
@@ -458,33 +571,75 @@ enum AnalysisReportValidator {
                 return (listed, working)
             }
             .first
-        guard let match else { return nil }
-        guard toKg > match.workingKg,
-              let maxStep = maxStepKg(for: match.exercise),
-              toKg - match.workingKg <= maxStep + epsilon
-        else { return nil }
-        return .progression(
+        guard let match else { return .rejected(.wrongStartingWeight) }
+        guard toKg > match.workingKg + epsilon else { return .rejected(.noIncrease) }
+        switch match.exercise.twoForTwo {
+        case .notMet: return .rejected(.conditionNotMet)
+        case .notCheckable: return .rejected(.conditionNotCheckable)
+        case .met: break
+        }
+        guard let step = ProgressionBand.stepKg(for: match.exercise),
+              let range = ProgressionBand.range(for: match.exercise)
+        else { return .rejected(.noLoadStep) }
+        guard toKg >= range.lowerBound - weightToleranceKg - epsilon else { return .rejected(.belowRange) }
+        guard toKg <= range.upperBound + weightToleranceKg + epsilon else { return .rejected(.aboveRange) }
+        let steps = ((toKg - match.workingKg) / step).rounded()
+        let onStep = PlainWeightFormatter.rounded(match.workingKg + steps * step)
+        guard abs(toKg - onStep) <= weightToleranceKg + epsilon else { return .rejected(.offStep) }
+        return .accepted(.progression(
             exercise: match.exercise.title,
             muscleGroup: match.exercise.muscleGroup,
             fromKg: match.workingKg,
-            toKg: toKg,
+            toKg: onStep,
             reasoning: reasoning
-        )
+        ))
     }
 
-    /// The largest load increase prompt rule 6 allows for a listed exercise,
-    /// or `nil` when it allows none:
+    // MARK: - Rep progression (#234)
+
+    /// Checks a rep progression card against the listed exercises, by the
+    /// same rule as the load one: the exercise is listed, `weightKg` is its
+    /// working weight (within `weightToleranceKg`), `fromReps` is the reps the
+    /// prompt listed with it, and `toReps` adds between one and `maxRepStep`
+    /// reps.
     ///
-    /// - a barbell exercise (`AnalysisPromptBuilder.isBarbell(title:)`):
-    ///   `minimumStepKg`, even when a larger step is listed,
-    /// - any other exercise: the smallest step its line lists,
-    /// - any other exercise without a listed step: none — rule 6 progresses
-    ///   reps there, so a heavier target is not backed.
-    static func maxStepKg(for exercise: ListedExercise) -> Double? {
-        if AnalysisPromptBuilder.isBarbell(title: exercise.title) {
-            return minimumStepKg
-        }
-        return exercise.smallestStepKg
+    /// **Not gated on the 2-for-2 rule.** The card exists for the exercises
+    /// the rule holds back — not met, not checkable, no load step — and it is
+    /// harmless where the rule is met: more reps at the same weight is never
+    /// a load the log does not back. Title, muscle group, weight and starting
+    /// reps are replaced by the listed values; `toReps` stays the model's.
+    static func checkRepProgression(
+        exercise: String,
+        weightKg: Double,
+        fromReps: Int,
+        toReps: Int,
+        reasoning: String,
+        listed: [ListedExercise]
+    ) -> ProgressionCheck {
+        let name = folded(exercise)
+        let candidates = listed.filter { folded($0.title) == name }
+        guard !candidates.isEmpty else { return .rejected(.notListed) }
+        guard candidates.contains(where: { $0.workingSet != nil }) else { return .rejected(.noWorkingWeight) }
+        let match = candidates.lazy
+            .compactMap { listed -> (exercise: ListedExercise, working: WorkingSet)? in
+                guard let working = listed.workingSet,
+                      abs(weightKg - working.roundedWeightKg) <= weightToleranceKg + epsilon
+                else { return nil }
+                return (listed, working)
+            }
+            .first
+        guard let match else { return .rejected(.wrongStartingWeight) }
+        guard fromReps == match.working.reps else { return .rejected(.wrongStartingReps) }
+        guard toReps > fromReps else { return .rejected(.noIncrease) }
+        guard toReps - fromReps <= maxRepStep else { return .rejected(.aboveRepStep) }
+        return .accepted(.repProgression(
+            exercise: match.exercise.title,
+            muscleGroup: match.exercise.muscleGroup,
+            weightKg: match.working.roundedWeightKg,
+            fromReps: match.working.reps,
+            toReps: toReps,
+            reasoning: reasoning
+        ))
     }
 
     // MARK: - Imbalance

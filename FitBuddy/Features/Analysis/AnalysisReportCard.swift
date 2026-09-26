@@ -13,6 +13,10 @@ import Foundation
 /// Encoded like `AnalysisCard`: a flat object with `kind` as discriminator.
 enum AnalysisReportCard: Equatable, Sendable {
     case progression(exercise: String, muscleGroup: MuscleGroup, fromKg: Double, toKg: Double, reasoning: String)
+    /// More repetitions at the cache's working weight (US-17 AC3, #234):
+    /// `weightKg` and `fromReps` are the listed working set, `toReps` and the
+    /// reasoning are the model's.
+    case repProgression(exercise: String, muscleGroup: MuscleGroup, weightKg: Double, fromReps: Int, toReps: Int, reasoning: String)
     case recovery(reasoning: String, metrics: RecoveryMetrics)
     case imbalance(groupA: MuscleGroup, perWeekA: Double, groupB: MuscleGroup, perWeekB: Double, reasoning: String)
     /// One figure of the week, with the app's own current value in place of
@@ -38,13 +42,16 @@ enum AnalysisReportCard: Equatable, Sendable {
     /// rejected, and `AnalysisReportValidator` replaces it with its own
     /// (#170).
     ///
-    /// A progression always does. A metric card does when its step is an
+    /// A load progression always does, and so does a rep progression (#234):
+    /// more reps at the same weight is the step ADR-013 prescribes where the
+    /// 2-for-2 rule holds the load back, so a lead arguing for it names a
+    /// figure that survived. A metric card does when its step is an
     /// improvement in its own unit (`MetricUnit.isImprovement`), so a card
     /// asking for fewer kilometres or an easier heart rate does not hold up a
     /// progress lead, and an endurance report recommending +3 km does.
     var backsProgress: Bool {
         switch self {
-        case .progression:
+        case .progression, .repProgression:
             return true
         case let .metric(_, from, to, unit, _, _):
             return unit.isImprovement(from: from, to: to)
@@ -56,6 +63,7 @@ enum AnalysisReportCard: Equatable, Sendable {
     var kind: AnalysisCard.Kind {
         switch self {
         case .progression: return .progression
+        case .repProgression: return .repProgression
         case .recovery: return .recovery
         case .imbalance: return .imbalance
         case .metric: return .metric
@@ -69,6 +77,7 @@ extension AnalysisReportCard: Codable {
     enum CodingKeys: String, CodingKey {
         case kind
         case exercise, muscleGroup, fromKg, toKg
+        case weightKg, fromReps, toReps
         case metrics
         case groupA, perWeekA, groupB, perWeekB
         case label, from, to, unit, source
@@ -86,6 +95,15 @@ extension AnalysisReportCard: Codable {
                 muscleGroup: try container.decode(MuscleGroup.self, forKey: .muscleGroup),
                 fromKg: try container.decode(Double.self, forKey: .fromKg),
                 toKg: try container.decode(Double.self, forKey: .toKg),
+                reasoning: try container.decode(String.self, forKey: .reasoning)
+            )
+        case .repProgression:
+            self = .repProgression(
+                exercise: try container.decode(String.self, forKey: .exercise),
+                muscleGroup: try container.decode(MuscleGroup.self, forKey: .muscleGroup),
+                weightKg: try container.decode(Double.self, forKey: .weightKg),
+                fromReps: try container.decode(Int.self, forKey: .fromReps),
+                toReps: try container.decode(Int.self, forKey: .toReps),
                 reasoning: try container.decode(String.self, forKey: .reasoning)
             )
         case .recovery:
@@ -132,6 +150,13 @@ extension AnalysisReportCard: Codable {
             try container.encode(muscleGroup, forKey: .muscleGroup)
             try container.encode(fromKg, forKey: .fromKg)
             try container.encode(toKg, forKey: .toKg)
+            try container.encode(reasoning, forKey: .reasoning)
+        case let .repProgression(exercise, muscleGroup, weightKg, fromReps, toReps, reasoning):
+            try container.encode(exercise, forKey: .exercise)
+            try container.encode(muscleGroup, forKey: .muscleGroup)
+            try container.encode(weightKg, forKey: .weightKg)
+            try container.encode(fromReps, forKey: .fromReps)
+            try container.encode(toReps, forKey: .toReps)
             try container.encode(reasoning, forKey: .reasoning)
         case let .recovery(reasoning, metrics):
             try container.encode(reasoning, forKey: .reasoning)

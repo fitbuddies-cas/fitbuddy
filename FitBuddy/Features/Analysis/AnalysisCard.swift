@@ -16,6 +16,12 @@ enum AnalysisCard: Equatable, Sendable {
     /// A load increase on one exercise. `fromKg` is meant to be the weight of
     /// its most recent session; #175 checks that against the cache.
     case progression(exercise: String, muscleGroup: String, fromKg: Double, toKg: Double, reasoning: String)
+    /// More repetitions at the listed weight on one exercise (US-17 AC3,
+    /// #234) — the lever where a load increase is not on: the 2-for-2 rule
+    /// not met or not checkable, or no load step for the equipment (ADR-013).
+    /// `weightKg` and `fromReps` are meant to be the working set the prompt
+    /// listed; #233 checks both against the cache.
+    case repProgression(exercise: String, muscleGroup: String, weightKg: Double, fromReps: Int, toReps: Int, reasoning: String)
     /// Rest before any progression.
     case recovery(reasoning: String, suggestedRestHours: Double)
     /// Two muscle groups trained at clearly different frequencies.
@@ -51,14 +57,14 @@ enum AnalysisCard: Equatable, Sendable {
     /// recovery card's figures — they are on the wire only so the model has to
     /// commit to the week it is reasoning about.
     case interference(strengthDays: Int, cardioDays: Int, overlapDays: Int, reasoning: String)
-    /// Anything else worth saying, e.g. a rep progression without a weight
-    /// change.
+    /// Anything else worth saying.
     case note(title: String, text: String)
 
     /// The `kind` discriminator of each case, as it appears on the wire and in
     /// the schema.
     enum Kind: String, Codable, CaseIterable, Sendable {
         case progression
+        case repProgression
         case recovery
         case imbalance
         case metric
@@ -71,6 +77,7 @@ enum AnalysisCard: Equatable, Sendable {
     var prose: String {
         switch self {
         case .progression(_, _, _, _, let reasoning),
+             .repProgression(_, _, _, _, _, let reasoning),
              .recovery(let reasoning, _),
              .imbalance(_, _, _, _, let reasoning),
              .metric(_, _, _, _, let reasoning, _),
@@ -84,6 +91,7 @@ enum AnalysisCard: Equatable, Sendable {
     var kind: Kind {
         switch self {
         case .progression: return .progression
+        case .repProgression: return .repProgression
         case .recovery: return .recovery
         case .imbalance: return .imbalance
         case .metric: return .metric
@@ -99,6 +107,7 @@ extension AnalysisCard: Codable {
     enum CodingKeys: String, CodingKey {
         case kind
         case exercise, muscleGroup, fromKg, toKg
+        case weightKg, fromReps, toReps
         case suggestedRestHours
         case groupA, perWeekA, groupB, perWeekB
         case label, from, to, unit, source
@@ -116,6 +125,15 @@ extension AnalysisCard: Codable {
                 muscleGroup: try container.decode(String.self, forKey: .muscleGroup),
                 fromKg: try container.decode(Double.self, forKey: .fromKg),
                 toKg: try container.decode(Double.self, forKey: .toKg),
+                reasoning: try container.decode(String.self, forKey: .reasoning)
+            )
+        case .repProgression:
+            self = .repProgression(
+                exercise: try container.decode(String.self, forKey: .exercise),
+                muscleGroup: try container.decode(String.self, forKey: .muscleGroup),
+                weightKg: try container.decode(Double.self, forKey: .weightKg),
+                fromReps: try container.decode(Int.self, forKey: .fromReps),
+                toReps: try container.decode(Int.self, forKey: .toReps),
                 reasoning: try container.decode(String.self, forKey: .reasoning)
             )
         case .recovery:
@@ -167,6 +185,13 @@ extension AnalysisCard: Codable {
             try container.encode(muscleGroup, forKey: .muscleGroup)
             try container.encode(fromKg, forKey: .fromKg)
             try container.encode(toKg, forKey: .toKg)
+            try container.encode(reasoning, forKey: .reasoning)
+        case let .repProgression(exercise, muscleGroup, weightKg, fromReps, toReps, reasoning):
+            try container.encode(exercise, forKey: .exercise)
+            try container.encode(muscleGroup, forKey: .muscleGroup)
+            try container.encode(weightKg, forKey: .weightKg)
+            try container.encode(fromReps, forKey: .fromReps)
+            try container.encode(toReps, forKey: .toReps)
             try container.encode(reasoning, forKey: .reasoning)
         case let .recovery(reasoning, suggestedRestHours):
             try container.encode(reasoning, forKey: .reasoning)

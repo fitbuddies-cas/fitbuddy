@@ -26,6 +26,33 @@ final class AnalysisCardTests: XCTestCase {
         XCTAssertEqual(card.kind, .progression)
     }
 
+    func testDecodesARepProgressionCard() throws {
+        let card = try decode("""
+        {"kind": "repProgression", "exercise": "Lateral Raise (Dumbbell)", "muscleGroup": "Shoulders",
+         "weightKg": 10, "fromReps": 12, "toReps": 14, "reasoning": "Earn the next dumbbell with reps."}
+        """)
+
+        XCTAssertEqual(card, .repProgression(
+            exercise: "Lateral Raise (Dumbbell)",
+            muscleGroup: "Shoulders",
+            weightKg: 10,
+            fromReps: 12,
+            toReps: 14,
+            reasoning: "Earn the next dumbbell with reps."
+        ))
+        XCTAssertEqual(card.kind, .repProgression)
+        XCTAssertEqual(card.prose, "Earn the next dumbbell with reps.")
+    }
+
+    /// Reps are whole numbers: a rep count sent as a fraction is not the
+    /// schema.
+    func testRejectsRepsSentAsAFraction() {
+        XCTAssertThrowsError(try decode("""
+        {"kind": "repProgression", "exercise": "Row", "muscleGroup": "Back",
+         "weightKg": 50, "fromReps": 8.5, "toReps": 10, "reasoning": "More."}
+        """))
+    }
+
     func testDecodesARecoveryCard() throws {
         let card = try decode("""
         {"kind": "recovery", "reasoning": "Six sessions in seven days.", "suggestedRestHours": 48}

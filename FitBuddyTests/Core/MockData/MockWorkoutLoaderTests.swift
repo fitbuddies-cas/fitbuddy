@@ -253,17 +253,17 @@ final class MockWorkoutLoaderTests: XCTestCase {
     /// loader builds Hevy's envelope per request anyway.
     ///
     /// Each file is in its own source's wire shape — Hevy's `workouts` object,
-    /// and the bare arrays Strava and Polar return (#188).
+    /// optionally with the `routines` its workouts name (#233), and the bare
+    /// arrays Strava and Polar return (#188).
     func testPayloadFilesCarryTheirSourcesWireShape() throws {
         for payload in MockWorkoutProfile.allCases.flatMap(\.payloads) {
             let root = try json(of: payload)
             switch payload.source {
             case .hevy:
                 let object = try XCTUnwrap(root as? [String: Any], payload.resourceName)
-                XCTAssertEqual(
-                    Set(object.keys),
-                    ["workouts"],
-                    "\(payload.resourceName) stores more than its workouts"
+                XCTAssertTrue(
+                    Set(object.keys).isSubset(of: ["workouts", "routines"]) && object["workouts"] != nil,
+                    "\(payload.resourceName) stores more than its workouts and routines"
                 )
             case .strava, .polar:
                 XCTAssertNotNil(root as? [[String: Any]], "\(payload.resourceName) is not an array")
@@ -278,6 +278,64 @@ final class MockWorkoutLoaderTests: XCTestCase {
     func testEveryPayloadIsNamedForTheReleaseExclusion() {
         for payload in MockWorkoutProfile.allCases.flatMap(\.payloads) {
             XCTAssertTrue(payload.resourceName.hasPrefix("mock-workouts-"), payload.resourceName)
+        }
+    }
+
+    /// The progression-ready profile logs against two routines (#233): every
+    /// session names one, and bench press is prescribed at 3 × 3 — so the
+    /// three closing sessions of 60 kg × 5 meet the 2-for-2 rule of ADR-013,
+    /// and only they do.
+    func testProgressionReadySessionsCarryTheirRoutineTargets() throws {
+        let activities = try loader.activities(for: .progressionReady, from: .hevy)
+
+        XCTAssertFalse(activities.isEmpty)
+        XCTAssertTrue(activities.allSatisfy { $0.routineID != nil }, "a session without a routine")
+        XCTAssertTrue(activities.allSatisfy { $0.routineUpdatedAt != nil }, "a routine without a snapshot date")
+        let bench = try XCTUnwrap(
+            activities.first { $0.title == "Upper Body" }?.exercises.first { $0.title == "Bench Press (Barbell)" }
+        )
+        XCTAssertEqual(bench.sets.map(\.targetReps), [8, 3, 3, 3])
+        let row = try XCTUnwrap(
+            activities.first { $0.title == "Upper Body" }?.exercises.first { $0.title == "Bent Over Row (Barbell)" }
+        )
+        XCTAssertEqual(row.sets.map(\.targetReps), [8, 8, 8])
+    }
+
+    /// The plateau profile (#235) logs every session against one routine
+    /// that prescribes three of its four exercises — the fourth is the
+    /// not-checkable case, so it has no targets by design.
+    func testPlateauSessionsCarryTargetsForThreeOfFourExercises() throws {
+        let activities = try loader.activities(for: .plateau, from: .hevy)
+
+        XCTAssertEqual(activities.count, 16)
+        XCTAssertTrue(activities.allSatisfy { $0.routineID != nil }, "a session without a routine")
+        let newest = try XCTUnwrap(activities.first)
+        let targets = Dictionary(uniqueKeysWithValues: newest.exercises.map { ($0.title, $0.sets.map(\.targetReps)) })
+        XCTAssertEqual(targets["Squat (Barbell)"], [8, 3, 3, 3, 3])
+        XCTAssertEqual(targets["Bench Press (Barbell)"], [5, 5, 5])
+        XCTAssertEqual(targets["Lateral Raise (Dumbbell)"], [10, 10, 10])
+        XCTAssertEqual(targets["Seated Row (Cable)"], [nil, nil, nil])
+    }
+
+    /// Every plateau session starts at 12:00 UTC, like the cross-source
+    /// profiles: one wall clock keeps the day counts in every zone.
+    func testThePlateauProfileSharesOneWallClock() throws {
+        let clocks = Set(try loader.activities(for: .plateau, from: .hevy).map {
+            Calendar(identifier: .gregorian).dateComponents(in: .gmt, from: $0.startTime).hour
+        })
+        XCTAssertEqual(clocks, [12])
+    }
+
+    /// The other Hevy profiles log freely: no routine, no targets — the
+    /// common case, and the one the rule reads as not checkable.
+    func testTheOtherHevyProfilesCarryNoTargets() throws {
+        for profile in [MockWorkoutProfile.personA, .personB, .overreached, .mixed, .overreachedMixed] {
+            let activities = try loader.activities(for: profile, from: .hevy)
+            XCTAssertTrue(activities.allSatisfy { $0.routineID == nil }, profile.rawValue)
+            XCTAssertTrue(
+                activities.flatMap(\.exercises).flatMap(\.sets).allSatisfy { $0.targetReps == nil },
+                profile.rawValue
+            )
         }
     }
 
@@ -518,11 +576,41 @@ final class MockWorkoutLoaderTests: XCTestCase {
     /// still decode and still read correctly near UTC, and would only fail
     /// somewhere in the Pacific.
     func testTheCrossSourceProfilesShareOneWallClock() throws {
-        for profile in [MockWorkoutProfile.runner, .mixed, .overreachedMixed] {
+        for profile in [MockWorkoutProfile.runner, .mixed, .overreachedMixed, .progressionReady, .overreached, .plateau] {
             let clocks = Set(try loader.workouts(for: profile).map {
                 Self.utc.dateComponents([.hour, .minute, .second], from: $0.startTime)
             })
             XCTAssertEqual(clocks.count, 1, "\(profile.rawValue) spreads over \(clocks.count) times of day")
+        }
+    }
+
+    /// The strength profiles carry their endurance sessions on days that
+    /// already carry a lift (#262): no profile gains a training day, so the
+    /// count each one exists to prove — three, six, two — holds in every
+    /// zone and at every hour, and the recovery figures read all three
+    /// sources.
+    func testTheStrengthProfilesKeepTheirTrainingDaysWithCardioOnLiftDays() throws {
+        for (profile, days) in [(MockWorkoutProfile.progressionReady, 3), (.overreached, 6), (.plateau, 2)] {
+            for zone in Self.zones {
+                for hour in [0, 6, 12, 18, 23] {
+                    let calendar = Self.calendar(in: zone)
+                    let reference = calendar.startOfDay(for: now).addingTimeInterval(Double(hour) * 3_600 + 60)
+                    let workouts = try MockWorkoutLoader(bundle: Bundle(for: Workout.self), now: { reference })
+                        .workouts(for: profile)
+                    let week = RecoveryMetrics.lastSevenDaysSessions(
+                        in: workouts.map(WorkoutSummary.init(workout:)),
+                        now: reference,
+                        calendar: calendar
+                    )
+                    let day = { (summary: WorkoutSummary) in calendar.startOfDay(for: summary.startTime) }
+                    let lifts = Set(week.filter { $0.source == .hevy }.map(day))
+                    let cardio = Set(week.filter { $0.source.isEnduranceSource }.map(day))
+                    XCTAssertEqual(lifts.count, days, "\(profile.rawValue) at \(hour):01 in \(zone)")
+                    XCTAssertTrue(cardio.isSubset(of: lifts), "\(profile.rawValue): cardio on a day without a lift, \(zone)")
+                    XCTAssertEqual(Set(week.map(\.source)), [.hevy, .strava, .polar], "\(profile.rawValue) in \(zone)")
+                    XCTAssertNotNil(try recoveryMetrics(of: profile, atHour: hour, in: zone).averageHeartRate, profile.rawValue)
+                }
+            }
         }
     }
 

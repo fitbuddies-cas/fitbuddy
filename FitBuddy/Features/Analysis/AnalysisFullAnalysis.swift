@@ -12,7 +12,8 @@ enum AnalysisFullAnalysis {
     /// group to even out, a figure to move, two domains to separate (#186). A
     /// note is not one — it is prose in a card.
     static let actionableKinds: Set<AnalysisCard.Kind> = [
-        .progression, .recovery, .imbalance, .metric, .interference,
+        .progression,
+        .repProgression, .recovery, .imbalance, .metric, .interference,
     ]
 
     /// Open when no card is actionable: with thin data the full analysis is

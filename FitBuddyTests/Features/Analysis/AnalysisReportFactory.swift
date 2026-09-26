@@ -35,6 +35,15 @@ enum AnalysisReportFactory {
           "reasoning": "3 sessions at 60 kg x 5 with RPE 7 or lower."
         },
         {
+          "kind": "repProgression",
+          "exercise": "Lateral Raise (Dumbbell)",
+          "muscleGroup": "Shoulders",
+          "weightKg": 10,
+          "fromReps": 12,
+          "toReps": 14,
+          "reasoning": "Twelve clean reps for three sessions; the next dumbbell is too big a jump."
+        },
+        {
           "kind": "recovery",
           "reasoning": "Take a rest day before the next heavy session.",
           "suggestedRestHours": 48
@@ -112,7 +121,7 @@ enum AnalysisReportFactory {
     /// A model answer of each verdict.
     ///
     /// `insufficientData` is not one a model can send — the schema does not
-    /// offer it (ADR-013 §7) — so it maps to the thinnest answer a model does
+    /// offer it (ADR-014 §7) — so it maps to the thinnest answer a model does
     /// send for such a window.
     static func report(_ verdict: AnalysisVerdict) -> AnalysisReport {
         switch verdict {
@@ -133,6 +142,15 @@ enum AnalysisReportFactory {
                 fromKg: 60,
                 toKg: 62.5,
                 reasoning: "3 sessions at 60 kg x 5 with RPE 7 or lower."
+            )
+        case .repProgression:
+            return .repProgression(
+                exercise: "Lateral Raise (Dumbbell)",
+                muscleGroup: "Shoulders",
+                weightKg: 10,
+                fromReps: 12,
+                toReps: 14,
+                reasoning: "Twelve clean reps for three sessions; the next dumbbell is too big a jump."
             )
         case .recovery:
             return .recovery(reasoning: "Take a rest day before the next heavy session.", suggestedRestHours: 48)
@@ -187,6 +205,7 @@ enum AnalysisReportFactory {
         cards: [
             validatedCard(.recovery),
             validatedCard(.progression),
+            validatedCard(.repProgression),
             validatedCard(.imbalance),
             validatedCard(.metric),
             validatedCard(.interference),
@@ -205,6 +224,15 @@ enum AnalysisReportFactory {
                 fromKg: 60,
                 toKg: 62.5,
                 reasoning: "Five sessions at 60 kg with the reps held."
+            )
+        case .repProgression:
+            return .repProgression(
+                exercise: "Lateral Raise (Dumbbell)",
+                muscleGroup: .shoulders,
+                weightKg: 10,
+                fromReps: 12,
+                toReps: 14,
+                reasoning: "Twelve clean reps for three sessions; the next dumbbell is too big a jump."
             )
         case .recovery:
             return .recovery(
@@ -273,6 +301,75 @@ enum AnalysisReportFactory {
             ),
         ],
         summary: "Bench press held 60 kg × 5 for three sessions at RPE 7. Add 2.5 kg next session."
+    )
+
+    /// The working weight the `plateau` profile ends squat on.
+    static let plateauSquatKg = 97.5
+
+    /// What a model answers for `MockWorkoutProfile.plateau` (#235): one card
+    /// per exercise, each the recommendation its prompt line invites — and
+    /// with figures that are **not** the cache's where the validator replaces
+    /// them, so the assertion proves the replacement (lesson from #188).
+    ///
+    /// Squat: a load increase at the top of the band, from a rounded 97.6 kg.
+    /// Lateral raise: two more reps at a rounded 10.2 kg. Bench press and
+    /// seated row: load increases the 2-for-2 rule holds back — not met, and
+    /// not checkable — which the validator turns into notes.
+    static let plateau = AnalysisReport(
+        headline: "You're ready to progress.",
+        verdict: .progress,
+        lead: "Squat is ready for 105 kg, lateral raise for two more reps. Bench and rows stay where they are.",
+        cards: [
+            .progression(
+                exercise: "Squat (Barbell)",
+                muscleGroup: "Legs",
+                fromKg: plateauSquatKg + 0.1,
+                toKg: 105,
+                reasoning: "Every session beat the 3-rep target by two — take the full step to 105 kg."
+            ),
+            .repProgression(
+                exercise: "Lateral Raise (Dumbbell)",
+                muscleGroup: "Shoulders",
+                weightKg: 10.2,
+                fromReps: 12,
+                toReps: 14,
+                reasoning: "Twelve clean reps on the only dumbbell you log — earn the next one with reps."
+            ),
+            .progression(
+                exercise: "Bench Press (Barbell)",
+                muscleGroup: "Chest",
+                fromKg: 60,
+                toKg: 62.5,
+                reasoning: "Eight weeks at 60 kg — time to move on."
+            ),
+            .progression(
+                exercise: "Seated Row (Cable)",
+                muscleGroup: "Back",
+                fromKg: 52.5,
+                toKg: 55,
+                reasoning: "Rows rose every other week; keep going."
+            ),
+        ],
+        summary: "Squat progresses to 105 kg, lateral raise to 14 reps. Bench press has not beaten its target twice; rows carry no target."
+    )
+
+    /// The same profile with a squat step over the band's ceiling (#235): the
+    /// one progression is rejected, and a progress verdict with nothing left
+    /// behind it holds.
+    static let plateauOvershoot = AnalysisReport(
+        headline: "You're ready to progress.",
+        verdict: .progress,
+        lead: "Squat can take 110 kg.",
+        cards: [
+            .progression(
+                exercise: "Squat (Barbell)",
+                muscleGroup: "Legs",
+                fromKg: plateauSquatKg,
+                toKg: 110,
+                reasoning: "A big jump, but the reps are there."
+            ),
+        ],
+        summary: "Squat to 110 kg."
     )
 
     /// What a model might answer for `MockWorkoutProfile.overreached` when it

@@ -51,14 +51,14 @@ struct AnalysisReportEvidence: Equatable, Sendable {
     /// a card against, and a card in it is not validated.
     var weeklyMetrics: [MetricUnit: Double] = [:]
     /// Sessions of the resolved window that this run analyses, i.e. those in
-    /// the domains the profile covers — ADR-013 stage 1, first condition.
+    /// the domains the profile covers — ADR-014 stage 1, first condition.
     ///
     /// Not `AnalysisContext`'s count, which is the honest total of everything
     /// the app read; this one is what the model was shown. Zero by default, so
     /// a fixture that predates #227 states no data basis rather than a
     /// borrowed one.
     var sessionsInWindow = 0
-    /// Of those, the ones in the last seven days — ADR-013 stage 1, second
+    /// Of those, the ones in the last seven days — ADR-014 stage 1, second
     /// condition.
     ///
     /// Separate from `recovery.sessions`, which counts every domain because a

@@ -1,4 +1,4 @@
-# ADR-13: Verdict-Regel der App — Reihenfolge, Schwellen und die vierte Klasse «zu dünne Datenbasis»
+# ADR-014: Verdict-Regel der App — Reihenfolge, Schwellen und die vierte Klasse «zu dünne Datenbasis»
 
 **Status:** Accepted
 **Datum:** 2026-09-20
@@ -113,12 +113,12 @@ Nirgendwo steht eine `0` für eine Grösse, die es im Profil nicht gibt. Fehlt e
 |---|---|
 | **Headline** (App-Text, ersetzt den Modelltext) | `Not enough data to judge.` |
 | **Lead** (App-Text, ersetzt den Modelltext) | `Your logged training doesn't yet support a recommendation for or against more load. Keep training as before — the next analysis will have more to go on.` |
-| **Karten** | Keine `progression`- und keine `recovery`-Karte. Zugelassen sind `note`-Karten und Karten, die ausschliesslich gemessene Zahlen wiedergeben. |
+| **Karten** | Keine `progression`-, keine `repProgression`- und keine `recovery`-Karte, ebenso keine `metric`-Karte mit Zielwert (`to`). Zugelassen sind `note`-Karten und Karten, die ausschliesslich gemessene Zahlen wiedergeben (`imbalance`, `interference`). |
 | **Begründungs-Note** | Die App fügt **eine** `note` an erster Stelle ein, Titel `Why there's no verdict`, deren Text die greifende Bedingung benennt (zu wenige Sessions im Fenster / keine Session in den letzten 7 Tagen / keine Übung mit genug Sessions / keine Anstrengung erfasst). |
 
 Headline und Lead sind hier App-Text, nicht Modelltext — dieselbe Konstruktion wie `recoveryHeadline` / `recoveryLead`. Der Grund ist derselbe: Der Modell-Lead argumentiert für ein Urteil, das die App gerade zurückgenommen hat.
 
-Eine `progression`-Karte wäre ein Urteil und fällt deshalb weg; eine `recovery`-Karte wäre `recover` unter anderem Namen. Bleibt nichts übrig, zeigt der Screen null Karten — das Kartenband ist seit #177 für null bis vier Karten ausgelegt.
+Eine `progression`-Karte wäre ein Urteil und fällt deshalb weg — ebenso die `repProgression`-Karte aus US-17 ([ADR-013](ADR-013-progressionsband-je-muskelgruppe.md)), die mehr Wiederholungen statt mehr Last empfiehlt, und eine `metric`-Karte, die mit `to` einen Schritt nennt; eine `recovery`-Karte wäre `recover` unter anderem Namen. Bleibt nichts übrig, zeigt der Screen null Karten — das Kartenband ist seit #177 für null bis vier Karten ausgelegt.
 
 Der Lead nennt die fehlende Anstrengung bewusst **nicht**. Der einmalige Hinweis «mit erfasster Anstrengung wird die Analyse genauer» gehört zu #241 AC6 und erscheint genau einmal an seinem eigenen Ort; auf diesem Screen steht er allenfalls in der Begründungs-Note, wenn die fehlende Anstrengung tatsächlich die greifende Bedingung war.
 
@@ -129,6 +129,8 @@ Das Feld `verdict` **bleibt im Antwortschema** und wird von der App gelesen, üb
 `insufficientData` wird dem Modell **nicht** angeboten: Das Schema kennt dort weiterhin nur `progress`, `hold`, `recover`. Die vierte Klasse ist eine Aussage der App über ihre eigene Datenlage, nicht etwas, das ein Modell über sich selbst behaupten kann.
 
 Headline, Lead und Summary bleiben Modelltext, ausser in den Fällen, in denen die App das Verdict überschreibt — dort ersetzt sie sie, wie heute schon bei `recoveryHeadline` und `holdHeadline`.
+
+**Abgrenzung zu [ADR-013](ADR-013-progressionsband-je-muskelgruppe.md).** Band und 2-for-2-Bedingung prüfen einzelne Karten — wie gross ein Schritt sein darf und ob er überhaupt zulässig ist. Sie entscheiden nicht über das Verdict, und dieser ADR entscheidet nicht über die Karten. Eine abgestufte Progression-Karte ändert das Verdict nicht; umgekehrt macht ein `progress` der App keine Karte zulässig, die ADR-013 verwirft.
 
 ### 8. Worauf die Regel nicht beruht
 
@@ -162,7 +164,7 @@ Keine dieser Zahlen stammt aus einer Studie, einer Norm oder einem veröffentlic
 
 ### – Negativ
 
-- **`insufficientData` trägt vorerst viele Fälle.** Jeder Nutzer mit weniger als vier Sessions im Fenster und jeder, dessen Übungen noch keine vier Sessions haben, bekommt kein Urteil. Bei den Mock-Profilen und bei einem frisch verbundenen Polar-Konto (nur Trainings nach der Registrierung, [[ADR-11]]) ist das der Normalfall.
+- **`insufficientData` trägt vorerst viele Fälle.** Jeder Nutzer mit weniger als vier Sessions im Fenster und jeder, dessen Übungen noch keine vier Sessions haben, bekommt kein Urteil. Bei den Mock-Profilen und bei einem frisch verbundenen Polar-Konto (nur Trainings nach der Registrierung, [ADR-011](ADR-011-polar-als-dritte-quelle.md)) ist das der Normalfall.
 - **Ausdauer bekommt in v0 kein `progress`.** Ein reiner Läufer sieht «Ready to progress» nie. Das ist die direkte Folge davon, dass die App für Ausdauer keine der drei belegbaren Aussagen besitzt — und es macht #241 zur Voraussetzung dafür, dass US-15 sein Versprechen für Ausdauer einlöst.
 - **`recover` steht vor #241 auf einer Ruhetag-Zählung.** Genau die Kennzahl, die dieser ADR als Belastungsmass verwirft, ist bis dahin der einzige Auslöser. Sie bleibt nur, weil sie als *Ruhetag*-Aussage wahr ist und weil US-3 AC6 sie verlangt.
 - **Das Modell verliert das Verdict.** Es formuliert nur noch. Headline und Lead müssen in vier statt zwei Fällen durch App-Text ersetzt werden können, und der Modelltext wird häufiger verworfen — bezahlte Tokens, die nicht auf den Screen kommen. Das Kartenschema und die Karten-Validierung aus #175/#177 bleiben davon unberührt.

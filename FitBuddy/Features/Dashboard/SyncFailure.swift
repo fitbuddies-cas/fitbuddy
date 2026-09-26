@@ -10,6 +10,10 @@ import Foundation
 enum SyncFailure: Equatable {
     /// The request never reached Hevy (no connection, DNS, timeout).
     case offline
+    /// The source answered, but with a certificate FitBuddy must not trust
+    /// (failed pinning, #153) — the network or the device clock, not the
+    /// source, is the problem.
+    case untrustedConnection
     /// Hevy answered 5xx — the app is fine, the service is not.
     case serviceUnavailable
     /// HTTP 429, with Hevy's `Retry-After` in seconds when it sent one.
@@ -46,6 +50,8 @@ enum SyncFailure: Equatable {
             return nil
         case .networkUnavailable:
             self = .offline
+        case .untrustedConnection:
+            self = .untrustedConnection
         case .serviceUnavailable:
             self = .serviceUnavailable
         case .rateLimited(let retryAfter):
@@ -81,6 +87,8 @@ enum SyncFailure: Equatable {
             return "connection needs renewing"
         case .offline:
             return "no connection"
+        case .untrustedConnection:
+            return "connection not trusted"
         case .serviceUnavailable:
             return "service unavailable"
         case .rateLimited(let retryAfter):
@@ -113,6 +121,8 @@ enum SyncFailure: Equatable {
             return "A connected source needs renewing. Reconnect it in Settings."
         case .offline:
             return "No connection. Your cached data is still here."
+        case .untrustedConnection:
+            return "The secure connection could not be verified. Check the device's date and time or switch networks, then try again."
         case .serviceUnavailable:
             return "Hevy is unavailable right now. Your cached data is still here."
         case .rateLimited(let retryAfter):
@@ -142,6 +152,8 @@ enum SyncFailure: Equatable {
             return "exclamationmark.arrow.circlepath"
         case .offline:
             return "antenna.radiowaves.left.and.right.slash"
+        case .untrustedConnection:
+            return "lock.trianglebadge.exclamationmark"
         case .serviceUnavailable, .rateLimited:
             return "exclamationmark.icloud"
         case .keychainUnavailable:

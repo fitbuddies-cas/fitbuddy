@@ -192,7 +192,7 @@ final class AnalysisViewModelTests: XCTestCase {
 
         await sut.start()
 
-        // Two sessions in the window is below ADR-013 stage 1, so the run
+        // Two sessions in the window is below ADR-014 stage 1, so the run
         // has no verdict and says which condition produced that (#227).
         // Before #227 this was a `hold` with the model's own lead.
         let expected = ValidatedAnalysisReport(
@@ -570,12 +570,15 @@ final class AnalysisViewModelTests: XCTestCase {
         )
     }
 
+    /// `sessions` sessions at the same weight, three days apart, each beating
+    /// its routine target by two reps — so the 2-for-2 rule of ADR-013 is met
+    /// and a progression card on the movement is one the validator can keep.
     private static func progression(
         _ summary: ExerciseSummary,
         weightKg: Double,
         reps: Int,
         daysAgo: Int,
-        sessions: Int = 1
+        sessions: Int = TwoForTwoCondition.requiredSessions
     ) -> ExerciseProgression {
         let sets = (0..<3).map { index in
             SetDetail(
@@ -585,14 +588,16 @@ final class AnalysisViewModelTests: XCTestCase {
                 reps: reps,
                 distanceMeters: nil,
                 durationSeconds: nil,
-                rpe: nil
+                rpe: nil,
+                targetReps: reps - TwoForTwoCondition.requiredMargin
             )
         }
-        // Oldest first, the most recent one `daysAgo` back. More than one
-        // only where a test needs the movement to be decidable for the
-        // verdict rule (#227): four sessions at the same weight are a
-        // plateau, which leaves the cards alone.
-        let entries = (0..<max(1, sessions)).reversed().map { index in
+        // Oldest first, the most recent one `daysAgo` back. Two by default,
+        // the pair the 2-for-2 rule reads (#233); more only where a test
+        // needs the movement to be decidable for the verdict rule (#227):
+        // four sessions at the same weight are a plateau, which leaves the
+        // cards alone.
+        let entries = (0..<max(TwoForTwoCondition.requiredSessions, sessions)).reversed().map { index in
             ExerciseHistoryEntry(
                 workoutID: "w-\(daysAgo + index * 3)",
                 sessionStart: reference.addingTimeInterval(-Double(daysAgo + index * 3) * 86_400),

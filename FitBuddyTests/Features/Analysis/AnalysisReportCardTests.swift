@@ -15,6 +15,7 @@ final class AnalysisReportCardTests: XCTestCase {
                     metrics: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: nil)
                 ),
                 .progression(exercise: "Bench Press", muscleGroup: .chest, fromKg: 60, toKg: 62.5, reasoning: "Clean."),
+                .repProgression(exercise: "Row", muscleGroup: .back, weightKg: 50, fromReps: 8, toReps: 10, reasoning: "Reps."),
                 .imbalance(groupA: .chest, perWeekA: 3, groupB: .legs, perWeekB: 0.8, reasoning: "Add legs."),
                 .metric(
                     label: "Weekly distance",
@@ -71,6 +72,23 @@ final class AnalysisReportCardTests: XCTestCase {
             toKg: 62.5,
             reasoning: "Clean overload signal."
         ))
+    }
+
+    func testDecodesAStoredRepProgressionCard() throws {
+        let card = try decode("""
+        {"kind": "repProgression", "exercise": "Lateral Raise (Dumbbell)", "muscleGroup": "shoulders",
+         "weightKg": 10, "fromReps": 12, "toReps": 14, "reasoning": "Earn the next dumbbell with reps."}
+        """)
+
+        XCTAssertEqual(card, .repProgression(
+            exercise: "Lateral Raise (Dumbbell)",
+            muscleGroup: .shoulders,
+            weightKg: 10,
+            fromReps: 12,
+            toReps: 14,
+            reasoning: "Earn the next dumbbell with reps."
+        ))
+        XCTAssertTrue(card.backsProgress, "more reps at the same weight is a step forward")
     }
 
     func testDecodesAStoredRecoveryCard() throws {

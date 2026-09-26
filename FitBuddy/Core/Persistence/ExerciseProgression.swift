@@ -75,11 +75,11 @@ struct ExerciseProgression: Equatable, Sendable {
     /// beat, so "not plateaued" would claim progress nobody measured.
     ///
     /// The same condition `isPlateaued` guards on, named once so the prompt
-    /// line, the report evidence and ADR-013 stage 2 all read it here.
+    /// line, the report evidence and ADR-014 stage 2 all read it here.
     var isPlateauDecidable: Bool { points.count > Self.plateauSessionCount }
 
     /// Whether the most recent session set the window's best estimate —
-    /// ADR-013 stage 4, the one statement about a rising movement the app can
+    /// ADR-014 stage 4, the one statement about a rising movement the app can
     /// prove from its own figures.
     ///
     /// `false` without points: no session, no best.

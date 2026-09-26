@@ -1,13 +1,13 @@
-# ADR-7: Multi-Provider-LLM (Claude / Gemini / Mistral) im BYO-Key-Modell
+# ADR-007: Multi-Provider-LLM (Claude / Gemini / Mistral) im BYO-Key-Modell
 
-**Status:** Vorgeschlagen (Team-Review ausstehend; finale Verhältnismässigkeitsentscheidung beim Datenschutz-Verantwortlichen der BFH)
+**Status:** Proposed — die Entscheidung ist mit #78/#83/#79 bereits umgesetzt; Team-Review und die finale Verhältnismässigkeitsentscheidung beim Datenschutz-Verantwortlichen der BFH stehen aus
 **Datum:** 2026-08-21
 **Treiber-QA:** Security / Privacy (QA-1), Reliability (Analyse-Fallback, #79)
 **Umgesetzt mit:** #78 (Key-Erfassung), #83 (Settings), #79 (Fallback-Kette + Provider-Anzeige)
 
 ## Kontext
 
-Mit #78 (Multi-Provider-Key-Eingabe im Onboarding) und #79 (Fallback-Kette im `InferenceService`) kann FitBuddy Trainingsdaten neu nicht mehr nur an Anthropic, sondern auch an Google (Gemini) und Mistral AI übermitteln. [[ADR-005]] begründet die Drittlandübermittlung sehr spezifisch für Anthropic (Commercial Terms, DPA inkl. SCCs + Swiss Addendum, Anthropic Ireland Ltd als Vertragspartner, vertragliches Trainings-Verbot). Für Google und Mistral fehlte diese Prüfung bisher — die Konformitätsprüfung in #78 fordert sie mit derselben Prüftiefe ein, bevor der erweiterte Consent-Screen ausgeliefert wird.
+Mit #78 (Multi-Provider-Key-Eingabe im Onboarding) und #79 (Fallback-Kette im `InferenceService`) kann FitBuddy Trainingsdaten neu nicht mehr nur an Anthropic, sondern auch an Google (Gemini) und Mistral AI übermitteln. [ADR-005](ADR-005-claude-api-usa-with-dpa.md) begründet die Drittlandübermittlung sehr spezifisch für Anthropic (Commercial Terms, DPA inkl. SCCs + Swiss Addendum, Anthropic Ireland Ltd als Vertragspartner, vertragliches Trainings-Verbot). Für Google und Mistral fehlte diese Prüfung bisher — die Konformitätsprüfung in #78 fordert sie mit derselben Prüftiefe ein, bevor der erweiterte Consent-Screen ausgeliefert wird.
 
 Das BYO-Key-Modell bleibt unverändert: Jeder User erstellt seinen eigenen Provider-Account, akzeptiert dabei dessen API-Bedingungen und ist selbst «Customer» des jeweiligen Providers. Keys liegen ausschliesslich im iOS Keychain (`kSecAttrAccessibleWhenUnlockedThisDeviceOnly`); persistiert wird zusätzlich nur die Prioritätsreihenfolge (UserDefaults, kein Key-Material).
 
@@ -29,11 +29,11 @@ Das BYO-Key-Modell bleibt unverändert: Jeder User erstellt seinen eigenen Provi
 
 FitBuddy erlaubt im PoC bis zu drei LLM-Provider (Claude, Gemini, Mistral) im strikten BYO-Key-Modell, unter folgenden Bedingungen:
 
-1. **Rechtsgrundlage bleibt der Provider-Vertrag des Users:** Wie bei Anthropic ([[ADR-005]]) ist der User selbst Customer von Google bzw. Mistral; sein eigener API-Vertrag (inkl. der dortigen DPA/SCC-Mechanismen) trägt die Übermittlung. Das Team schliesst keinen eigenen Vertrag mit einem der Provider.
+1. **Rechtsgrundlage bleibt der Provider-Vertrag des Users:** Wie bei Anthropic ([ADR-005](ADR-005-claude-api-usa-with-dpa.md)) ist der User selbst Customer von Google bzw. Mistral; sein eigener API-Vertrag (inkl. der dortigen DPA/SCC-Mechanismen) trägt die Übermittlung. Das Team schliesst keinen eigenen Vertrag mit einem der Provider.
 2. **Consent- und Datenschutztext nennen alle möglichen Empfänger** (Anthropic, Google, Mistral AI) inkl. Drittland-Hinweis USA für Anthropic und Google sowie EU-Verarbeitung für Mistral — und stellen klar, dass nur die Provider Daten erhalten, für die der User einen Key hinterlegt hat (US-4 AC4). Die Consent-Version wird angehoben, sodass bestehende Tester erneut einwilligen.
 3. **Mistral-Experiment-Tier-Risiko wird adressiert:** Da der kostenlose Mistral-Tier per Default trainiert, wird in der Dokumentation/Onboarding-Hilfe empfohlen, Pay-as-you-go zu aktivieren oder das Trainings-Opt-out in der Mistral Admin Console zu setzen (offener Punkt: Hinweis direkt im UI, sobald #79 den Provider aktiv nutzt).
-4. **Kein Team-Key, für keinen Provider** — die Architekturpflicht aus [[ADR-004]]/[[ADR-005]] gilt unverändert für Google und Mistral.
-5. **Alle drei Provider werden tatsächlich aufgerufen (seit #79):** Der `InferenceService` ist ein Orchestrator über drei `LLMProviderClient`-Implementierungen (`AnthropicClient`, `GeminiClient`, `MistralClient`) und arbeitet die Prioritätsreihenfolge ab; jeder Fehler eines Providers führt zum nächsten. Für Gemini wird die Generative Language API (`generativelanguage.googleapis.com`) genutzt — das Produkt, für das der AI-Studio-Key des Users ausgestellt ist. Google Vertex AI `europe-west6`, in [[ADR-005]] als EU-Hosting-Pfad vor v1.0 genannt, verlangt Google-Cloud-Credentials statt eines API-Keys und ist damit eine v1-Migration, kein Host-Tausch im BYO-Key-Modell.
+4. **Kein Team-Key, für keinen Provider** — die Architekturpflicht aus [ADR-004](ADR-004-no-backend-proxy-poc.md)/[ADR-005](ADR-005-claude-api-usa-with-dpa.md) gilt unverändert für Google und Mistral.
+5. **Alle drei Provider werden tatsächlich aufgerufen (seit #79):** Der `InferenceService` ist ein Orchestrator über drei `LLMProviderClient`-Implementierungen (`AnthropicClient`, `GeminiClient`, `MistralClient`) und arbeitet die Prioritätsreihenfolge ab; jeder Fehler eines Providers führt zum nächsten. Für Gemini wird die Generative Language API (`generativelanguage.googleapis.com`) genutzt — das Produkt, für das der AI-Studio-Key des Users ausgestellt ist. Google Vertex AI `europe-west6`, in [ADR-005](ADR-005-claude-api-usa-with-dpa.md) als EU-Hosting-Pfad vor v1.0 genannt, verlangt Google-Cloud-Credentials statt eines API-Keys und ist damit eine v1-Migration, kein Host-Tausch im BYO-Key-Modell.
 6. **Der Analyse-Screen weist den antwortenden Provider aus:** Während des Laufs steht sein Name im Ladehinweis, das Ergebnis trägt ein Provider-Badge, und nach einem Fallback erscheint zusätzlich ein Hinweis («Claude unavailable — answered by Gemini»). Ohne diese Anzeige wüsste der User nicht, an welchen Empfänger seine Gesundheitsdaten tatsächlich gegangen sind — das wäre ein Transparenzbruch gegenüber dem Consent-Text.
 
 ## Konsequenzen
@@ -43,7 +43,7 @@ FitBuddy erlaubt im PoC bis zu drei LLM-Provider (Claude, Gemini, Mistral) im st
 - Analyse-Verfügbarkeit steigt: Fällt ein Provider aus oder ist das Guthaben aufgebraucht, greift die Fallback-Kette (#79) statt eines harten Fehlers.
 - Für User mit Standort Schweiz gilt bei Gemini das Paid-Services-Datenregime (kein Training) auch im Free Tier — ausdrücklich in den Google-Terms verankert.
 - Mistral als EU-Provider senkt das Drittland-Risiko gegenüber der reinen Anthropic-Lösung; für Mistral entfällt der USA-Hinweis.
-- BYO-Key-Modell und Keychain-Architektur ([[ADR-003]], [[ADR-004]]) bleiben unverändert — kein neuer Vertrags- oder Infrastrukturaufwand für das Team.
+- BYO-Key-Modell und Keychain-Architektur ([ADR-003](ADR-003-keychain-this-device-only.md), [ADR-004](ADR-004-no-backend-proxy-poc.md)) bleiben unverändert — kein neuer Vertrags- oder Infrastrukturaufwand für das Team.
 
 ### - Negativ
 
@@ -65,7 +65,7 @@ FitBuddy erlaubt im PoC bis zu drei LLM-Provider (Claude, Gemini, Mistral) im st
 | ~~Hinweis «v0 analysiert nur mit Claude» aus Schritt 3 entfernen~~ — mit #79 entfernt; `LLMProvider.isCallable` und `providerNotSupportedYet` sind gelöscht. **(geschlossen)** | — | — |
 | Einseitige Risikonotiz (PoC) um Google/Mistral erweitern | Mittel | vor v1.0 |
 | **Verhältnismässigkeits-Freigabe durch Datenschutz-Verantwortlichen der BFH einholen → Status auf «Accepted» heben** | **Hoch** | **vor Merge von #79** |
-| Cert-Pinning-Scope in [[ADR-004]] auf `generativelanguage.googleapis.com` und `api.mistral.ai` erweitern — Pinning ist bisher für keinen Host umgesetzt (QA-1) | Hoch | Sprint 2 / vor TestFlight |
+| ~~Cert-Pinning-Scope in [ADR-004](ADR-004-no-backend-proxy-poc.md) auf `generativelanguage.googleapis.com` und `api.mistral.ai` erweitern~~ — mit #153 für beide Hosts umgesetzt, `docs/CERTIFICATE-PINNING.md`. **(geschlossen)** | — | — |
 
 ---
 
@@ -79,4 +79,4 @@ FitBuddy erlaubt im PoC bis zu drei LLM-Provider (Claude, Gemini, Mistral) im st
 
 **Entscheidung:** Mit #178 ist die Sperre entfernt. Die Fallback-Kette schreibt keinen Zeitstempel mehr. Ein neuer Durchlauf ist direkt nach dem vorherigen möglich; parallel laufen kann weiterhin nur einer, weil der Button während eines laufenden Durchlaufs gesperrt ist.
 
-**Konsequenzen:** Die Frage, ob ein Durchlauf mit Fallback die Sperre pro Provider oder pro Durchlauf setzt, entfällt. Die Kosten jedes Durchlaufs trägt der Account des Users beim jeweils antwortenden Provider; **ein Spending Limit im Provider-Account bleibt Pflicht** ([[ADR-004]]), denn eine client-seitige Sperre war nie ein Kostenlimit.
+**Konsequenzen:** Die Frage, ob ein Durchlauf mit Fallback die Sperre pro Provider oder pro Durchlauf setzt, entfällt. Die Kosten jedes Durchlaufs trägt der Account des Users beim jeweils antwortenden Provider; **ein Spending Limit im Provider-Account bleibt Pflicht** ([ADR-004](ADR-004-no-backend-proxy-poc.md)), denn eine client-seitige Sperre war nie ein Kostenlimit.

@@ -507,6 +507,13 @@ final class StravaConnectorTests: XCTestCase {
         await assertFetchThrows(.networkUnavailable)
     }
 
+    func testRefreshCertificateFailureIsUntrustedConnection() async throws {
+        try await sut.connect(credentials: Self.expiringPair)
+        await oauth.setRefreshResult(.failure(StravaOAuthError.untrustedConnection))
+
+        await assertFetchThrows(.untrustedConnection)
+    }
+
     func testRefreshServerErrorIsServiceUnavailable() async throws {
         try await sut.connect(credentials: Self.expiringPair)
         await oauth.setRefreshResult(.failure(StravaOAuthError.unexpectedStatus(503)))
@@ -547,6 +554,12 @@ final class StravaConnectorTests: XCTestCase {
     func testTransportFailureMapsToNetworkUnavailable() async {
         StubURLProtocol.handler = { _ in throw URLError(.notConnectedToInternet) }
         await assertFetchThrows(.networkUnavailable)
+    }
+
+    /// A failed certificate check (pinning, #153) must not read as offline.
+    func testCertificateFailureMapsToUntrustedConnection() async {
+        StubURLProtocol.handler = { _ in throw URLError(.serverCertificateUntrusted) }
+        await assertFetchThrows(.untrustedConnection)
     }
 
     func testMalformedBodyMapsToInvalidResponse() async {

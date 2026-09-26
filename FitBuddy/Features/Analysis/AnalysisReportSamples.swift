@@ -62,7 +62,7 @@ enum AnalysisReportSamples {
             """
     )
 
-    /// The fourth verdict class (#227, ADR-013 §6): the app's headline, the
+    /// The fourth verdict class (#227, ADR-014 §6): the app's headline, the
     /// app's lead and the note naming the condition that fired — the same
     /// shape as design 3.4b, which the mock draws with a `hold`.
     static let insufficientData = ValidatedAnalysisReport(
@@ -97,6 +97,17 @@ enum AnalysisReportSamples {
         fromKg: 80,
         toKg: 82.5,
         reasoning: "Estimated 1RM up 4 % in 4 weeks, reps held across all sets."
+    )
+
+    /// US-17 AC3 (#234): the lever where no load step fits — two more reps
+    /// at the same dumbbell.
+    static let repProgressionCard = AnalysisReportCard.repProgression(
+        exercise: "Lateral Raise (Dumbbell)",
+        muscleGroup: .shoulders,
+        weightKg: 10,
+        fromReps: 12,
+        toReps: 14,
+        reasoning: "Twelve clean reps for three sessions and the next dumbbell is a 20 % jump — earn it with reps first."
     )
 
     static let imbalanceCard = AnalysisReportCard.imbalance(

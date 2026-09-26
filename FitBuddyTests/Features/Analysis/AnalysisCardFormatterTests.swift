@@ -22,6 +22,20 @@ final class AnalysisCardFormatterTests: XCTestCase {
         XCTAssertEqual(AnalysisCardFormatter.delta(fromKg: 60, toKg: 62.125, locale: english), "+2.13 kg")
     }
 
+    // MARK: - Reps (#234)
+
+    func testRepsArePluralisedAndTheDeltaSigned() {
+        XCTAssertEqual(AnalysisCardFormatter.reps(8), "8 reps")
+        XCTAssertEqual(AnalysisCardFormatter.reps(1), "1 rep")
+        XCTAssertEqual(AnalysisCardFormatter.repDelta(fromReps: 8, toReps: 10), "+2 reps")
+        XCTAssertEqual(AnalysisCardFormatter.repDelta(fromReps: 8, toReps: 9), "+1 rep")
+        XCTAssertEqual(AnalysisCardFormatter.repDelta(fromReps: 10, toReps: 8), "\u{2212}2 reps")
+    }
+
+    func testTheHeldWeightReadsAsAt() {
+        XCTAssertEqual(AnalysisCardFormatter.atWeight(22.5), "at 22.5 kg")
+    }
+
     // MARK: - Delta
 
     func testDeltaIsSignedAndInKilograms() {

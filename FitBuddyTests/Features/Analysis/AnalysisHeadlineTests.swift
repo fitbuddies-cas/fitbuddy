@@ -7,7 +7,7 @@ final class AnalysisHeadlineTests: XCTestCase {
         XCTAssertEqual(AnalysisHeadline.text(for: .progress), "You're ready to progress.")
         XCTAssertEqual(AnalysisHeadline.text(for: .recover), "Recover this week.")
         XCTAssertEqual(AnalysisHeadline.text(for: .hold), "Hold steady this week.")
-        // ADR-013 §6, word for word.
+        // ADR-014 §6, word for word.
         XCTAssertEqual(AnalysisHeadline.text(for: .insufficientData), "Not enough data to judge.")
     }
 

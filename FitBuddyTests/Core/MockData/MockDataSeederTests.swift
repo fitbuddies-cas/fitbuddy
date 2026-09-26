@@ -170,6 +170,36 @@ final class MockDataSeederTests: XCTestCase {
         )
     }
 
+    /// Seeding replaces the whole window, not only the sources the new profile
+    /// happens to have. Switching the scheme from `mixed` to a Hevy-only
+    /// profile without `-fbResetState` used to leave the Strava runs behind,
+    /// so the basis line named two sources for a one-source profile.
+    func testSeedingAProfileDropsTheSourcesItDoesNotCarry() async throws {
+        let store = WorkoutStore(modelContainer: container)
+
+        await MockDataSeeder.seedIfRequested(
+            container: container,
+            launchArguments: ["-fbSeedMockData", "mixed"],
+            timestamps: timestamps,
+            now: { self.reference }
+        )
+        let seededStrava = try await store.workoutCount(from: .strava)
+        XCTAssertGreaterThan(seededStrava, 0, "the mixed profile has to seed Strava first")
+
+        await MockDataSeeder.seedIfRequested(
+            container: container,
+            launchArguments: ["-fbSeedMockData", "person-a"],
+            timestamps: timestamps,
+            now: { self.reference }
+        )
+
+        let summaries = try await store.workoutSummaries(since: .distantPast)
+        XCTAssertEqual(Set(summaries.map(\.source)), [.hevy])
+        let survivingStrava = try await store.workoutCount(from: .strava)
+        XCTAssertEqual(survivingStrava, 0)
+        XCTAssertEqual(summaries.count, try MockWorkoutLoader().activities(for: .personA).count)
+    }
+
     func testWithoutTheArgumentNothingIsWritten() async throws {
         let store = WorkoutStore(modelContainer: container)
 

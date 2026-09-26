@@ -1,4 +1,4 @@
-# ADR-4: Kein Backend-Proxy im PoC — Direkter API-Call vom iOS-Client
+# ADR-004: Kein Backend-Proxy im PoC — Direkter API-Call vom iOS-Client
 
 **Status:** Accepted
 **Datum:** 2026-06-03
@@ -40,12 +40,12 @@ Wir verzichten im PoC auf einen Backend-Proxy. Sowohl Hevy- als auch Claude-API-
 
 ### - Negativ
 
-- **Claude-API-Key liegt auf dem Endgerät:** Bei Jailbreak / forensischer Geräteanalyse exponiert; es gibt keinen serverseitigen Kill-Switch ([[ADR-3]]-Konsequenz). Realistische Bedrohung im TestFlight-Demo-Kontext gering, aber in v1.0 nicht tolerierbar.
+- **Claude-API-Key liegt auf dem Endgerät:** Bei Jailbreak / forensischer Geräteanalyse exponiert; es gibt keinen serverseitigen Kill-Switch ([ADR-003](ADR-003-keychain-this-device-only.md)-Konsequenz). Realistische Bedrohung im TestFlight-Demo-Kontext gering, aber in v1.0 nicht tolerierbar.
 - **Kosten-Exposure ohne Spending-Limit:** Eine client-seitige Sperre ist grundsätzlich bypassbar via Jailbreak oder Proxy und taugt deshalb nicht als Kostenlimit. Der ursprünglich vorgesehene 6h-Cooldown ist mit #117 durch eine 60-s-Doppeltipp-Sperre ersetzt: Sie verhindert versehentliche Mehrfach-Calls, mehr soll sie nicht. **Pflicht-Massnahme (unverändert):** Anthropic Spending Limit im Console-Account konfigurieren, bevor die ersten TestFlight-Tester Zugang erhalten. Ohne Spending Limit kann ein einzelner missbrauchter Key unkontrollierte Kosten auslösen — im BYO-Key-Modell auf Rechnung des Users, der ihn beschafft hat.
 - **Rate-Limit-Sharing bei Multi-User-TestFlight:** Wenn mehrere Tester denselben Demo-Anthropic-Account nutzen (z. B. für CAS-Präsentation), teilen sich alle Tester das Account-Level-Rate-Limit. Ein Tester, der 5 Calls in Folge macht, blockiert alle anderen bis zum Ablauf des Account-Rate-Limits. **Mitigation:** Für Demo-Phase jeden Tester mit eigenem Anthropic-Key ausstatten oder Cloudflare AI Gateway mit per-User-Rate-Limiting.
-- **Certificate Pinning nicht optional:** Ohne Certificate Pinning genügt ein MITM-Proxy (Charles, mitmproxy) im CAS-Kursraum-WLAN, um API-Keys im Klartext abzugreifen. **Implementierungs-Pflicht in Sprint 2:** Public-Key-Pinning für `api.anthropic.com` und `api.hevyapp.com` via `URLAuthenticationChallenge`. Bei Zertifikats-Rotation Backup-Pin vorsehen.
+- **Certificate Pinning nicht optional:** Ohne Certificate Pinning genügt ein MITM-Proxy (Charles, mitmproxy) im CAS-Kursraum-WLAN, um API-Keys im Klartext abzugreifen. **Umgesetzt mit #153:** deklarativ über `NSPinnedDomains` in der `Info.plist` (nicht per `URLAuthenticationChallenge` — das System prüft vor jedem Handshake, kein Code-Pfad kann es vergessen) für alle sieben Hosts, an die ein Nutzer-Geheimnis geht: `api.hevyapp.com`, `api.anthropic.com`, `generativelanguage.googleapis.com`, `api.mistral.ai`, `www.strava.com`, `www.polaraccesslink.com`, `polarremote.com`. Gepinnt sind die **Root-CAs** (SPKI-SHA256) mit allen Backup-Roots des Anbieters — nicht Leaf oder Intermediate, weil Let's Encrypt und Google Trust Services ihre Intermediates pro Ausstellung rotieren. Ein Pin-Fehler ist fail closed und erscheint dem Nutzer als «connection not trusted». Herleitung, Prüfung, manueller mitmproxy-Test und Rotationsablauf: [`docs/CERTIFICATE-PINNING.md`](../CERTIFICATE-PINNING.md).
 - **Keine Betriebsübersicht:** Ohne Proxy gibt es keine zentrale Log-Übersicht. Fehler (API-Down, Rate-Limit, 401) sind nur im Xcode-Debugger oder via On-Device-Logging sichtbar.
-- **Vor v1.0 ist die Migration auf Bedrock oder einen Proxy zwingend** — Aufwand ist verschoben, nicht eingespart. Die Bedrock-Migration (AWS Bedrock `eu-central-1`) ist in [[ADR-5]] spezifiziert und kostet realistisch 2–3 Sprints.
+- **Vor v1.0 ist die Migration auf Bedrock oder einen Proxy zwingend** — Aufwand ist verschoben, nicht eingespart. Die Bedrock-Migration (AWS Bedrock `eu-central-1`) ist in [ADR-005](ADR-005-claude-api-usa-with-dpa.md) spezifiziert und kostet realistisch 2–3 Sprints.
 - **KEIN gemeinsamer Team-Key für externe Tester (Architekturpflicht):** Stellt das Team einen eigenen Anthropic-Key für Demos oder externe CAS-Tester bereit, wird das Team zum Anthropic-«Customer» — es trägt die Kosten und muss die Gesundheitsdaten Dritter vertraglich absichern (DPA, DSFA, Controller-Pflichten kommen vollständig zurück). Diese Pflichten sind für einen 3-Monats-PoC nicht tragbar und werden durch das BYO-Key-Modell bewusst vermieden. **Regel:** Jeder Tester beschafft und finanziert seinen eigenen Anthropic-Account.
 
 ---
@@ -56,14 +56,14 @@ Wir verzichten im PoC auf einen Backend-Proxy. Sowohl Hevy- als auch Claude-API-
 |---|---|---|
 | ~~AUP-Status dokumentieren~~ — in Kontext dieses ADR dokumentiert; kein Support-Gate erforderlich. **(geschlossen)** | — | — |
 | **Anthropic Spending Limit im Console-Account setzen (vor erstem TestFlight-Build mit echten Usern)** | **Kritisch** | **Sprint 1** |
-| **Certificate Pinning für `api.anthropic.com` + `api.hevyapp.com` implementieren** | **Hoch** | **Sprint 2** |
+| ~~Certificate Pinning für `api.anthropic.com` + `api.hevyapp.com` implementieren~~ — mit #153 für alle sieben Hosts über `NSPinnedDomains` umgesetzt, siehe `docs/CERTIFICATE-PINNING.md`. **(geschlossen)** | — | — |
 | **Cloudflare AI Gateway als Plan-B vorbereiten (Konfiguration dokumentieren, nicht aktivieren)** | Hoch | Sprint 1 |
-| Account-Inhaber des Anthropic Commercial-Accounts festlegen (BFH, Privatperson, Team-Mitglied) — wirkt sich auf Controller-Status aus ([[ADR-5]]) | Hoch | Sprint 1 |
+| Account-Inhaber des Anthropic Commercial-Accounts festlegen (BFH, Privatperson, Team-Mitglied) — wirkt sich auf Controller-Status aus ([ADR-005](ADR-005-claude-api-usa-with-dpa.md)) | Hoch | Sprint 1 |
 | Demo-Strategie für Rate-Limits klären: eigene Keys pro Tester oder Cloudflare Gateway mit User-Isolation | Mittel | Sprint 3 |
 
 ---
 
-*Korrektur 2026-06-03: AUP-Offener-Punkt als geschlossen markiert (im Kontext dokumentiert); «Kein Team-Key für externe Tester» als Architekturpflicht ergänzt (BYO-Key-Konsistenz mit ADR-5).*
+*Korrektur 2026-06-03: AUP-Offener-Punkt als geschlossen markiert (im Kontext dokumentiert); «Kein Team-Key für externe Tester» als Architekturpflicht ergänzt (BYO-Key-Konsistenz mit ADR-005).*
 
 ---
 

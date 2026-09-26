@@ -52,6 +52,7 @@ enum AccessibilityID {
         static let clientSecretField = "stravaCredentials.clientSecretField"
         static let saveButton = "stravaCredentials.saveButton"
         static let errorBanner = "stravaCredentials.errorBanner"
+        static let setupGuideLink = "stravaCredentials.setupGuideLink"
     }
 
     enum StravaConnection {
@@ -59,6 +60,7 @@ enum AccessibilityID {
         static let connectButton = "stravaConnection.connectButton"
         static let disconnectButton = "stravaConnection.disconnectButton"
         static let credentialsLink = "stravaConnection.credentialsLink"
+        static let setupGuideLink = "stravaConnection.setupGuideLink"
         static let errorBanner = "stravaConnection.errorBanner"
     }
 
@@ -133,6 +135,8 @@ enum AccessibilityID {
         /// Every card of a kind carries its kind's identifier — the tests ask
         /// whether a kind is on screen, not which of its cards.
         static let progressionCard = "analysis.progressionCard"
+        /// The rep progression card (US-17 AC3, #234).
+        static let repProgressionCard = "analysis.repProgressionCard"
         static let recoveryCard = "analysis.recoveryCard"
         static let imbalanceCard = "analysis.imbalanceCard"
         /// The generic metric card and the interference card (US-15, #186).

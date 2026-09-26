@@ -3,31 +3,31 @@ import Foundation
 /// The app's own verdict, derived from the figures it computed itself
 /// (US-16 AC3/AC6, #227).
 ///
-/// **The specification is `docs/adr/ADR-013-verdict-regel-der-app.md`** — the
+/// **The specification is `docs/adr/ADR-014-verdict-regel-der-app.md`** — the
 /// order of the stages, every threshold and the wording of the fourth class
 /// are decided there, not here. The two numbers this file needs are read from
 /// where the rest of the app already keeps them
 /// (`RecoveryMetrics.recoveryTrainingDays`, `ExerciseProgression`), so there
 /// is one plateau definition and one rest-day threshold in the product. Only
-/// `minimumSessionsInWindow` is written down here, and ADR-013 §9 is where it
+/// `minimumSessionsInWindow` is written down here, and ADR-014 §9 is where it
 /// comes from.
 ///
 /// Separate from `AnalysisReportValidator` on purpose (#227): the validator
 /// checks cards against the cache, this decides what the analysis says. The
 /// validator calls it and applies the result to the report.
 ///
-/// Stage 5 of ADR-013 — the effort cap — is **not** here: it needs the effort
+/// Stage 5 of ADR-014 — the effort cap — is **not** here: it needs the effort
 /// data of #241 and arrives with #246. Until then the tree runs without it,
 /// which is why `recover` has exactly one trigger and that trigger counts rest
 /// days.
 enum AnalysisVerdictRule {
     /// Sessions the resolved window must hold before the app judges anything
-    /// (ADR-013 stage 1). Below this no exercise can reach the points stage 2
+    /// (ADR-014 stage 1). Below this no exercise can reach the points stage 2
     /// asks for, so there is nothing to decide.
     static let minimumSessionsInWindow = 4
 
     /// Why the rule answered as it did — what the `Why there's no verdict`
-    /// note names (ADR-013 §6), and what #228 will record next to the model's
+    /// note names (ADR-014 §6), and what #228 will record next to the model's
     /// own choice.
     enum Reason: String, Equatable, Sendable {
         /// Stage 0: six of the last seven days were training days.
@@ -37,7 +37,7 @@ enum AnalysisVerdictRule {
         /// Stage 1: nothing in the last seven days belongs to this analysis.
         case noRecentSession
         /// Stages 2–4 do not exist under this profile — there is no estimated
-        /// 1RM outside strength (ADR-013 §5).
+        /// 1RM outside strength (ADR-014 §5).
         case noStrengthDomain
         /// Stage 2: no listed exercise has enough sessions to tell a plateau
         /// from progress.
@@ -57,7 +57,7 @@ enum AnalysisVerdictRule {
         let reason: Reason
     }
 
-    /// The verdict for this evidence — ADR-013 §2, first stage that fires
+    /// The verdict for this evidence — ADR-014 §2, first stage that fires
     /// wins.
     ///
     /// Deterministic and free of the model's answer by construction: it reads
@@ -66,7 +66,7 @@ enum AnalysisVerdictRule {
         // Stage 0. Domain-blind, because a rest day is a rest day whatever it
         // was taken from (#184). It can force `recover` and never allow
         // `progress` — changing that is an requirements change to US-3 AC6,
-        // not a tuning of this rule (ADR-013 §2).
+        // not a tuning of this rule (ADR-014 §2).
         if evidence.recovery.needsRecovery {
             return Outcome(verdict: .recover, reason: .restDays)
         }
@@ -83,7 +83,7 @@ enum AnalysisVerdictRule {
         // for strength and nowhere else. Under "Endurance" they are absent,
         // not zero — so the rule says it has no verdict rather than falling
         // through to `hold`, and that profile cannot produce `progress` in v0
-        // (ADR-013 §5, listed there as a known negative consequence).
+        // (ADR-014 §5, listed there as a known negative consequence).
         guard evidence.analysisProfile.covers(.strength) else {
             return Outcome(verdict: .insufficientData, reason: .noStrengthDomain)
         }

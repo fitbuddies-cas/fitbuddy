@@ -21,8 +21,8 @@ import SwiftData
 /// each is written the way its own sync would write it.
 ///
 /// `-fbSeedMockData person-a` (or `person-b`, `progression-ready`,
-/// `overreached`, `runner`, `mixed`, `overreached-mixed`) turns it on; without
-/// the argument nothing here runs.
+/// `overreached`, `plateau`, `runner`, `mixed`, `overreached-mixed`) turns it
+/// on; without the argument nothing here runs.
 enum MockDataSeeder {
     static let launchArgument = "-fbSeedMockData"
 
@@ -93,6 +93,16 @@ enum MockDataSeeder {
                 let activities = try loader.activities(for: profile, from: payload.source)
                 try await store.replaceCachedWorkouts(from: payload.source, with: activities)
                 seeded += activities.count
+            }
+            // And nothing else: a source the profile does not carry is dropped
+            // rather than left where a previous seeding put it. Without this,
+            // switching the scheme from `mixed` to a Hevy-only profile without
+            // `-fbResetState` keeps the Strava runs, and the basis line names
+            // two sources for a one-source profile. The UI tests never saw it
+            // because they always reset; manual seeding does not.
+            let seededSources = Set(profile.payloads.map(\.source))
+            for source in ConnectorSource.allCases where !seededSources.contains(source) {
+                try await store.deleteCachedWorkouts(from: source)
             }
             await timestamps.setLastSync(now())
             logger.debug("Seeded \(seeded, privacy: .public) mock workouts")

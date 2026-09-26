@@ -61,7 +61,7 @@ final class AnalysisResultUITests: XCTestCase {
         XCTAssertFalse(sut.analysisProse.exists)
     }
 
-    /// The fourth verdict class (#227, ADR-013 §6): the app's headline, the
+    /// The fourth verdict class (#227, ADR-014 §6): the app's headline, the
     /// note naming why there is no verdict, and neither a progression nor a
     /// recovery card under it.
     @MainActor
