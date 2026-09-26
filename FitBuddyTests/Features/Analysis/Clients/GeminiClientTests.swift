@@ -246,4 +246,46 @@ final class GeminiClientTests: LLMClientTestCase {
             XCTAssertEqual(error, .networkUnavailable)
         }
     }
+
+    // MARK: - Sampling (#226)
+
+    /// No `seed`, deliberately — its acceptance on `gemini-3.6-flash` is
+    /// unverified, and an unknown `generationConfig` key would be a 400 that
+    /// breaks the fallback (see `LLMSampling`). Keys at any depth.
+    func testRequestCarriesNoSeed() async throws {
+        stub(body: GeminiSSEFactory.body(textChunks: ["Hi"]))
+
+        _ = try await collect(try await stream())
+
+        let keys = Self.allKeys(in: try jsonBody(of: try capturedRequest()))
+        XCTAssertFalse(keys.contains("seed"), "Gemini seed support is unverified (#226)")
+    }
+
+    /// No temperature, deliberately — Gemini 3 stays at its default 1.0 (see
+    /// `LLMSampling`). Keys at any depth; a schema `description` may still
+    /// contain the word.
+    func testRequestCarriesNoTemperature() async throws {
+        stub(body: GeminiSSEFactory.body(textChunks: ["Hi"]))
+
+        _ = try await collect(try await stream())
+
+        let keys = Self.allKeys(in: try jsonBody(of: try capturedRequest()))
+        XCTAssertFalse(keys.contains("temperature"), "Gemini runs at its default temperature (#226)")
+    }
+
+    /// Every dictionary key in `value`, at any depth.
+    private static func allKeys(in value: Any) -> Set<String> {
+        switch value {
+        case let dictionary as [String: Any]:
+            return dictionary.reduce(into: Set(dictionary.keys)) { keys, entry in
+                keys.formUnion(allKeys(in: entry.value))
+            }
+        case let array as [Any]:
+            return array.reduce(into: Set<String>()) { keys, element in
+                keys.formUnion(allKeys(in: element))
+            }
+        default:
+            return []
+        }
+    }
 }

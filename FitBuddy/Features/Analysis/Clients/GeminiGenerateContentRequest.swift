@@ -35,6 +35,17 @@ struct GeminiGenerateContentRequest: Encodable {
     /// mutually exclusive, and both require `responseMimeType`
     /// `application/json`. Works with `streamGenerateContent`: the chunks'
     /// text concatenates to the JSON document.
+    ///
+    /// **No sampling fields at all, on purpose (#226).** Gemini runs on its
+    /// provider defaults:
+    /// - No `seed`: its acceptance on `gemini-3.6-flash` is unverified — the
+    ///   live test on 26.09.2026 only returned HTTP 503 (overload). An unknown
+    ///   `generationConfig` key would be an HTTP 400 and break the Gemini
+    ///   fallback, so it is not sent. Revisit only with a verified live call.
+    /// - No `temperature`: Gemini 3 stays at its default 1.0 (see
+    ///   `LLMSampling`).
+    ///
+    /// `GeminiClientTests` asserts that neither key reaches the wire.
     struct GenerationConfig: Encodable {
         let maxOutputTokens: Int
         let responseMimeType: String

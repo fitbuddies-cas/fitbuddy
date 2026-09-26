@@ -211,4 +211,62 @@ final class MistralClientTests: LLMClientTestCase {
             XCTAssertEqual(error, .networkUnavailable)
         }
     }
+
+    // MARK: - Sampling (#226)
+
+    /// `random_seed`, not OpenAI's `seed` — Mistral renamed the field, and the
+    /// wrong key would be ignored rather than rejected.
+    func testRequestCarriesTheSharedSeed() async throws {
+        stub(body: MistralSSEFactory.body(textChunks: ["Hi"]))
+
+        _ = try await collect(try await stream())
+
+        let json = try jsonBody(of: try capturedRequest())
+        XCTAssertEqual(json["random_seed"] as? Int, LLMSampling.seed)
+        XCTAssertNil(json["seed"])
+    }
+
+    /// No temperature, deliberately — Mistral's default applies (see
+    /// `LLMSampling`). Keys at any depth; a schema `description` may still
+    /// contain the word.
+    func testRequestCarriesNoTemperature() async throws {
+        stub(body: MistralSSEFactory.body(textChunks: ["Hi"]))
+
+        _ = try await collect(try await stream())
+
+        let keys = Self.allKeys(in: try jsonBody(of: try capturedRequest()))
+        XCTAssertFalse(keys.contains("temperature"), "Mistral runs at its default temperature (#226)")
+    }
+
+    /// The point of the seed is that it does not move between runs.
+    func testTheSeedIsTheSameOnEveryRun() async throws {
+        stub(body: MistralSSEFactory.body(textChunks: ["Hi"]))
+        _ = try await collect(try await stream())
+        let first = try jsonBody(of: try capturedRequest())
+
+        stub(body: MistralSSEFactory.body(textChunks: ["Hi"]))
+        _ = try await collect(try await stream())
+        let second = try jsonBody(of: try capturedRequest())
+
+        // Unwrapped, not compared as optionals: drop the field entirely and
+        // both sides would be `nil`, so the equality alone would still pass.
+        let firstSeed = try XCTUnwrap(first["random_seed"] as? Int)
+        XCTAssertEqual(firstSeed, second["random_seed"] as? Int)
+    }
+
+    /// Every dictionary key in `value`, at any depth.
+    private static func allKeys(in value: Any) -> Set<String> {
+        switch value {
+        case let dictionary as [String: Any]:
+            return dictionary.reduce(into: Set(dictionary.keys)) { keys, entry in
+                keys.formUnion(allKeys(in: entry.value))
+            }
+        case let array as [Any]:
+            return array.reduce(into: Set<String>()) { keys, element in
+                keys.formUnion(allKeys(in: element))
+            }
+        default:
+            return []
+        }
+    }
 }
