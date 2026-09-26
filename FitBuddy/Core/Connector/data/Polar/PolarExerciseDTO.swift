@@ -85,11 +85,15 @@ struct PolarExerciseDTO: Decodable, Equatable, Sendable {
 
         // Training Load Pro is device-bound: an older watch sends no block at
         // all, and that is not an error — every value simply stays `nil`.
+        // Each field is decoded tolerantly: the block is optional enrichment,
+        // so a value of an unexpected type (or a block that is not an object)
+        // drops that value only, never the session — and with it the whole
+        // `[PolarExerciseDTO]` list the client decodes.
         if let pro = try? container.nestedContainer(keyedBy: TrainingLoadProKeys.self, forKey: .trainingLoadPro) {
-            cardioLoad = try pro.decodeIfPresent(Double.self, forKey: .cardioLoad)
-            muscleLoad = try pro.decodeIfPresent(Double.self, forKey: .muscleLoad)
-            perceivedLoad = try pro.decodeIfPresent(Double.self, forKey: .perceivedLoad)
-            userRPE = try pro.decodeIfPresent(PolarUserRPE.self, forKey: .userRPE)
+            cardioLoad = try? pro.decodeIfPresent(Double.self, forKey: .cardioLoad)
+            muscleLoad = try? pro.decodeIfPresent(Double.self, forKey: .muscleLoad)
+            perceivedLoad = try? pro.decodeIfPresent(Double.self, forKey: .perceivedLoad)
+            userRPE = try? pro.decodeIfPresent(PolarUserRPE.self, forKey: .userRPE)
         } else {
             cardioLoad = nil
             muscleLoad = nil
