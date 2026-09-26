@@ -458,13 +458,13 @@ final class MockWorkoutLoaderTests: XCTestCase {
         XCTAssertEqual(cardio.maxHeartRate, 167)
         XCTAssertEqual(cardio.elevationGainMeters, 390)
         XCTAssertEqual(try XCTUnwrap(cardio.averageSpeedMetersPerSecond), 2.78, accuracy: 0.01)
-        XCTAssertEqual(cardio.perceivedEffort, 148)
+        XCTAssertEqual(cardio.relativeEffort, 148)
 
         // The shake-out run wore no strap: its cells have to be absent rather
         // than zero (US-15 AC7).
         let shakeOut = try XCTUnwrap(summaries.first { $0.title == "Shake-out run" })
         XCTAssertNil(shakeOut.cardio?.averageHeartRate)
-        XCTAssertNil(shakeOut.cardio?.perceivedEffort)
+        XCTAssertNil(shakeOut.cardio?.relativeEffort)
     }
 
     /// Four runs a week, never six days in seven — the runner is a dense week,

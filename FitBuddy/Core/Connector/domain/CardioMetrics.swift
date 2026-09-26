@@ -36,9 +36,16 @@ struct CardioMetrics: Codable, Hashable, Sendable {
     /// (Strava's `kilojoules`, power-meter rides only). Not a calorie count:
     /// `activeCalories` is the metabolic figure.
     var energyKilojoules: Double?
-    /// The source's own effort score — Strava's Relative Effort
-    /// (`suffer_score`). Provider-specific scale.
-    var perceivedEffort: Double?
+    /// Strava's Relative Effort (`suffer_score`): an objective score Strava
+    /// derives from heart rate against the athlete's own zones, with an
+    /// undisclosed formula. `nil` when the session recorded no heart rate.
+    ///
+    /// **Not a self-assessment.** It is not an RPE and not "perceived" in any
+    /// sense — Strava's user-entered rating is `perceived_exertion`, which is
+    /// not decoded. The scale is source-specific: never compare it with, or
+    /// average it into, a Hevy RPE or a Polar load; read it only as a trend
+    /// within Strava (ADR-015, #242). Named `perceivedEffort` until #243.
+    var relativeEffort: Double?
     /// Active energy expenditure the source attributed to the session, in
     /// kcal (Polar's `calories`).
     var activeCalories: Int?
@@ -60,7 +67,7 @@ struct CardioMetrics: Codable, Hashable, Sendable {
         elevationGainMeters: Double? = nil,
         averageSpeedMetersPerSecond: Double? = nil,
         energyKilojoules: Double? = nil,
-        perceivedEffort: Double? = nil,
+        relativeEffort: Double? = nil,
         activeCalories: Int? = nil,
         distanceMeters: Double? = nil,
         durationSeconds: Int? = nil,
@@ -71,7 +78,7 @@ struct CardioMetrics: Codable, Hashable, Sendable {
         self.elevationGainMeters = elevationGainMeters
         self.averageSpeedMetersPerSecond = averageSpeedMetersPerSecond
         self.energyKilojoules = energyKilojoules
-        self.perceivedEffort = perceivedEffort
+        self.relativeEffort = relativeEffort
         self.activeCalories = activeCalories
         self.distanceMeters = distanceMeters
         self.durationSeconds = durationSeconds
@@ -87,7 +94,7 @@ struct CardioMetrics: Codable, Hashable, Sendable {
             && elevationGainMeters == nil
             && averageSpeedMetersPerSecond == nil
             && energyKilojoules == nil
-            && perceivedEffort == nil
+            && relativeEffort == nil
             && activeCalories == nil
             && distanceMeters == nil
             && durationSeconds == nil

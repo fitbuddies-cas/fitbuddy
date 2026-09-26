@@ -167,7 +167,7 @@ final class WorkoutStoreTests: XCTestCase {
         XCTAssertEqual(cardio.elevationGainMeters, 412.5)
         XCTAssertEqual(cardio.averageSpeedMetersPerSecond, 2.78)
         XCTAssertEqual(cardio.energyKilojoules, 920)
-        XCTAssertEqual(cardio.perceivedEffort, 64)
+        XCTAssertEqual(cardio.relativeEffort, 64)
         XCTAssertEqual(cardio.activeCalories, 530)
         XCTAssertEqual(cardio.distanceMeters, 10_400)
         XCTAssertEqual(cardio.durationSeconds, 3742)
