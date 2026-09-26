@@ -1,5 +1,10 @@
 import SwiftUI
 
+// Developer tooling: excluded from Release builds, so the validation log
+// view never ships in a TestFlight binary. The log itself is captured and
+// stored in every build (#228).
+#if DEBUG
+
 /// Developer view of what the validator did to each stored analysis (US-16
 /// AC4, #228): the tally across all of them first, then one section per
 /// analysis. Reached from the debug section of Settings only.
@@ -107,7 +112,6 @@ struct AnalysisValidationLogView: View {
     }
 }
 
-#if DEBUG
 #Preview {
     NavigationStack {
         AnalysisValidationLogView(
@@ -115,4 +119,5 @@ struct AnalysisValidationLogView: View {
         )
     }
 }
+
 #endif

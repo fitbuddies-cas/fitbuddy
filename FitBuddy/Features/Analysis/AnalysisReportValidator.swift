@@ -164,10 +164,10 @@ enum AnalysisReportValidator {
         against evidence: AnalysisReportEvidence
     ) -> (report: ValidatedAnalysisReport, log: AnalysisValidationLog) {
         var interventions: [AnalysisIntervention] = []
-        var cards: [AnalysisReportCard] = []
+        var cards: [TrackedCard] = []
         for card in report.cards {
             let checked = validateLogged(card, against: evidence)
-            if let valid = checked.card { cards.append(valid) }
+            if let valid = checked.card { cards.append(TrackedCard(card: valid, sentAs: card.kind)) }
             if let intervention = checked.intervention { interventions.append(intervention) }
         }
         let outcome = AnalysisVerdictRule.outcome(for: evidence)
@@ -182,16 +182,14 @@ enum AnalysisReportValidator {
         // recovery card always survives at that count, so a missing one means
         // the model left it out. This is the card side of ADR-014 stage 0;
         // the verdict side is in the rule.
-        if evidence.recovery.needsRecovery, !cards.contains(where: { $0.kind == .recovery }) {
-            cards.insert(
-                .recovery(
-                    reasoning: insertedRecoveryReasoning(
-                        countingUnanalysedTraining: evidence.recoveryCountsUnanalysedTraining
-                    ),
-                    metrics: evidence.recovery
+        if evidence.recovery.needsRecovery, !cards.contains(where: { $0.card.kind == .recovery }) {
+            let inserted = AnalysisReportCard.recovery(
+                reasoning: insertedRecoveryReasoning(
+                    countingUnanalysedTraining: evidence.recoveryCountsUnanalysedTraining
                 ),
-                at: 0
+                metrics: evidence.recovery
             )
+            cards.insert(TrackedCard(card: inserted, sentAs: .recovery), at: 0)
             interventions.append(
                 AnalysisIntervention(subject: .recovery, action: .inserted, reason: .recoveryMissing)
             )
@@ -206,26 +204,29 @@ enum AnalysisReportValidator {
         // The card checks of ADR-013 run first and are untouched by this:
         // a card they struck is already a note (ADR-014 §7).
         if verdict == .insufficientData {
-            cards = cards.compactMap { card in
-                let demoted = withoutAVerdict(card)
-                if demoted != card {
+            cards = cards.compactMap { tracked in
+                let demoted = withoutAVerdict(tracked.card)
+                if demoted != tracked.card {
                     interventions.append(AnalysisIntervention(
-                        subject: AnalysisInterventionSubject(card.kind),
+                        subject: AnalysisInterventionSubject(tracked.card.kind),
                         action: demoted == nil ? .dropped : .downgraded,
                         reason: .noVerdict
                     ))
                 }
-                return demoted
+                return demoted.map { TrackedCard(card: $0, sentAs: tracked.sentAs) }
             }
             if let note = insufficientDataNote(reason: outcome.reason, evidence: evidence) {
-                cards.insert(note, at: 0)
+                cards.insert(TrackedCard(card: note, sentAs: .note), at: 0)
             }
         }
 
+        // A cut card is logged under the kind the model sent it as: a
+        // progression already downgraded to a note reads "progression
+        // dropped", not like a note the model wrote itself.
         let capped = capped(cards)
-        let kept = capped.kept
+        let kept = capped.kept.map(\.card)
         interventions += capped.dropped.map {
-            AnalysisIntervention(subject: AnalysisInterventionSubject($0.kind), action: .dropped, reason: .overCardLimit)
+            AnalysisIntervention(subject: AnalysisInterventionSubject($0.sentAs), action: .dropped, reason: .overCardLimit)
         }
 
         // Where the app's verdict differs from the model's, the model's
@@ -382,7 +383,7 @@ enum AnalysisReportValidator {
             switch check {
             case let .accepted(valid):
                 return (valid, nil)
-            case let .rejected(rejection):
+            case let .rejected(rejection, figure):
                 // The title and the figures are the user's training data.
                 logger.notice(
                     "Progression card rejected (\(rejection.rawValue, privacy: .public)): \(exercise, privacy: .private) \(fromKg, privacy: .private) → \(toKg, privacy: .private) kg"
@@ -392,13 +393,7 @@ enum AnalysisReportValidator {
                     title: title,
                     text: reasoning,
                     reason: AnalysisInterventionReason(rejection),
-                    figure: progressionFigure(
-                        for: rejection,
-                        exercise: exercise,
-                        fromKg: fromKg,
-                        toKg: toKg,
-                        listed: evidence.exercises
-                    )
+                    figure: figure
                 )
             }
 
@@ -423,20 +418,13 @@ enum AnalysisReportValidator {
             switch check {
             case let .accepted(valid):
                 return (valid, nil)
-            case let .rejected(rejection):
+            case let .rejected(rejection, figure):
                 return downgraded(
                     .repProgression,
                     title: title,
                     text: reasoning,
                     reason: AnalysisInterventionReason(rejection),
-                    figure: repProgressionFigure(
-                        for: rejection,
-                        exercise: exercise,
-                        weightKg: weightKg,
-                        fromReps: fromReps,
-                        toReps: toReps,
-                        listed: evidence.exercises
-                    )
+                    figure: figure
                 )
             }
 
@@ -676,7 +664,10 @@ enum AnalysisReportValidator {
     /// exercises.
     enum ProgressionCheck: Equatable, Sendable {
         case accepted(AnalysisReportCard)
-        case rejected(ProgressionRejection)
+        /// The reason, with the model's figure next to the app's that the
+        /// failed step compared (#228). Built where the check looked the
+        /// exercise up, so the log never repeats the lookup.
+        case rejected(ProgressionRejection, AnalysisInterventionFigure)
     }
 
     /// The outcome of a card check that can fail for more than one reason,
@@ -684,77 +675,6 @@ enum AnalysisReportValidator {
     enum CardCheck: Equatable, Sendable {
         case accepted(AnalysisReportCard)
         case rejected(AnalysisInterventionReason, AnalysisInterventionFigure?)
-    }
-
-    /// The model's figure next to the app's for a rejected load progression
-    /// (#228) — the figure the failed check compared, looked up the same way
-    /// `checkProgression(...)` does.
-    static func progressionFigure(
-        for rejection: ProgressionRejection,
-        exercise: String,
-        fromKg: Double,
-        toKg: Double,
-        listed: [ListedExercise]
-    ) -> AnalysisInterventionFigure {
-        let candidates = listed.filter { folded($0.title) == folded(exercise) }
-        let match = candidates.first { candidate in
-            guard let working = candidate.workingSet?.roundedWeightKg else { return false }
-            return abs(fromKg - working) <= weightToleranceKg + epsilon
-        }
-        let working = match?.workingSet?.roundedWeightKg
-        switch rejection {
-        case .wrongStartingWeight:
-            let listedWeight = candidates.lazy.compactMap { $0.workingSet?.roundedWeightKg }.first
-            return AnalysisInterventionFigure(proposed: fromKg, app: listedWeight, unit: .kilograms)
-        case .belowRange, .aboveRange, .offStep:
-            return AnalysisInterventionFigure(
-                proposed: toKg,
-                app: working,
-                allowed: match.flatMap(ProgressionBand.range(for:)),
-                unit: .kilograms
-            )
-        case .notListed, .noWorkingWeight, .noIncrease, .conditionNotMet, .conditionNotCheckable,
-             .noLoadStep, .wrongStartingReps, .aboveRepStep:
-            return AnalysisInterventionFigure(proposed: toKg, app: working, unit: .kilograms)
-        }
-    }
-
-    /// The model's figure next to the app's for a rejected rep progression
-    /// (#228).
-    static func repProgressionFigure(
-        for rejection: ProgressionRejection,
-        exercise: String,
-        weightKg: Double,
-        fromReps: Int,
-        toReps: Int,
-        listed: [ListedExercise]
-    ) -> AnalysisInterventionFigure {
-        let candidates = listed.filter { folded($0.title) == folded(exercise) }
-        let match = candidates.lazy.compactMap(\.workingSet).first { working in
-            abs(weightKg - working.roundedWeightKg) <= weightToleranceKg + epsilon
-        }
-        switch rejection {
-        case .wrongStartingWeight:
-            let listedWeight = candidates.lazy.compactMap { $0.workingSet?.roundedWeightKg }.first
-            return AnalysisInterventionFigure(proposed: weightKg, app: listedWeight, unit: .kilograms)
-        case .wrongStartingReps:
-            return AnalysisInterventionFigure(
-                proposed: Double(fromReps),
-                app: match.map { Double($0.reps) },
-                unit: .repetitions
-            )
-        case .noIncrease, .aboveRepStep:
-            let reps = match?.reps ?? fromReps
-            return AnalysisInterventionFigure(
-                proposed: Double(toReps),
-                app: Double(reps),
-                allowed: Double(reps + 1)...Double(reps + maxRepStep),
-                unit: .repetitions
-            )
-        case .notListed, .noWorkingWeight, .conditionNotMet, .conditionNotCheckable, .noLoadStep,
-             .belowRange, .aboveRange, .offStep:
-            return AnalysisInterventionFigure(proposed: Double(toReps), unit: .repetitions)
-        }
     }
 
     /// Checks a progression card against the listed exercises (#175, #233):
@@ -793,8 +713,11 @@ enum AnalysisReportValidator {
     ) -> ProgressionCheck {
         let name = folded(exercise)
         let candidates = listed.filter { folded($0.title) == name }
-        guard !candidates.isEmpty else { return .rejected(.notListed) }
-        guard candidates.contains(where: { $0.workingSet != nil }) else { return .rejected(.noWorkingWeight) }
+        let unmatched = AnalysisInterventionFigure(proposed: toKg, unit: .kilograms)
+        guard !candidates.isEmpty else { return .rejected(.notListed, unmatched) }
+        guard candidates.contains(where: { $0.workingSet != nil }) else {
+            return .rejected(.noWorkingWeight, unmatched)
+        }
         let match = candidates.lazy
             .compactMap { listed -> (exercise: ListedExercise, workingKg: Double)? in
                 guard let working = listed.workingSet?.roundedWeightKg,
@@ -803,21 +726,31 @@ enum AnalysisReportValidator {
                 return (listed, working)
             }
             .first
-        guard let match else { return .rejected(.wrongStartingWeight) }
-        guard toKg > match.workingKg + epsilon else { return .rejected(.noIncrease) }
+        guard let match else {
+            return .rejected(.wrongStartingWeight, startingWeightFigure(proposed: fromKg, candidates: candidates))
+        }
+        let againstWorking = AnalysisInterventionFigure(proposed: toKg, app: match.workingKg, unit: .kilograms)
+        guard toKg > match.workingKg + epsilon else { return .rejected(.noIncrease, againstWorking) }
         switch match.exercise.twoForTwo {
-        case .notMet: return .rejected(.conditionNotMet)
-        case .notCheckable: return .rejected(.conditionNotCheckable)
+        case .notMet: return .rejected(.conditionNotMet, againstWorking)
+        case .notCheckable: return .rejected(.conditionNotCheckable, againstWorking)
         case .met: break
         }
         guard let step = ProgressionBand.stepKg(for: match.exercise),
               let range = ProgressionBand.range(for: match.exercise)
-        else { return .rejected(.noLoadStep) }
-        guard toKg >= range.lowerBound - weightToleranceKg - epsilon else { return .rejected(.belowRange) }
-        guard toKg <= range.upperBound + weightToleranceKg + epsilon else { return .rejected(.aboveRange) }
+        else { return .rejected(.noLoadStep, againstWorking) }
+        let againstRange = AnalysisInterventionFigure(
+            proposed: toKg, app: match.workingKg, allowed: range, unit: .kilograms
+        )
+        guard toKg >= range.lowerBound - weightToleranceKg - epsilon else {
+            return .rejected(.belowRange, againstRange)
+        }
+        guard toKg <= range.upperBound + weightToleranceKg + epsilon else {
+            return .rejected(.aboveRange, againstRange)
+        }
         let steps = ((toKg - match.workingKg) / step).rounded()
         let onStep = PlainWeightFormatter.rounded(match.workingKg + steps * step)
-        guard abs(toKg - onStep) <= weightToleranceKg + epsilon else { return .rejected(.offStep) }
+        guard abs(toKg - onStep) <= weightToleranceKg + epsilon else { return .rejected(.offStep, againstRange) }
         return .accepted(.progression(
             exercise: match.exercise.title,
             muscleGroup: match.exercise.muscleGroup,
@@ -850,8 +783,11 @@ enum AnalysisReportValidator {
     ) -> ProgressionCheck {
         let name = folded(exercise)
         let candidates = listed.filter { folded($0.title) == name }
-        guard !candidates.isEmpty else { return .rejected(.notListed) }
-        guard candidates.contains(where: { $0.workingSet != nil }) else { return .rejected(.noWorkingWeight) }
+        let unmatched = AnalysisInterventionFigure(proposed: Double(toReps), unit: .repetitions)
+        guard !candidates.isEmpty else { return .rejected(.notListed, unmatched) }
+        guard candidates.contains(where: { $0.workingSet != nil }) else {
+            return .rejected(.noWorkingWeight, unmatched)
+        }
         let match = candidates.lazy
             .compactMap { listed -> (exercise: ListedExercise, working: WorkingSet)? in
                 guard let working = listed.workingSet,
@@ -860,10 +796,24 @@ enum AnalysisReportValidator {
                 return (listed, working)
             }
             .first
-        guard let match else { return .rejected(.wrongStartingWeight) }
-        guard fromReps == match.working.reps else { return .rejected(.wrongStartingReps) }
-        guard toReps > fromReps else { return .rejected(.noIncrease) }
-        guard toReps - fromReps <= maxRepStep else { return .rejected(.aboveRepStep) }
+        guard let match else {
+            return .rejected(.wrongStartingWeight, startingWeightFigure(proposed: weightKg, candidates: candidates))
+        }
+        let reps = match.working.reps
+        guard fromReps == reps else {
+            return .rejected(
+                .wrongStartingReps,
+                AnalysisInterventionFigure(proposed: Double(fromReps), app: Double(reps), unit: .repetitions)
+            )
+        }
+        let againstStep = AnalysisInterventionFigure(
+            proposed: Double(toReps),
+            app: Double(reps),
+            allowed: Double(reps + 1)...Double(reps + maxRepStep),
+            unit: .repetitions
+        )
+        guard toReps > fromReps else { return .rejected(.noIncrease, againstStep) }
+        guard toReps - fromReps <= maxRepStep else { return .rejected(.aboveRepStep, againstStep) }
         return .accepted(.repProgression(
             exercise: match.exercise.title,
             muscleGroup: match.exercise.muscleGroup,
@@ -872,6 +822,16 @@ enum AnalysisReportValidator {
             toReps: toReps,
             reasoning: reasoning
         ))
+    }
+
+    /// The model's starting weight next to the first weight the prompt
+    /// listed under the title, for a card that matched none of them (#228).
+    private static func startingWeightFigure(
+        proposed: Double,
+        candidates: [ListedExercise]
+    ) -> AnalysisInterventionFigure {
+        let listedWeight = candidates.lazy.compactMap { $0.workingSet?.roundedWeightKg }.first
+        return AnalysisInterventionFigure(proposed: proposed, app: listedWeight, unit: .kilograms)
     }
 
     // MARK: - Imbalance
@@ -929,17 +889,26 @@ enum AnalysisReportValidator {
     /// Returns the cut cards too, in the order they were cut, so the log can
     /// name them (#228).
     private static func capped(
-        _ cards: [AnalysisReportCard]
-    ) -> (kept: [AnalysisReportCard], dropped: [AnalysisReportCard]) {
+        _ cards: [TrackedCard]
+    ) -> (kept: [TrackedCard], dropped: [TrackedCard]) {
         var cards = cards
-        var dropped: [AnalysisReportCard] = []
+        var dropped: [TrackedCard] = []
         while cards.count > maxCards {
-            let index = cards.lastIndex { $0.kind == .note }
-                ?? cards.lastIndex { $0.kind != .recovery }
+            let index = cards.lastIndex { $0.card.kind == .note }
+                ?? cards.lastIndex { $0.card.kind != .recovery }
                 ?? cards.count - 1
             dropped.append(cards.remove(at: index))
         }
         return (cards, dropped)
+    }
+
+    /// A card on its way through `validateLogged(_:against:)`, with the kind
+    /// the model sent it as — a note after a downgrade still remembers it was
+    /// a progression, so the cap can log it as one (#228). A card the app
+    /// added itself counts as sent as its own kind.
+    private struct TrackedCard {
+        let card: AnalysisReportCard
+        let sentAs: AnalysisCard.Kind
     }
 
     // MARK: - Helpers

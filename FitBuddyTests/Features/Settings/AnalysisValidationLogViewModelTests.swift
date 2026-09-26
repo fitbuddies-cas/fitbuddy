@@ -1,6 +1,11 @@
 import XCTest
 @testable import FitBuddy
 
+// Developer tooling: excluded from Release builds, so the validation log
+// view never ships in a TestFlight binary. The log itself is captured and
+// stored in every build (#228).
+#if DEBUG
+
 /// `AnalysisValidationLogViewModel` and `AnalysisValidationTally` (#228): the
 /// developer view lists every stored log and counts the interventions across
 /// them, keeping analyses without a log apart from clean ones.
@@ -143,3 +148,5 @@ final class AnalysisValidationLogViewModelTests: XCTestCase {
         )
     }
 }
+
+#endif

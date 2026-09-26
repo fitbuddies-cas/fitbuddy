@@ -1,5 +1,10 @@
 import Foundation
 
+// Developer tooling: excluded from Release builds, so the validation log
+// view never ships in a TestFlight binary. The log itself is captured and
+// stored in every build (#228).
+#if DEBUG
+
 /// The hit rate over several runs (US-16 AC4, #228, for #229): how many
 /// stored analyses carry a log, how many went through untouched, how often
 /// the app overruled the model's verdict, and how often each intervention
@@ -18,18 +23,22 @@ struct AnalysisValidationTally: Equatable, Sendable {
         runs = logs.count
         cleanRuns = logs.filter { $0.interventions.isEmpty }.count
         overriddenVerdicts = logs.filter(\.verdictOverridden).count
-        var counts: [String: AnalysisValidationTallyRow] = [:]
+        var counts: [Key: Int] = [:]
         for intervention in logs.flatMap(\.interventions) {
-            let key = AnalysisValidationTallyRow(subject: intervention.subject, reason: intervention.reason, count: 0).id
-            let previous = counts[key]?.count ?? 0
-            counts[key] = AnalysisValidationTallyRow(
-                subject: intervention.subject,
-                reason: intervention.reason,
-                count: previous + 1
-            )
+            counts[Key(subject: intervention.subject, reason: intervention.reason), default: 0] += 1
         }
-        rows = counts.values.sorted { lhs, rhs in
-            lhs.count != rhs.count ? lhs.count > rhs.count : lhs.id < rhs.id
-        }
+        rows = counts
+            .map { AnalysisValidationTallyRow(subject: $0.key.subject, reason: $0.key.reason, count: $0.value) }
+            .sorted { lhs, rhs in
+                lhs.count != rhs.count ? lhs.count > rhs.count : lhs.id < rhs.id
+            }
+    }
+
+    /// What the tally counts by: one part of the answer and one reason.
+    private struct Key: Hashable {
+        let subject: AnalysisInterventionSubject
+        let reason: AnalysisInterventionReason
     }
 }
+
+#endif
