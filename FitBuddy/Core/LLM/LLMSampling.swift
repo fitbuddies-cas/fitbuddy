@@ -1,12 +1,28 @@
 import Foundation
 
-/// The sampling parameters every analysis call uses, in one place (#226, US-16
+/// The sampling parameters the analysis calls use, in one place (#226, US-16
 /// AC2).
+///
+/// Per provider:
+/// - **Claude** — nothing. `temperature` and friends are rejected with HTTP
+///   400 on `claude-opus-5`, and the Messages API has no seed (see
+///   `ClaudeMessageRequest`).
+/// - **Gemini** — nothing. Whether `gemini-3.6-flash` accepts `seed` is
+///   unverified: the live test on 26.09.2026 only returned HTTP 503
+///   (overload), and an unknown `generationConfig` key would be an HTTP 400
+///   that breaks the Gemini fallback. So it is deliberately not sent and
+///   Gemini runs on provider defaults; revisit only with a verified live call
+///   (see `GeminiGenerateContentRequest`).
+/// - **Mistral** — the fixed `seed` below as `random_seed` (live-verified
+///   26.09.2026, HTTP 200).
+///
+/// In practice that makes this type Mistral-only today; it stays the single
+/// place so that any provider that gains a verified seed reads the same value.
 ///
 /// Its own type rather than properties on `LLMProvider`: that enum models what
 /// the *user* deals with — which providers a key can be entered for, where to
 /// get one, what the key looks like. These constants are wire-level decoding
-/// settings that are identical across providers by design. Per-provider
+/// settings meant to be identical for every provider that takes them. Per-provider
 /// computed properties there would invite exactly the divergence this task
 /// removes, and it would tie an onboarding type to request bodies. One type per
 /// file (CLAUDE.md), so it lives here next to `LLMProvider` in `Core/LLM/`
@@ -32,11 +48,12 @@ import Foundation
 ///    reasoning models. A low value like 0.2 risks silent quality loss.
 ///
 /// Do not add a temperature here to make the providers "consistent" without
-/// revisiting these points. `AnthropicClient` takes no sampling field at all;
-/// the Gemini and Mistral tests assert that no `temperature` key is sent.
+/// revisiting these points. `AnthropicClient` and `GeminiClient` take no
+/// sampling field at all; the Gemini and Mistral tests assert that no
+/// `temperature` key is sent, and the Gemini tests that no `seed` is sent.
 enum LLMSampling {
-    /// Fixed seed for the providers that accept one (Mistral `random_seed`,
-    /// Gemini `seed`).
+    /// Fixed seed for the providers verified to accept one — currently only
+    /// Mistral (`random_seed`). Not sent to Gemini (unverified, see above).
     ///
     /// Costs nothing and adds best-effort reproducibility where it is offered.
     /// The value is arbitrary; that it never changes between runs is the whole

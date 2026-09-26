@@ -249,17 +249,16 @@ final class GeminiClientTests: LLMClientTestCase {
 
     // MARK: - Sampling (#226)
 
-    /// The seed belongs inside `generationConfig`; Gemini has no top-level
-    /// sampling keys.
-    func testRequestCarriesTheSharedSeed() async throws {
+    /// No `seed`, deliberately — its acceptance on `gemini-3.6-flash` is
+    /// unverified, and an unknown `generationConfig` key would be a 400 that
+    /// breaks the fallback (see `LLMSampling`). Keys at any depth.
+    func testRequestCarriesNoSeed() async throws {
         stub(body: GeminiSSEFactory.body(textChunks: ["Hi"]))
 
         _ = try await collect(try await stream())
 
-        let json = try jsonBody(of: try capturedRequest())
-        XCTAssertNil(json["seed"])
-        let config = try XCTUnwrap(json["generationConfig"] as? [String: Any])
-        XCTAssertEqual(config["seed"] as? Int, LLMSampling.seed)
+        let keys = Self.allKeys(in: try jsonBody(of: try capturedRequest()))
+        XCTAssertFalse(keys.contains("seed"), "Gemini seed support is unverified (#226)")
     }
 
     /// No temperature, deliberately — Gemini 3 stays at its default 1.0 (see
@@ -272,24 +271,6 @@ final class GeminiClientTests: LLMClientTestCase {
 
         let keys = Self.allKeys(in: try jsonBody(of: try capturedRequest()))
         XCTAssertFalse(keys.contains("temperature"), "Gemini runs at its default temperature (#226)")
-    }
-
-    /// The point of the seed is that it does not move between runs.
-    func testTheSeedIsTheSameOnEveryRun() async throws {
-        stub(body: GeminiSSEFactory.body(textChunks: ["Hi"]))
-        _ = try await collect(try await stream())
-        let first = try jsonBody(of: try capturedRequest())
-
-        stub(body: GeminiSSEFactory.body(textChunks: ["Hi"]))
-        _ = try await collect(try await stream())
-        let second = try jsonBody(of: try capturedRequest())
-
-        let firstConfig = try XCTUnwrap(first["generationConfig"] as? [String: Any])
-        let secondConfig = try XCTUnwrap(second["generationConfig"] as? [String: Any])
-        // Unwrapped, not compared as optionals: drop the field entirely and
-        // both sides would be `nil`, so the equality alone would still pass.
-        let firstSeed = try XCTUnwrap(firstConfig["seed"] as? Int)
-        XCTAssertEqual(firstSeed, secondConfig["seed"] as? Int)
     }
 
     /// Every dictionary key in `value`, at any depth.
