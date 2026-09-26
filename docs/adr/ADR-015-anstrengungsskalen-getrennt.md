@@ -81,7 +81,7 @@ Die Ressource liefert `strain` (7-Tage-Schnitt), `tolerance` (28-Tage-Schnitt) u
 
 ### 5. Polar `user-rpe` bleibt ein Enum ohne Zahl
 
-`user-rpe` wird als **geordnetes Enum** geführt (`RPE_NONE` … `RPE_EXTREME`, mit `unknown`-Fallback für unbekannte Werte), **ohne numerische Zuordnung**. Polar dokumentiert keine; `RPE_BRISK = 5` wäre geraten. Kein Wert wird je auf Hevys 1–10 abgebildet.
+`user-rpe` wird als **geordnetes Enum** geführt (`RPE_NONE` … `RPE_EXTREME`, mit `unknown`-Fallback für unbekannte Werte), **ohne numerische Zuordnung**. Polar dokumentiert keine; `RPE_BRISK = 5` wäre geraten. Kein Wert wird je auf Hevys 1–10 abgebildet. Belegt sind nur `RPE_NONE`, `RPE_BRISK` und `RPE_EXTREME`; die übrigen Stufennamen sind gegen AccessLink ungeprüft, und ein unbekannter Wert fällt auf `unknown` zurück und wird weggelassen.
 
 Daraus folgt: `Polar RPE` wird nicht gemittelt und fliesst in v0 nicht in die Trendrechnung aus [ADR-014](ADR-014-verdict-regel-der-app.md) §3 ein — ein Mittel über ein Enum ohne Zahlen gibt es nicht. Im Prompt steht der Stufenname pro Session. Soll später doch eine Zahl her, ist das eine Änderung dieses ADR, keine stille Setzung im Code.
 

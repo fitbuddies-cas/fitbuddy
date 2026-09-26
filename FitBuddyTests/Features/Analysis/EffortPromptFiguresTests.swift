@@ -75,6 +75,16 @@ final class EffortPromptFiguresTests: XCTestCase {
         XCTAssertEqual(values, [])
     }
 
+    /// A zero mean RPE is "not measured" too, as in `EffortScale.value`: no
+    /// "mean RPE" in the prompt, and no effort for the AC6 hint.
+    func testAZeroMeanRPEIsLeftOutAndCountsAsNoEffort() {
+        let zero = summary(rpe: 0)
+
+        XCTAssertEqual(EffortPromptFigures.labelledValues(of: zero), [])
+        XCTAssertFalse(EffortPromptFigures.hasEffort(zero))
+        XCTAssertFalse(EffortPromptFigures.containsEffort([zero]))
+    }
+
     /// Product-owner decision on #245: "none" and a label this build could not
     /// read count as missing.
     func testPolarRPENoneAndUnknownCountAsMissing() {
