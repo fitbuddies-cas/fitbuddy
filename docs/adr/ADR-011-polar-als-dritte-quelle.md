@@ -1,18 +1,20 @@
-# ADR-11: Polar AccessLink als dritte Datenquelle — BYO-App wie Strava
+# ADR-011: Polar AccessLink als dritte Datenquelle — BYO-App wie Strava
 
 **Status:** Accepted
 **Datum:** 2026-09-16
 **Treiber-QA:** Maintainability (QA-3), Security / Privacy (QA-1)
 
+> **Nachtrag (#180):** `Activity.metrics` / `ActivityMetrics` sind durch `Activity.cardio` / `CardioMetrics` abgelöst und werden seit Schema V5 persistiert — siehe [ADR-012](ADR-012-activitykind-und-cardiometrics.md). Der Entscheid unten bleibt als Protokoll unverändert.
+
 ---
 
 ## Kontext
 
-Hevy (#34) und Strava ([[ADR-10]], #152) sind als reale Quellen hinter dem `FitnessConnector`-Protocol ([[ADR-6]]) umgesetzt. Polar AccessLink kommt als **dritte** Quelle hinzu. Das ist keine Wahl gegen Strava: Beide Quellen laufen nebeneinander, der Sync fragt alle verbundenen Quellen ab.
+Hevy (#34) und Strava ([ADR-010](ADR-010-strava-oauth-byo-app.md), #152) sind als reale Quellen hinter dem `FitnessConnector`-Protocol ([ADR-006](ADR-006-fitness-connector-protocol.md)) umgesetzt. Polar AccessLink kommt als **dritte** Quelle hinzu. Das ist keine Wahl gegen Strava: Beide Quellen laufen nebeneinander, der Sync fragt alle verbundenen Quellen ab.
 
 Drei Punkte sind für Polar zu klären:
 
-1. **OAuth ohne Backend.** Polars Token-Endpoint verlangt, wie Strava, bei jedem Request HTTP Basic `client_id:client_secret`. PKCE wird von AccessLink v3 nicht unterstützt. Ein Team-Secret im Binary ist aus jedem TestFlight-Build extrahierbar, ein Backend schliesst [[ADR-4]] aus.
+1. **OAuth ohne Backend.** Polars Token-Endpoint verlangt, wie Strava, bei jedem Request HTTP Basic `client_id:client_secret`. PKCE wird von AccessLink v3 nicht unterstützt. Ein Team-Secret im Binary ist aus jedem TestFlight-Build extrahierbar, ein Backend schliesst [ADR-004](ADR-004-no-backend-proxy-poc.md) aus.
 2. **API-Version.** Polar betreibt zwei getrennte, inkompatible Systeme: AccessLink **v3** (`flow.polar.com`, `polarremote.com`, `www.polaraccesslink.com`) und die API **v4** (`auth.polar.com`). Ein unter `admin.polaraccesslink.com` registrierter Client authentisiert sich nur gegen die v3-Hosts.
 3. **Datenmodell.** Polar liefert Ausdauer-Kennzahlen (Herzfrequenz, Kalorien, Trainingsload), für die das krafttrainingsgeformte `Activity`-Modell (`exercises → sets`) keinen Platz hat.
 
@@ -20,14 +22,14 @@ Drei Punkte sind für Polar zu klären:
 
 ## Entscheidung
 
-**1. BYO-App wie Strava.** Jeder Nutzer registriert seine eigene AccessLink-Application unter `admin.polaraccesslink.com` und trägt Client-ID und Client-Secret im Screen `PolarCredentialsView` ein. Als Redirect-URI hinterlegt er `fitbuddy://polar/callback`. Die Begründung aus [[ADR-10]] gilt unverändert: Das Secret gehört dem Nutzer, nicht dem Team — kein Secret im Binary, kein Backend, [[ADR-4]] bleibt gültig.
+**1. BYO-App wie Strava.** Jeder Nutzer registriert seine eigene AccessLink-Application unter `admin.polaraccesslink.com` und trägt Client-ID und Client-Secret im Screen `PolarCredentialsView` ein. Als Redirect-URI hinterlegt er `fitbuddy://polar/callback`. Die Begründung aus [ADR-010](ADR-010-strava-oauth-byo-app.md) gilt unverändert: Das Secret gehört dem Nutzer, nicht dem Team — kein Secret im Binary, kein Backend, [ADR-004](ADR-004-no-backend-proxy-poc.md) bleibt gültig.
 
 **2. AccessLink v3.**
 - Autorisierung: `https://flow.polar.com/oauth2/authorization`, Scope `accesslink.read_all`, Absicherung des Callbacks über den zufälligen `state`-Parameter
 - Token: `https://polarremote.com/v2/oauth2/token`
 - Daten: `POST /v3/users` (einmalige Registrierung, `409` = bereits registriert = ok), `GET /v3/exercises`
 
-**3. Sechs Keychain-Items**, alle `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` ([[ADR-3]]):
+**3. Sechs Keychain-Items**, alle `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` ([ADR-003](ADR-003-keychain-this-device-only.md)):
 
 | Item | Inhalt |
 |---|---|
@@ -48,7 +50,7 @@ Der Hard-Logout (US-1 AC3) löscht alle sechs samt der gecachten Polar-Trainings
 
 **7. Polar-Sessions bleiben wie Strava aus den Kraft-Auswertungen draussen (v0).** `ConnectorSource.isEnduranceSource` markiert Strava und Polar; Analyse-Prompt, Übungsliste, Progressionskurve und Muskel-Split lassen solche Sessions aus, die Detailansicht zeigt kein «0 kg». Die Eigenschaft ist exhaustiv, damit jede künftige Quelle sich einordnen muss.
 
-**8. Schlaf-, HRV- und Recovery-Daten bleiben ausgeschlossen.** Sie sind tages-, nicht trainingsförmig und passen nicht in `Activity` — dasselbe Problem wie HealthKit (`W-5`, [[ADR-6]]).
+**8. Schlaf-, HRV- und Recovery-Daten bleiben ausgeschlossen.** Sie sind tages-, nicht trainingsförmig und passen nicht in `Activity` — dasselbe Problem wie HealthKit (`W-5`, [ADR-006](ADR-006-fitness-connector-protocol.md)).
 
 **9. Die Member-ID bleibt stabil.** FitBuddy erzeugt sie beim ersten Start und speichert sie. Ist der Keychain beim Start nicht lesbar, gilt für diesen Prozess eine Ersatz-ID, die nicht gespeichert wird; AccessLink beantwortet deren Registrierung mit `409`.
 
@@ -60,7 +62,7 @@ Der Hard-Logout (US-1 AC3) löscht alle sechs samt der gecachten Polar-Trainings
 
 ### + Positiv
 
-- **Kein Secret im Binary, kein Backend** — dieselben Eigenschaften wie Strava ([[ADR-10]]), inklusive pro Nutzer isolierter Rate-Limits und ohne Auftragsverarbeitung durch das Team.
+- **Kein Secret im Binary, kein Backend** — dieselben Eigenschaften wie Strava ([ADR-010](ADR-010-strava-oauth-byo-app.md)), inklusive pro Nutzer isolierter Rate-Limits und ohne Auftragsverarbeitung durch das Team.
 - **Kein Protocol-Drift.** Drei Conformer auf dem unveränderten `FitnessConnector`, geteilte OAuth-Infrastruktur mit Strava.
 - **Ausdauer-Kennzahlen im Modell** über den additiven Eingriff `Activity.metrics`.
 
@@ -71,7 +73,7 @@ Der Hard-Logout (US-1 AC3) löscht alle sechs samt der gecachten Polar-Trainings
 - **`trainingLoad` ist providerspezifisch skaliert** — nur als Trend innerhalb von Polar interpretierbar.
 - **`metrics` wird noch nicht persistiert.** Das SwiftData-Schema kennt die Ausdauer-Kennzahlen nicht; im Cache fehlen sie.
 - **v3 wird mittelfristig abgelöst.** Die Migration auf v4 bedeutet neue Hosts, neue Client-Registrierung und ein neues DTO.
-- **Drei weitere Hosts für das Certificate-Pinning** (TD-4).
+- **Zwei weitere Hosts für das Certificate-Pinning** (TD-4): `www.polaraccesslink.com` und `polarremote.com`, mit #153 umgesetzt. `flow.polar.com` läuft in `ASWebAuthenticationSession` und ist nicht pinnbar.
 
 ---
 

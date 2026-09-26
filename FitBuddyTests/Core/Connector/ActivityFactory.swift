@@ -43,4 +43,51 @@ enum ActivityFactory {
             ]
         )
     }
+
+    /// The session of `activity(...)`, logged against a routine (#240): the
+    /// warm-up prescribed 10 reps, the working set a range topping out at 12.
+    static func routineActivity(
+        id: String,
+        start: Date,
+        routineID: String = "r-1",
+        routineUpdatedAt: Date = Date(timeIntervalSince1970: 1_749_000_000)
+    ) -> Activity {
+        var activity = activity(id: id, start: start)
+        activity.routineID = routineID
+        activity.routineUpdatedAt = routineUpdatedAt
+        activity.exercises[0].sets[0].targetReps = 10
+        activity.exercises[0].sets[1].targetReps = 12
+        return activity
+    }
+
+    /// One endurance session as Strava or Polar hands it over (#180): a
+    /// classified sport with a full cardio block and no sets worth counting.
+    static func cardioActivity(
+        id: String,
+        start: Date,
+        source: ConnectorSource = .strava,
+        kind: ActivityKind = .run,
+        cardio: CardioMetrics = CardioMetrics(
+            averageHeartRate: 148,
+            maxHeartRate: 172,
+            elevationGainMeters: 412.5,
+            averageSpeedMetersPerSecond: 2.78,
+            energyKilojoules: 920,
+            perceivedEffort: 64,
+            activeCalories: 530,
+            distanceMeters: 10_400,
+            durationSeconds: 3742,
+            trainingLoad: 143.22
+        )
+    ) -> Activity {
+        Activity(
+            id: id,
+            title: "Trail Run",
+            startTime: start,
+            endTime: start.addingTimeInterval(3742),
+            source: source,
+            kind: kind,
+            cardio: cardio
+        )
+    }
 }

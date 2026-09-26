@@ -15,6 +15,12 @@ struct MistralClient: LLMProviderClient {
     /// page never mention it. Whether Mistral can re-point either id to a
     /// revised build of 3.5 is not documented — the two are equal in that
     /// respect, so the documented name wins.
+    ///
+    /// **Context window: 128 k tokens — the smallest of the three, and so
+    /// the one the prompt budget is derived from**
+    /// (`AnalysisPromptBudget.smallestContextWindowTokens`, TD-1/#187).
+    /// Changing this pin to a model with a different window means changing
+    /// that constant with it.
     static let model = "mistral-medium-3-5"
     /// Same budget as the other two: the report is a summary plus up to four
     /// cards, and a JSON answer cut off before its summary is no answer (#174).

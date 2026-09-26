@@ -23,7 +23,7 @@ enum MuscleGroupFrequency {
     ///
     /// - Parameters:
     ///   - sessions: The strength sessions of the analysed window —
-    ///     `AnalysisPromptBuilder.strengthSessions(in:)`, already restricted to
+    ///     `AnalysisPromptBuilder.sessions(in:for:)` with `.strength`, already restricted to
     ///     the window.
     ///   - window: The window analysed; its length is the divisor.
     static func sessionsPerWeek(

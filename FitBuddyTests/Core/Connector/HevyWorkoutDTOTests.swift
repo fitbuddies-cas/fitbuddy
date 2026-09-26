@@ -37,6 +37,7 @@ final class HevyWorkoutDTOTests: XCTestCase {
 
         XCTAssertNil(dto.title)
         XCTAssertNil(dto.endTime)
+        XCTAssertNil(dto.routineID)
         XCTAssertEqual(dto.exercises, [])
 
         let activity = dto.makeActivity()
@@ -205,5 +206,77 @@ final class HevyWorkoutDTOTests: XCTestCase {
         XCTAssertEqual(page.page, 1)
         XCTAssertEqual(page.pageCount, 1)
         XCTAssertEqual(page.workouts, [])
+    }
+
+    // MARK: - Routine targets (#240)
+
+    /// A workout logged without a routine is the common case, and the spec
+    /// does not mark `routine_id` nullable: decoding it strictly would fail
+    /// the whole page at the first free workout.
+    func testAWorkoutWithoutARoutineDecodesAndCarriesNoTargets() throws {
+        let dto = try decode(HevyPayloadFactory.workout(id: "w-1", start: Date(timeIntervalSince1970: 1_750_000_000)))
+        XCTAssertNil(dto.routineID)
+
+        let activity = dto.makeActivity(routine: nil)
+        XCTAssertNil(activity.routineID)
+        XCTAssertNil(activity.routineUpdatedAt)
+        XCTAssertEqual(activity.exercises.first?.sets.map(\.targetReps), [nil, nil])
+    }
+
+    /// Hevy sends `routine_id: null` too, on a workout whose routine is gone.
+    func testANullRoutineIdDecodesAsNone() throws {
+        var payload = HevyPayloadFactory.workout(id: "w-1", start: Date(timeIntervalSince1970: 1_750_000_000))
+        payload["routine_id"] = NSNull()
+        XCTAssertNil(try decode(payload).routineID)
+    }
+
+    func testTargetsAreSnapshottedByPositionWithTheRoutineTimestamp() throws {
+        let updatedAt = Date(timeIntervalSince1970: 1_750_000_000)
+        let dto = try decode(HevyPayloadFactory.workout(id: "w-1", start: updatedAt, routineID: "r-1"))
+        let routineData = try JSONSerialization.data(
+            withJSONObject: HevyPayloadFactory.routine(id: "r-1", updatedAt: updatedAt)
+        )
+        let routine = try JSONDecoder.hevy.decode(HevyRoutineDTO.self, from: routineData)
+
+        let activity = dto.makeActivity(routine: routine)
+
+        XCTAssertEqual(activity.routineID, "r-1")
+        XCTAssertEqual(activity.routineUpdatedAt, updatedAt)
+        // Warm-up slot and working slot line up with the prescribed ones.
+        XCTAssertEqual(activity.exercises.first?.sets.map(\.targetReps), [10, 12])
+    }
+
+    /// A warm-up skipped on the day does not shift the working targets: the
+    /// routine prescribes a warm-up and a working set, the user logged the
+    /// working set only, and it still gets the working target.
+    func testASkippedWarmUpDoesNotShiftTheWorkingTargets() throws {
+        var payload = HevyPayloadFactory.workout(id: "w-1", start: Date(timeIntervalSince1970: 1_750_000_000), routineID: "r-1")
+        var exercises = try XCTUnwrap(payload["exercises"] as? [[String: Any]])
+        var sets = try XCTUnwrap(exercises[0]["sets"] as? [[String: Any]])
+        sets.removeFirst()
+        exercises[0]["sets"] = sets
+        payload["exercises"] = exercises
+        let routineData = try JSONSerialization.data(
+            withJSONObject: HevyPayloadFactory.routine(id: "r-1", updatedAt: Date(timeIntervalSince1970: 1_750_000_000))
+        )
+        let routine = try JSONDecoder.hevy.decode(HevyRoutineDTO.self, from: routineData)
+
+        let activity = try decode(payload).makeActivity(routine: routine)
+
+        XCTAssertEqual(activity.exercises.first?.sets.map(\.type), [.normal])
+        XCTAssertEqual(activity.exercises.first?.sets.map(\.targetReps), [12])
+    }
+
+    /// The id is kept even when the routine could not be fetched (deleted
+    /// at the source): the session still says what it was logged against,
+    /// and the empty targets say the plan is gone.
+    func testARoutineHevyNoLongerHasLeavesTheIdAndNoTargets() throws {
+        let dto = try decode(HevyPayloadFactory.workout(id: "w-1", start: Date(timeIntervalSince1970: 1_750_000_000), routineID: "r-gone"))
+
+        let activity = dto.makeActivity(routine: nil)
+
+        XCTAssertEqual(activity.routineID, "r-gone")
+        XCTAssertNil(activity.routineUpdatedAt)
+        XCTAssertEqual(activity.exercises.first?.sets.map(\.targetReps), [nil, nil])
     }
 }

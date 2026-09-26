@@ -26,6 +26,33 @@ final class AnalysisCardTests: XCTestCase {
         XCTAssertEqual(card.kind, .progression)
     }
 
+    func testDecodesARepProgressionCard() throws {
+        let card = try decode("""
+        {"kind": "repProgression", "exercise": "Lateral Raise (Dumbbell)", "muscleGroup": "Shoulders",
+         "weightKg": 10, "fromReps": 12, "toReps": 14, "reasoning": "Earn the next dumbbell with reps."}
+        """)
+
+        XCTAssertEqual(card, .repProgression(
+            exercise: "Lateral Raise (Dumbbell)",
+            muscleGroup: "Shoulders",
+            weightKg: 10,
+            fromReps: 12,
+            toReps: 14,
+            reasoning: "Earn the next dumbbell with reps."
+        ))
+        XCTAssertEqual(card.kind, .repProgression)
+        XCTAssertEqual(card.prose, "Earn the next dumbbell with reps.")
+    }
+
+    /// Reps are whole numbers: a rep count sent as a fraction is not the
+    /// schema.
+    func testRejectsRepsSentAsAFraction() {
+        XCTAssertThrowsError(try decode("""
+        {"kind": "repProgression", "exercise": "Row", "muscleGroup": "Back",
+         "weightKg": 50, "fromReps": 8.5, "toReps": 10, "reasoning": "More."}
+        """))
+    }
+
     func testDecodesARecoveryCard() throws {
         let card = try decode("""
         {"kind": "recovery", "reasoning": "Six sessions in seven days.", "suggestedRestHours": 48}
@@ -46,6 +73,71 @@ final class AnalysisCardTests: XCTestCase {
             groupB: "Legs",
             perWeekB: 1.5,
             reasoning: "Add a leg session."
+        ))
+    }
+
+    func testDecodesAMetricCard() throws {
+        let card = try decode("""
+        {"kind": "metric", "label": "Weekly distance", "from": 32, "to": 35,
+         "unit": "kilometers", "reasoning": "Held for three weeks.", "source": "Run"}
+        """)
+
+        XCTAssertEqual(card, .metric(
+            label: "Weekly distance",
+            from: 32,
+            to: 35,
+            unit: .kilometers,
+            reasoning: "Held for three weeks.",
+            source: "Run"
+        ))
+        XCTAssertEqual(card.kind, .metric)
+    }
+
+    /// Every unit the schema offers decodes to its case; an invented one does
+    /// not, so a card in a unit the app cannot format never reaches a view.
+    func testDecodesEveryMetricUnitAndRejectsAnUnknownOne() throws {
+        for unit in MetricUnit.allCases {
+            let card = try decode("""
+            {"kind": "metric", "label": "Figure", "from": 5, "to": 6,
+             "unit": "\(unit.rawValue)", "reasoning": "Because.", "source": ""}
+            """)
+            guard case let .metric(_, _, _, decoded, _, _) = card else {
+                return XCTFail("expected a metric card")
+            }
+            XCTAssertEqual(decoded, unit)
+        }
+
+        XCTAssertThrowsError(try decode("""
+        {"kind": "metric", "label": "Figure", "from": 5, "to": 6,
+         "unit": "furlongs", "reasoning": "Because.", "source": ""}
+        """))
+    }
+
+    /// The one optional key across every card: a model that leaves the header
+    /// label out sends a card without a source, not a broken one.
+    func testAMetricCardWithoutASourceDecodesWithAnEmptyOne() throws {
+        let card = try decode("""
+        {"kind": "metric", "label": "Weekly distance", "from": 32, "to": 35,
+         "unit": "kilometers", "reasoning": "Held for three weeks."}
+        """)
+
+        guard case let .metric(_, _, _, _, _, source) = card else {
+            return XCTFail("expected a metric card")
+        }
+        XCTAssertEqual(source, "")
+    }
+
+    func testDecodesAnInterferenceCard() throws {
+        let card = try decode("""
+        {"kind": "interference", "strengthDays": 4, "cardioDays": 4, "overlapDays": 3,
+         "reasoning": "Move one run."}
+        """)
+
+        XCTAssertEqual(card, .interference(
+            strengthDays: 4,
+            cardioDays: 4,
+            overlapDays: 3,
+            reasoning: "Move one run."
         ))
     }
 

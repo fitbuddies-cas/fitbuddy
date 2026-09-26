@@ -31,6 +31,8 @@ actor AnalysisResultStore {
             generatedAt: generatedAt,
             windowWeeks: context.window.weeks,
             sessionCount: context.sessionCount,
+            sessionCountsJSON: SessionCountFormat.encode(context),
+            analysisProfileRawValue: context.analysisProfile?.rawValue,
             goal: context.profile.goal?.rawValue,
             experience: context.profile.experience?.rawValue,
             reportJSON: encoded.json,
@@ -117,20 +119,57 @@ actor AnalysisResultStore {
             id: result.id,
             text: result.text,
             generatedAt: result.generatedAt,
-            context: AnalysisContext(
-                sessionCount: result.sessionCount,
-                window: AnalysisWindow(weeks: result.windowWeeks),
-                // `flatMap` rather than a crash on a value this build no
-                // longer knows: a goal renamed in a later version leaves the
-                // row readable, minus that one line.
-                profile: TrainingProfile(
-                    goal: result.goal.flatMap(TrainingGoal.init(rawValue:)),
-                    experience: result.experience.flatMap(TrainingExperience.init(rawValue:))
-                )
-            ),
+            context: context(of: result),
             report: AnalysisReportFormat.decode(result.reportJSON, version: result.reportVersion),
             provider: result.provider
         )
+    }
+
+    /// The data basis of a stored row (#36, #87, #182, #185).
+    ///
+    /// A row without a domain breakdown takes the initializer that derives one
+    /// from the sources — that is what a run counted before #182 meant — and a
+    /// row whose breakdown could not be read keeps its bare total. Making all
+    /// three readings explicit here keeps them apart.
+    private static func context(of result: AnalysisResult) -> AnalysisContext {
+        // `flatMap` rather than a crash on a value this build no longer knows:
+        // a goal renamed in a later version leaves the row readable, minus that
+        // one line.
+        let profile = TrainingProfile(
+            goal: result.goal.flatMap(TrainingGoal.init(rawValue:)),
+            experience: result.experience.flatMap(TrainingExperience.init(rawValue:))
+        )
+        let window = AnalysisWindow(weeks: result.windowWeeks)
+        let analysisProfile = result.analysisProfile
+        switch SessionCountFormat.decode(
+            result.sessionCountsJSON,
+            fallbackSessionCount: result.sessionCount
+        ) {
+        case .unattributed(let total):
+            return AnalysisContext(
+                unattributedSessionCount: total,
+                window: window,
+                analysisProfile: analysisProfile,
+                profile: profile
+            )
+        case .breakdown(let sources, let domains, let analysed):
+            guard let domains else {
+                return AnalysisContext(
+                    sessionCounts: sources,
+                    window: window,
+                    analysisProfile: analysisProfile,
+                    profile: profile
+                )
+            }
+            return AnalysisContext(
+                sessionCounts: sources,
+                domainCounts: domains,
+                analysedCounts: analysed,
+                window: window,
+                analysisProfile: analysisProfile,
+                profile: profile
+            )
+        }
     }
 
     /// Saves, discarding the pending changes if the save fails — without the

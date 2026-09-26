@@ -28,12 +28,68 @@ actor WorkoutStore {
     /// entirely, and it removes workouts the user deleted at the source for
     /// free. Delete and insert share one `save()`, so a failure leaves the
     /// previous cache intact.
+    ///
+    /// One thing survives the rebuild: the **routine snapshot** a session
+    /// already carries (#240). The connector hands over the targets as the
+    /// routine stands today, and rewriting them on every sync would compare
+    /// a past session against a plan that did not apply when it was trained
+    /// — the live join ADR-013 rules out. So the first snapshot a session was
+    /// cached with is carried over, and a routine the user edits afterwards
+    /// reaches only the sessions logged after the edit.
     func replaceCachedWorkouts(from source: ConnectorSource, with activities: [Activity]) throws {
+        let snapshots = try routineSnapshots(from: source)
         try deleteWorkouts(from: source)
         for activity in activities {
-            modelContext.insert(activity.makeWorkout())
+            let workout = activity.makeWorkout()
+            snapshots[activity.id]?.apply(to: workout)
+            modelContext.insert(workout)
         }
         try saveOrRollback()
+    }
+
+    /// The routine snapshot of every cached session of `source` that has
+    /// one, keyed by workout id — read before the rows are deleted.
+    private func routineSnapshots(from source: ConnectorSource) throws -> [String: RoutineSnapshot] {
+        var snapshots: [String: RoutineSnapshot] = [:]
+        for workout in try modelContext.fetch(Self.descriptor(for: source)) where workout.routineUpdatedAt != nil {
+            snapshots[workout.id] = RoutineSnapshot(workout: workout)
+        }
+        return snapshots
+    }
+
+    /// What a session was compared against when it was first cached: the
+    /// routine, its state, and the target of every set, by exercise and set
+    /// index.
+    private struct RoutineSnapshot {
+        let routineID: String?
+        let routineUpdatedAt: Date?
+        let targets: [Int: [Int: Int]]
+
+        init(workout: Workout) {
+            routineID = workout.routineID
+            routineUpdatedAt = workout.routineUpdatedAt
+            var targets: [Int: [Int: Int]] = [:]
+            for exercise in workout.exercises {
+                for set in exercise.sets {
+                    if let target = set.targetReps { targets[exercise.index, default: [:]][set.index] = target }
+                }
+            }
+            self.targets = targets
+        }
+
+        /// Puts the snapshot onto a freshly mapped workout in place of the
+        /// targets the connector just derived. A set the snapshot never saw
+        /// — added to the session at the source since — carries no target,
+        /// which is the state the 2-for-2 rule reads as not checkable.
+        func apply(to workout: Workout) {
+            workout.routineID = routineID
+            workout.routineUpdatedAt = routineUpdatedAt
+            for exercise in workout.exercises {
+                for set in exercise.sets {
+                    set.targetReps = targets[exercise.index]?[set.index]
+                }
+            }
+        }
     }
 
     /// Drops one source's sessions — disconnecting Strava, or ending the Hevy

@@ -19,6 +19,10 @@ enum StravaConnectionFailure: Equatable {
     case invalidResponse
     /// Offline, timeout, DNS.
     case network
+    /// The token endpoint answered with a certificate FitBuddy must not
+    /// trust (failed pinning, #153): interception on the network, or a
+    /// device clock far enough off that every certificate looks expired.
+    case untrustedConnection
     /// Strava answered with an error status.
     case serviceUnavailable
     /// The Keychain refused a read or a write: the pair could not be stored,
@@ -35,6 +39,7 @@ enum StravaConnectionFailure: Equatable {
         case .missingScope: self = .missingScope
         case .stateMismatch, .invalidCallback, .invalidResponse: self = .invalidResponse
         case .transport: self = .network
+        case .untrustedConnection: self = .untrustedConnection
         case .unexpectedStatus: self = .serviceUnavailable
         // A refresh token is never involved in a fresh authorization; if the
         // code exchange is rejected as a grant, the callback was not usable.
@@ -46,7 +51,7 @@ enum StravaConnectionFailure: Equatable {
     var pointsToCredentials: Bool {
         switch self {
         case .invalidClientCredentials, .invalidResponse: return true
-        case .accessDenied, .missingScope, .network, .serviceUnavailable, .keychain: return false
+        case .accessDenied, .missingScope, .network, .untrustedConnection, .serviceUnavailable, .keychain: return false
         }
     }
 
@@ -58,6 +63,7 @@ enum StravaConnectionFailure: Equatable {
         case .missingScope: return "Activity access was not granted"
         case .invalidResponse: return "Strava did not send FitBuddy back correctly"
         case .network: return "Could not reach Strava"
+        case .untrustedConnection: return "Connection to Strava not trusted"
         case .serviceUnavailable: return "Strava is currently unavailable"
         case .keychain: return "Could not update the Strava connection"
         }
@@ -76,6 +82,8 @@ enum StravaConnectionFailure: Equatable {
             return "Make sure the Authorization Callback Domain of your Strava application is set to “\(StravaKeyPresentation.callbackDomain)”, then try again."
         case .network:
             return "Check your internet connection and try again."
+        case .untrustedConnection:
+            return "FitBuddy could not verify the secure connection to Strava. Your credentials were not sent. Check the device's date and time, or switch to another network, for example mobile data, and try again."
         case .serviceUnavailable:
             return "Strava answered with an unexpected error — nothing was rejected. Please try again in a little while."
         case .keychain:

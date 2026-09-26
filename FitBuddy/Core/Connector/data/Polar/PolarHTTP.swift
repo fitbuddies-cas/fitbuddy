@@ -19,6 +19,7 @@ enum PolarHTTP {
             (data, response) = try await session.data(for: request)
         } catch {
             if error.isCancellation { throw error }
+            if error.isUntrustedConnection { throw ConnectorError.untrustedConnection }
             throw ConnectorError.networkUnavailable
         }
         guard let http = response as? HTTPURLResponse else {

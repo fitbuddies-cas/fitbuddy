@@ -15,13 +15,16 @@ final class HevyConnectorTests: XCTestCase {
 
     /// Requests the stub answered, in order.
     nonisolated(unsafe) private static var captured: [URLRequest] = []
-    /// Page bodies the stub still has to hand out, in order.
+    /// Workout page bodies the stub still has to hand out, in order.
     nonisolated(unsafe) private static var pendingPages: [Data] = []
+    /// Routine page bodies the stub still has to hand out, in order.
+    nonisolated(unsafe) private static var pendingRoutinePages: [Data] = []
 
     override func setUp() async throws {
         try await super.setUp()
         Self.captured = []
         Self.pendingPages = []
+        Self.pendingRoutinePages = []
         sut = HevyConnector(session: StubURLProtocol.makeSession())
         try await sut.connect(credentials: .apiKey("hv_live_abc"))
     }
@@ -30,6 +33,7 @@ final class HevyConnectorTests: XCTestCase {
         StubURLProtocol.handler = nil
         Self.captured = []
         Self.pendingPages = []
+        Self.pendingRoutinePages = []
         sut = nil
         try await super.tearDown()
     }
@@ -201,6 +205,108 @@ final class HevyConnectorTests: XCTestCase {
         XCTAssertEqual(activities.map(\.id), ["newest", "boundary", "oldest"])
     }
 
+    // MARK: - Routine targets (#240)
+
+    func testAWorkoutNamingARoutineGetsItsTargetsFromASecondEndpoint() async throws {
+        let updatedAt = Self.daysAgo(30)
+        stub(
+            workoutPages: [HevyPayloadFactory.page(page: 1, pageCount: 1, workouts: [
+                HevyPayloadFactory.workout(id: "w-1", start: Self.daysAgo(1), routineID: "r-1"),
+            ])],
+            routinePages: [HevyPayloadFactory.routinesPage(page: 1, pageCount: 1, routines: [
+                HevyPayloadFactory.routine(id: "r-1", updatedAt: updatedAt),
+            ])]
+        )
+
+        let activities = try await sut.fetchActivities(since: Self.daysAgo(90))
+
+        let activity = try XCTUnwrap(activities.first)
+        XCTAssertEqual(activity.routineID, "r-1")
+        XCTAssertEqual(activity.routineUpdatedAt, updatedAt)
+        XCTAssertEqual(activity.exercises.first?.sets.map(\.targetReps), [10, 12])
+        XCTAssertEqual(Self.captured.map { $0.url?.path }, ["/v1/workouts", "/v1/routines"])
+        let routinesRequest = try XCTUnwrap(Self.captured.last)
+        XCTAssertEqual(routinesRequest.value(forHTTPHeaderField: "api-key"), "hv_live_abc")
+        XCTAssertEqual(Self.queryValue("pageSize", in: routinesRequest), "10")
+    }
+
+    /// Logging freely is the common case, and it must not cost a request.
+    func testWorkoutsWithoutARoutineSendNoRoutinesRequest() async throws {
+        stub(workoutPages: [HevyPayloadFactory.page(page: 1, pageCount: 1, workouts: [
+            HevyPayloadFactory.workout(id: "w-1", start: Self.daysAgo(1)),
+        ])])
+
+        let activities = try await sut.fetchActivities(since: Self.daysAgo(90))
+
+        XCTAssertEqual(activities.first?.routineID, nil)
+        XCTAssertEqual(activities.first?.exercises.first?.sets.map(\.targetReps), [nil, nil])
+        XCTAssertEqual(Self.captured.map { $0.url?.path }, ["/v1/workouts"])
+    }
+
+    /// A routine the user deleted since is absent from the library. The
+    /// session keeps its id, carries no targets, and the sync succeeds.
+    func testARoutineMissingFromTheLibraryIsNotAFailure() async throws {
+        stub(
+            workoutPages: [HevyPayloadFactory.page(page: 1, pageCount: 1, workouts: [
+                HevyPayloadFactory.workout(id: "w-1", start: Self.daysAgo(1), routineID: "r-gone"),
+            ])],
+            routinePages: [HevyPayloadFactory.routinesPage(page: 1, pageCount: 1, routines: [
+                HevyPayloadFactory.routine(id: "r-other", updatedAt: Self.daysAgo(30)),
+            ])]
+        )
+
+        let activities = try await sut.fetchActivities(since: Self.daysAgo(90))
+
+        XCTAssertEqual(activities.first?.routineID, "r-gone")
+        XCTAssertNil(activities.first?.routineUpdatedAt)
+        XCTAssertEqual(activities.first?.exercises.first?.sets.map(\.targetReps), [nil, nil])
+    }
+
+    /// The library has no filter, so it is walked — but only until every
+    /// routine the window names has been found.
+    func testTheRoutineWalkStopsOnceEveryNamedRoutineIsFound() async throws {
+        stub(
+            workoutPages: [HevyPayloadFactory.page(page: 1, pageCount: 1, workouts: [
+                HevyPayloadFactory.workout(id: "w-1", start: Self.daysAgo(1), routineID: "r-2"),
+                HevyPayloadFactory.workout(id: "w-2", start: Self.daysAgo(2), routineID: "r-1"),
+            ])],
+            routinePages: [
+                HevyPayloadFactory.routinesPage(page: 1, pageCount: 3, routines: [
+                    HevyPayloadFactory.routine(id: "r-1", updatedAt: Self.daysAgo(30)),
+                ]),
+                HevyPayloadFactory.routinesPage(page: 2, pageCount: 3, routines: [
+                    HevyPayloadFactory.routine(id: "r-2", updatedAt: Self.daysAgo(20)),
+                ]),
+                HevyPayloadFactory.routinesPage(page: 3, pageCount: 3, routines: [
+                    HevyPayloadFactory.routine(id: "r-3", updatedAt: Self.daysAgo(10)),
+                ]),
+            ]
+        )
+
+        let activities = try await sut.fetchActivities(since: Self.daysAgo(90))
+
+        XCTAssertEqual(activities.map(\.routineUpdatedAt), [Self.daysAgo(20), Self.daysAgo(30)])
+        let routinePages = Self.captured
+            .filter { $0.url?.path == "/v1/routines" }
+            .compactMap { Self.queryValue("page", in: $0) }
+        XCTAssertEqual(routinePages, ["1", "2"], "Page 3 holds nothing the window needs")
+    }
+
+    /// The routines share the key and the error mapping with the workouts:
+    /// a rejected key on the second endpoint is the same answer as on the
+    /// first.
+    func testAFailureOnTheRoutinesEndpointPropagates() async {
+        stub(
+            workoutPages: [HevyPayloadFactory.page(page: 1, pageCount: 1, workouts: [
+                HevyPayloadFactory.workout(id: "w-1", start: Self.daysAgo(1), routineID: "r-1"),
+            ])],
+            routinePages: [],
+            routineStatus: 503
+        )
+
+        await assertFetchThrows(.serviceUnavailable)
+    }
+
     // MARK: - Error mapping
 
     func testUnauthorizedIsReportedWithoutTheConnectorActingOnIt() async throws {
@@ -239,6 +345,13 @@ final class HevyConnectorTests: XCTestCase {
         await assertFetchThrows(.networkUnavailable)
     }
 
+    /// A failed certificate check (pinning, #153) is not "no internet": the
+    /// user has to leave the network, not look for reception.
+    func testCertificateFailureMapsToUntrustedConnection() async {
+        StubURLProtocol.handler = { _ in throw URLError(.serverCertificateUntrusted) }
+        await assertFetchThrows(.untrustedConnection)
+    }
+
     func testMalformedBodyMapsToInvalidResponse() async {
         StubURLProtocol.handler = { request in
             (Self.http(status: 200, for: request, headers: nil), Data("not json".utf8))
@@ -262,14 +375,33 @@ final class HevyConnectorTests: XCTestCase {
 
     // MARK: - Helpers
 
-    /// Answers requests with `pages` in order; the last page repeats if the
-    /// connector asks for more, so an over-eager walk shows up as an extra
-    /// captured request rather than as a stub failure.
+    /// Answers `/v1/workouts` with `pages` in order; the last page repeats if
+    /// the connector asks for more, so an over-eager walk shows up as an extra
+    /// captured request rather than as a stub failure. `/v1/routines` answers
+    /// with an empty library.
     private func stub(pages: [Data]) {
+        stub(workoutPages: pages)
+    }
+
+    /// Answers each endpoint with its own pages, in order, the last one
+    /// repeating (see `stub(pages:)`). `routineStatus` other than 200 answers
+    /// the routines endpoint with that status and an empty body.
+    private func stub(workoutPages: [Data], routinePages: [Data] = [], routineStatus: Int = 200) {
         Self.captured = []
-        Self.pendingPages = pages
+        Self.pendingPages = workoutPages
+        Self.pendingRoutinePages = routinePages
         StubURLProtocol.handler = { request in
             Self.captured.append(request)
+            if request.url?.path == "/v1/routines" {
+                guard routineStatus == 200 else {
+                    return (Self.http(status: routineStatus, for: request, headers: nil), Data())
+                }
+                let body = Self.pendingRoutinePages.count > 1
+                    ? Self.pendingRoutinePages.removeFirst()
+                    : (Self.pendingRoutinePages.first
+                        ?? HevyPayloadFactory.routinesPage(page: 1, pageCount: 1, routines: []))
+                return (Self.http(status: 200, for: request, headers: nil), body)
+            }
             let body = Self.pendingPages.count > 1
                 ? Self.pendingPages.removeFirst()
                 : (Self.pendingPages.first ?? Data())

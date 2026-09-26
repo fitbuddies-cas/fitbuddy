@@ -8,6 +8,16 @@ final class SyncFailureTests: XCTestCase {
         XCTAssertEqual(SyncFailure(syncError: WorkoutSyncError.networkUnavailable), .offline)
     }
 
+    /// A failed certificate check (pinning, #153) gets its own reason: the
+    /// banner must not say "no connection" when the connection could not be
+    /// verified.
+    func testUntrustedConnectionKeepsItsOwnReason() {
+        XCTAssertEqual(SyncFailure(syncError: WorkoutSyncError.untrustedConnection), .untrustedConnection)
+        XCTAssertEqual(WorkoutSyncError(connectorError: .untrustedConnection), .untrustedConnection)
+        XCTAssertNotEqual(SyncFailure.untrustedConnection.summary, SyncFailure.offline.summary)
+        XCTAssertEqual(SyncFailure.untrustedConnection.summary, "connection not trusted")
+    }
+
     func testServerFailuresStaySeparateFromTheNetworkCase() {
         XCTAssertEqual(SyncFailure(syncError: WorkoutSyncError.serviceUnavailable), .serviceUnavailable)
         XCTAssertEqual(
@@ -115,7 +125,7 @@ final class SyncFailureTests: XCTestCase {
     }
 
     private static let allFailures: [SyncFailure] = [
-        .offline, .serviceUnavailable, .rateLimited(retryAfter: nil),
+        .offline, .untrustedConnection, .serviceUnavailable, .rateLimited(retryAfter: nil),
         .keychainUnavailable, .unreadableResponse, .cacheWriteFailed, .unknown,
     ]
 }

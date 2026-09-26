@@ -18,6 +18,9 @@ struct WorkoutSummary: Hashable, Identifiable, Sendable {
     /// Which provider delivered the session (#141) — the dashboard labels
     /// Strava sessions next to Hevy ones (US-5 AC1).
     let source: ConnectorSource
+    /// The normalized sport (#180). `.strength` for a Hevy workout, and for a
+    /// cached session written before V5 whose sport nobody recorded.
+    let kind: ActivityKind
     /// Training volume in kg: Σ (weight × reps) over all counted sets.
     let volumeKg: Double
     let exerciseCount: Int
@@ -33,12 +36,17 @@ struct WorkoutSummary: Hashable, Identifiable, Sendable {
     /// Σ duration over the counted sets, in seconds, or `nil` when none logged
     /// one (#144).
     let durationSeconds: Int?
+    /// Session-level endurance metrics the source reported (#180) — heart
+    /// rate, elevation, speed, effort. `nil` for a strength session and for
+    /// any session cached before V5.
+    let cardio: CardioMetrics?
 
     /// - Parameters:
     ///   - source: Defaults to Hevy, so a fixture written before #141 still
     ///     describes what it always did.
     ///   - muscleLoads: Defaults to none, so a caller that only cares about
-    ///     the totals — a test fixture, a list row — stays unaffected.
+    ///     the totals — a test fixture, a list row — stays unaffected, as it
+    ///     does for `kind` and `cardio`.
     ///   - distanceMeters: Defaults to none, as does `durationSeconds`, for
     ///     the same reason.
     init(
@@ -46,30 +54,64 @@ struct WorkoutSummary: Hashable, Identifiable, Sendable {
         title: String,
         startTime: Date,
         source: ConnectorSource = .hevy,
+        kind: ActivityKind = .strength,
         volumeKg: Double,
         exerciseCount: Int,
         countedSetCount: Int,
         muscleLoads: [MuscleLoad] = [],
         distanceMeters: Double? = nil,
-        durationSeconds: Int? = nil
+        durationSeconds: Int? = nil,
+        cardio: CardioMetrics? = nil
     ) {
         self.id = id
         self.title = title
         self.startTime = startTime
         self.source = source
+        self.kind = kind
         self.volumeKg = volumeKg
         self.exerciseCount = exerciseCount
         self.countedSetCount = countedSetCount
         self.muscleLoads = muscleLoads
         self.distanceMeters = distanceMeters
         self.durationSeconds = durationSeconds
+        self.cardio = cardio
     }
 
-    /// Whether the session is better described by distance and time than by
-    /// kg: it moved no load but logged either. A Strava run, or a Hevy
-    /// session made of treadmill sets.
+    /// Whether the row is better described by distance and time than by kg.
+    /// This is a presentation question; the domain question — which sport was
+    /// trained — is `isEnduranceWork`, which is what the analysis paths read
+    /// (ADR-012).
+    ///
+    /// Since #180 a mapped endurance discipline is cardio whatever it logged,
+    /// so a Strava `Run` no longer depends on the heuristic. Every other kind
+    /// falls through to that heuristic — moved no load, but logged distance
+    /// or time. A `WeightTraining` session that logged only a duration
+    /// therefore still shows its time: "0 kg" would be a wrong number rather
+    /// than a missing one, even though its `kind` is `.strength`.
     var isCardio: Bool {
-        volumeKg == 0 && (distanceMeters != nil || durationSeconds != nil)
+        if kind.isEndurance { return true }
+        return volumeKg == 0 && (distanceMeters != nil || durationSeconds != nil)
+    }
+
+    /// Whether the session is endurance work — the domain question, and the
+    /// one rule `AnalysisDomain`, the prompt's sections and the exercise list
+    /// all read, so the Exercises section can never fall out of step with the
+    /// strength figures it explains (#183).
+    ///
+    /// It turns on whether `kind` is a classification at all:
+    ///
+    /// - a mapped endurance discipline is endurance whatever it logged,
+    /// - `.strength` **from an endurance source** is a real classification —
+    ///   Strava's `WeightTraining`, Polar's `STRENGTH_TRAINING` — so that
+    ///   session is strength work even though `isCardio` shows its duration,
+    /// - everything else falls back on the row's own figures: Hevy's
+    ///   `.strength` is the model's default rather than a statement about the
+    ///   session, so a Hevy treadmill session is endurance, and `.other` is a
+    ///   row cached before V5 whose sport was never recorded.
+    var isEnduranceWork: Bool {
+        if kind.isEndurance { return true }
+        if kind == .strength, source.isEnduranceSource { return false }
+        return isCardio
     }
 }
 
@@ -99,6 +141,7 @@ extension WorkoutSummary {
             title: workout.title,
             startTime: workout.startTime,
             source: workout.source,
+            kind: workout.kind,
             volumeKg: countedSets.trainingVolumeKg,
             exerciseCount: workout.exercises.count,
             countedSetCount: countedSets.count,
@@ -107,8 +150,12 @@ extension WorkoutSummary {
             // "Other · 1 set" would misrepresent both the run and the chart,
             // which stays what it was — Hevy's strength split.
             muscleLoads: workout.source.isEnduranceSource ? [] : MuscleLoad.merged(loads),
-            distanceMeters: distance > 0 ? distance : nil,
-            durationSeconds: duration > 0 ? duration : nil
+            // A source that reports no sets (Polar) carries its distance and
+            // duration in the cardio block instead, so the dashboard reads the
+            // same two figures whichever source wrote the session.
+            distanceMeters: distance > 0 ? distance : workout.cardio?.distanceMeters,
+            durationSeconds: duration > 0 ? duration : workout.cardio?.durationSeconds,
+            cardio: workout.cardio
         )
     }
 }

@@ -28,6 +28,7 @@ actor DataResetService {
     private let priority: LLMPriorityStore
     private let skip: LLMKeysSkipStore
     private let trainingProfile: TrainingProfileStore
+    private let analysisProfile: AnalysisProfileStore
     private let defaults: UserDefaults
 
     private let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "DataReset")
@@ -40,6 +41,7 @@ actor DataResetService {
         priority: LLMPriorityStore = LLMPriorityStore(),
         skip: LLMKeysSkipStore = LLMKeysSkipStore(),
         trainingProfile: TrainingProfileStore = TrainingProfileStore(),
+        analysisProfile: AnalysisProfileStore = AnalysisProfileStore(),
         defaults: UserDefaults = .standard
     ) {
         self.keychain = keychain
@@ -49,6 +51,7 @@ actor DataResetService {
         self.priority = priority
         self.skip = skip
         self.trainingProfile = trainingProfile
+        self.analysisProfile = analysisProfile
         self.defaults = defaults
     }
 
@@ -86,5 +89,8 @@ actor DataResetService {
         // it would make the next launch mistake this install for one that
         // predates step 4 and never ask again.
         await trainingProfile.clear()
+        // The remembered analysis profile goes with the training it was chosen
+        // for (#185): the next run starts from the default its data suggests.
+        await analysisProfile.clear()
     }
 }

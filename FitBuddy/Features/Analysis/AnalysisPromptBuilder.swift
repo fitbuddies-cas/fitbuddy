@@ -7,12 +7,25 @@ import Foundation
 /// no population averages, strength standards or "typical" volumes anywhere in
 /// the output, and the system prompt forbids inventing them — US-3 AC3 is a
 /// property of the prompt, not of the model's goodwill.
+///
+/// Since #183 the user turn is built from domain sections rather than from one
+/// strength narrative: `StrengthPromptSection`, `EndurancePromptSection` and
+/// `LoadPromptSection`, each rendered only where the window holds data for it.
+/// Which section a session lands in is decided by `AnalysisDomain`, i.e. by
+/// the normalized sport of ADR-012 — a Strava `WeightTraining` session is
+/// strength work, and a Hevy session of treadmill sets is not.
+///
+/// Since #185 the user's `AnalysisProfile` decides which of those sections are
+/// built at all. `.overallLoad` builds everything the window holds, which is
+/// the prompt as #183 and #184 left it; the two single-domain profiles keep
+/// the other half out of the figures and say so, so the model never reads a
+/// deliberate omission as an absence of training.
 enum AnalysisPromptBuilder {
     /// Sessions listed individually. Four weeks of training fits comfortably,
     /// and even a widened 13-week window rarely fills it; the cap only guards
     /// the tail, where sessions add tokens but no signal — the aggregates
     /// above already carry the older ones.
-    private static let maxListedSessions = 30
+    static let maxListedSessions = 30
 
     /// Exercises listed individually in the Exercises section (#173).
     ///
@@ -49,8 +62,8 @@ enum AnalysisPromptBuilder {
     /// - Parameters:
     ///   - summaries: Cached workouts, in any order. Anything outside the two
     ///     analysis windows is ignored, so the dashboard's 90-day read can be
-    ///     passed in unchanged. Strava sessions are ignored as well — see
-    ///     `strengthSessions(in:)`.
+    ///     passed in unchanged. Endurance sessions are no longer dropped
+    ///     (#183): they are described by `EndurancePromptSection` instead.
     ///   - exercises: The movements of the analysed window, rolled up per
     ///     exercise (`exerciseSummaries(since:)` with the window's start). The
     ///     prompt lists the top `maxListedExercises` of them by volume.
@@ -66,6 +79,17 @@ enum AnalysisPromptBuilder {
     ///   - profile: What the user said they train for (US-13). An empty
     ///     profile — the default, and every install that never answered —
     ///     leaves the prompt byte-for-byte as it was without one.
+    ///   - analysisProfile: What this run is about (US-15 AC1, #185). Decides
+    ///     which domain sections are built at all. `.overallLoad` — the
+    ///     default — is "everything the window holds", i.e. exactly the prompt
+    ///     of #183 and #184, so no call site that does not care has to say so.
+    ///   - budgetTokens: The estimated size both turns together have to stay
+    ///     under (#187). The app never passes it: `AnalysisPromptBudget`
+    ///     derives the value from the smallest provider context window, and
+    ///     that is what every call site gets. It is a parameter so the
+    ///     degradation ladder can be driven from a test with an ordinary
+    ///     window instead of a fixture built to be enormous — the rungs are
+    ///     the same either way.
     static func make(
         summaries: [WorkoutSummary],
         exercises: [ExerciseSummary] = [],
@@ -73,20 +97,37 @@ enum AnalysisPromptBuilder {
         window: AnalysisWindow = .default,
         now: Date = Date(),
         calendar: Calendar = .current,
-        profile: TrainingProfile = TrainingProfile()
+        profile: TrainingProfile = TrainingProfile(),
+        analysisProfile: AnalysisProfile = .overallLoad,
+        budgetTokens: Int = AnalysisPromptBudget.maxPromptTokens
     ) -> AnalysisPrompt {
-        AnalysisPrompt(
-            system: systemPrompt,
-            user: userPrompt(
-                summaries: strengthSessions(in: summaries),
-                exercises: exercises,
-                progressions: progressions,
-                window: window,
-                now: now,
-                calendar: calendar,
-                profile: profile
+        // The prompt is built at the widest rung of the ladder that fits the
+        // token budget (TD-1, US-15 AC8, #187). Building it more than once is
+        // string work over data already in memory, and it is the only way to
+        // decide on the size the model will actually be sent rather than on a
+        // guess about it. The last rung goes out whether or not it fits: the
+        // ladder is what the app gives up, not a reason to refuse an analysis.
+        var built = (user: "", detail: AnalysisPromptDetail.full)
+        for detail in AnalysisPromptDetail.ladder {
+            built = (
+                userPrompt(
+                    summaries: summaries,
+                    exercises: exercises,
+                    progressions: progressions,
+                    window: window,
+                    now: now,
+                    calendar: calendar,
+                    profile: profile,
+                    analysisProfile: analysisProfile,
+                    detail: detail
+                ),
+                detail
             )
-        )
+            let estimate = AnalysisPromptBudget.estimatedTokens(in: systemPrompt)
+                + AnalysisPromptBudget.estimatedTokens(in: built.user)
+            if estimate <= budgetTokens { break }
+        }
+        return AnalysisPrompt(system: systemPrompt, user: built.user, detail: built.detail)
     }
 
     // MARK: - Profile
@@ -98,13 +139,21 @@ enum AnalysisPromptBuilder {
     /// to the model as a statement about the person, and a half profile
     /// states only the half that was answered.
     ///
-    /// The closing line is the one that matters most. The analysis reads
-    /// strength sessions only, so a runner with the goal "improve endurance"
-    /// would otherwise hand the model a goal that asks for context the prompt
-    /// does not carry — and rule 3 of the system prompt is the only thing
-    /// standing between that gap and an invented one. Saying it here keeps
-    /// the profile inside the rules instead of leaning against them.
-    static func profileSection(_ profile: TrainingProfile) -> String? {
+    /// The closing line is the one that matters most. It names what the data
+    /// below actually covers, so a goal that asks for context the prompt does
+    /// not carry — "improve endurance" over a cache of bench sessions — is
+    /// answered here rather than left to rule 3. Since #183 the prompt can
+    /// carry endurance work, so the line says which domains are in it instead
+    /// of claiming strength only.
+    ///
+    /// - Parameter domains: The domains the prompt actually carries a section
+    ///   for — what the profile covers, narrowed to what the window holds
+    ///   (#185). An empty window reads as strength-only, which is what it said
+    ///   before there was anything else to say.
+    static func profileSection(
+        _ profile: TrainingProfile,
+        covering domains: [AnalysisDomain] = [.strength]
+    ) -> String? {
         var lines: [String] = []
         if let goal = profile.goal {
             lines.append("Goal: \(goal.displayName.lowercased())")
@@ -113,25 +162,39 @@ enum AnalysisPromptBuilder {
             lines.append("Strength training experience: \(experience.displayName.lowercased())")
         }
         guard !lines.isEmpty else { return nil }
+        let covered: String
+        if domains.contains(.strength) && domains.contains(.endurance) {
+            covered = "my strength and endurance sessions"
+        } else if domains == [.endurance] {
+            covered = "my endurance sessions only"
+        } else {
+            covered = "my strength sessions only"
+        }
         lines.append(
-            "The data below covers my strength sessions only; do not assume anything "
+            "The data below covers \(covered); do not assume anything "
                 + "about other training I may do."
         )
         return (["## Profile"] + lines).joined(separator: "\n")
     }
 
-    /// The sessions the analysis is about: Hevy's, not Strava's or Polar's
-    /// (US-5, #144).
+    /// The sessions of one domain (#183).
     ///
-    /// The system prompt describes strength training, and rule 5 explains a
-    /// 0 kg line as bodyweight or timed work. A run passed through as a
-    /// session would be read exactly that way — "1 exercise, 1 working set,
-    /// 0 kg" — and someone running four times a week would be told about a
-    /// volume collapse that never happened (US-3 AC3). Cardio context is v1
-    /// material; for v0 the figures at least have to be right, so the same
-    /// filter decides the session count `AnalysisContext` reports (US-6).
-    static func strengthSessions(in summaries: [WorkoutSummary]) -> [WorkoutSummary] {
-        summaries.filter { !$0.source.isEnduranceSource }
+    /// The filter reads `AnalysisDomain(summary:)`, i.e. the normalized sport
+    /// (`WorkoutSummary.isEnduranceWork`, ADR-012), and no longer the source. Before
+    /// #183 it dropped every endurance *source* — which put a Strava
+    /// `WeightTraining` session out of the prompt entirely and would have let
+    /// a Hevy treadmill session into the strength figures as "1 exercise,
+    /// 1 working set, 0 kg", exactly the reading of rule 5 that the filter
+    /// existed to prevent. The sport is what the two sections are about, so
+    /// the sport is what selects them.
+    ///
+    /// Which of these sections the user's `AnalysisProfile` asks for is a
+    /// second, separate question, answered by `AnalysisProfile.covers(_:)`
+    /// where the sections are assembled (#185). Deliberately not a second
+    /// overload of this method: `sessions(in:for: .strength)` would then be
+    /// ambiguous at every call site that spells the case with a leading dot.
+    static func sessions(in summaries: [WorkoutSummary], for domain: AnalysisDomain) -> [WorkoutSummary] {
+        summaries.filter { AnalysisDomain(summary: $0) == domain }
     }
 
     /// The strength sessions of the analysed window — what every figure about
@@ -144,7 +207,7 @@ enum AnalysisPromptBuilder {
         calendar: Calendar = .current
     ) -> [WorkoutSummary] {
         let start = window.start(endingAt: now, calendar: calendar)
-        return strengthSessions(in: summaries).filter { $0.startTime >= start }
+        return sessions(in: summaries, for: .strength).filter { $0.startTime >= start }
     }
 
     /// The movements the Exercises section lists: the top
@@ -155,13 +218,24 @@ enum AnalysisPromptBuilder {
     /// title, so the same cache always yields the same prompt — and
     /// bodyweight movements, which carry no kilograms, still rank by how often
     /// they were trained.
-    static func promptedExercises(from exercises: [ExerciseSummary]) -> [ExerciseSummary] {
+    ///
+    /// - Parameter limit: How many the section lists. `maxListedExercises`
+    ///   unless the token budget took the prompt down a rung (#187) — in which
+    ///   case the *same* number has to reach the report validation, or a card
+    ///   could be checked against an exercise the model never saw. The
+    ///   ViewModel still reads progressions at the full cap: the rung is
+    ///   decided after that read, from the prompt it produces, and reading a
+    ///   superset costs nothing.
+    static func promptedExercises(
+        from exercises: [ExerciseSummary],
+        limit: Int = maxListedExercises
+    ) -> [ExerciseSummary] {
         let ranked = exercises.sorted { lhs, rhs in
             if lhs.volumeKg != rhs.volumeKg { return lhs.volumeKg > rhs.volumeKg }
             if lhs.sessionCount != rhs.sessionCount { return lhs.sessionCount > rhs.sessionCount }
             return lhs.title < rhs.title
         }
-        return Array(ranked.prefix(maxListedExercises))
+        return Array(ranked.prefix(max(0, limit)))
     }
 
     // MARK: - System
@@ -170,10 +244,38 @@ enum AnalysisPromptBuilder {
     /// to know that FitBuddy is not a medical product, that the muscle split is
     /// a keyword heuristic, or that bodyweight work carries load without
     /// kilograms — and each of those, unstated, produces confident nonsense.
+    ///
+    /// Since #183 the rules are scoped per domain. Rule 5 — the kilogram rule —
+    /// is the one that made endurance sessions unsafe to pass through at all,
+    /// so it now says which sections it applies to, and rule 7 states the
+    /// endurance counterpart. Rule 2 was sharpened at the same time: general
+    /// training principles are allowed and named as such, while population
+    /// comparisons and norm values stay forbidden (US-3 AC3, US-15 AC6).
+    ///
+    /// The `cards:` paragraph was tightened by about 60 words in #187, where
+    /// the two card kinds of #186 had grown it: the per-kind sentences became
+    /// a list of `"kind": what it is` clauses. Rules 1 to 8 are untouched,
+    /// including their numbers, which `AnalysisReportValidator` refers to by
+    /// number.
+    ///
+    /// **The reasoning requirement stays per kind**, in one closing sentence
+    /// rather than five repetitions. A first attempt front-loaded it as "each
+    /// card with its reasoning in one sentence", which the schema contradicts
+    /// twice over: `note` has no `reasoning` field at all — it carries a
+    /// `title` and a `text`, and every card object is `additionalProperties:
+    /// false` with all fields required — and `recovery`'s is documented as one
+    /// or two sentences, which is what the app's own inserted reasoning is.
+    /// The closing sentence names the four kinds the one-sentence rule applies
+    /// to and leaves recovery at one or two.
     static let systemPrompt = """
     You are FitBuddy's training assistant. You analyse one person's own \
-    strength-training history and give them a concrete recommendation for \
-    their next training block.
+    training history — strength work, endurance work, or both — and give them \
+    a concrete recommendation for their next training block.
+
+    The data comes in sections. A section you were not given covers training \
+    this person did not record in this window, or training they chose to \
+    leave out of this analysis: either way, do not reason about it and do not \
+    fill it in.
 
     Ground rules:
 
@@ -185,10 +287,13 @@ enum AnalysisPromptBuilder {
 
     2. Judge this data only against itself. The person's own history is the \
     only reference point you have: compare the recent window with the \
-    previous one and name what these numbers show. Never invoke population \
-    averages, strength standards, "typical" volumes for a body weight, sex or \
-    age, or any benchmark from outside this prompt. You were given none, and \
-    inventing one would present a guess as a fact.
+    previous one and name what these numbers show. General training \
+    principles — progressive overload, spreading intensity across the week, \
+    recovery after hard days — are established practice, and you may name \
+    them as principles and apply them to these numbers. Never invoke \
+    population averages, strength standards, "typical" volumes for a body \
+    weight, sex or age, or any benchmark from outside this prompt. You were \
+    given none, and inventing one would present a guess as a fact.
 
     3. Work only with what is stated. Do not assume a training goal, training \
     age, body weight, equipment or weekly schedule that is not in the data. \
@@ -198,20 +303,55 @@ enum AnalysisPromptBuilder {
     4. Muscle groups are classified heuristically from exercise names and are \
     sometimes wrong. Treat the split as an indication, not a measurement.
 
-    5. Volume is the sum of weight x reps over working sets; warm-up sets are \
-    excluded. Bodyweight and time-based work contributes sets but no \
-    kilograms, so a group can carry real training load while showing little \
-    or no volume. Never read a low kg figure as "untrained" on its own.
+    5. In the strength sections, volume is the sum of weight x reps over \
+    working sets; warm-up sets are excluded. Bodyweight and time-based work \
+    contributes sets but no kilograms, so a group can carry real training \
+    load while showing little or no volume. Never read a low kg figure as \
+    "untrained" on its own. A session listed as "no sets logged" recorded no \
+    set data at all, because its source reports whole sessions rather than \
+    sets: it is training that happened, its load is not in the volume figures, \
+    and it is not bodyweight work — do not explain it as such and do not read \
+    its absence from the volume as a light session.
 
     6. Name only exercises and weights from the Exercises section. Spell an \
     exercise exactly as it is listed there, and start any load change from \
     the weight listed for its most recent session. Never name an exercise \
     that section does not contain, or a weight it does not list as a \
-    starting point. A new target weight is always the listed weight of the \
-    most recent session plus one step. Increase barbell exercises in steps \
-    of 2.5 kg; for every other exercise increase by at most the smallest \
-    step listed for it, and where none is listed, progress reps rather than \
-    weight.
+    starting point. A new target weight is a value within the range the \
+    line names after "Next:", inclusive of both ends and never above the \
+    upper one. Where the line says "progress reps, not weight", do not \
+    recommend a heavier weight for that exercise: recommend more \
+    repetitions at the listed weight instead, as a repProgression card. \
+    That line is the \
+    2-for-2 rule applied to this person's own log — the rep target of their \
+    routine beaten by two or more reps in two consecutive sessions — and \
+    where no rep target is on file the rule cannot be applied, which is not \
+    the same as it being met.
+
+    7. In the endurance sections, load is distance, time, pace and heart \
+    rate. Rule 5 does not apply there: no volume in kilograms is not an \
+    absence of training load. Never convert endurance work into kilograms, \
+    never judge an endurance session by the strength figures, and never name \
+    a kilogram value in a recommendation about endurance training. A figure \
+    that is missing — an indoor ride without distance, a session recorded \
+    without a heart-rate strap — is unrecorded, not zero. Heart rate is a \
+    number this person recorded, never a target: never name a heart-rate \
+    zone, a target heart rate, or a percentage of maximum heart rate. Those \
+    are derived from population norms, which rule 2 forbids, and you were \
+    given neither their maximum heart rate nor the model any zone scheme \
+    rests on. Say "easier" or "harder" where you would have named a zone.
+
+    8. The Week structure section is about both domains at once: strength and \
+    endurance draw on the same recovery, so training days, days carrying \
+    both, and consecutive training days are judged over them together rather \
+    than per domain. Its "Last 7 days" line counts a day on which any \
+    training was recorded, a run as much as a squat session; six or seven \
+    such days are a week without enough rest, whichever domain filled them. \
+    Where that section says a domain was left out of this analysis, its \
+    sessions still count towards those days and still cost recovery: give \
+    your recommendation for the domain that was asked about, and take the day \
+    count as it stands rather than recomputing it from the sessions you were \
+    shown.
 
     Answer in English, as one JSON object that follows the response schema:
 
@@ -225,19 +365,31 @@ enum AnalysisPromptBuilder {
     - summary: the full analysis as plain prose under 200 words, readable \
     without the cards: first what stands out in the data, then a concrete \
     recommendation for the next block.
-    - cards: zero to four cards, most important first. Add a card only when \
-    the data supports it; when the data is too thin for any, return an empty \
-    array — the lead and the summary carry the answer. Use "progression" for \
-    a load increase on one exercise: fromKg is the weight listed for its most \
-    recent session, toKg the new weight, reasoning one sentence. Use \
-    "recovery" when rest comes before any progression, with the rest you \
-    recommend in suggestedRestHours. Use "imbalance" when two muscle groups \
-    are trained at clearly different frequencies, naming each group and its \
-    sessions per week exactly as the Muscle groups section lists them. Use \
-    "note" for anything else worth saying, including a rep progression \
-    without a weight change. Every card follows the ground rules \
-    above; a recommendation you cannot ground in the data does not become a \
-    card.
+    - cards: zero to four cards, most important first, each following the \
+    ground rules above; a recommendation you cannot ground in the data does \
+    not become a card, and when the data is too thin for any, return an empty \
+    array — the lead and the summary carry the answer. "progression": a load \
+    increase on one exercise, fromKg the weight listed for its most recent \
+    session, toKg the new weight. "repProgression": more repetitions at the \
+    listed weight on one exercise — the card for a line that says to \
+    progress reps, not weight; weightKg the weight listed for its most \
+    recent session, fromReps the reps listed with it, toReps one or two \
+    more. "recovery": rest before any progression, \
+    with the rest you recommend in suggestedRestHours. "imbalance": two \
+    muscle groups trained at clearly different frequencies, each group and \
+    its sessions per week exactly as the Muscle groups section lists them. \
+    "metric": a figure of the week as a whole rather than of one exercise — \
+    weekly distance, long run, weekly volume, weekly training time — with \
+    label naming the figure, unit the unit both numbers are in, from that \
+    figure written exactly as the last 7 days report it, to the figure you \
+    recommend and within a fifth of from, and source a short header label \
+    such as Run, Ride or Strength, or an empty string when none fits. There \
+    is no unit for a heart rate: rule 7 stands, and a card is a target, so a \
+    heart rate is not something to recommend a new value for. "interference": \
+    strength and endurance sessions shared days in the last 7, with the three \
+    day counts taken from the Week structure section. "note": anything else \
+    worth saying, as title and text. Write the reasoning of a progression, imbalance, metric \
+    or interference card in one sentence, a recovery card's in one or two.
 
     Write the fields in this order.
 
@@ -255,16 +407,42 @@ enum AnalysisPromptBuilder {
         window: AnalysisWindow,
         now: Date,
         calendar: Calendar,
-        profile: TrainingProfile
+        profile: TrainingProfile,
+        analysisProfile: AnalysisProfile,
+        detail: AnalysisPromptDetail = .full
     ) -> String {
         let recentStart = window.start(endingAt: now, calendar: calendar)
         let previousStart = window.previousStart(endingAt: now, calendar: calendar)
 
-        let recent = analysedSessions(in: summaries, window: window, now: now, calendar: calendar)
+        let recent = summaries.filter { $0.startTime >= recentStart }
         let previous = summaries.filter { $0.startTime >= previousStart && $0.startTime < recentStart }
+        // The window's own split, before the profile is applied: the week
+        // structure judges recovery over everything that happened, whichever
+        // half the user asked about (#185).
+        let windowStrength = sessions(in: recent, for: .strength)
+        let windowEndurance = sessions(in: recent, for: .endurance)
+        // A profile that covers nothing this window holds falls back to
+        // "Overall load" — see `AnalysisProfile.resolved(for:)`.
+        let analysed = analysisProfile.resolved(for: recent)
+        let recentStrength = analysed.covers(.strength) ? windowStrength : []
+        let recentEndurance = analysed.covers(.endurance) ? windowEndurance : []
+        // What the profile left out although the window holds it. Stated, and
+        // not silently dropped: the system prompt tells the model that a
+        // missing section is training this person did not record, and under a
+        // single-domain profile that would be untrue.
+        let omitted = AnalysisDomain.allCases.filter { domain in
+            guard !analysed.covers(domain) else { return false }
+            return !sessions(in: recent, for: domain).isEmpty
+        }
 
-        let days = DayFormatter(calendar: calendar)
+        let days = PromptDayFormatter(calendar: calendar)
         var intro = "Here is my own training data. Analyse it and tell me what to do next."
+        if !omitted.isEmpty {
+            let left = omitted.map(\.displayName).joined(separator: " and ")
+            intro += " Analyse my \(analysed.displayName.lowercased()) training only — "
+                + "I also recorded \(left) sessions in this window and left them out of "
+                + "this analysis on purpose."
+        }
         // A widened window means the user did not train for at least the last
         // four weeks. Left unsaid, the model reads the window as a normal one
         // and recommends progression across a break it never noticed (#87).
@@ -279,7 +457,16 @@ enum AnalysisPromptBuilder {
         // window header itself. Saying it once, plainly, is shorter and truer.
         // Facts about the person come before facts about the data, and only
         // when there are any: `compactMap` drops the section, not its heading.
-        let opening = [intro, profileSection(profile)].compactMap { $0 }
+        let covered = AnalysisDomain.allCases.filter { domain in
+            switch domain {
+            case .strength: return !recentStrength.isEmpty
+            case .endurance: return !recentEndurance.isEmpty
+            }
+        }
+        let opening = [
+            intro,
+            profileSection(profile, covering: covered.isEmpty ? [.strength] : covered),
+        ].compactMap { $0 }
 
         guard !recent.isEmpty else {
             return (opening + [
@@ -289,187 +476,47 @@ enum AnalysisPromptBuilder {
             ]).joined(separator: "\n\n")
         }
 
-        var sections: [String] = opening + [
-            windowSection(recent, window: window, from: recentStart, to: now, calendar: calendar, days: days),
-        ]
-        sections.append(weeklySection(recent, window: window, now: now, calendar: calendar, days: days))
-        sections.append(muscleSection(recent, window: window))
-        sections.append(
-            comparisonSection(
-                previous,
-                window: window,
-                from: previousStart,
-                to: recentStart,
-                calendar: calendar,
-                days: days
-            )
+        var sections = opening
+        sections += StrengthPromptSection.sections(
+            recent: recentStrength,
+            previous: sessions(in: previous, for: .strength),
+            exercises: exercises,
+            progressions: progressions,
+            window: window,
+            recentStart: recentStart,
+            previousStart: previousStart,
+            now: now,
+            calendar: calendar,
+            days: days,
+            detail: detail
         )
-        sections.append(sessionSection(recent, days: days))
-        sections.append(
-            exerciseSection(
-                exercises,
-                progressions: progressions,
-                window: window,
-                from: recentStart,
-                days: days
-            )
+        sections += EndurancePromptSection.sections(
+            recent: recentEndurance,
+            previous: sessions(in: previous, for: .endurance),
+            window: window,
+            recentStart: recentStart,
+            previousStart: previousStart,
+            now: now,
+            calendar: calendar,
+            days: days,
+            detail: detail
         )
+        if let load = LoadPromptSection.section(
+            strength: windowStrength,
+            endurance: windowEndurance,
+            profile: analysed,
+            window: window,
+            now: now,
+            calendar: calendar,
+            days: days
+        ) {
+            sections.append(load)
+        }
 
         return sections.joined(separator: "\n\n")
     }
 
-    private static func windowSection(
-        _ summaries: [WorkoutSummary],
-        window: AnalysisWindow,
-        from start: Date,
-        to end: Date,
-        calendar: Calendar,
-        days formatter: DayFormatter
-    ) -> String {
-        let days = trainingDays(summaries, calendar: calendar)
-        return """
-        ## Last \(window.weeks) weeks (\(formatter.string(start)) to \(formatter.string(end)))
-        Sessions: \(summaries.count)
-        Training days: \(days) (\(frequency(days, window: window)) per week)
-        Total volume: \(kg(volume(of: summaries)))
-        """
-    }
-
-    /// Per-week figures, newest first. The totals alone cannot show whether
-    /// the window's training was spread evenly or crammed into one week — and
-    /// that difference changes the recommendation.
-    private static func weeklySection(
-        _ summaries: [WorkoutSummary],
-        window: AnalysisWindow,
-        now: Date,
-        calendar: Calendar,
-        days: DayFormatter
-    ) -> String {
-        let weeks = (0..<window.weeks).map { index -> String in
-            let start = AnalysisWindow.weekStart(index, endingAt: now, calendar: calendar)
-            let end = calendar.date(byAdding: .day, value: 7, to: start) ?? start
-            let inWeek = summaries.filter { $0.startTime >= start && $0.startTime < end }
-            let label = index == 0 ? "most recent" : "\(index + 1) weeks back"
-            return "- Week starting \(days.string(start)) (\(label)): "
-                + "\(inWeek.count) sessions, \(kg(volume(of: inWeek)))"
-        }
-        return (["## Volume per week"] + weeks).joined(separator: "\n")
-    }
-
-    /// Volume, sets and training frequency per group. The frequency is the
-    /// figure an imbalance card has to quote (#175), so it comes from
-    /// `MuscleGroupFrequency`, which the validator reads as well.
-    private static func muscleSection(_ summaries: [WorkoutSummary], window: AnalysisWindow) -> String {
-        let distribution = MuscleLoad.merged(summaries.flatMap(\.muscleLoads))
-        guard !distribution.isEmpty else {
-            return "## Muscle groups\nNo exercises in this window could be classified."
-        }
-
-        let total = distribution.reduce(0) { $0 + $1.volumeKg }
-        let sessionCounts = MuscleGroupFrequency.sessionCounts(in: summaries)
-        let perWeek = MuscleGroupFrequency.sessionsPerWeek(in: summaries, window: window)
-        let rows = distribution.map { load -> String in
-            // Sets carry the groups that produce no kilograms at all. Reporting
-            // a share of a zero total would be a division by zero dressed up as
-            // "0%", so the share is simply omitted where it means nothing.
-            let share = total > 0
-                ? " (\(Int((load.volumeKg / total * 100).rounded()))% of volume)"
-                : ""
-            let sessions = sessionCounts[load.group] ?? 0
-            let frequency = MuscleGroupFrequency.string(perWeek[load.group] ?? 0)
-            return "- \(load.group.displayName): \(kg(load.volumeKg))\(share), \(load.setCount) working sets, "
-                + "trained in \(sessions) \(sessions == 1 ? "session" : "sessions") (\(frequency) per week)"
-        }
-        return (["## Muscle groups (last \(window.weeks) weeks)"] + rows).joined(separator: "\n")
-    }
-
-    /// The equally long window before the analysed one, for trend only.
-    /// Deliberately just the headline figures: the model needs a direction of
-    /// travel here, not a second full breakdown competing with the recent
-    /// window for attention.
-    private static func comparisonSection(
-        _ summaries: [WorkoutSummary],
-        window: AnalysisWindow,
-        from start: Date,
-        to end: Date,
-        calendar: Calendar,
-        days formatter: DayFormatter
-    ) -> String {
-        let header = "## Previous \(window.weeks) weeks "
-            + "(\(formatter.string(start)) to \(formatter.string(end))), for comparison"
-        guard !summaries.isEmpty else {
-            return header + "\nNo workouts recorded. This may be a break, or simply the "
-                + "start of the recorded history — do not assume which."
-        }
-
-        let days = trainingDays(summaries, calendar: calendar)
-        return """
-        \(header)
-        Sessions: \(summaries.count)
-        Training days: \(days) (\(frequency(days, window: window)) per week)
-        Total volume: \(kg(volume(of: summaries)))
-        """
-    }
-
-    private static func sessionSection(
-        _ summaries: [WorkoutSummary],
-        days: DayFormatter
-    ) -> String {
-        let sorted = summaries.sorted { $0.startTime > $1.startTime }
-        let listed = sorted.prefix(maxListedSessions)
-        let rows = listed.map { summary in
-            "- \(days.string(summary.startTime)) \(summary.title): \(kg(summary.volumeKg)), "
-                + "\(summary.exerciseCount) exercises, \(summary.countedSetCount) working sets"
-        }
-        let omitted = sorted.count - listed.count
-        let footer = omitted > 0 ? ["(\(omitted) older sessions in this window omitted)"] : []
-        return (["## Sessions (newest first)"] + rows + footer).joined(separator: "\n")
-    }
-
     // MARK: - Exercises (#173)
-
-    /// Per-exercise working weights, reps, RPE and the 1RM trend — the figures
-    /// a concrete recommendation starts from (US-3 AC7, US-14 AC7).
-    ///
-    /// Without this section the model knows session totals but not a single
-    /// working weight, so any "go from 60 to 62.5 kg" it produced would be
-    /// invented. Names are passed exactly as the cache spells them: they are
-    /// the key the recommendation cards are validated against (#175).
-    ///
-    /// Each line opens with the exercise name followed by a colon, so a name
-    /// that itself contains parentheses stays unambiguous.
-    private static func exerciseSection(
-        _ exercises: [ExerciseSummary],
-        progressions: [String: ExerciseProgression],
-        window: AnalysisWindow,
-        from start: Date,
-        days: DayFormatter
-    ) -> String {
-        let header = "## Exercises (last \(window.weeks) weeks)"
-        let rows = promptedExercises(from: exercises).compactMap { exercise -> String? in
-            guard let progression = progressions[exercise.id],
-                  let listing = listing(progression, from: start)
-            else { return nil }
-            return exerciseRow(exercise, listing: listing, days: days)
-        }
-        guard !rows.isEmpty else {
-            return header + "\nNo exercise-level data is available for this window. "
-                + "Do not name exercises or weights."
-        }
-
-        let legend = "Each line starts with the exercise name exactly as logged, then the "
-            + "heaviest working set (weight × reps) of its most recent session with working "
-            + "sets. e1RM is the Epley estimate from a session's best set, at the first and at "
-            + "the most recent session in this window that has one."
-        // Counted against the cap, not against the rows: a listed exercise
-        // skipped for want of a progression was not cut by the cap, and
-        // calling it "omitted" would misstate why it is missing.
-        let omitted = max(0, exercises.count - maxListedExercises)
-        let footer = omitted > 0
-            ? ["(\(rows.count) exercises with the most volume listed; \(omitted) more in this window omitted)"]
-            : []
-        return ([header, legend] + rows + footer).joined(separator: "\n")
-    }
 
     /// The exercises the Exercises section lists, each reduced to the
     /// working set its line states — what a progression card is checked
@@ -478,32 +525,34 @@ enum AnalysisPromptBuilder {
     /// Walks the same ranking, the same lookup and the same session choice as
     /// the section itself, so a movement is here exactly when it has a line,
     /// and with exactly the weight that line names.
+    ///
+    /// - Parameter detail: The rung the prompt was built at (#187). Its
+    ///   exercise cap is what this list is taken at, so the section and its
+    ///   validation stay one list however far the budget trimmed the prompt.
     static func listedExercises(
         exercises: [ExerciseSummary],
         progressions: [String: ExerciseProgression],
         window: AnalysisWindow,
         now: Date,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        detail: AnalysisPromptDetail = .full
     ) -> [ListedExercise] {
         let start = window.start(endingAt: now, calendar: calendar)
-        return promptedExercises(from: exercises).compactMap { exercise in
+        return promptedExercises(from: exercises, limit: detail.listedExercises).compactMap { exercise in
             guard let progression = progressions[exercise.id],
                   let listing = listing(progression, from: start)
             else { return nil }
-            return ListedExercise(
-                title: exercise.title,
-                muscleGroup: exercise.muscleGroup,
-                workingSet: listing.last.heaviestWorkingSet,
-                smallestStepKg: listing.last.heaviestWorkingSet.flatMap {
-                    smallestStep(in: listing.inWindow.sessions, latest: $0)
-                }
-            )
+            return ListedExercise.make(title: exercise.title, muscleGroup: exercise.muscleGroup, listing: listing)
         }
     }
 
     /// A movement's sessions inside the window, and the session its line
     /// starts from. `nil` when the window holds none of its sessions.
-    private static func listing(
+    ///
+    /// Shared with `StrengthPromptSection`, which renders the line: the
+    /// section and the validation of #175 have to pick the same session, so
+    /// the choice is made in exactly one place.
+    static func listing(
         _ progression: ExerciseProgression,
         from start: Date
     ) -> (inWindow: ExerciseProgression, last: ExerciseHistoryEntry)? {
@@ -522,79 +571,6 @@ enum AnalysisPromptBuilder {
             ?? inWindow.sessions.last
         else { return nil }
         return (inWindow, last)
-    }
-
-    private static func exerciseRow(
-        _ exercise: ExerciseSummary,
-        listing: (inWindow: ExerciseProgression, last: ExerciseHistoryEntry),
-        days: DayFormatter
-    ) -> String {
-        let (inWindow, last) = listing
-
-        // The working set leads, right after the name: it is the value a
-        // recommendation starts from, and "Bench Press: 60 kg × 5" reads as
-        // one fact rather than two figures to be paired up.
-        var parts = [
-            "- \(exercise.title): \(lastSessionSummary(last)) "
-                + "(most recent session, \(days.string(last.sessionStart)))",
-            "\(exercise.muscleGroup.displayName), \(exercise.sessionCount) sessions, \(kg(exercise.volumeKg))",
-        ]
-        let points = inWindow.points
-        if let first = points.first, let latest = points.last {
-            let now = PlainWeightFormatter.string(latest.estimatedOneRepMaxKg, decimals: 1)
-            if points.count == 1 {
-                parts.append("e1RM \(now) kg (one session, no trend yet)")
-            } else {
-                let then = PlainWeightFormatter.string(first.estimatedOneRepMaxKg, decimals: 1)
-                let delta = latest.estimatedOneRepMaxKg - first.estimatedOneRepMaxKg
-                parts.append("e1RM \(then) kg at first session in window, \(now) kg now (\(signed(delta)))")
-            }
-            parts.append(plateauVerdict(inWindow))
-        }
-        if let latest = last.heaviestWorkingSet,
-           let step = smallestStep(in: inWindow.sessions, latest: latest) {
-            parts.append("Smallest logged step: \(PlainWeightFormatter.string(step)) kg")
-        }
-        return parts.joined(separator: ". ") + "."
-    }
-
-    /// The session's working weight, and the mean RPE over the counted sets
-    /// that logged one.
-    ///
-    /// The working weight is `ExerciseHistoryEntry.heaviestWorkingSet` — the
-    /// same rule the validation of #175 reads, so the figure a card starts
-    /// from and the figure the prompt stated cannot drift apart.
-    private static func lastSessionSummary(_ session: ExerciseHistoryEntry) -> String {
-        let counted = session.sets.filter(\.countsTowardsVolume)
-        var summary: String
-        if let working = session.heaviestWorkingSet {
-            summary = "\(working.weightText) kg × \(working.reps)"
-        } else if counted.isEmpty {
-            summary = "no working sets logged"
-        } else if let reps = counted.compactMap(\.reps).max(), reps > 0 {
-            summary = "no weight logged, best set \(reps) reps"
-        } else {
-            summary = "no set with both weight and reps logged"
-        }
-
-        let rpes = counted.compactMap(\.rpe)
-        if !rpes.isEmpty {
-            let mean = rpes.reduce(0, +) / Double(rpes.count)
-            summary += ", mean RPE \(PlainWeightFormatter.string(mean, decimals: 1))"
-        }
-        return summary
-    }
-
-    /// `ExerciseProgression.isPlateaued`, with the case it cannot decide said
-    /// out loud: a "no" over three sessions would claim progress nobody
-    /// measured.
-    private static func plateauVerdict(_ progression: ExerciseProgression) -> String {
-        guard progression.points.count > ExerciseProgression.plateauSessionCount else {
-            return "Plateau: too few sessions to tell"
-        }
-        return progression.isPlateaued
-            ? "Plateau: yes, no new e1RM best in the last \(ExerciseProgression.plateauSessionCount) sessions"
-            : "Plateau: no"
     }
 
     /// The smallest difference between two distinct working weights the user
@@ -630,65 +606,5 @@ enum AnalysisPromptBuilder {
     /// a barbell exercise here and falls under the listed-step rule.
     static func isBarbell(title: String) -> Bool {
         title.range(of: "(Barbell)", options: .caseInsensitive) != nil
-    }
-
-    // MARK: - Aggregation
-
-    private static func volume(of summaries: [WorkoutSummary]) -> Double {
-        summaries.reduce(0) { $0 + $1.volumeKg }
-    }
-
-    /// Calendar days carrying at least one session — two sessions on one day
-    /// are one training day.
-    private static func trainingDays(_ summaries: [WorkoutSummary], calendar: Calendar) -> Int {
-        Set(summaries.map { calendar.startOfDay(for: $0.startTime) }).count
-    }
-
-    // MARK: - Formatting
-
-    /// Volume without grouping separators.
-    ///
-    /// `VolumeFormatter` is the dashboard's, and it follows the device locale —
-    /// which would put `48'320` in front of the model on a Swiss device and
-    /// `48,320` on a US one, for identical training. A prompt has no reader to
-    /// charm; it needs one unambiguous form.
-    private static func kg(_ kilograms: Double) -> String {
-        "\(Int(kilograms.rounded())) kg"
-    }
-
-    /// A 1RM change with its direction spelled out.
-    private static func signed(_ kilograms: Double) -> String {
-        let text = PlainWeightFormatter.string(abs(kilograms), decimals: 1)
-        guard text != "0" else { return "no change" }
-        return (kilograms > 0 ? "+" : "-") + text + " kg"
-    }
-
-    private static func frequency(_ trainingDays: Int, window: AnalysisWindow) -> String {
-        let perWeek = Double(trainingDays) / Double(window.weeks)
-        return String(format: "%.1f days", perWeek)
-    }
-
-    /// One formatter per prompt, handed to the sections that need it.
-    ///
-    /// A prompt renders up to ~40 dates, and `DateFormatter` is expensive to
-    /// create; it is also not safe to share across calls, so the instance lives
-    /// exactly as long as the build that owns it.
-    private struct DayFormatter {
-        private let formatter: DateFormatter
-
-        init(calendar: Calendar) {
-            let formatter = DateFormatter()
-            // Fixed locale and the window's own time zone: the date is data
-            // here, not display text, and must not shift with the device's
-            // region.
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.timeZone = calendar.timeZone
-            formatter.dateFormat = "yyyy-MM-dd"
-            self.formatter = formatter
-        }
-
-        func string(_ date: Date) -> String {
-            formatter.string(from: date)
-        }
     }
 }

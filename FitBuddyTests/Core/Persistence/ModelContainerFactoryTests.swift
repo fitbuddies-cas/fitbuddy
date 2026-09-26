@@ -30,7 +30,8 @@ final class ModelContainerFactoryTests: XCTestCase {
     /// written by the build before #141 (schema V1, no `sourceRawValue`) has to
     /// open under the current schema with every workout and analysis intact,
     /// and every migrated workout has to read as Hevy — the only source that
-    /// build knew. Since #176 this runs three stages in turn, V1 → V2 → V3 → V4.
+    /// build knew. Since #240 this runs five stages in turn,
+    /// V1 → V2 → V3 → V4 → V5 → V6.
     /// A fresh store would prove nothing; it never had a version to come from.
     func testV1StoreMigratesToTheCurrentSchemaWithEveryWorkoutReadingAsHevy() throws {
         let storeURL = try makeTemporaryStoreURL()
@@ -147,11 +148,12 @@ final class ModelContainerFactoryTests: XCTestCase {
     /// The V3 → V4 stage of #176: a store written by a `develop` build with
     /// the training profile (schema V3, no report or provider columns on
     /// `AnalysisResult`) has to open under V4 with its workouts and profiled
-    /// analysis intact. The profile survives, and the analysis comes back as
-    /// prose without a provider (US-14 AC6). Growing V3 in place instead would
+    /// analysis intact — through the V4 → V5 stage on top. The profile
+    /// survives, and the analysis comes back as prose without a provider
+    /// (US-14 AC6). Growing V3 in place instead would
     /// make this store fail as "unknown model version" and fall back to an
     /// empty in-memory container.
-    func testV3StoreMigratesToV4KeepingTheProfileAndReadingAsProse() async throws {
+    func testV3StoreMigratesToTheCurrentSchemaKeepingTheProfileAndReadingAsProse() async throws {
         let storeURL = try makeTemporaryStoreURL()
         try writeV3Store(at: storeURL)
 
@@ -170,7 +172,8 @@ final class ModelContainerFactoryTests: XCTestCase {
         XCTAssertEqual(analyses.map(\.reportJSON), [nil])
         XCTAssertEqual(analyses.map(\.provider), [nil])
 
-        // Read the way the history reads it, then write what only V4 can hold.
+        // Read the way the history reads it, then write what only V4 and up
+        // can hold.
         let store = AnalysisResultStore(modelContainer: container)
         let migrated = try await store.latest()
         XCTAssertEqual(migrated?.context.profile, TrainingProfile(goal: .getStronger, experience: .underOneYear))
@@ -189,6 +192,203 @@ final class ModelContainerFactoryTests: XCTestCase {
         XCTAssertEqual(latest?.report, report)
         XCTAssertEqual(latest?.provider, .claude)
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<AnalysisResult>()), 2)
+    }
+
+    /// The V5 → V6 stage of #240: a store written with the cardio columns
+    /// (schema V5, no routine columns on `Workout` and no target on
+    /// `ExerciseSet`) has to open under V6 with everything intact. The sport
+    /// and the cardio block survive, and the new columns come back empty —
+    /// a session synced before this version does not know what routine it
+    /// was logged against, and a missing target is what the 2-for-2 rule
+    /// (ADR-013) reads as not checkable.
+    func testV5StoreMigratesToV6KeepingCardioAndDefaultingTargetsToNone() async throws {
+        let storeURL = try makeTemporaryStoreURL()
+        try writeV5Store(at: storeURL)
+
+        let container = try ModelContainerFactory.makePersistent(storeURL: storeURL)
+        let context = ModelContext(container)
+
+        let workouts = try context.fetch(FetchDescriptor<Workout>(sortBy: [SortDescriptor(\.id)]))
+        XCTAssertEqual(workouts.map(\.id), ["strava:9", "w-1"])
+        XCTAssertEqual(workouts.map(\.kind), [.run, .strength])
+        XCTAssertEqual(workouts.map(\.cardio?.averageHeartRate), [148, nil])
+        XCTAssertEqual(workouts.map(\.routineID), [nil, nil])
+        XCTAssertEqual(workouts.map(\.routineUpdatedAt), [nil, nil])
+        let sets = try context.fetch(FetchDescriptor<ExerciseSet>())
+        XCTAssertEqual(sets.map(\.reps), [5])
+        XCTAssertEqual(sets.map(\.targetReps), [nil])
+
+        // The V5 analysis columns are untouched by the stage above them.
+        let analyses = try context.fetch(FetchDescriptor<AnalysisResult>())
+        XCTAssertEqual(analyses.map(\.analysisProfile), [.overallLoad])
+        XCTAssertEqual(analyses.map(\.provider), [.claude])
+        let restored = try await AnalysisResultStore(modelContainer: container).latest()
+        XCTAssertEqual(restored?.context.sessionCounts, [.hevy: 12, .strava: 3])
+
+        // And the migrated store accepts what only V6 can write.
+        let store = WorkoutStore(modelContainer: container)
+        try await store.replaceCachedWorkouts(from: .hevy, with: [
+            ActivityFactory.routineActivity(id: "w-2", start: Date(timeIntervalSince1970: 1_750_200_000)),
+        ])
+        let cached = try context.fetch(FetchDescriptor<Workout>(sortBy: [SortDescriptor(\.id)]))
+        XCTAssertEqual(cached.map(\.routineID), [nil, "r-1"])
+        XCTAssertEqual(cached.last?.exercises.first?.sets.sorted { $0.index < $1.index }.map(\.targetReps), [10, 12])
+    }
+
+    /// Writes a Hevy workout with a full tree, a classified Strava run with
+    /// its cardio block and one profiled analysis under `FitBuddySchemaV5`,
+    /// exactly as the build before #240 would have, and lets the container go
+    /// out of scope again.
+    private func writeV5Store(at storeURL: URL) throws {
+        let schema = Schema(versionedSchema: FitBuddySchemaV5.self)
+        let container = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, url: storeURL, cloudKitDatabase: .none)
+        )
+        let context = ModelContext(container)
+        context.insert(
+            FitBuddySchemaV5.Workout(
+                id: "w-1",
+                title: "Morning Workout",
+                startTime: Date(timeIntervalSince1970: 1_750_000_000),
+                kindRawValue: ActivityKind.strength.rawValue,
+                exercises: [
+                    FitBuddySchemaV5.Exercise(index: 0, title: "Squat (Barbell)", sets: [
+                        FitBuddySchemaV5.ExerciseSet(index: 0, typeRawValue: "normal", weightKg: 100, reps: 5),
+                    ]),
+                ]
+            )
+        )
+        context.insert(
+            FitBuddySchemaV5.Workout(
+                id: "strava:9",
+                title: "Morning Run",
+                startTime: Date(timeIntervalSince1970: 1_750_100_000),
+                sourceRawValue: ConnectorSource.strava.rawValue,
+                kindRawValue: ActivityKind.run.rawValue,
+                cardioAverageHeartRate: 148,
+                cardioDistanceMeters: 10_400
+            )
+        )
+        let report = AnalysisReportFactory.validatedEveryCard
+        context.insert(
+            FitBuddySchemaV5.AnalysisResult(
+                text: report.summary,
+                generatedAt: Date(timeIntervalSince1970: 1_788_000_000),
+                windowWeeks: 4,
+                sessionCount: 15,
+                // The stored shape of `SessionCountFormat`, written as bytes the
+                // way the V5 build left them on disk.
+                sessionCountsJSON: Data(#"{"sources":{"hevy":12,"strava":3}}"#.utf8),
+                analysisProfileRawValue: AnalysisProfile.overallLoad.rawValue,
+                goal: TrainingGoal.getStronger.rawValue,
+                experience: TrainingExperience.underOneYear.rawValue,
+                reportJSON: AnalysisReportFormat.encode(report).json,
+                reportVersion: AnalysisReportFormat.encode(report).version,
+                providerRawValue: LLMProvider.claude.rawValue
+            )
+        )
+        try context.save()
+    }
+
+    /// The V4 → V5 stage of #180: a store written with the report columns
+    /// (schema V4, no sport and no cardio columns on `Workout`) has to open
+    /// under V5 with everything intact. The report, the provider and the
+    /// profile survive, the new cardio columns come back empty, and a
+    /// migrated session's sport is resolved from its source rather than
+    /// defaulted to strength — a cached Strava run must not turn into a
+    /// strength session on migration (US-15).
+    func testV4StoreMigratesToV5KeepingTheReportAndDefaultingCardioToNone() async throws {
+        let storeURL = try makeTemporaryStoreURL()
+        try writeV4Store(at: storeURL)
+
+        let container = try ModelContainerFactory.makePersistent(storeURL: storeURL)
+        let context = ModelContext(container)
+
+        let workouts = try context.fetch(FetchDescriptor<Workout>(sortBy: [SortDescriptor(\.id)]))
+        XCTAssertEqual(workouts.map(\.id), ["strava:9", "w-1"])
+        XCTAssertEqual(workouts.map(\.source), [.strava, .hevy])
+        XCTAssertEqual(workouts.map(\.kindRawValue), [nil, nil])
+        XCTAssertEqual(workouts.map(\.kind), [.other, .strength])
+        XCTAssertEqual(workouts.map(\.cardio), [nil, nil])
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<Exercise>()), 1)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<ExerciseSet>()), 1)
+
+        // The report columns of V4 are untouched by the stage above them.
+        let analyses = try context.fetch(FetchDescriptor<AnalysisResult>())
+        XCTAssertEqual(analyses.map(\.goal), [TrainingGoal.getStronger.rawValue])
+        XCTAssertEqual(analyses.map(\.experience), [TrainingExperience.underOneYear.rawValue])
+        XCTAssertEqual(analyses.map(\.reportVersion), [AnalysisReportFormat.validatedReportV1])
+        XCTAssertEqual(analyses.map(\.provider), [.claude])
+        let restored = try await AnalysisResultStore(modelContainer: container).latest()
+        XCTAssertEqual(restored?.report, AnalysisReportFactory.validatedEveryCard)
+        // The row carries no per-source counts (#182) — before V5 there was no
+        // column for them — and still renders its basis, as Hevy's alone.
+        XCTAssertEqual(analyses.map(\.sessionCountsJSON), [nil])
+        XCTAssertEqual(restored?.context.sessionCounts, [.hevy: 12])
+        XCTAssertEqual(restored?.context.basisDescription, "12 Hevy sessions")
+        // Nor a profile (#185): the run predates the choice, so the line names
+        // none rather than claiming one on a guess.
+        XCTAssertEqual(analyses.map(\.analysisProfileRawValue), [nil])
+        XCTAssertNil(restored?.context.analysisProfile)
+
+        // And the migrated store accepts what only V5 can write.
+        let store = WorkoutStore(modelContainer: container)
+        try await store.replaceCachedWorkouts(from: .strava, with: [
+            ActivityFactory.cardioActivity(id: "strava:9", start: Date(timeIntervalSince1970: 1_750_100_000)),
+        ])
+        let cached = try context.fetch(FetchDescriptor<Workout>(sortBy: [SortDescriptor(\.id)]))
+        XCTAssertEqual(cached.first?.kind, .run)
+        XCTAssertEqual(cached.first?.cardio?.averageHeartRate, 148)
+        XCTAssertEqual(cached.first?.cardio?.elevationGainMeters, 412.5)
+    }
+
+    /// Writes a Hevy workout with a full tree, a sourceless-sport Strava
+    /// session and one analysis carrying a report under `FitBuddySchemaV4`,
+    /// exactly as the build before #180 would have, and lets the container go
+    /// out of scope again.
+    private func writeV4Store(at storeURL: URL) throws {
+        let schema = Schema(versionedSchema: FitBuddySchemaV4.self)
+        let container = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, url: storeURL, cloudKitDatabase: .none)
+        )
+        let context = ModelContext(container)
+        context.insert(
+            FitBuddySchemaV4.Workout(
+                id: "w-1",
+                title: "Morning Workout",
+                startTime: Date(timeIntervalSince1970: 1_750_000_000),
+                exercises: [
+                    FitBuddySchemaV4.Exercise(index: 0, title: "Squat (Barbell)", sets: [
+                        FitBuddySchemaV4.ExerciseSet(index: 0, typeRawValue: "normal", weightKg: 100, reps: 5),
+                    ]),
+                ]
+            )
+        )
+        context.insert(
+            FitBuddySchemaV4.Workout(
+                id: "strava:9",
+                title: "Morning Run",
+                startTime: Date(timeIntervalSince1970: 1_750_100_000),
+                sourceRawValue: ConnectorSource.strava.rawValue
+            )
+        )
+        let report = AnalysisReportFactory.validatedEveryCard
+        context.insert(
+            FitBuddySchemaV4.AnalysisResult(
+                text: report.summary,
+                generatedAt: Date(timeIntervalSince1970: 1_788_000_000),
+                windowWeeks: 4,
+                sessionCount: 12,
+                goal: TrainingGoal.getStronger.rawValue,
+                experience: TrainingExperience.underOneYear.rawValue,
+                reportJSON: AnalysisReportFormat.encode(report).json,
+                reportVersion: AnalysisReportFormat.encode(report).version,
+                providerRawValue: LLMProvider.claude.rawValue
+            )
+        )
+        try context.save()
     }
 
     /// Writes a Hevy workout with a full tree and one profiled analysis under

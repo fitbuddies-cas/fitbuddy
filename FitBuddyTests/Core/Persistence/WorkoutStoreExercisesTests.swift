@@ -159,6 +159,9 @@ final class WorkoutStoreExercisesTests: XCTestCase {
     /// A run is one "exercise" named after the sport with a single cardio
     /// set. Listed, it would read as a 0 kg movement over n sessions with a
     /// guessed muscle group — and fold into a Hevy exercise of the same title.
+    ///
+    /// Still true after #183 flipped the filter from the source to the sport:
+    /// these runs are endurance either way.
     func testStravaSessionsStayOutOfTheListAndDoNotMergeWithAHevyMovement() async throws {
         try insert([
             makeWorkout(id: "hevy-1", start: reference, exercises: [
@@ -190,14 +193,82 @@ final class WorkoutStoreExercisesTests: XCTestCase {
         XCTAssertEqual(summaries.first?.sessionCount, 1, "only the Hevy session counts")
     }
 
+    // MARK: - Domain, not source (#183)
+
+    /// The first of the two mismatches the review of #183 caught: a Hevy
+    /// session of treadmill sets is endurance by `WorkoutSummary.isCardio`, so
+    /// its session is described by the endurance section — but the source
+    /// filter kept listing its "exercise" here, next to strength figures that
+    /// do not contain it. Rule 6 tells the model to recommend only on this
+    /// section, so the two have to cover the same sessions.
+    func testAHevyCardioSessionIsNotListedAsAMovement() async throws {
+        try insert([
+            makeWorkout(id: "hevy-lift", start: reference, exercises: [
+                (title: "Bench Press (Barbell)", templateID: "t-bench", sets: [(.normal, 100, 5)]),
+            ]),
+            Workout(
+                id: "hevy-treadmill",
+                title: "Treadmill",
+                startTime: reference.addingTimeInterval(-86_400),
+                exercises: [
+                    Exercise(index: 0, title: "Treadmill", sets: [
+                        ExerciseSet(index: 0, type: .normal, distanceMeters: 5_000, durationSeconds: 1_800),
+                    ]),
+                ]
+            ),
+        ])
+
+        let summaries = try await sut.exerciseSummaries(since: .distantPast)
+
+        XCTAssertEqual(summaries.map(\.title), ["Bench Press (Barbell)"])
+    }
+
+    /// The other mismatch: a Strava `WeightTraining` session counts towards
+    /// the strength figures since #183, so the movements it recorded belong in
+    /// the section those figures are explained by.
+    func testAStravaStrengthSessionIsListedAsAMovement() async throws {
+        try insert([
+            makeWorkout(id: "hevy-lift", start: reference, exercises: [
+                (title: "Bench Press (Barbell)", templateID: "t-bench", sets: [(.normal, 100, 5)]),
+            ]),
+            Workout(
+                id: "strava:gym",
+                title: "Gym",
+                startTime: reference.addingTimeInterval(-86_400),
+                source: .strava,
+                kind: .strength,
+                exercises: [
+                    Exercise(index: 0, title: "Gym", sets: [
+                        ExerciseSet(index: 0, type: .normal, durationSeconds: 2_880),
+                    ]),
+                ]
+            ),
+        ])
+
+        let summaries = try await sut.exerciseSummaries(since: .distantPast)
+
+        XCTAssertEqual(summaries.map(\.title), ["Bench Press (Barbell)", "Gym"])
+        XCTAssertEqual(summaries.last?.volumeKg, 0)
+    }
+
     // MARK: - Helpers
 
-    private func makeStravaRun(id: String, start: Date, source: ConnectorSource = .strava) -> Workout {
+    /// A run as a connector caches one. `kind` is explicit since #183: the
+    /// column is written on every row, so leaving it at the model default
+    /// would store "Strava says this is strength training", which is what the
+    /// filter now — correctly — reads it as.
+    private func makeStravaRun(
+        id: String,
+        start: Date,
+        source: ConnectorSource = .strava,
+        kind: ActivityKind = .run
+    ) -> Workout {
         Workout(
             id: id,
             title: "Morning Run",
             startTime: start,
             source: source,
+            kind: kind,
             exercises: [
                 Exercise(index: 0, title: "Run", sets: [
                     ExerciseSet(index: 0, type: .normal, distanceMeters: 5_000, durationSeconds: 1_800),

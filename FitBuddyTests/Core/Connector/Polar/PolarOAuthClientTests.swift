@@ -106,4 +106,14 @@ final class PolarOAuthClientTests: XCTestCase {
             try await self.sut.exchange(code: "c")
         }
     }
+
+    /// A failed certificate check (pinning, #153) must not read as offline —
+    /// the client secret was not sent.
+    func testACertificateFailureComesBackAsUntrustedConnection() async {
+        StubURLProtocol.handler = { _ in throw URLError(.serverCertificateUntrusted) }
+
+        await assertThrowsConnectorError(.untrustedConnection) {
+            try await self.sut.exchange(code: "c")
+        }
+    }
 }

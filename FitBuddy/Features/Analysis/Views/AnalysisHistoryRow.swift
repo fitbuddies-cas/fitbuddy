@@ -15,9 +15,14 @@ struct AnalysisHistoryRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(age)
-                .font(.fbLabel)
-                .foregroundStyle(Color.fbInkSecondary)
+            HStack(spacing: 8) {
+                Text(age)
+                    .font(.fbLabel)
+                    .foregroundStyle(Color.fbInkSecondary)
+                if let profile = entry.context.analysisProfile {
+                    profileChip(profile)
+                }
+            }
             Text(preview)
                 .font(.subheadline)
                 .foregroundStyle(Color.fbInk)
@@ -27,6 +32,25 @@ struct AnalysisHistoryRow: View {
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
+    }
+
+    /// Which profile produced this recommendation (US-15 AC1, #185) — absent
+    /// on every row written before the choice existed.
+    ///
+    /// A chip and not a word in the preview: two rows from the same week can
+    /// give opposite advice because they were run under different profiles,
+    /// and the list is where that is noticed. `AnalysisCardChip` is the
+    /// capsule the report cards already use, so the history reads in the same
+    /// vocabulary as the screen it came from — in the muted pair, because this
+    /// one labels a row rather than flagging anything.
+    private func profileChip(_ profile: AnalysisProfile) -> some View {
+        AnalysisCardChip(
+            symbol: profile.symbolName,
+            title: profile.displayName,
+            foreground: .fbInkSecondary,
+            background: .fbCardSubtle,
+            border: .fbInkSecondary.opacity(0.2)
+        )
     }
 
     /// The marker-free recommendation: the raw text would put asterisks into
@@ -53,7 +77,10 @@ struct AnalysisHistoryRow: View {
     }
 
     private var accessibilityLabel: String {
-        "Analysis from \(age), \(previewSnippet)"
+        guard let profile = entry.context.analysisProfile else {
+            return "Analysis from \(age), \(previewSnippet)"
+        }
+        return "\(profile.displayName) analysis from \(age), \(previewSnippet)"
     }
 }
 
@@ -65,7 +92,11 @@ struct AnalysisHistoryRow: View {
                 id: UUID(),
                 text: "**Progressive overload**\nAdd 2.5 kg on bench next session and keep the reps.",
                 generatedAt: .now.addingTimeInterval(-2 * 3_600),
-                context: AnalysisContext(sessionCount: 12, window: .default)
+                context: AnalysisContext(
+                    sessionCounts: [.hevy: 14, .strava: 9],
+                    window: .default,
+                    analysisProfile: .overallLoad
+                )
             ),
             now: .now
         )

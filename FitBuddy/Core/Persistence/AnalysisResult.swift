@@ -1,10 +1,10 @@
 import Foundation
 import SwiftData
 
-/// The current `AnalysisResult` model — see `FitBuddySchemaV4`.
-typealias AnalysisResult = FitBuddySchemaV4.AnalysisResult
+/// The current `AnalysisResult` model — see `FitBuddySchemaV6`.
+typealias AnalysisResult = FitBuddySchemaV6.AnalysisResult
 
-extension FitBuddySchemaV4 {
+extension FitBuddySchemaV6 {
     /// One AI recommendation, kept so it survives an app restart and stays
     /// readable next to the ones before it (US-3 AC10/AC11, #97/#117).
     ///
@@ -47,6 +47,26 @@ extension FitBuddySchemaV4 {
         /// plan; a row written before #36 then reads as thin data, which is
         /// the honest answer for a basis nobody recorded.
         var sessionCount: Int = 0
+        /// How those sessions split across the sources, JSON-encoded (US-15
+        /// AC4, #182) — read it through `SessionCountFormat`, never directly.
+        ///
+        /// Stored next to `sessionCount` rather than replacing it: the total is
+        /// what every row since #36 carries, and it is what a row whose map
+        /// this build cannot read falls back to. `nil` on every row written
+        /// before #182, where it means "all of them Hevy's" and not "none" —
+        /// the analysis had no other source to count.
+        var sessionCountsJSON: Data?
+        /// The analysis profile the run was made under, as
+        /// `AnalysisProfile.rawValue` (US-15 AC1, #185) — `nil` on every row
+        /// written before the choice existed, where it means "there was none"
+        /// and not "Overall load".
+        ///
+        /// Stored because the profile decided which domains reached the
+        /// prompt: without it two rows from the same week can give opposite
+        /// advice with nothing in the history to explain why. Its own column
+        /// rather than a key in `sessionCountsJSON`: that blob describes the
+        /// sessions, and this is a decision about them.
+        var analysisProfileRawValue: String?
         /// The training goal the run was steered by, as `TrainingGoal.rawValue`
         /// (US-13 AC4, #192) — `nil` when the user had not set one. Stored for
         /// the same reason as `sessionCount`: the basis line above a restored
@@ -88,12 +108,22 @@ extension FitBuddySchemaV4 {
             providerRawValue.flatMap(LLMProvider.init(rawValue:))
         }
 
+        /// Typed view of `analysisProfileRawValue`, with the same reading of an
+        /// unknown value as `provider`: a profile a newer build wrote is
+        /// nothing this one can name, so the row renders without one rather
+        /// than claiming a guess.
+        var analysisProfile: AnalysisProfile? {
+            analysisProfileRawValue.flatMap(AnalysisProfile.init(rawValue:))
+        }
+
         init(
             id: UUID = UUID(),
             text: String,
             generatedAt: Date,
             windowWeeks: Int,
             sessionCount: Int,
+            sessionCountsJSON: Data? = nil,
+            analysisProfileRawValue: String? = nil,
             goal: String? = nil,
             experience: String? = nil,
             reportJSON: Data? = nil,
@@ -105,6 +135,8 @@ extension FitBuddySchemaV4 {
             self.generatedAt = generatedAt
             self.windowWeeks = windowWeeks
             self.sessionCount = sessionCount
+            self.sessionCountsJSON = sessionCountsJSON
+            self.analysisProfileRawValue = analysisProfileRawValue
             self.goal = goal
             self.experience = experience
             self.reportJSON = reportJSON

@@ -30,6 +30,8 @@ enum StravaKeyPresentation {
     static let callbackDomain = "localhost"
 
     /// Where-to-find instructions shown on the credentials card (markdown).
+    /// The full walkthrough is `StravaSetupGuideView` (#168), linked from the
+    /// same card — the repository is private, so no link to the docs.
     static let consoleInstructions = """
         FitBuddy uses your own Strava API application, so no key of ours is involved. \
         Log in at **strava.com**, open **Settings → My API Application**, and create one. \

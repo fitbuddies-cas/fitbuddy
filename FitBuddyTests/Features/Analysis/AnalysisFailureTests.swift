@@ -16,6 +16,7 @@ final class AnalysisFailureTests: XCTestCase {
 
     func testMapsTransportErrors() {
         XCTAssertEqual(failure(.networkUnavailable), .offline(.claude))
+        XCTAssertEqual(failure(.untrustedConnection), .untrustedConnection(.claude))
         XCTAssertEqual(failure(.serviceUnavailable), .serviceUnavailable(.claude))
         XCTAssertEqual(
             failure(.rateLimited(retryAfter: 30)),
@@ -143,6 +144,7 @@ final class AnalysisFailureTests: XCTestCase {
     /// have one.
     private static let everyFailure: [AnalysisFailure] = [
         .missingAPIKey, .keychainUnavailable, .unauthorized(.claude), .offline(.gemini),
+        .untrustedConnection(.claude), .untrustedConnection(nil),
         .rateLimited(provider: .mistral, retryAfter: nil), .planExcludesModel(.mistral),
         .planExcludesModel(nil), .serviceUnavailable(.claude),
         .noTrainingData,

@@ -16,8 +16,8 @@ import SwiftData
 /// also covers its persistence and the restore path.
 ///
 /// `-fbSeedAnalysis` turns it on and stores the progress report of design 3.4;
-/// `-fbSeedAnalysis recover` (or `progress`, `hold`, `thin`) picks the report
-/// (#179, #170).
+/// `-fbSeedAnalysis recover` (or `progress`, `hold`, `thin`, `endurance`,
+/// `overall`) picks the report (#179, #170, #186).
 /// Without the argument nothing here runs.
 enum MockAnalysisSeeder {
     static let launchArgument = "-fbSeedAnalysis"
@@ -32,6 +32,11 @@ enum MockAnalysisSeeder {
         "hold": AnalysisReportSamples.hold,
         // Design 3.4b: no cards, the full analysis open (#170).
         "thin": AnalysisReportSamples.thin,
+        // Design 3.4c/3.4d: the generic cards of #186 — an endurance report
+        // whose figures are all in endurance units (US-15 AC5), and an
+        // overall-load one led by the interference card.
+        "endurance": AnalysisReportSamples.endurance,
+        "overall": AnalysisReportSamples.overallLoad,
     ]
 
     /// Sessions the context line of a seeded report names. 14 as in design
@@ -57,10 +62,44 @@ enum MockAnalysisSeeder {
         requestedReportName(in: launchArguments).flatMap { reports[$0] }
     }
 
-    /// The context line a seeded report rests on: its own session count, over
-    /// the default window.
+    /// The context line a seeded report rests on where there is no cache
+    /// behind it: its own session count, over the default window, all Hevy.
     static func context(forReportNamed name: String) -> AnalysisContext {
         AnalysisContext(sessionCount: sessionCounts[name] ?? defaultSessionCount, window: .default)
+    }
+
+    /// The context line a seeded report rests on when a workout profile was
+    /// seeded with it (#188): the window that profile's cache actually holds,
+    /// counted per source and per domain.
+    ///
+    /// Read from the cache rather than fixed, so a UI test over the `mixed`
+    /// profile asserts the cross-source line of US-15 AC4 — "12 Hevy · 12
+    /// Strava sessions" — as the app computes it, not as a fixture spells it.
+    /// The counting, the window ladder and the preselected profile are the
+    /// view model's own (`AnalysisViewModel.sessionCounts(in:from:)`,
+    /// `AnalysisProfileOptions`), so the seeded line and a real run's cannot
+    /// drift apart.
+    ///
+    /// Falls back to the fixed line for a cache the ladder finds nothing in —
+    /// a report seeded without a profile behind it still has a basis to name.
+    static func context(
+        forReportNamed name: String,
+        summaries: [WorkoutSummary],
+        now: Date,
+        calendar: Calendar = .current
+    ) -> AnalysisContext {
+        guard let window = AnalysisWindow.resolve(for: summaries, endingAt: now, calendar: calendar)
+        else { return context(forReportNamed: name) }
+        let start = window.start(endingAt: now, calendar: calendar)
+        let counts = AnalysisViewModel.sessionCounts(in: summaries, from: start)
+        let profile = AnalysisProfileOptions(domainCounts: counts.domains).preselected
+        return AnalysisContext(
+            sessionCounts: counts.sources,
+            domainCounts: counts.domains,
+            analysedCounts: counts.domains.filter { profile.covers($0.key) },
+            window: window,
+            analysisProfile: profile
+        )
     }
 
     /// The report name the launch asked for — the default for a bare argument
@@ -93,18 +132,51 @@ enum MockAnalysisSeeder {
             return
         }
         let store = AnalysisResultStore(modelContainer: container)
+        let reference = now()
         do {
             try await store.deleteAll()
             try await store.save(
                 text: report.summary,
                 report: report,
                 provider: .claude,
-                generatedAt: now(),
-                context: context(forReportNamed: name)
+                generatedAt: reference,
+                context: await context(
+                    forReportNamed: name,
+                    container: container,
+                    launchArguments: launchArguments,
+                    now: reference
+                )
             )
             logger.debug("Seeded a stored analysis")
         } catch {
             logger.error("Seeding the analysis failed: \(error, privacy: .public)")
+        }
+    }
+
+    /// The basis to store the report with: the seeded cache's own window where
+    /// a workout profile was seeded too, and the fixed line otherwise.
+    ///
+    /// `MockDataSeeder` runs first (`RootView`), so by the time this reads the
+    /// cache the profile is already in it. A read that fails leaves the fixed
+    /// line — the seeded report is still worth showing, and the test that
+    /// needed the breakdown fails on its own assertion.
+    private static func context(
+        forReportNamed name: String,
+        container: ModelContainer,
+        launchArguments: [String],
+        now: Date
+    ) async -> AnalysisContext {
+        guard MockDataSeeder.requestedProfile(in: launchArguments) != nil else {
+            return context(forReportNamed: name)
+        }
+        do {
+            let summaries = try await WorkoutStore(modelContainer: container).workoutSummaries(
+                since: AnalysisWindow.widest.previousStart(endingAt: now)
+            )
+            return context(forReportNamed: name, summaries: summaries, now: now)
+        } catch {
+            logger.error("Seeded basis not read: \(error, privacy: .public)")
+            return context(forReportNamed: name)
         }
     }
 }

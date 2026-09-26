@@ -182,6 +182,19 @@ final class AnthropicClientTests: LLMClientTestCase {
         }
     }
 
+    /// A failed certificate check (pinning, #153) is reported as such, not
+    /// as offline — the prompt with the training data was never sent.
+    func testUntrustedConnectionWhenCertificateCheckFails() async throws {
+        StubURLProtocol.handler = { _ in throw URLError(.serverCertificateUntrusted) }
+
+        do {
+            _ = try await stream()
+            XCTFail("expected untrustedConnection")
+        } catch let error as InferenceServiceError {
+            XCTAssertEqual(error, .untrustedConnection)
+        }
+    }
+
     // MARK: - Sampling (#226)
 
     /// Claude gets **no** sampling fields, and that is deliberate — see the

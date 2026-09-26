@@ -1,10 +1,10 @@
 import Foundation
 import SwiftData
 
-/// The current `ExerciseSet` model — see `FitBuddySchemaV4`.
-typealias ExerciseSet = FitBuddySchemaV4.ExerciseSet
+/// The current `ExerciseSet` model — see `FitBuddySchemaV6`.
+typealias ExerciseSet = FitBuddySchemaV6.ExerciseSet
 
-extension FitBuddySchemaV4 {
+extension FitBuddySchemaV6 {
     /// A single logged set, the leaf of the cached `Workout → Exercise →
     /// ExerciseSet` hierarchy.
     ///
@@ -24,6 +24,12 @@ extension FitBuddySchemaV4 {
         var durationSeconds: Int?
         /// Rate of perceived exertion (6–10) when the user logged it.
         var rpe: Double?
+        /// The repetitions this set was meant to reach, from the routine the
+        /// workout was logged against (#240, ADR-013) — `nil` when there was
+        /// no routine, the routine set had no target, or the row predates V6.
+        /// "No target" is a state the 2-for-2 rule reads as not checkable,
+        /// not as met.
+        var targetReps: Int?
 
         /// Inverse of `Exercise.sets`; owned by the parent's cascade delete rule.
         var exercise: Exercise?
@@ -40,7 +46,8 @@ extension FitBuddySchemaV4 {
             reps: Int? = nil,
             distanceMeters: Double? = nil,
             durationSeconds: Int? = nil,
-            rpe: Double? = nil
+            rpe: Double? = nil,
+            targetReps: Int? = nil
         ) {
             self.index = index
             self.typeRawValue = type.rawValue
@@ -49,6 +56,7 @@ extension FitBuddySchemaV4 {
             self.distanceMeters = distanceMeters
             self.durationSeconds = durationSeconds
             self.rpe = rpe
+            self.targetReps = targetReps
         }
     }
 }

@@ -15,6 +15,10 @@ enum PolarConnectionFailure: Equatable {
     case invalidResponse
     /// Offline, timeout, DNS.
     case network
+    /// Polar answered with a certificate FitBuddy must not trust (failed
+    /// pinning, #153): interception on the network, or a device clock far
+    /// enough off that every certificate looks expired.
+    case untrustedConnection
     /// Polar answered with a rate limit or a server error — nothing about the
     /// credentials, so a retry later is the fix.
     case serviceUnavailable
@@ -41,6 +45,7 @@ enum PolarConnectionFailure: Equatable {
         switch error {
         case .unauthorized: self = .unauthorized
         case .networkUnavailable: self = .network
+        case .untrustedConnection: self = .untrustedConnection
         case .rateLimited, .serviceUnavailable: self = .serviceUnavailable
         case .invalidResponse, .notImplemented: self = .invalidResponse
         }
@@ -50,7 +55,7 @@ enum PolarConnectionFailure: Equatable {
     var pointsToCredentials: Bool {
         switch self {
         case .unauthorized, .invalidResponse: return true
-        case .accessDenied, .network, .serviceUnavailable, .keychain: return false
+        case .accessDenied, .network, .untrustedConnection, .serviceUnavailable, .keychain: return false
         }
     }
 
@@ -60,6 +65,7 @@ enum PolarConnectionFailure: Equatable {
         case .accessDenied: return "Polar access was declined"
         case .invalidResponse: return "Polar did not send FitBuddy back correctly"
         case .network: return "Could not reach Polar"
+        case .untrustedConnection: return "Connection to Polar not trusted"
         case .serviceUnavailable: return "Polar is currently unavailable"
         case .unauthorized: return "Polar rejected the connection"
         case .keychain: return "Could not save the Polar connection"
@@ -75,6 +81,8 @@ enum PolarConnectionFailure: Equatable {
             return "Something in the response from Polar did not match what FitBuddy expected. Please try again."
         case .network:
             return "Check your internet connection and try again."
+        case .untrustedConnection:
+            return "FitBuddy could not verify the secure connection to Polar. Your credentials were not sent. Check the device's date and time, or switch to another network, for example mobile data, and try again."
         case .serviceUnavailable:
             return "Polar answered with an unexpected error — nothing was rejected. Please try again in a little while."
         case .unauthorized:
