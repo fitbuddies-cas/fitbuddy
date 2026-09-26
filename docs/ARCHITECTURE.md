@@ -2,7 +2,7 @@
 
 > *Getrennt geführt: Ziele, Personas, Risiken → [README.md](../README.md) · User Stories, NFRs → [REQUIREMENTS.md](REQUIREMENTS.md) · Architekturentscheide (Detail) → [adr/](adr/)*
 >
-> **Dokumentationsstand:** Stand nach US-16 «Reproduzierbare Empfehlung bei gleicher Datenlage» (Issue #224; #229 noch offen) auf Basis von US-15 (#171) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, Verdict aus der App statt vom Modell, SwiftData-Schema V7, ADR-001 bis ADR-014.
+> **Dokumentationsstand:** Stand nach US-16 «Reproduzierbare Empfehlung bei gleicher Datenlage» (Issue #224) auf Basis von US-15 (#171) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, Verdict aus der App statt vom Modell, SwiftData-Schema V7, ADR-001 bis ADR-014.
 
 ---
 
@@ -267,7 +267,7 @@ Das Modell-Verdict bleibt im Antwortschema, wird überschrieben und als `modelVe
 angezeigt wird es nie. `insufficientData` wird dem Modell nicht angeboten; ein solcher Wert wird
 beim Decodieren auf `hold` normalisiert. Die Eingriffe des Validators werden je Analyse
 protokolliert ([Protokoll der Eingriffe](#protokoll-der-eingriffe-228)). Die verbleibende Streuung über mehrere Läufe misst
-[messung-verdict-streuung.md](messung-verdict-streuung.md) (folgt mit #229).
+[messung-verdict-streuung.md](messung-verdict-streuung.md) (#229).
 
 > **Grenze:** Das Verdict hängt an der Übungsliste des Prompts (Top 6 nach Volumen, auf einer
 > tieferen Budget-Stufe weniger, #187). Dieselbe Historie kann deshalb auf einer anderen
