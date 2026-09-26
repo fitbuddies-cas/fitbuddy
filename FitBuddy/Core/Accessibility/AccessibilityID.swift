@@ -84,7 +84,6 @@ enum AccessibilityID {
         /// Every session row carries it — the tests address them by position,
         /// since the point is that a row opens its session, not which one.
         static let sessionRow = "dashboard.sessionRow"
-        static let exercisesLink = "dashboard.exercisesLink"
         /// The stale-source row from US-8 AC1, with its retry button — one
         /// per source, so two sources gone stale at once stay tellable apart
         /// (#40 review). Takes the raw `ConnectorSource` value rather than the

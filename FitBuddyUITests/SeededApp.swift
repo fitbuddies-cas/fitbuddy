@@ -71,8 +71,10 @@ struct SeededApp {
         app.descendants(matching: .any).matching(identifier: AccessibilityID.WorkoutDetail.exerciseCard)
     }
 
-    var exercisesLink: XCUIElement {
-        app.buttons[AccessibilityID.Dashboard.exercisesLink]
+    /// The exercises tab in the tab bar (#264). Addressed by its title, like
+    /// the analysis tab: a SwiftUI `Tab` exposes no identifier of its own.
+    var exercisesTab: XCUIElement {
+        app.tabBars.buttons["Exercises"]
     }
 
     var exerciseList: XCUIElement {

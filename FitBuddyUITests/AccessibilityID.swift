@@ -60,7 +60,6 @@ enum AccessibilityID {
     enum Dashboard {
         static let root = "dashboard.root"
         static let sessionRow = "dashboard.sessionRow"
-        static let exercisesLink = "dashboard.exercisesLink"
         /// The stale-source row from US-8 AC1, with its retry button — one
         /// per source, so two sources gone stale at once stay tellable apart
         /// (#40 review). Takes the raw `ConnectorSource` value rather than the

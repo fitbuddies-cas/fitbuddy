@@ -3,7 +3,8 @@ import SwiftUI
 
 /// Root view gating app access on the 3-step onboarding flow (US-4), which is
 /// coordinated by `OnboardingViewModel`: consent → Hevy key → LLM keys →
-/// the tab bar with dashboard, analysis and settings (#27, #107).
+/// the tab bar with dashboard, exercises, analysis and settings (#27, #107,
+/// #264).
 struct RootView: View {
     @Environment(\.modelContext) private var modelContext
 
@@ -203,10 +204,11 @@ struct RootView: View {
 
     /// Wires the exercise list to the cache (#37).
     ///
-    /// A factory rather than a ready-made ViewModel: the screen exists only
-    /// while the user is in it, and each push has to read the cache fresh — a
-    /// sync in between changes what the window holds. Its own `WorkoutStore`
-    /// over the same container, like the detail screen's — this one only reads.
+    /// A factory rather than a ready-made ViewModel, like the dashboard's: the
+    /// tab builds it once when SwiftUI first creates its state, so the
+    /// container is not touched before the tab bar exists. Its own
+    /// `WorkoutStore` over the same container, like the detail screen's — this
+    /// one only reads.
     private func makeExerciseListViewModel() -> ExerciseListViewModel {
         ExerciseListViewModel(cache: WorkoutStore(modelContainer: modelContext.container))
     }

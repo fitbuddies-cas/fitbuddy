@@ -150,9 +150,11 @@ struct SettingsView: View {
                 }
                 .listRowBackground(Color.fbRedSoft)
             }
+            // The profile first (#264): it is the one setting that changes
+            // what the analysis says, and the keys below it are set once.
+            trainingProfileSection
             hevySection
             llmSection
-            trainingProfileSection
             privacySection
             dangerSection
         }
