@@ -7,9 +7,9 @@ import Foundation
 /// One place for the labels, so the strength session rows, the endurance
 /// effort lines and the result screen's "no effort anywhere" check (AC6) all
 /// read the same rule for what counts as an effort value and what it is
-/// called. The label strings are private on purpose: #246 introduces
-/// `EffortScale` with the same ADR-015 labels, and once both are merged these
-/// can read `EffortScale.label` instead of keeping a second copy.
+/// called. The labels come from `EffortScale.label` (#246), so each ADR-015
+/// label exists once; only "Polar RPE" lives here, because Polar's RPE is an
+/// ordered level, not an `EffortScale` case (ADR-015 §5).
 ///
 /// **Nothing here combines two scales** (ADR-015 §1, AC2). A session carrying
 /// a Strava Relative Effort and a Polar Cardio Load gets two separately
@@ -23,11 +23,14 @@ enum EffortPromptFigures {
     /// Hevy's RPE. Unprefixed — ADR-015 reserves the bare "RPE" for Hevy —
     /// and spelled "mean RPE" like the Exercises section, because the figure
     /// is the mean over a session's sets.
-    private static let hevyRPELabel = "mean RPE"
-    private static let stravaRelativeEffortLabel = "Strava Relative Effort"
-    private static let polarCardioLoadLabel = "Polar Cardio Load"
-    private static let polarMuscleLoadLabel = "Polar Muscle Load"
-    private static let polarPerceivedLoadLabel = "Polar Perceived Load"
+    private static let hevyRPELabel = "mean \(EffortScale.hevyRPE.label)"
+    private static let stravaRelativeEffortLabel = EffortScale.stravaRelativeEffort.label
+    private static let polarCardioLoadLabel = EffortScale.polarCardioLoad.label
+    private static let polarMuscleLoadLabel = EffortScale.polarMuscleLoad.label
+    private static let polarPerceivedLoadLabel = EffortScale.polarPerceivedLoad.label
+    /// Polar's RPE is not an `EffortScale` case — an ordered level without
+    /// numbers, so it has no trend (ADR-015 §5) — and its ADR-015 label is
+    /// kept here, the only place that writes it.
     private static let polarRPELabel = "Polar RPE"
 
     /// The session's effort values in a fixed order — Hevy's RPE, Strava's
