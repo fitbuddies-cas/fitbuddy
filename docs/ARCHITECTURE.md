@@ -2,7 +2,7 @@
 
 > *Getrennt geführt: Ziele, Personas, Risiken → [README.md](../README.md) · User Stories, NFRs → [REQUIREMENTS.md](REQUIREMENTS.md) · Architekturentscheide (Detail) → [adr/](adr/)*
 >
-> **Dokumentationsstand:** Stand nach US-16 «Reproduzierbare Empfehlung bei gleicher Datenlage» (Issue #224; #228 und #229 noch offen) auf Basis von US-15 (#171) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, Verdict aus der App statt vom Modell, SwiftData-Schema V6, ADR-001 bis ADR-014.
+> **Dokumentationsstand:** Stand nach US-16 «Reproduzierbare Empfehlung bei gleicher Datenlage» (Issue #224; #229 noch offen) auf Basis von US-15 (#171) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, Verdict aus der App statt vom Modell, SwiftData-Schema V7, ADR-001 bis ADR-014.
 
 ---
 
@@ -208,7 +208,8 @@ Der SwiftData-Store ist versioniert (`VersionedSchema`, ADR-001). `FitBuddyMigra
 | V3 | `AnalysisResult.goal` · `.experience` | #192 |
 | V4 | `AnalysisResult.reportJSON` · `.providerRawValue` · `.reportVersion` | #176 |
 | V5 | `Workout.kindRawValue` + zehn flache Cardio-Spalten · `AnalysisResult.sessionCountsJSON` · `.analysisProfileRawValue` | #180 · #182 · #185 |
-| **V6** | `Workout.routineID` · `.routineUpdatedAt` · `ExerciseSet.targetReps` | #240 |
+| V6 | `Workout.routineID` · `.routineUpdatedAt` · `ExerciseSet.targetReps` | #240 |
+| **V7** | `AnalysisResult.validationLogJSON` | #228 |
 
 **V5 (US-15)** persistiert, was [ADR-012](adr/ADR-012-activitykind-und-cardiometrics.md) normalisiert hat:
 
@@ -224,7 +225,9 @@ Alle neuen Spalten sind optional, V4 → V5 ist entsprechend leichtgewichtig: `n
 
 «Kein Ziel» ist ein modellierter Zustand, kein Fehler: frei geloggte Workouts, gelöschte Routinen und Sätze ohne Wiederholungsziel tragen `nil`, und die 2-for-2-Regel liest das als «nicht prüfbar», nie als «erfüllt». V5 → V6 ist leichtgewichtig; für jede bestehende Zeile ist `nil` die Wahrheit, der nächste Sync füllt die Spalten.
 
-> **V6 darf nur wachsen, bis es `develop` erreicht.** V5 war mit US-15 auf `develop` angekommen, also musste #240 eine neue Version aufmachen. Danach ist die nächste Änderung V7: Ein Store, der von einem anderen V6 geschrieben wurde, gilt als «unknown model version» und fällt still auf einen leeren In-Memory-Container zurück.
+**V7 (US-16, #228)** speichert pro Analyse das [Protokoll der Eingriffe](#protokoll-der-eingriffe-228): `AnalysisResult.validationLogJSON` ist ein optionaler JSON-Blob, gelesen und geschrieben nur über `AnalysisValidationLogFormat`. V6 → V7 ist leichtgewichtig; für jede bestehende Zeile ist `nil` die Wahrheit — «nicht erfasst», nicht «nichts verworfen».
+
+> **V7 darf nur wachsen, bis es `develop` erreicht.** V6 war mit US-17 auf `develop` angekommen, also musste #228 eine neue Version aufmachen. Danach ist die nächste Änderung V8: Ein Store, der von einem anderen V7 geschrieben wurde, gilt als «unknown model version» und fällt still auf einen leeren In-Memory-Container zurück.
 
 ---
 
@@ -263,12 +266,47 @@ Herkunft: [ADR-014](adr/ADR-014-verdict-regel-der-app.md) — hier bewusst nicht
 Das Modell-Verdict bleibt im Antwortschema, wird überschrieben und als `modelVerdict` behalten —
 angezeigt wird es nie. `insufficientData` wird dem Modell nicht angeboten; ein solcher Wert wird
 beim Decodieren auf `hold` normalisiert. Die Eingriffe des Validators werden je Analyse
-protokolliert (Protokoll der Eingriffe, #228). Die verbleibende Streuung über mehrere Läufe misst
+protokolliert ([Protokoll der Eingriffe](#protokoll-der-eingriffe-228)). Die verbleibende Streuung über mehrere Läufe misst
 [messung-verdict-streuung.md](messung-verdict-streuung.md) (folgt mit #229).
 
 > **Grenze:** Das Verdict hängt an der Übungsliste des Prompts (Top 6 nach Volumen, auf einer
 > tieferen Budget-Stufe weniger, #187). Dieselbe Historie kann deshalb auf einer anderen
 > Budget-Stufe ein anderes Verdict ergeben.
+
+#### Protokoll der Eingriffe (#228)
+
+US-16 AC4 verlangt, dass messbar wird, was die App vom Modell nicht übernimmt. Erfasst wird an
+**einer** Stelle: `AnalysisReportValidator.validateLogged` validiert und baut dabei das Protokoll;
+`validate` ist nur noch die Variante, die das Protokoll verwirft. Die Gründe sind geschlossene
+Enums, kein Freitext, damit sich jede Rate über mehrere Läufe zählen lässt:
+
+- `AnalysisInterventionSubject` — woran eingegriffen wurde: eine Kartenart oder `verdict` /
+  `headline` / `lead`.
+- `AnalysisInterventionAction` — was die App tat: `downgraded`, `dropped`, `inserted`, `replaced`.
+- `AnalysisInterventionReason` — warum; die Progressions-Gründe spiegeln die Prüfungen des
+  Validators eins zu eins, dazu die Gründe auf Report-Ebene (`verdictOverridden`,
+  `recoveryMissing`, `overCardLimit`, `noBackingCard`, `noVerdict`).
+
+`AnalysisValidationLog` hält pro Analyse Provider, Modell (`LLMProvider.analysisModel` — die
+Konstante des jeweiligen Clients, ein geänderter Pin wird also als solcher protokolliert),
+`modelVerdict`, `appVerdict`, `verdictReason` (die Stufe von `AnalysisVerdictRule`) und die
+Eingriffe in ihrer Reihenfolge; wo es um eine Zahl geht, dazu der Modellwert neben dem der App.
+Gespeichert wird das als optionaler JSON-Blob `AnalysisResult.validationLogJSON` über
+`AnalysisValidationLogFormat` (wie `SessionCountFormat`), **keine eigene Tabelle**: Das Protokoll
+bedeutet nur zusammen mit seiner Analyse etwas und wird mit ihr gelöscht bzw. beim Kürzen der
+Historie mit entfernt. `nil` heisst «nicht erfasst» (Prosa-Antwort, Zeile vor V7), eine leere
+Liste «nichts verworfen». Nicht gespeichert werden Übungsnamen, die Begründung des Modells und
+Session-Daten — nur, was die Messung braucht.
+
+**Debug-Pfad.** Geschrieben wird das Protokoll in allen Builds, sichtbar ist es nur in
+DEBUG-Builds: In den Einstellungen erscheint dort die Sektion `AnalysisValidationLogSection` →
+`AnalysisValidationLogView` mit einer Auszählung über alle gespeicherten Analysen (Läufe ohne
+Eingriff, überstimmte Verdicts, Eingriffe je Teil und Grund) — die Trefferquote für #229.
+TestFlight-Tester sehen die Sektion nicht.
+
+> **Achtung:** Wer einen Fall von `AnalysisVerdictRule.Reason` (oder einen der Eingriffs-Enums)
+> umbenennt, bricht das Decodieren gespeicherter Protokolle. Ein unlesbarer Blob wird als `nil`
+> gelesen — die Analyse bleibt, ihr Protokoll gilt als nicht erfasst.
 
 Eine Sperre nach dem Durchlauf gibt es nicht mehr: Die 60-s-Doppeltipp-Sperre (#117) ist entfernt,
 der «Analysieren»-Button ist nur während eines laufenden Calls deaktiviert. Das harte Kostenlimit
@@ -348,8 +386,11 @@ System-Prompt definiert: Verbotene Termini (Fachjargon), Ausgabeformat («1 Satz
 Karten es vorschlägt und wie es Headline, Kurzfazit und Karten formuliert. Es entscheidet **nicht**
 mehr über das Verdict (App-Regel, ADR-014) und nie über Zahlen (Validator, US-14 AC3).
 
-**Determinismus-Parameter (#226).** An einer Stelle, `LLMSampling`: gesetzt wird nur ein fester
-Seed (Gemini `seed`, Mistral `random_seed`). Die Temperatur bleibt bewusst auf dem
+**Determinismus-Parameter (#226).** An einer Stelle, `LLMSampling`: gesetzt wird nur bei Mistral
+ein fester Seed (`random_seed`, live verifiziert: HTTP 200 am 26.09.2026). Gemini bekommt bewusst
+**keinen** Sampling-Parameter, auch keinen Seed: Ob `gemini-3.6-flash` den Seed annimmt, ist nicht
+verifiziert (der Live-Test lieferte nur HTTP 503), und ein unbekannter Schlüssel in
+`generationConfig` wäre ein HTTP 400, der die Fallback-Kette bricht. Die Temperatur bleibt bewusst auf dem
 Provider-Default — die Stabilität des Verdicts kommt aus der App-Regel, Temperatur 0 ist hinter
 einer öffentlichen API nicht deterministisch, und Reasoning-Modelle verlieren bei tiefer Temperatur
 an Qualität (Google empfiehlt für Gemini 3 den Default 1.0, Mistral ~0.7). Claude bekommt keinen
