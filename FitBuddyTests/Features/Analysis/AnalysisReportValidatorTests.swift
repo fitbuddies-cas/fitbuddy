@@ -140,16 +140,16 @@ final class AnalysisReportValidatorTests: XCTestCase {
     /// 2.5 kg step is rejected, and logged apart from an overshoot.
     func testAnIncreaseUnderOneStepIsRejectedAsBelowTheRange() {
         XCTAssertEqual(validate([benchPress(from: 60, to: 61)]).cards, [.note(title: "Bench Press", text: "Clean overload.")])
-        XCTAssertEqual(check(benchPress(from: 60, to: 61)), .rejected(.belowRange))
-        XCTAssertEqual(check(benchPress(from: 60, to: 66)), .rejected(.aboveRange))
+        XCTAssertEqual(check(benchPress(from: 60, to: 61)), .belowRange)
+        XCTAssertEqual(check(benchPress(from: 60, to: 66)), .aboveRange)
     }
 
     /// Inside the range but off the step: 64 kg on a 2.5 kg bar is not a
     /// load anyone can put on, so it is rejected — and logged apart, since a
     /// model that lands between the plates is its own finding (#233 review).
     func testAnIncreaseOffTheStepIsRejected() {
-        XCTAssertEqual(check(benchPress(from: 60, to: 64)), .rejected(.offStep))
-        XCTAssertEqual(check(benchPress(from: 60, to: 63.75)), .rejected(.offStep))
+        XCTAssertEqual(check(benchPress(from: 60, to: 64)), .offStep)
+        XCTAssertEqual(check(benchPress(from: 60, to: 63.75)), .offStep)
         XCTAssertEqual(validate([benchPress(from: 60, to: 64)]).cards, [.note(title: "Bench Press", text: "Clean overload.")])
     }
 
@@ -240,18 +240,18 @@ final class AnalysisReportValidatorTests: XCTestCase {
     /// Same rule as the weight: the starting figures have to be the ones the
     /// prompt listed, and the step is bounded.
     func testARepProgressionIsCheckedAgainstTheListedWorkingSet() {
-        XCTAssertEqual(checkReps("Incline Press", weight: 60, from: 5, to: 7), .rejected(.notListed))
-        XCTAssertEqual(checkReps("Bench Press", weight: 57.5, from: 5, to: 7), .rejected(.wrongStartingWeight))
-        XCTAssertEqual(checkReps("Bench Press", weight: 60, from: 6, to: 8), .rejected(.wrongStartingReps))
-        XCTAssertEqual(checkReps("Bench Press", weight: 60, from: 5, to: 5), .rejected(.noIncrease))
-        XCTAssertEqual(checkReps("Bench Press", weight: 60, from: 5, to: 4), .rejected(.noIncrease))
-        XCTAssertEqual(checkReps("Bench Press", weight: 60, from: 5, to: 8), .rejected(.aboveRepStep))
+        XCTAssertEqual(checkReps("Incline Press", weight: 60, from: 5, to: 7), .notListed)
+        XCTAssertEqual(checkReps("Bench Press", weight: 57.5, from: 5, to: 7), .wrongStartingWeight)
+        XCTAssertEqual(checkReps("Bench Press", weight: 60, from: 6, to: 8), .wrongStartingReps)
+        XCTAssertEqual(checkReps("Bench Press", weight: 60, from: 5, to: 5), .noIncrease)
+        XCTAssertEqual(checkReps("Bench Press", weight: 60, from: 5, to: 4), .noIncrease)
+        XCTAssertEqual(checkReps("Bench Press", weight: 60, from: 5, to: 8), .aboveRepStep)
         XCTAssertEqual(
             validate([repProgression("Bench Press", weight: 60, from: 5, to: 8)]).cards,
             [.note(title: "Bench Press", text: "Reps first.")]
         )
         let bodyweight = evidence(exercises: [Self.listed(title: "Pull Up", muscleGroup: .back, workingSet: nil)])
-        XCTAssertEqual(checkReps("Pull Up", weight: 0, from: 8, to: 10, evidence: bodyweight), .rejected(.noWorkingWeight))
+        XCTAssertEqual(checkReps("Pull Up", weight: 0, from: 8, to: 10, evidence: bodyweight), .noWorkingWeight)
     }
 
     /// A progress lead backed only by a rep progression stands: more reps at
@@ -358,7 +358,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
                 [.note(title: "Bench Press", text: "Clean overload.")],
                 "\(condition)"
             )
-            XCTAssertEqual(check(benchPress(from: 60, to: 62.5), evidence: evidence), .rejected(reason), "\(condition)")
+            XCTAssertEqual(check(benchPress(from: 60, to: 62.5), evidence: evidence), reason, "\(condition)")
         }
     }
 
@@ -375,7 +375,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
             ),
         ])
 
-        XCTAssertEqual(check(benchPress(from: 60, to: 100), evidence: evidence), .rejected(.conditionNotCheckable))
+        XCTAssertEqual(check(benchPress(from: 60, to: 100), evidence: evidence), .conditionNotCheckable)
     }
 
     /// A card the 2-for-2 rule struck is downgraded, and that is all: the
@@ -434,18 +434,18 @@ final class AnalysisReportValidatorTests: XCTestCase {
     }
 
     func testEveryRejectionNamesItsReason() {
-        XCTAssertEqual(check(progression("Incline Press", from: 60, to: 62.5)), .rejected(.notListed))
-        XCTAssertEqual(check(benchPress(from: 57.5, to: 60)), .rejected(.wrongStartingWeight))
-        XCTAssertEqual(check(benchPress(from: 60, to: 60)), .rejected(.noIncrease))
-        XCTAssertEqual(check(benchPress(from: 60, to: 55)), .rejected(.noIncrease))
+        XCTAssertEqual(check(progression("Incline Press", from: 60, to: 62.5)), .notListed)
+        XCTAssertEqual(check(benchPress(from: 57.5, to: 60)), .wrongStartingWeight)
+        XCTAssertEqual(check(benchPress(from: 60, to: 60)), .noIncrease)
+        XCTAssertEqual(check(benchPress(from: 60, to: 55)), .noIncrease)
         let bodyweight = evidence(exercises: [
             Self.listed(title: "Pull Up", muscleGroup: .back, workingSet: nil, twoForTwo: .met),
         ])
-        XCTAssertEqual(check(progression("Pull Up", from: 0, to: 5), evidence: bodyweight), .rejected(.noWorkingWeight))
+        XCTAssertEqual(check(progression("Pull Up", from: 0, to: 5), evidence: bodyweight), .noWorkingWeight)
         let noStep = evidence(exercises: [
             Self.listed(title: "Lateral Raise", muscleGroup: .shoulders, workingSet: WorkingSet(weightKg: 8, reps: 12), twoForTwo: .met),
         ])
-        XCTAssertEqual(check(progression("Lateral Raise", from: 8, to: 10), evidence: noStep), .rejected(.noLoadStep))
+        XCTAssertEqual(check(progression("Lateral Raise", from: 8, to: 10), evidence: noStep), .noLoadStep)
     }
 
     /// Any other exercise moves by the step its line lists, under the small
@@ -1739,10 +1739,14 @@ final class AnalysisReportValidatorTests: XCTestCase {
         )
     }
 
-    /// The check behind the card, for asserting the reason a card failed.
-    private func check(_ card: AnalysisCard, evidence: AnalysisReportEvidence? = nil) -> AnalysisReportValidator.ProgressionCheck {
+    /// The check behind the card, for asserting the reason a card failed —
+    /// `nil` when it passed. The figure the rejection carries is asserted in
+    /// `AnalysisValidationLogCaptureTests`.
+    private func check(
+        _ card: AnalysisCard, evidence: AnalysisReportEvidence? = nil
+    ) -> AnalysisReportValidator.ProgressionRejection? {
         guard case let .progression(exercise, _, fromKg, toKg, reasoning) = card else {
-            return .rejected(.notListed)
+            return .notListed
         }
         return AnalysisReportValidator.checkProgression(
             exercise: exercise,
@@ -1750,7 +1754,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
             toKg: toKg,
             reasoning: reasoning,
             listed: (evidence ?? self.evidence()).exercises
-        )
+        ).rejection
     }
 
     private func repProgression(_ exercise: String, weight: Double, from: Int, to: Int) -> AnalysisCard {
@@ -1759,7 +1763,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
 
     private func checkReps(
         _ exercise: String, weight: Double, from: Int, to: Int, evidence: AnalysisReportEvidence? = nil
-    ) -> AnalysisReportValidator.ProgressionCheck {
+    ) -> AnalysisReportValidator.ProgressionRejection? {
         AnalysisReportValidator.checkRepProgression(
             exercise: exercise,
             weightKg: weight,
@@ -1767,7 +1771,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
             toReps: to,
             reasoning: "Reps first.",
             listed: (evidence ?? self.evidence()).exercises
-        )
+        ).rejection
     }
 
     private func progression(_ exercise: String, from: Double, to: Double) -> AnalysisCard {
@@ -1780,5 +1784,13 @@ final class AnalysisReportValidatorTests: XCTestCase {
 
     private func chestVersusLegs(_ chest: Double, _ legs: Double) -> AnalysisCard {
         .imbalance(groupA: "Chest", perWeekA: chest, groupB: "Legs", perWeekB: legs, reasoning: "Add a leg session.")
+    }
+}
+
+private extension AnalysisReportValidator.ProgressionCheck {
+    /// The reason the check failed, `nil` when it passed.
+    var rejection: AnalysisReportValidator.ProgressionRejection? {
+        guard case let .rejected(rejection, _) = self else { return nil }
+        return rejection
     }
 }
