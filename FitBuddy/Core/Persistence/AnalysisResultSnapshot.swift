@@ -25,6 +25,10 @@ struct AnalysisResultSnapshot: Equatable, Sendable, Identifiable {
     /// The provider that wrote the answer (#176), or `nil` when the row did
     /// not record one — the badge then stays a bare "AI".
     let provider: LLMProvider?
+    /// What the validator rejected, downgraded or overrode in the answer
+    /// (#228), or `nil` for a prose answer, a row written before V7 and a log
+    /// this build cannot read. Never shown outside the debug path.
+    let validationLog: AnalysisValidationLog?
 
     init(
         id: UUID,
@@ -32,7 +36,8 @@ struct AnalysisResultSnapshot: Equatable, Sendable, Identifiable {
         generatedAt: Date,
         context: AnalysisContext,
         report: ValidatedAnalysisReport? = nil,
-        provider: LLMProvider? = nil
+        provider: LLMProvider? = nil,
+        validationLog: AnalysisValidationLog? = nil
     ) {
         self.id = id
         self.text = text
@@ -40,5 +45,6 @@ struct AnalysisResultSnapshot: Equatable, Sendable, Identifiable {
         self.context = context
         self.report = report
         self.provider = provider
+        self.validationLog = validationLog
     }
 }

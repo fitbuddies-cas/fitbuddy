@@ -1,10 +1,10 @@
 import Foundation
 import SwiftData
 
-/// The current `AnalysisResult` model — see `FitBuddySchemaV6`.
-typealias AnalysisResult = FitBuddySchemaV6.AnalysisResult
+/// The current `AnalysisResult` model — see `FitBuddySchemaV7`.
+typealias AnalysisResult = FitBuddySchemaV7.AnalysisResult
 
-extension FitBuddySchemaV6 {
+extension FitBuddySchemaV7 {
     /// One AI recommendation, kept so it survives an app restart and stays
     /// readable next to the ones before it (US-3 AC10/AC11, #97/#117).
     ///
@@ -95,6 +95,17 @@ extension FitBuddySchemaV6 {
         /// last one of the fallback chain (#176), read it through `provider`.
         /// `nil` on rows written before V4, which did not record it.
         var providerRawValue: String?
+        /// What the validator rejected, downgraded or overrode in the model's
+        /// answer, JSON-encoded (US-16 AC4, #228) — read it through
+        /// `AnalysisValidationLogFormat`, never directly.
+        ///
+        /// A blob next to the row rather than a table of its own, the way
+        /// `sessionCountsJSON` is: the log only means anything together with
+        /// the analysis it describes, is deleted with it, and its reasons grow
+        /// with the validator without a schema version per reason. `nil` on a
+        /// prose answer and on every row written before V7 — "not recorded",
+        /// not "nothing rejected".
+        var validationLogJSON: Data?
         /// Unused: held the "Helpful" / "Not helpful" verdict until those
         /// buttons were removed. Kept so installed stores open without a
         /// migration — nothing writes it since, and neither V3 nor V4 spent a
@@ -128,7 +139,8 @@ extension FitBuddySchemaV6 {
             experience: String? = nil,
             reportJSON: Data? = nil,
             reportVersion: Int = AnalysisReportFormat.prose,
-            providerRawValue: String? = nil
+            providerRawValue: String? = nil,
+            validationLogJSON: Data? = nil
         ) {
             self.id = id
             self.text = text
@@ -142,6 +154,7 @@ extension FitBuddySchemaV6 {
             self.reportJSON = reportJSON
             self.reportVersion = reportVersion
             self.providerRawValue = providerRawValue
+            self.validationLogJSON = validationLogJSON
         }
     }
 }

@@ -428,6 +428,36 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(restarted.attribution, AnalysisAttribution(first: .gemini))
     }
 
+    /// US-16 AC4 (#228): what the validator did to the answer is stored with
+    /// it, attributed to the provider that answered and the model it was
+    /// asked with.
+    func testTheValidationLogIsStoredWithTheProviderAndModelThatAnswered() async throws {
+        await streamer.setReport(AnalysisReportFactory.progress, from: .gemini)
+        let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache())
+
+        await sut.start()
+
+        let latest = try await results.latest()
+        let log = try XCTUnwrap(latest?.validationLog)
+        XCTAssertEqual(log.provider, .gemini)
+        XCTAssertEqual(log.model, GeminiClient.model)
+        XCTAssertEqual(log.modelVerdict, AnalysisReportFactory.progress.verdict)
+        XCTAssertEqual(log.appVerdict, latest?.report?.verdict)
+    }
+
+    /// Prose was not validated, so there is nothing to log — and "not
+    /// recorded" is what the row says, not an empty log.
+    func testAProseAnswerStoresNoValidationLog() async throws {
+        await streamer.setEvents([.attempting(.claude), .text("Recommendation")])
+        let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache())
+
+        await sut.start()
+
+        let latest = try await results.latest()
+        XCTAssertEqual(latest?.text, "Recommendation")
+        XCTAssertNil(latest?.validationLog)
+    }
+
     /// A report with a single note, so the recovery card in the result can
     /// only have come from the app.
     private static let noteOnlyReport = AnalysisReport(

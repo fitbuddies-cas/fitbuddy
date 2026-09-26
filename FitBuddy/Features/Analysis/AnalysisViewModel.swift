@@ -478,8 +478,9 @@ final class AnalysisViewModel: ObservableObject {
             guard !Task.isCancelled else { return finish(id) }
 
             let outcome: AnalysisOutcome
+            var validationLog: AnalysisValidationLog?
             if let report {
-                outcome = self.outcome(for: report, reads: built.reads)
+                (outcome, validationLog) = self.outcome(for: report, reads: built.reads)
             } else if !prose.isEmpty {
                 outcome = .prose(prose)
             } else {
@@ -492,7 +493,7 @@ final class AnalysisViewModel: ObservableObject {
             // Before `.result`, not after: while the write runs the state stays
             // `.running`, so "New analysis" cannot start a second run before
             // this one has stored its answer.
-            await persist(outcome)
+            await persist(outcome, validationLog: validationLog)
             // A `cancel()` during the await above already published a resting
             // state; it wins over the run it stopped.
             guard !Task.isCancelled else { return finish(id) }
@@ -518,9 +519,13 @@ final class AnalysisViewModel: ObservableObject {
     /// exercise data, so every progression card would be downgraded for lack
     /// of data rather than for being wrong. The report is then shown as its
     /// summary, which is what the model wrote for exactly that purpose, and
-    /// never as cards nothing has checked.
-    private func outcome(for report: AnalysisReport, reads: AnalysisRunReads) -> AnalysisOutcome {
-        guard exerciseCache != nil else { return .prose(report.summary) }
+    /// never as cards nothing has checked — and without a validation log,
+    /// because nothing was validated (#228).
+    private func outcome(
+        for report: AnalysisReport,
+        reads: AnalysisRunReads
+    ) -> (outcome: AnalysisOutcome, log: AnalysisValidationLog?) {
+        guard exerciseCache != nil else { return (.prose(report.summary), nil) }
         let evidence = AnalysisReportEvidence(
             summaries: reads.summaries,
             exercises: reads.exercises,
@@ -534,7 +539,8 @@ final class AnalysisViewModel: ObservableObject {
             analysisProfile: reads.analysisProfile,
             promptDetail: reads.promptDetail
         )
-        return AnalysisOutcome(validated: AnalysisReportValidator.validate(report, against: evidence))
+        let validated = AnalysisReportValidator.validateLogged(report, against: evidence)
+        return (AnalysisOutcome(validated: validated.report), validated.log)
     }
 
     /// Reads the window and builds the prompt, or publishes the reason it
@@ -768,7 +774,7 @@ final class AnalysisViewModel: ObservableObject {
     /// A failing write is logged, not surfaced: the recommendation is on screen
     /// and readable, and an error banner over it would be about the next
     /// launch, not about anything the user can act on now.
-    private func persist(_ outcome: AnalysisOutcome) async {
+    private func persist(_ outcome: AnalysisOutcome, validationLog: AnalysisValidationLog?) async {
         let timestamp = now()
         generatedAt = timestamp
         refreshResultAge()
@@ -782,11 +788,13 @@ final class AnalysisViewModel: ObservableObject {
             // back the same cards rather than re-validating against a cache
             // that has moved on; its summary is the row's prose fallback. The
             // provider is the one that answered, so the history badge can name
-            // it (#176).
+            // it (#176). The validation log names the same provider and the
+            // model it was asked with (#228).
             currentResultID = try await resultStore.save(
                 text: outcome.text,
                 report: outcome.report,
                 provider: attribution?.provider,
+                validationLog: validationLog?.attributed(to: attribution?.provider),
                 generatedAt: timestamp,
                 context: context
             )

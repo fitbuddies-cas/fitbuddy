@@ -13,7 +13,8 @@ actor AnalysisResultStore {
     /// `text` is stored whether or not a `report` comes with it: it is what
     /// renders when the report cannot be read back (US-14 AC6, #176).
     /// `provider` is the one that wrote the answer — the last of the fallback
-    /// chain.
+    /// chain. `validationLog` is what the validator did to that answer
+    /// (#228), stored next to it through `AnalysisValidationLogFormat`.
     ///
     /// Insert and trim share one `save()`, so a failing write leaves the
     /// history exactly as it was rather than half-pruned.
@@ -22,6 +23,7 @@ actor AnalysisResultStore {
         text: String,
         report: ValidatedAnalysisReport? = nil,
         provider: LLMProvider? = nil,
+        validationLog: AnalysisValidationLog? = nil,
         generatedAt: Date,
         context: AnalysisContext
     ) throws -> UUID {
@@ -37,7 +39,8 @@ actor AnalysisResultStore {
             experience: context.profile.experience?.rawValue,
             reportJSON: encoded.json,
             reportVersion: encoded.version,
-            providerRawValue: provider?.rawValue
+            providerRawValue: provider?.rawValue,
+            validationLogJSON: AnalysisValidationLogFormat.encode(validationLog)
         )
         modelContext.insert(result)
         try trimToLimit()
@@ -121,7 +124,8 @@ actor AnalysisResultStore {
             generatedAt: result.generatedAt,
             context: context(of: result),
             report: AnalysisReportFormat.decode(result.reportJSON, version: result.reportVersion),
-            provider: result.provider
+            provider: result.provider,
+            validationLog: AnalysisValidationLogFormat.decode(result.validationLogJSON)
         )
     }
 
