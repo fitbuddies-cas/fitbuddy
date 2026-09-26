@@ -13,46 +13,38 @@ import Foundation
 /// rather than in any single client — the point of the task is that the clients
 /// read from one definition instead of carrying three copies.
 ///
-/// Not every provider takes both fields; `AnthropicClient` takes neither. See
-/// `ClaudeMessageRequest` for why, and keep that documented rather than silent.
+/// **Seed only — no temperature, on purpose.** Every provider runs at its own
+/// default temperature, and that absence is a decision, not an oversight (#224
+/// AC2):
+///
+/// 1. Verdict stability comes from #227 — the app derives the verdict from its
+///    own metrics. After that, temperature only affects wording and card
+///    choice, which US-16 AC1 allows to vary.
+/// 2. The primary provider, Claude Opus 5, rejects `temperature` with HTTP 400
+///    (see `ClaudeMessageRequest`). A lowered value would only make the
+///    fallback providers behave differently from the primary one.
+/// 3. Even `temperature = 0` is not deterministic behind a public API: the
+///    study #224 cites found outputs still varying because of batch-dependent
+///    GPU kernels, not sampling.
+/// 4. Both fallback models reason before answering. Google advises keeping
+///    Gemini 3 models at the default temperature 1.0 (lower values risk
+///    looping or degraded output); Mistral recommends about 0.7 for its
+///    reasoning models. A low value like 0.2 risks silent quality loss.
+///
+/// Do not add a temperature here to make the providers "consistent" without
+/// revisiting these points. `AnthropicClient` takes no sampling field at all;
+/// the Gemini and Mistral tests assert that no `temperature` key is sent.
 enum LLMSampling {
-    /// Low, but deliberately not 0.
-    ///
-    /// The problem being solved is that the same cache and the same prompt
-    /// produced three different verdicts in three runs (#224). Temperature is
-    /// the part of that FitBuddy can actually turn down: it narrows the
-    /// distribution the next token is drawn from, so the model stops wandering
-    /// between defensible readings of the same numbers.
-    ///
-    /// Why not 0. Greedy decoding would not buy the determinism it looks like
-    /// it buys: the study #224 cites (arXiv 2604.19598 / PMID 42435611) found
-    /// outputs still varying at `temperature = 0`, because the cause is the
-    /// batch dependence of the GPU kernels behind a public API rather than the
-    /// sampling. That study covers GPT-4.1 and Claude Sonnet 4.6 — **not**
-    /// Gemini and Mistral, the only two providers this constant reaches — so it
-    /// is an argument by analogy, not a result measured on our own stack. The
-    /// remaining reason to stay off 0 is that greedy decoding on a structured
-    /// JSON answer can fall into degenerate repetition, and the report is prose
-    /// the user reads.
-    ///
-    /// **0.2 is a judgement call, not a measured optimum.** Nothing in this
-    /// repo has compared it against 0, 0.3 or 0.7, and #229 is the task that
-    /// measures what spread is actually left. Treat the number as revisable.
-    ///
-    /// The verdict itself does not become stable from this alone — #227 moves
-    /// it out of the model and into the app's own metrics. This only lowers the
-    /// spread where the provider lets it.
-    static let temperature = 0.2
-
     /// Fixed seed for the providers that accept one (Mistral `random_seed`,
     /// Gemini `seed`).
     ///
+    /// Costs nothing and adds best-effort reproducibility where it is offered.
     /// The value is arbitrary; that it never changes between runs is the whole
     /// point. With an identical prompt and a fixed seed, the provider samples
-    /// the same way twice — as far as its own scheduling allows, which is the
-    /// same caveat as above. A fixed value is the only variant that buys
-    /// anything: omitting the field lets the provider pick a seed per request,
-    /// so sending a freshly drawn one each run is *equivalent* to omitting it —
-    /// not worse, just pointless.
+    /// the same way twice — as far as its own scheduling allows (point 3
+    /// above). A fixed value is the only variant that buys anything: omitting
+    /// the field lets the provider pick a seed per request, so sending a
+    /// freshly drawn one each run is *equivalent* to omitting it — not worse,
+    /// just pointless.
     static let seed = 1
 }

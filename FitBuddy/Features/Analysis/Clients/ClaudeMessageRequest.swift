@@ -3,8 +3,9 @@ import Foundation
 /// Wire body for a streaming call to Claude's `POST /v1/messages` (#29).
 ///
 /// **No sampling fields here, on purpose (#226).** Gemini and Mistral both take
-/// `temperature` and a seed from `LLMSampling`; Claude takes neither, and that
-/// gap is a property of the API rather than an oversight:
+/// the seed from `LLMSampling` (no provider gets a temperature — see there for
+/// why); Claude takes no seed either, and that gap is a property of the API
+/// rather than an oversight:
 ///
 /// - `temperature`, `top_p` and `top_k` are removed on `claude-opus-5`, the
 ///   model this client uses, because of its adaptive thinking. A request that

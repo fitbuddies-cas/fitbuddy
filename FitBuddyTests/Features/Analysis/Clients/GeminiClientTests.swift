@@ -249,19 +249,29 @@ final class GeminiClientTests: LLMClientTestCase {
 
     // MARK: - Sampling (#226)
 
-    /// Both fields belong inside `generationConfig`; Gemini has no top-level
+    /// The seed belongs inside `generationConfig`; Gemini has no top-level
     /// sampling keys.
-    func testRequestCarriesTheSharedTemperatureAndSeed() async throws {
+    func testRequestCarriesTheSharedSeed() async throws {
         stub(body: GeminiSSEFactory.body(textChunks: ["Hi"]))
 
         _ = try await collect(try await stream())
 
         let json = try jsonBody(of: try capturedRequest())
-        XCTAssertNil(json["temperature"])
         XCTAssertNil(json["seed"])
         let config = try XCTUnwrap(json["generationConfig"] as? [String: Any])
-        XCTAssertEqual(config["temperature"] as? Double, LLMSampling.temperature)
         XCTAssertEqual(config["seed"] as? Int, LLMSampling.seed)
+    }
+
+    /// No temperature, deliberately — Gemini 3 stays at its default 1.0 (see
+    /// `LLMSampling`). Keys at any depth; a schema `description` may still
+    /// contain the word.
+    func testRequestCarriesNoTemperature() async throws {
+        stub(body: GeminiSSEFactory.body(textChunks: ["Hi"]))
+
+        _ = try await collect(try await stream())
+
+        let keys = Self.allKeys(in: try jsonBody(of: try capturedRequest()))
+        XCTAssertFalse(keys.contains("temperature"), "Gemini runs at its default temperature (#226)")
     }
 
     /// The point of the seed is that it does not move between runs.
@@ -280,5 +290,21 @@ final class GeminiClientTests: LLMClientTestCase {
         // both sides would be `nil`, so the equality alone would still pass.
         let firstSeed = try XCTUnwrap(firstConfig["seed"] as? Int)
         XCTAssertEqual(firstSeed, secondConfig["seed"] as? Int)
+    }
+
+    /// Every dictionary key in `value`, at any depth.
+    private static func allKeys(in value: Any) -> Set<String> {
+        switch value {
+        case let dictionary as [String: Any]:
+            return dictionary.reduce(into: Set(dictionary.keys)) { keys, entry in
+                keys.formUnion(allKeys(in: entry.value))
+            }
+        case let array as [Any]:
+            return array.reduce(into: Set<String>()) { keys, element in
+                keys.formUnion(allKeys(in: element))
+            }
+        default:
+            return []
+        }
     }
 }
