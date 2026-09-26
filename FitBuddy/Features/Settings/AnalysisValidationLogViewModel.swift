@@ -1,6 +1,11 @@
 import Foundation
 import OSLog
 
+// Developer tooling: excluded from Release builds, so the validation log
+// view never ships in a TestFlight binary. The log itself is captured and
+// stored in every build (#228).
+#if DEBUG
+
 /// Drives the developer view of the validation log (US-16 AC4, #228): per
 /// stored analysis, who answered, the model's verdict against the app's, and
 /// every intervention — plus the tally across all of them, which is what
@@ -90,3 +95,5 @@ final class AnalysisValidationLogViewModel: ObservableObject {
         value.formatted(.number.precision(.fractionLength(0...2)).locale(Locale(identifier: "en_US_POSIX")))
     }
 }
+
+#endif

@@ -1,5 +1,10 @@
 import Foundation
 
+// Developer tooling: excluded from Release builds, so the validation log
+// view never ships in a TestFlight binary. The log itself is captured and
+// stored in every build (#228).
+#if DEBUG
+
 /// The hit rate over several runs (US-16 AC4, #228, for #229): how many
 /// stored analyses carry a log, how many went through untouched, how often
 /// the app overruled the model's verdict, and how often each intervention
@@ -33,3 +38,5 @@ struct AnalysisValidationTally: Equatable, Sendable {
         }
     }
 }
+
+#endif
