@@ -4,7 +4,9 @@ import Foundation
 /// decoding — the counterpart to `HevyPayloadFactory`.
 enum StravaPayloadFactory {
     /// One "SummaryActivity" as `GET /athlete/activities` lists it. Defaults
-    /// describe a 5 km run in 30 minutes of moving time.
+    /// describe a 5 km run in 30 minutes of moving time, with no cardio
+    /// metrics — Strava omits the keys for an activity that recorded none,
+    /// and a test that wants them passes them explicitly.
     static func activity(
         id: Int64,
         start: Date,
@@ -13,7 +15,13 @@ enum StravaPayloadFactory {
         type: String? = "Run",
         distance: Double? = 5000,
         movingTime: Int? = 1800,
-        elapsedTime: Int? = 1900
+        elapsedTime: Int? = 1900,
+        totalElevationGain: Double? = nil,
+        averageSpeed: Double? = nil,
+        averageHeartRate: Double? = nil,
+        maxHeartRate: Double? = nil,
+        kilojoules: Double? = nil,
+        sufferScore: Double? = nil
     ) -> [String: Any] {
         var json: [String: Any] = [
             "id": id,
@@ -28,6 +36,12 @@ enum StravaPayloadFactory {
         if let distance { json["distance"] = distance }
         if let movingTime { json["moving_time"] = movingTime }
         if let elapsedTime { json["elapsed_time"] = elapsedTime }
+        if let totalElevationGain { json["total_elevation_gain"] = totalElevationGain }
+        if let averageSpeed { json["average_speed"] = averageSpeed }
+        if let averageHeartRate { json["average_heartrate"] = averageHeartRate }
+        if let maxHeartRate { json["max_heartrate"] = maxHeartRate }
+        if let kilojoules { json["kilojoules"] = kilojoules }
+        if let sufferScore { json["suffer_score"] = sufferScore }
         return json
     }
 

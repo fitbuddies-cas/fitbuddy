@@ -16,10 +16,22 @@ enum AnalysisCardAccessibility {
             From \(AnalysisCardFormatter.weight(fromKg)) to \(AnalysisCardFormatter.weight(toKg)), \
             \(AnalysisCardFormatter.delta(fromKg: fromKg, toKg: toKg)). \(reasoning)
             """
+        case let .repProgression(exercise, muscleGroup, weightKg, fromReps, toReps, reasoning):
+            return """
+            More reps. \(exercise), \(muscleGroup.displayName). \
+            From \(AnalysisCardFormatter.reps(fromReps)) to \(AnalysisCardFormatter.reps(toReps)) \
+            \(AnalysisCardFormatter.atWeight(weightKg)), \
+            \(AnalysisCardFormatter.repDelta(fromReps: fromReps, toReps: toReps)). \(reasoning)
+            """
         case let .recovery(reasoning, metrics):
             var figures = ["\(metrics.sessions) sessions in the last 7 days"]
             if let averageRPE = metrics.averageRPE {
                 figures.append("average RPE \(AnalysisCardFormatter.rpe(averageRPE))")
+            }
+            // Spelled out, unlike the card's "Avg HR": VoiceOver reads an
+            // abbreviation letter by letter (#184).
+            if let averageHeartRate = metrics.averageHeartRate {
+                figures.append("average heart rate \(averageHeartRate) beats per minute")
             }
             figures.append("suggested rest \(metrics.suggestedRestHours) hours")
             return """
@@ -32,6 +44,25 @@ enum AnalysisCardAccessibility {
                 .map { "\($0.group.displayName) \(AnalysisCardFormatter.frequency($0.perWeek)) \($0.perWeek == 1 ? "time" : "times") per week" }
                 .joined(separator: ", ")
             return "Imbalance. \(frequencies). \(reasoning)"
+        case let .metric(label, from, to, unit, reasoning, source):
+            // The unit is spelled out — VoiceOver reads "km" and "bpm" letter
+            // by letter — and so is the direction, because "32 35" says
+            // nothing about which way the figure moves.
+            var sentence = AnalysisCardFormatter.metricChipTitle(from: from, to: to, unit: unit) + "."
+            if !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                sentence += " \(source)."
+            }
+            sentence += " \(label)."
+            if let start = unit.spoken(from), let target = unit.spoken(to) {
+                sentence += " From \(start) to \(target)."
+            }
+            return sentence + " \(reasoning)"
+        case let .interference(metrics, reasoning):
+            return """
+            Interference. \(AnalysisCardFormatter.interferenceHeadline(metrics)) \
+            \(metrics.strengthDays) strength days, \(metrics.cardioDays) endurance days, \
+            \(metrics.overlapDays) days with both, of the last \(metrics.days). \(reasoning)
+            """
         case let .note(title, text):
             return "\(title). \(text)"
         }

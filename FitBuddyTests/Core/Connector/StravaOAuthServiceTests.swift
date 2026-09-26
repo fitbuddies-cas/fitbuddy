@@ -238,6 +238,14 @@ final class StravaOAuthServiceTests: XCTestCase {
         await assertAuthorizeThrows(.transport)
     }
 
+    /// A failed certificate check on the token endpoint (pinning, #153) is
+    /// kept apart from being offline: the client secret was not sent, and
+    /// the user has to leave the network rather than retry.
+    func testTokenEndpointCertificateFailureThrowsUntrustedConnection() async {
+        StubURLProtocol.handler = { _ in throw URLError(.serverCertificateUntrusted) }
+        await assertAuthorizeThrows(.untrustedConnection)
+    }
+
     // MARK: - Token endpoint status mapping
 
     func testHTTP401OnCodeExchangeThrowsInvalidClientCredentials() async {

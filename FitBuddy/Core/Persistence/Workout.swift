@@ -1,10 +1,10 @@
 import Foundation
 import SwiftData
 
-/// The current `Workout` model — see `FitBuddySchemaV4`.
-typealias Workout = FitBuddySchemaV4.Workout
+/// The current `Workout` model — see `FitBuddySchemaV6`.
+typealias Workout = FitBuddySchemaV6.Workout
 
-extension FitBuddySchemaV4 {
+extension FitBuddySchemaV6 {
     /// A cached training session — the root of the `Workout → Exercise →
     /// ExerciseSet` hierarchy that backs the offline dashboard (US-2 AC2).
     ///
@@ -33,6 +33,43 @@ extension FitBuddySchemaV4 {
         /// literal rather than `ConnectorSource.hevy.rawValue` so the schema's
         /// default does not depend on evaluating another type.
         var sourceRawValue: String = "hevy"
+        /// `ActivityKind.rawValue` of the sport this session was (#180) —
+        /// read it through `kind`.
+        ///
+        /// Optional rather than defaulted, because "not recorded" is what the
+        /// V4 → V5 stage truthfully fills existing rows with: a store written
+        /// before this version holds Strava and Polar sessions too, and
+        /// defaulting those to `strength` would file a cached run under the
+        /// wrong domain. `kind` resolves the gap from the source instead; the
+        /// next sync replaces the window and fills the column for real.
+        var kindRawValue: String?
+        /// The source's id of the routine this session was logged against
+        /// (Hevy's `routine_id`, #240) — `nil` for a freely logged workout,
+        /// for an endurance source's session, and for every row written
+        /// before V6.
+        var routineID: String?
+        /// The routine's `updated_at` as it was when this session was
+        /// **first** cached. Snapshotted with the targets on the sets, not
+        /// joined live: a routine the user edits after training has no
+        /// version history, so the only record of what the session was
+        /// compared against is the one taken then. A later sync rewrites the
+        /// window but carries this snapshot over —
+        /// `WorkoutStore.replaceCachedWorkouts` — so it never moves.
+        var routineUpdatedAt: Date?
+
+        /// Session-level endurance metrics, flat — SwiftData stores scalars,
+        /// not a nested `CardioMetrics` (#180). Read them through `cardio`,
+        /// which is also the only thing that writes them.
+        var cardioAverageHeartRate: Int?
+        var cardioMaxHeartRate: Int?
+        var cardioElevationGainMeters: Double?
+        var cardioAverageSpeedMetersPerSecond: Double?
+        var cardioEnergyKilojoules: Double?
+        var cardioPerceivedEffort: Double?
+        var cardioActiveCalories: Int?
+        var cardioDistanceMeters: Double?
+        var cardioDurationSeconds: Int?
+        var cardioTrainingLoad: Double?
 
         /// Deleting a workout deletes its exercises (and, transitively, their sets).
         @Relationship(deleteRule: .cascade, inverse: \Exercise.workout)
@@ -44,6 +81,34 @@ extension FitBuddySchemaV4 {
             ConnectorSource(rawValue: sourceRawValue) ?? .hevy
         }
 
+        /// Typed view of `kindRawValue`. A row with none — written before V5
+        /// — falls back to what its source can still tell us: a Hevy workout
+        /// is strength training, an endurance source's session is `.other`,
+        /// because which discipline it was is exactly what was not recorded.
+        /// An unknown raw value, from a store written by a newer build, reads
+        /// the same way.
+        var kind: ActivityKind {
+            if let kindRawValue, let kind = ActivityKind(rawValue: kindRawValue) { return kind }
+            return source.isEnduranceSource ? .other : .strength
+        }
+
+        /// Typed view of the flat cardio columns; `nil` when the session
+        /// recorded none, so "is there cardio data?" stays one check.
+        var cardio: CardioMetrics? {
+            CardioMetrics(
+                averageHeartRate: cardioAverageHeartRate,
+                maxHeartRate: cardioMaxHeartRate,
+                elevationGainMeters: cardioElevationGainMeters,
+                averageSpeedMetersPerSecond: cardioAverageSpeedMetersPerSecond,
+                energyKilojoules: cardioEnergyKilojoules,
+                perceivedEffort: cardioPerceivedEffort,
+                activeCalories: cardioActiveCalories,
+                distanceMeters: cardioDistanceMeters,
+                durationSeconds: cardioDurationSeconds,
+                trainingLoad: cardioTrainingLoad
+            ).nonEmpty
+        }
+
         init(
             id: String,
             title: String,
@@ -52,7 +117,11 @@ extension FitBuddySchemaV4 {
             endTime: Date? = nil,
             updatedAt: Date? = nil,
             source: ConnectorSource = .hevy,
-            exercises: [Exercise] = []
+            kind: ActivityKind = .strength,
+            exercises: [Exercise] = [],
+            cardio: CardioMetrics? = nil,
+            routineID: String? = nil,
+            routineUpdatedAt: Date? = nil
         ) {
             self.id = id
             self.title = title
@@ -61,7 +130,20 @@ extension FitBuddySchemaV4 {
             self.endTime = endTime
             self.updatedAt = updatedAt
             self.sourceRawValue = source.rawValue
+            self.kindRawValue = kind.rawValue
             self.exercises = exercises
+            self.routineID = routineID
+            self.routineUpdatedAt = routineUpdatedAt
+            self.cardioAverageHeartRate = cardio?.averageHeartRate
+            self.cardioMaxHeartRate = cardio?.maxHeartRate
+            self.cardioElevationGainMeters = cardio?.elevationGainMeters
+            self.cardioAverageSpeedMetersPerSecond = cardio?.averageSpeedMetersPerSecond
+            self.cardioEnergyKilojoules = cardio?.energyKilojoules
+            self.cardioPerceivedEffort = cardio?.perceivedEffort
+            self.cardioActiveCalories = cardio?.activeCalories
+            self.cardioDistanceMeters = cardio?.distanceMeters
+            self.cardioDurationSeconds = cardio?.durationSeconds
+            self.cardioTrainingLoad = cardio?.trainingLoad
         }
     }
 }

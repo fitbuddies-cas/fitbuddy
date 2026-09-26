@@ -311,6 +311,14 @@ final class WorkoutSyncServiceTests: XCTestCase {
         XCTAssertEqual(stored, previous)
     }
 
+    /// A failed certificate check (pinning, #153) travels through the sync
+    /// as its own failure, so the banner can say so instead of "offline".
+    func testCertificateFailureSurfacesAsUntrustedConnection() async throws {
+        StubURLProtocol.handler = { _ in throw URLError(.serverCertificateUntrusted) }
+
+        await assertSyncThrows(.untrustedConnection)
+    }
+
     func testFailedSyncKeepsCachedWorkouts() async throws {
         stub(pages: [HevyPayloadFactory.page(page: 1, pageCount: 1, workouts: [
             HevyPayloadFactory.workout(id: "w-1", start: daysAgo(1)),

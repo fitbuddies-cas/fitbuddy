@@ -32,6 +32,8 @@ final class AnalysisReportFactoryTests: XCTestCase {
         for report in [
             AnalysisReportFactory.progressionReady,
             AnalysisReportFactory.overreached,
+            AnalysisReportFactory.plateau,
+            AnalysisReportFactory.plateauOvershoot,
             AnalysisReportFactory.thin,
         ] {
             let json = try XCTUnwrap(String(data: JSONEncoder().encode(report), encoding: .utf8))
@@ -45,6 +47,8 @@ final class AnalysisReportFactoryTests: XCTestCase {
         let answers = AnalysisVerdict.allCases.map(AnalysisReportFactory.report) + [
             AnalysisReportFactory.progressionReady,
             AnalysisReportFactory.overreached,
+            AnalysisReportFactory.plateau,
+            AnalysisReportFactory.plateauOvershoot,
             AnalysisReportFactory.thin,
         ]
         for answer in answers {

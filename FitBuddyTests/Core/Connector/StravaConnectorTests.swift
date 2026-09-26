@@ -173,6 +173,123 @@ final class StravaConnectorTests: XCTestCase {
         XCTAssertNil(set.durationSeconds)
     }
 
+    // MARK: - Kind & cardio metrics (#180)
+
+    /// US-15 / #180 AC1: a run with heart rate and elevation arrives as a
+    /// classified session with its cardio block filled.
+    func testARunWithHeartRateAndElevationFillsTheCardioBlock() async throws {
+        stub(pages: [StravaPayloadFactory.page([
+            StravaPayloadFactory.activity(
+                id: 987,
+                start: Self.daysAgo(1),
+                sportType: "TrailRun",
+                type: "Run",
+                totalElevationGain: 412.5,
+                averageSpeed: 2.78,
+                averageHeartRate: 148.4,
+                maxHeartRate: 171.6,
+                kilojoules: 920,
+                sufferScore: 64
+            ),
+        ])])
+
+        let activities = await fetchAll()
+        let activity = try XCTUnwrap(activities.first)
+        let cardio = try XCTUnwrap(activity.cardio)
+
+        XCTAssertEqual(activity.kind, .run)
+        XCTAssertEqual(cardio.averageHeartRate, 148)
+        XCTAssertEqual(cardio.maxHeartRate, 172)
+        XCTAssertEqual(cardio.elevationGainMeters, 412.5)
+        XCTAssertEqual(cardio.averageSpeedMetersPerSecond, 2.78)
+        XCTAssertEqual(cardio.energyKilojoules, 920)
+        XCTAssertEqual(cardio.perceivedEffort, 64)
+        // Distance and moving time stay on the set, where the dashboard reads
+        // them — the block must not double-count them.
+        XCTAssertNil(cardio.distanceMeters)
+        XCTAssertNil(cardio.durationSeconds)
+    }
+
+    func testAnActivityWithoutMetricsHasNoCardioBlock() async throws {
+        stub(pages: [StravaPayloadFactory.page([
+            StravaPayloadFactory.activity(id: 1, start: Self.daysAgo(1)),
+        ])])
+
+        let activities = await fetchAll()
+        XCTAssertNil(activities.first?.cardio)
+    }
+
+    /// Zero is what Strava sends for what it never measured, so it must not
+    /// turn into "0 m of ascent", "0 m/s" or a heart rate of 0 bpm — the last
+    /// one being a number the dashboard would otherwise show as a reading.
+    func testZeroHeartRateElevationSpeedEnergyAndEffortDecodeAsNotLogged() async throws {
+        stub(pages: [StravaPayloadFactory.page([
+            StravaPayloadFactory.activity(
+                id: 1,
+                start: Self.daysAgo(1),
+                sportType: "Swim",
+                totalElevationGain: 0,
+                averageSpeed: 0,
+                averageHeartRate: 0,
+                maxHeartRate: 0,
+                kilojoules: 0,
+                sufferScore: 0
+            ),
+        ])])
+
+        let activities = await fetchAll()
+        XCTAssertNil(activities.first?.cardio)
+    }
+
+    /// Strava composes its finer sports out of the coarse ones, so the
+    /// mapping is matched on the suffix rather than on a lookup table. Tested
+    /// against the mapper directly: a failure then points at the sport type
+    /// instead of at the connector round-trip.
+    func testSportTypeMapsOntoTheNormalizedKind() {
+        let cases: [(String, ActivityKind)] = [
+            ("Run", .run),
+            ("TrailRun", .run),
+            ("VirtualRun", .run),
+            ("Ride", .ride),
+            ("GravelRide", .ride),
+            ("EMountainBikeRide", .ride),
+            ("Swim", .swim),
+            ("Hike", .hike),
+            ("Walk", .walk),
+            ("WeightTraining", .strength),
+            ("Crossfit", .strength),
+            ("Yoga", .other),
+            ("Kitesurf", .other),
+            // Strava's catch-all for mobility, stretching or a class — not a
+            // gym session, so it stays unclassified.
+            ("Workout", .other),
+        ]
+
+        for (sportType, expected) in cases {
+            XCTAssertEqual(StravaActivityDTO.kind(sportType: sportType, type: nil), expected, sportType)
+        }
+    }
+
+    func testAnUnknownSportTypeFallsBackToTypeBeforeGivingUp() {
+        XCTAssertEqual(StravaActivityDTO.kind(sportType: nil, type: "Ride"), .ride)
+    }
+
+    /// The mapped kind survives the connector, so the direct mapper cases
+    /// above stand for what the dashboard actually receives.
+    func testTheMappedKindReachesTheNormalizedActivity() async throws {
+        stub(pages: [StravaPayloadFactory.page([
+            StravaPayloadFactory.activity(id: 1, start: Self.daysAgo(1), sportType: "TrailRun"),
+        ])])
+
+        let activities = await fetchAll()
+        XCTAssertEqual(activities.first?.kind, .run)
+    }
+
+    /// Every activity of the default 90-day window.
+    private func fetchAll() async -> [Activity] {
+        (try? await sut.fetchActivities(since: Self.daysAgo(90))) ?? []
+    }
+
     func testMissingNameFallsBackToTheSportAndMissingSportTypeToType() async throws {
         stub(pages: [StravaPayloadFactory.page([
             StravaPayloadFactory.activity(id: 1, start: Self.daysAgo(1), name: nil, sportType: nil, type: "Ride"),
@@ -390,6 +507,13 @@ final class StravaConnectorTests: XCTestCase {
         await assertFetchThrows(.networkUnavailable)
     }
 
+    func testRefreshCertificateFailureIsUntrustedConnection() async throws {
+        try await sut.connect(credentials: Self.expiringPair)
+        await oauth.setRefreshResult(.failure(StravaOAuthError.untrustedConnection))
+
+        await assertFetchThrows(.untrustedConnection)
+    }
+
     func testRefreshServerErrorIsServiceUnavailable() async throws {
         try await sut.connect(credentials: Self.expiringPair)
         await oauth.setRefreshResult(.failure(StravaOAuthError.unexpectedStatus(503)))
@@ -430,6 +554,12 @@ final class StravaConnectorTests: XCTestCase {
     func testTransportFailureMapsToNetworkUnavailable() async {
         StubURLProtocol.handler = { _ in throw URLError(.notConnectedToInternet) }
         await assertFetchThrows(.networkUnavailable)
+    }
+
+    /// A failed certificate check (pinning, #153) must not read as offline.
+    func testCertificateFailureMapsToUntrustedConnection() async {
+        StubURLProtocol.handler = { _ in throw URLError(.serverCertificateUntrusted) }
+        await assertFetchThrows(.untrustedConnection)
     }
 
     func testMalformedBodyMapsToInvalidResponse() async {

@@ -41,6 +41,8 @@ struct StravaConnectionView: View {
                 }
                 credentialsLink
                     .padding(.top, 18)
+                setupGuideLink
+                    .padding(.top, 10)
                 privacyNote
                     .padding(.top, 18)
             }
@@ -177,6 +179,43 @@ struct StravaConnectionView: View {
         }
         .disabled(isAuthorizing)
         .accessibilityIdentifier(AccessibilityID.StravaConnection.credentialsLink)
+    }
+
+    /// The walkthrough for creating the Strava API application (#168). Sits
+    /// on this screen because it is the first one a user sees under Settings
+    /// → Strava, before any credentials exist.
+    private var setupGuideLink: some View {
+        NavigationLink {
+            StravaSetupGuideView()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "book")
+                    .font(.system(size: 16))
+                    .foregroundStyle(Color.fbAccent)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Setup guide")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Color.fbInk)
+                    Text("Create the API application on strava.com step by step")
+                        .font(.footnote)
+                        .foregroundStyle(Color.fbInkSecondary)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.fbMuted)
+            }
+            .padding(14)
+            .background(Color.fbCard)
+            .clipShape(RoundedRectangle(cornerRadius: FBRadius.control))
+            .overlay(
+                RoundedRectangle(cornerRadius: FBRadius.control)
+                    .strokeBorder(Color.fbBorder, lineWidth: 1)
+            )
+        }
+        .disabled(isAuthorizing)
+        .accessibilityIdentifier(AccessibilityID.StravaConnection.setupGuideLink)
     }
 
     private var privacyNote: some View {

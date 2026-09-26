@@ -27,6 +27,9 @@ enum StravaOAuthError: Error, Equatable, Sendable {
     case invalidResponse
     /// No HTTP response at all: offline, DNS, timeout.
     case transport
+    /// The token endpoint answered with a certificate FitBuddy must not trust
+    /// (failed pinning, #153). The client secret was not sent.
+    case untrustedConnection
     /// Any other status from the token endpoint.
     case unexpectedStatus(Int)
 }

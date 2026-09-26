@@ -13,16 +13,54 @@ import Foundation
 /// Encoded like `AnalysisCard`: a flat object with `kind` as discriminator.
 enum AnalysisReportCard: Equatable, Sendable {
     case progression(exercise: String, muscleGroup: MuscleGroup, fromKg: Double, toKg: Double, reasoning: String)
+    /// More repetitions at the cache's working weight (US-17 AC3, #234):
+    /// `weightKg` and `fromReps` are the listed working set, `toReps` and the
+    /// reasoning are the model's.
+    case repProgression(exercise: String, muscleGroup: MuscleGroup, weightKg: Double, fromReps: Int, toReps: Int, reasoning: String)
     case recovery(reasoning: String, metrics: RecoveryMetrics)
     case imbalance(groupA: MuscleGroup, perWeekA: Double, groupB: MuscleGroup, perWeekB: Double, reasoning: String)
+    /// One figure of the week, with the app's own current value in place of
+    /// the model's (US-15 AC5, #186).
+    ///
+    /// `from` is the weekly aggregate the app computed, `to` and `reasoning`
+    /// are the model's, and the delta is derived from the two by
+    /// `MetricUnit.delta(from:to:)` — never sent, never stored. `source` is
+    /// the header label and is empty where the card has none.
+    case metric(label: String, from: Double, to: Double, unit: MetricUnit, reasoning: String, source: String)
+    /// Strength and endurance in the same week, with the app's day counts
+    /// (US-15 AC2, #186). Only the reasoning is the model's.
+    case interference(metrics: InterferenceMetrics, reasoning: String)
     /// A model note, or a card that failed validation, reduced to its text.
     case note(title: String, text: String)
+
+    /// Whether this card states a step that adds training load — what decides
+    /// whether a "progress" verdict has a card behind it (#177).
+    ///
+    /// A progression always does. A metric card does when its step is an
+    /// improvement in its own unit (`MetricUnit.isImprovement`), so a card
+    /// asking for fewer kilometres or an easier heart rate does not hold up a
+    /// progress verdict, and an endurance report recommending +3 km does —
+    /// without this, the "Endurance" profile could never reach a progress
+    /// verdict at all, because it produces no progression cards.
+    var backsProgress: Bool {
+        switch self {
+        case .progression, .repProgression:
+            return true
+        case let .metric(_, from, to, unit, _, _):
+            return unit.isImprovement(from: from, to: to)
+        case .recovery, .imbalance, .interference, .note:
+            return false
+        }
+    }
 
     var kind: AnalysisCard.Kind {
         switch self {
         case .progression: return .progression
+        case .repProgression: return .repProgression
         case .recovery: return .recovery
         case .imbalance: return .imbalance
+        case .metric: return .metric
+        case .interference: return .interference
         case .note: return .note
         }
     }
@@ -32,8 +70,11 @@ extension AnalysisReportCard: Codable {
     enum CodingKeys: String, CodingKey {
         case kind
         case exercise, muscleGroup, fromKg, toKg
+        case weightKg, fromReps, toReps
         case metrics
         case groupA, perWeekA, groupB, perWeekB
+        case label, from, to, unit, source
+        case interference
         case reasoning
         case title, text
     }
@@ -49,6 +90,15 @@ extension AnalysisReportCard: Codable {
                 toKg: try container.decode(Double.self, forKey: .toKg),
                 reasoning: try container.decode(String.self, forKey: .reasoning)
             )
+        case .repProgression:
+            self = .repProgression(
+                exercise: try container.decode(String.self, forKey: .exercise),
+                muscleGroup: try container.decode(MuscleGroup.self, forKey: .muscleGroup),
+                weightKg: try container.decode(Double.self, forKey: .weightKg),
+                fromReps: try container.decode(Int.self, forKey: .fromReps),
+                toReps: try container.decode(Int.self, forKey: .toReps),
+                reasoning: try container.decode(String.self, forKey: .reasoning)
+            )
         case .recovery:
             self = .recovery(
                 reasoning: try container.decode(String.self, forKey: .reasoning),
@@ -60,6 +110,20 @@ extension AnalysisReportCard: Codable {
                 perWeekA: try container.decode(Double.self, forKey: .perWeekA),
                 groupB: try container.decode(MuscleGroup.self, forKey: .groupB),
                 perWeekB: try container.decode(Double.self, forKey: .perWeekB),
+                reasoning: try container.decode(String.self, forKey: .reasoning)
+            )
+        case .metric:
+            self = .metric(
+                label: try container.decode(String.self, forKey: .label),
+                from: try container.decode(Double.self, forKey: .from),
+                to: try container.decode(Double.self, forKey: .to),
+                unit: try container.decode(MetricUnit.self, forKey: .unit),
+                reasoning: try container.decode(String.self, forKey: .reasoning),
+                source: try container.decodeIfPresent(String.self, forKey: .source) ?? ""
+            )
+        case .interference:
+            self = .interference(
+                metrics: try container.decode(InterferenceMetrics.self, forKey: .interference),
                 reasoning: try container.decode(String.self, forKey: .reasoning)
             )
         case .note:
@@ -80,6 +144,13 @@ extension AnalysisReportCard: Codable {
             try container.encode(fromKg, forKey: .fromKg)
             try container.encode(toKg, forKey: .toKg)
             try container.encode(reasoning, forKey: .reasoning)
+        case let .repProgression(exercise, muscleGroup, weightKg, fromReps, toReps, reasoning):
+            try container.encode(exercise, forKey: .exercise)
+            try container.encode(muscleGroup, forKey: .muscleGroup)
+            try container.encode(weightKg, forKey: .weightKg)
+            try container.encode(fromReps, forKey: .fromReps)
+            try container.encode(toReps, forKey: .toReps)
+            try container.encode(reasoning, forKey: .reasoning)
         case let .recovery(reasoning, metrics):
             try container.encode(reasoning, forKey: .reasoning)
             try container.encode(metrics, forKey: .metrics)
@@ -88,6 +159,16 @@ extension AnalysisReportCard: Codable {
             try container.encode(perWeekA, forKey: .perWeekA)
             try container.encode(groupB, forKey: .groupB)
             try container.encode(perWeekB, forKey: .perWeekB)
+            try container.encode(reasoning, forKey: .reasoning)
+        case let .metric(label, from, to, unit, reasoning, source):
+            try container.encode(label, forKey: .label)
+            try container.encode(from, forKey: .from)
+            try container.encode(to, forKey: .to)
+            try container.encode(unit, forKey: .unit)
+            try container.encode(reasoning, forKey: .reasoning)
+            try container.encode(source, forKey: .source)
+        case let .interference(metrics, reasoning):
+            try container.encode(metrics, forKey: .interference)
             try container.encode(reasoning, forKey: .reasoning)
         case let .note(title, text):
             try container.encode(title, forKey: .title)

@@ -154,6 +154,7 @@ actor StravaOAuthService: StravaOAuthorizing {
             (data, response) = try await session.data(for: request)
         } catch {
             if error.isCancellation { throw StravaOAuthError.cancelled }
+            if error.isUntrustedConnection { throw StravaOAuthError.untrustedConnection }
             throw StravaOAuthError.transport
         }
         guard let http = response as? HTTPURLResponse else { throw StravaOAuthError.transport }

@@ -15,5 +15,106 @@
 			</array>
 		</dict>
 	</array>
+	<!--
+	  Certificate pinning (#153, ADR-004, docs/CERTIFICATE-PINNING.md).
+	  Every host FitBuddy sends a user secret to is pinned to the SPKI SHA-256
+	  of its certificate authority's *root* key — not the leaf, not the
+	  intermediate: Let's Encrypt and Google Trust Services rotate their
+	  intermediates per issuance. Each host lists every root its CA (and, for
+	  Cloudflare-fronted hosts, every CA Cloudflare may issue from) can chain
+	  to, so a CA switch does not lock testers out. Derivation and the
+	  rotation procedure are documented in docs/CERTIFICATE-PINNING.md;
+	  CertificatePinningConfigurationTests guards this table.
+	-->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSPinnedDomains</key>
+		<dict>
+			<!-- Hevy (Heroku, Let's Encrypt): ISRG Root X1, ISRG Root X2, ISRG Root YR (observed cross-signed root, 2026-09-20) -->
+			<key>api.hevyapp.com</key>
+			<dict>
+				<key>NSPinnedCAIdentities</key>
+				<array>
+					<dict><key>SPKI-SHA256-BASE64</key><string>C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>diGVwiVYbubAI3RW4hB9xU8e/CH2GnkuvVFZE8zmgzI=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>fk6IOKit1ild5647BH06ujSIq5XbCgqlbYl6ANhhi88=</string></dict>
+				</array>
+			</dict>
+			<!-- Anthropic (Cloudflare): GTS Root R1-R4, ISRG Root X1/X2, SSL.com TLS RSA/ECC Root CA 2022 -->
+			<key>api.anthropic.com</key>
+			<dict>
+				<key>NSPinnedCAIdentities</key>
+				<array>
+					<dict><key>SPKI-SHA256-BASE64</key><string>hxqRlPTu1bMS/0DITB1SSu0vd4u/8l8TjPgfaAp63Gc=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>Vfd95BwDeSQo+NUYxVEEIlvkOlWY2SalKK1lPhzOx78=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>QXnt2YHvdHR3tJYmQIr0Paosp6t/nggsEGD4QJZ3Q0g=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>mEflZT5enoR1FuXLgYYGqnVEoZvmf9c2bVBpiOjYQ0c=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>diGVwiVYbubAI3RW4hB9xU8e/CH2GnkuvVFZE8zmgzI=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>K89VOmb1cJAN3TK6bf4ezAbJGC1mLcG2Dh97dnwr3VQ=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>G/ANXI8TwJTdF+AFBM8IiIUPEv0Gf6H5LA/b9guG4yE=</string></dict>
+				</array>
+			</dict>
+			<!-- Google Gemini: GTS Root R1-R4 -->
+			<key>generativelanguage.googleapis.com</key>
+			<dict>
+				<key>NSPinnedCAIdentities</key>
+				<array>
+					<dict><key>SPKI-SHA256-BASE64</key><string>hxqRlPTu1bMS/0DITB1SSu0vd4u/8l8TjPgfaAp63Gc=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>Vfd95BwDeSQo+NUYxVEEIlvkOlWY2SalKK1lPhzOx78=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>QXnt2YHvdHR3tJYmQIr0Paosp6t/nggsEGD4QJZ3Q0g=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>mEflZT5enoR1FuXLgYYGqnVEoZvmf9c2bVBpiOjYQ0c=</string></dict>
+				</array>
+			</dict>
+			<!-- Mistral (Cloudflare): GTS Root R1-R4, ISRG Root X1/X2, SSL.com TLS RSA/ECC Root CA 2022 -->
+			<key>api.mistral.ai</key>
+			<dict>
+				<key>NSPinnedCAIdentities</key>
+				<array>
+					<dict><key>SPKI-SHA256-BASE64</key><string>hxqRlPTu1bMS/0DITB1SSu0vd4u/8l8TjPgfaAp63Gc=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>Vfd95BwDeSQo+NUYxVEEIlvkOlWY2SalKK1lPhzOx78=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>QXnt2YHvdHR3tJYmQIr0Paosp6t/nggsEGD4QJZ3Q0g=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>mEflZT5enoR1FuXLgYYGqnVEoZvmf9c2bVBpiOjYQ0c=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>diGVwiVYbubAI3RW4hB9xU8e/CH2GnkuvVFZE8zmgzI=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>K89VOmb1cJAN3TK6bf4ezAbJGC1mLcG2Dh97dnwr3VQ=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>G/ANXI8TwJTdF+AFBM8IiIUPEv0Gf6H5LA/b9guG4yE=</string></dict>
+				</array>
+			</dict>
+			<!-- Strava (GoDaddy): GoDaddy TLS Root CA - R1 (served, cross-signed), Go Daddy Root Certificate Authority - G2 -->
+			<key>www.strava.com</key>
+			<dict>
+				<key>NSPinnedCAIdentities</key>
+				<array>
+					<dict><key>SPKI-SHA256-BASE64</key><string>gKjJIacZSuY6bbDnu13WF/rufps/FKwGIaqxRb5nKZA=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>Ko8tivDrEjiY90yGasP6ZpBU4jwXvHqVvQI0GS3GNdA=</string></dict>
+				</array>
+			</dict>
+			<!-- Polar AccessLink (AWS): Amazon Root CA 1-4, Starfield Services Root Certificate Authority - G2 -->
+			<key>www.polaraccesslink.com</key>
+			<dict>
+				<key>NSPinnedCAIdentities</key>
+				<array>
+					<dict><key>SPKI-SHA256-BASE64</key><string>++MBgDH5WGvL9Bcn5Be30cRcL0f5O+NyoXuWtQdX1aI=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>f0KW/FtqTjs108NpYj42SrGvOB2PpxIVM8nWxjPqJGE=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>NqvDJlas/GRcYbcWE8S/IceH9cq77kg0jVhZeAPXq8k=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>9+ze1cZgR9KO1kZrVDxA4HQ6voHRCSVNz4RdTCx4U8U=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>KwccWaCgrnaw6tsrrSO61FgLacNgG2MMLq8GE6+oP5I=</string></dict>
+				</array>
+			</dict>
+			<!-- Polar OAuth token endpoint (AWS): same roots as AccessLink -->
+			<key>polarremote.com</key>
+			<dict>
+				<key>NSPinnedCAIdentities</key>
+				<array>
+					<dict><key>SPKI-SHA256-BASE64</key><string>++MBgDH5WGvL9Bcn5Be30cRcL0f5O+NyoXuWtQdX1aI=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>f0KW/FtqTjs108NpYj42SrGvOB2PpxIVM8nWxjPqJGE=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>NqvDJlas/GRcYbcWE8S/IceH9cq77kg0jVhZeAPXq8k=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>9+ze1cZgR9KO1kZrVDxA4HQ6voHRCSVNz4RdTCx4U8U=</string></dict>
+					<dict><key>SPKI-SHA256-BASE64</key><string>KwccWaCgrnaw6tsrrSO61FgLacNgG2MMLq8GE6+oP5I=</string></dict>
+				</array>
+			</dict>
+		</dict>
+	</dict>
 </dict>
 </plist>

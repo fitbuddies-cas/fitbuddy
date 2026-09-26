@@ -10,6 +10,12 @@ struct AnthropicClient: LLMProviderClient {
     /// Model used for every analysis call. The recommendation is short prose,
     /// but it is the one place FitBuddy asks a model to reason about a training
     /// history, so the flagship stays.
+    ///
+    /// Context window: 1 M tokens. The prompt is sized against the
+    /// *smallest* window of the three providers, not this one — see
+    /// `AnalysisPromptBudget.smallestContextWindowTokens`, which has to be
+    /// revisited if this model is ever swapped for one with a smaller
+    /// window than Mistral's.
     static let model = "claude-opus-5"
     /// A training recommendation is a short, focused paragraph, not a
     /// code-generation-scale response — capped well below the model's ceiling

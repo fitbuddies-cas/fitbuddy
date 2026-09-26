@@ -56,6 +56,7 @@ final class AnalysisViewModelTests: XCTestCase {
             inference: streamer,
             resultStore: resultStore ?? results,
             trainingProfile: TrainingProfileStore(defaults: defaults),
+            analysisProfiles: AnalysisProfileStore(defaults: defaults),
             calendar: Self.calendar,
             now: { clock.date },
             slowThreshold: slowThreshold,
@@ -74,16 +75,22 @@ final class AnalysisViewModelTests: XCTestCase {
     private static func workout(
         daysAgo: Int,
         title: String = "Push Day",
-        source: ConnectorSource = .hevy
+        source: ConnectorSource = .hevy,
+        kind: ActivityKind? = nil
     ) -> WorkoutSummary {
         WorkoutSummary(
             id: "w-\(daysAgo)",
             title: title,
             startTime: reference.addingTimeInterval(-Double(daysAgo) * 86_400),
             source: source,
-            volumeKg: source == .strava ? 0 : 4_200,
+            // Without an explicit sport, an endurance source reads as it does
+            // for a row cached before V5: unclassified, and told apart by the
+            // old heuristic (ADR-012).
+            kind: kind ?? (source.isEnduranceSource ? .other : .strength),
+            volumeKg: source == .hevy ? 4_200 : 0,
             exerciseCount: 5,
-            countedSetCount: 18
+            countedSetCount: 18,
+            distanceMeters: source.isEnduranceSource ? 8_400 : nil
         )
     }
 
@@ -254,6 +261,35 @@ final class AnalysisViewModelTests: XCTestCase {
             metrics: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: 8)
         ))
         XCTAssertEqual(details.callCount, 6)
+    }
+
+    /// US-15 AC3 end to end: four strength sessions and two runs on six days
+    /// insert the recovery card, where before #184 the four lifts left the run
+    /// days uncounted and no hint appeared.
+    ///
+    /// The details are read for the four strength sessions only — a run logs no
+    /// RPE, so fetching it would cost a round trip and risk dropping the RPE of
+    /// the whole week over an unreadable one.
+    func testAMixedWeekInsertsTheRecoveryCardAndReadsOnlyTheStrengthDetails() async throws {
+        cache.summaries = (0...3).map { Self.workout(daysAgo: $0) }
+            + [
+                Self.workout(daysAgo: 4, title: "Morning Run", source: .strava, kind: .run),
+                Self.workout(daysAgo: 5, title: "Evening Run", source: .strava, kind: .run),
+            ]
+        let details = StubWorkoutDetailCache()
+        details.details = (0...3).map { Self.detail(daysAgo: $0, rpe: 8) }
+        await streamer.setReport(Self.noteOnlyReport)
+        let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache(), detailCache: details)
+
+        await sut.start()
+
+        let report = try XCTUnwrap(sut.state.outcome?.report)
+        XCTAssertEqual(report.verdict, .recover)
+        XCTAssertEqual(report.cards.first, .recovery(
+            reasoning: AnalysisReportValidator.insertedRecoveryReasoning,
+            metrics: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: 8)
+        ))
+        XCTAssertEqual(details.callCount, 4)
     }
 
     /// A failing detail read costs the RPE, not the paid-for answer.
@@ -519,6 +555,9 @@ final class AnalysisViewModelTests: XCTestCase {
         )
     }
 
+    /// Two sessions at the same weight, a week apart, each beating its
+    /// routine target by two reps — so the 2-for-2 rule of ADR-013 is met and
+    /// a progression card on the movement is one the validator can keep.
     private static func progression(
         _ summary: ExerciseSummary,
         weightKg: Double,
@@ -533,19 +572,20 @@ final class AnalysisViewModelTests: XCTestCase {
                 reps: reps,
                 distanceMeters: nil,
                 durationSeconds: nil,
-                rpe: nil
+                rpe: nil,
+                targetReps: reps - TwoForTwoCondition.requiredMargin
             )
         }
         return ExerciseProgression(
             id: summary.id,
             title: summary.title,
-            sessions: [
+            sessions: [daysAgo + 7, daysAgo].map { day in
                 ExerciseHistoryEntry(
-                    workoutID: "w-\(daysAgo)",
-                    sessionStart: reference.addingTimeInterval(-Double(daysAgo) * 86_400),
+                    workoutID: "w-\(day)",
+                    sessionStart: reference.addingTimeInterval(-Double(day) * 86_400),
                     sets: sets
-                ),
-            ]
+                )
+            }
         )
     }
 
@@ -601,32 +641,422 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(sut.context?.sessionCount, 2)
     }
 
-    /// The context line describes the strength history the prompt was built
-    /// from (US-6 AC1): Strava sessions count neither here nor in the prompt.
-    func testContextDoesNotCountStravaSessions() async {
+    /// Only Hevy in the cache: the line reads exactly as it did before #182.
+    func testContextOfASingleSourceReadsAsBeforeTheSplit() async {
+        cache.summaries = [Self.workout(daysAgo: 2), Self.workout(daysAgo: 5)]
+        await streamer.setText("ok")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.sessionCounts, [.hevy: 2])
+        XCTAssertEqual(sut.context?.basisDescription, "2 Hevy sessions")
+    }
+
+    /// US-15 AC4: every source that fed the window is counted on its own, and
+    /// the line names them in a stable order. Before #182 the endurance
+    /// sessions were dropped from the count along with the prompt — an honest
+    /// line for a strength-only analysis, and a lie once #183 sections the
+    /// prompt by domain.
+    func testContextCountsEachSourceSeparately() async {
         cache.summaries = [
             Self.workout(daysAgo: 2),
             Self.workout(daysAgo: 3, title: "Morning Run", source: .strava),
+            Self.workout(daysAgo: 4, title: "Evening Ride", source: .strava),
             Self.workout(daysAgo: 5),
+            Self.workout(daysAgo: 6, title: "Pool", source: .polar),
         ]
         await streamer.setText("ok")
         let sut = makeSUT()
 
         await sut.start()
 
-        XCTAssertEqual(sut.context?.sessionCount, 2)
+        XCTAssertEqual(sut.context?.sessionCounts, [.hevy: 2, .strava: 2, .polar: 1])
+        XCTAssertEqual(sut.context?.sessionCount, 5)
+        XCTAssertEqual(sut.context?.basisDescription, "2 Hevy · 2 Strava · 1 Polar sessions")
     }
 
-    /// A cache holding nothing but runs has no strength history to analyse —
-    /// not a window to widen, and not a provider call worth paying for.
-    func testACacheOfOnlyStravaSessionsIsNoTrainingData() async {
-        cache.summaries = [Self.workout(daysAgo: 2, title: "Morning Run", source: .strava)]
+    /// The endurance sessions counted are the ones inside the resolved window,
+    /// not the ones the wide read returned — the rule the Hevy count has
+    /// followed since #36.
+    func testContextCountsEnduranceSessionsOnlyInsideTheResolvedWindow() async {
+        cache.summaries = [
+            Self.workout(daysAgo: 2),
+            Self.workout(daysAgo: 3, title: "Morning Run", source: .strava),
+            // Outside the 4-week window, inside the read.
+            Self.workout(daysAgo: 40, title: "Long Run", source: .strava),
+        ]
+        await streamer.setText("ok")
         let sut = makeSUT()
 
         await sut.start()
 
-        XCTAssertEqual(sut.state, .error(.noTrainingData))
-        XCTAssertNil(sut.context)
+        XCTAssertEqual(sut.context?.window, .default)
+        XCTAssertEqual(sut.context?.sessionCounts, [.hevy: 1, .strava: 1])
+    }
+
+    /// The case #182 could only half-answer: three Hevy and three Strava
+    /// strength sessions were six on the line and three in the model's hands,
+    /// because the prompt filtered by source. Since #183 the sport decides, so
+    /// all six reach the prompt and all six are what US-6 AC2 judges.
+    func testStravaStrengthSessionsReachThePromptAndTheStrengthCount() async {
+        cache.summaries = (1...3).map { Self.workout(daysAgo: $0) }
+            + (4...6).map { Self.workout(daysAgo: $0, title: "Gym", source: .strava, kind: .strength) }
+        await streamer.setText("ok")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.basisDescription, "3 Hevy · 3 Strava sessions")
+        XCTAssertEqual(sut.context?.domainCounts, [.strength: 6])
+        XCTAssertEqual(sut.context?.analysedCounts, [.strength: 6])
+        XCTAssertNil(sut.context?.thinDataWarning)
+    }
+
+    /// The other side of the flip. #182 made a lone run *not* warn, because
+    /// the prompt never saw it; now it does see it, the analysis carries an
+    /// endurance section built on one session, and saying so is the honest
+    /// reading of US-6 AC2.
+    ///
+    /// #185 is what narrows this again: under the "Strength" profile the
+    /// endurance half is counted on the line and deliberately not analysed.
+    func testASingleRunIsAnalysedAndReportedAsThinEnduranceData() async {
+        cache.summaries = (1...14).map { Self.workout(daysAgo: $0) }
+            + [Self.workout(daysAgo: 15, title: "Morning Run", source: .strava, kind: .run)]
+        await streamer.setText("ok")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.basisDescription, "14 Hevy · 1 Strava sessions")
+        XCTAssertEqual(sut.context?.analysedDomains, [.strength, .endurance])
+        XCTAssertEqual(
+            sut.context?.thinDataWarning,
+            "Thin endurance data — 1 session. Treat the recommendation as a starting point."
+        )
+    }
+
+    // MARK: - Analysis profile (US-15 AC1, #185)
+
+    /// AC1, first row: with Hevy alone there is one kind of training in the
+    /// window, so no picker appears and the run is a strength analysis.
+    func testAHevyOnlyCacheOffersNoChoiceAndAnalysesStrength() async {
+        cache.summaries = (1...6).map { Self.workout(daysAgo: $0) }
+        let sut = makeSUT()
+
+        await sut.prepareProfileSelection()
+
+        XCTAssertEqual(sut.profileOptions.available, [.strength])
+        XCTAssertFalse(sut.profileOptions.isChoice)
+        XCTAssertEqual(sut.selectedProfile, .strength)
+    }
+
+    /// AC1, second row: lifts and runs in the window — three options, with
+    /// "Overall load" preselected.
+    func testLiftsAndRunsPreselectOverallLoad() async {
+        cache.summaries = (1...6).map { Self.workout(daysAgo: $0) }
+            + (7...9).map { Self.workout(daysAgo: $0, title: "Run", source: .strava, kind: .run) }
+        let sut = makeSUT()
+
+        await sut.prepareProfileSelection()
+
+        XCTAssertEqual(sut.profileOptions.available, [.strength, .endurance, .overallLoad])
+        XCTAssertEqual(sut.selectedProfile, .overallLoad)
+    }
+
+    /// The options are read off the *resolved* window, like the context line:
+    /// a run from three months ago is not a reason to offer an endurance
+    /// analysis of the last four weeks.
+    func testSessionsOutsideTheResolvedWindowDoNotOpenTheChoice() async {
+        cache.summaries = (1...6).map { Self.workout(daysAgo: $0) }
+            + [Self.workout(daysAgo: 60, title: "Run", source: .strava, kind: .run)]
+        let sut = makeSUT()
+
+        await sut.prepareProfileSelection()
+
+        XCTAssertEqual(sut.profileOptions.available, [.strength])
+    }
+
+    func testSelectingAProfileRemembersItForTheNextRun() async {
+        cache.summaries = (1...6).map { Self.workout(daysAgo: $0) }
+            + (7...9).map { Self.workout(daysAgo: $0, title: "Run", source: .strava, kind: .run) }
+        let sut = makeSUT()
+        await sut.prepareProfileSelection()
+
+        await sut.select(.strength)
+        XCTAssertEqual(sut.selectedProfile, .strength)
+
+        // What the next launch sees: a fresh view model over the same
+        // defaults starts on the remembered choice, not on the default.
+        let next = makeSUT()
+        await next.prepareProfileSelection()
+        XCTAssertEqual(next.selectedProfile, .strength)
+    }
+
+    /// A tap on a segment this cache has no data for cannot happen through the
+    /// picker, which only renders the available ones — and is ignored if it
+    /// does.
+    func testSelectingAProfileTheWindowDoesNotSupportIsIgnored() async {
+        cache.summaries = (1...6).map { Self.workout(daysAgo: $0) }
+        let sut = makeSUT()
+        await sut.prepareProfileSelection()
+
+        await sut.select(.endurance)
+
+        XCTAssertEqual(sut.selectedProfile, .strength)
+    }
+
+    /// The case the profile exists to close: fourteen lifts and one run no
+    /// longer put a permanent thin-endurance warning on a strength
+    /// recommendation (US-6 AC2, US-15 AC4). The run stays on the line — the
+    /// user logged it — and out of the analysis.
+    func testTheStrengthProfileLeavesTheRunOutOfWhatIsJudged() async {
+        cache.summaries = (1...14).map { Self.workout(daysAgo: $0) }
+            + [Self.workout(daysAgo: 15, title: "Morning Run", source: .strava, kind: .run)]
+        await streamer.setText("ok")
+        let sut = makeSUT()
+        await sut.prepareProfileSelection()
+        await sut.select(.strength)
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.basisDescription, "14 Hevy · 1 Strava sessions")
+        XCTAssertEqual(sut.context?.domainCounts, [.strength: 14, .endurance: 1])
+        XCTAssertEqual(sut.context?.analysedCounts, [.strength: 14])
+        XCTAssertEqual(sut.context?.analysedDomains, [.strength])
+        XCTAssertNil(sut.context?.thinDataWarning)
+    }
+
+    /// The same cache under "Overall load" does warn — the analysis covers
+    /// endurance there, and one session is all it has.
+    func testOverallLoadStillReportsTheThinEnduranceHalf() async {
+        cache.summaries = (1...14).map { Self.workout(daysAgo: $0) }
+            + [Self.workout(daysAgo: 15, title: "Morning Run", source: .strava, kind: .run)]
+        await streamer.setText("ok")
+        let sut = makeSUT()
+        await sut.prepareProfileSelection()
+        await sut.select(.overallLoad)
+
+        await sut.start()
+
+        XCTAssertEqual(
+            sut.context?.thinDataWarning,
+            "Thin endurance data — 1 session. Treat the recommendation as a starting point."
+        )
+    }
+
+    /// A Hevy conditioning session — no volume, a duration, and so endurance
+    /// work by the fallback half of `isEnduranceWork`, because Hevy's
+    /// `.strength` is the model's default rather than a classification.
+    ///
+    /// This is the case #182 wrote down and asked #183 to turn around, and
+    /// this is where it turns: while the prompt filtered by source, the
+    /// session reached the model as a "0 kg" strength session and warning
+    /// about a thin endurance base would have been wrong. Now the prompt
+    /// carries an endurance section, that section holds exactly this one
+    /// session, and saying so is the honest answer.
+    func testASingleHevyConditioningSessionWarnsAboutThinEnduranceData() async {
+        cache.summaries = (1...12).map { Self.workout(daysAgo: $0) }
+            + [
+                WorkoutSummary(
+                    id: "w-conditioning",
+                    title: "Treadmill Intervals",
+                    startTime: Self.reference.addingTimeInterval(-13 * 86_400),
+                    source: .hevy,
+                    volumeKg: 0,
+                    exerciseCount: 1,
+                    countedSetCount: 4,
+                    durationSeconds: 1_200
+                ),
+            ]
+        await streamer.setText("ok")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.basisDescription, "13 Hevy sessions")
+        XCTAssertEqual(sut.context?.analysedCounts, [.strength: 12, .endurance: 1])
+        XCTAssertEqual(sut.context?.isThin, true)
+        XCTAssertEqual(
+            sut.context?.thinDataWarning,
+            "Thin endurance data — 1 session. Treat the recommendation as a starting point."
+        )
+    }
+
+    /// The orchestrator's decision, visible where it matters: under "Strength"
+    /// the run is out of every figure and still in the week the recovery rule
+    /// is judged on (US-3 AC6 / US-15 AC3).
+    func testARunCostsRecoveryUnderTheStrengthProfile() async {
+        cache.summaries = (1...4).map { Self.workout(daysAgo: $0) }
+            + (5...6).map { Self.workout(daysAgo: $0, title: "Run", source: .strava, kind: .run) }
+        await streamer.setText("ok")
+        let sut = makeSUT()
+        await sut.prepareProfileSelection()
+        await sut.select(.strength)
+
+        await sut.start()
+
+        let prompt = await streamer.userPrompt ?? ""
+        XCTAssertFalse(prompt.contains("## Endurance"))
+        XCTAssertTrue(prompt.contains("Last 7 days: 6 training days"))
+        XCTAssertTrue(prompt.contains("2 endurance sessions"))
+    }
+
+    func testTheContextRecordsTheProfileTheRunUsed() async {
+        cache.summaries = (1...6).map { Self.workout(daysAgo: $0) }
+            + (7...9).map { Self.workout(daysAgo: $0, title: "Run", source: .strava, kind: .run) }
+        await streamer.setText("ok")
+        let sut = makeSUT()
+        await sut.prepareProfileSelection()
+        await sut.select(.endurance)
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.analysisProfile, .endurance)
+    }
+
+    /// US-3 AC10 with the profile in it: the restored recommendation says
+    /// which profile produced it, however the picker stands today.
+    func testTheStoredProfileComesBackWithTheRestoredAnalysis() async throws {
+        cache.summaries = (1...6).map { Self.workout(daysAgo: $0) }
+            + (7...9).map { Self.workout(daysAgo: $0, title: "Run", source: .strava, kind: .run) }
+        await streamer.setText("ok")
+        let sut = makeSUT()
+        await sut.prepareProfileSelection()
+        await sut.select(.strength)
+        await sut.start()
+
+        let restored = makeSUT()
+        await restored.restore()
+
+        XCTAssertEqual(restored.context?.analysisProfile, .strength)
+    }
+
+    /// The race the review found: a tap landing while the cache read is in
+    /// flight must not be undone by the value that was current before it. The
+    /// segmented control would snap back under the finger, and the run would
+    /// use the profile the user had just moved away from.
+    func testATapDuringTheCacheReadIsNotRevertedByTheRefresh() async {
+        cache.summaries = (1...6).map { Self.workout(daysAgo: $0) }
+            + (7...9).map { Self.workout(daysAgo: $0, title: "Run", source: .strava, kind: .run) }
+        let sut = makeSUT()
+        // The options have to be there before a tap can be accepted — `select`
+        // ignores a profile the picker does not offer.
+        await sut.prepareProfileSelection()
+        XCTAssertEqual(sut.selectedProfile, .overallLoad)
+
+        cache.gatesFirstCall = true
+        let refresh = Task { await sut.prepareProfileSelection() }
+        await cache.waitForFirstCall()
+        await sut.select(.strength)
+        cache.releaseFirstCall()
+        await refresh.value
+
+        XCTAssertEqual(sut.selectedProfile, .strength)
+        XCTAssertEqual(sut.profileOptions.available, [.strength, .endurance, .overallLoad])
+    }
+
+    /// The domain reading of the default, stated as the behaviour it actually
+    /// produces: a Hevy-only account that logs treadmill work in Hevy has two
+    /// kinds of training in the window and does get the choice.
+    ///
+    /// AC1's "only Hevy → no choice" is about sources, and since ADR-012 the
+    /// sport is what decides. The wording of #185 and #171 should move from
+    /// "sources" to "kinds of training in the window" — see the handover file.
+    func testAHevyOnlyCacheWithATreadmillSessionStillOffersTheChoice() async {
+        cache.summaries = (1...6).map { Self.workout(daysAgo: $0) }
+            + [Self.workout(daysAgo: 7, title: "Treadmill", source: .hevy, kind: .run)]
+        let sut = makeSUT()
+
+        await sut.prepareProfileSelection()
+
+        XCTAssertEqual(sut.profileOptions.available, [.strength, .endurance, .overallLoad])
+        XCTAssertEqual(sut.selectedProfile, .overallLoad)
+    }
+
+    /// A cache the profiles cannot be resolved from leaves the picker as it
+    /// was — the run itself is what reports a cache it cannot read.
+    func testAFailingCacheReadLeavesTheOptionsAlone() async {
+        cache.error = StubWorkoutCache.Failure()
+        let sut = makeSUT()
+
+        await sut.prepareProfileSelection()
+
+        XCTAssertEqual(sut.profileOptions.available, [.strength])
+        // The value it started on: everything in the window, which is the one
+        // scope that cannot narrow a run by accident.
+        XCTAssertEqual(sut.selectedProfile, .overallLoad)
+    }
+
+    /// The ladder runs over every session now, because every session reaches
+    /// the prompt: twelve recent runs are training, so the window stays at
+    /// four weeks instead of widening past them to find a lift (#87, #183).
+    func testRunsInTheRecentWeeksKeepTheWindowAtItsDefault() async {
+        cache.summaries = [Self.workout(daysAgo: 40)]
+            + (1...12).map { Self.workout(daysAgo: $0, title: "Morning Run", source: .strava, kind: .run) }
+        await streamer.setText("ok")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.window, .default)
+        XCTAssertEqual(sut.context?.basisDescription, "12 Strava sessions")
+        XCTAssertNil(sut.context?.widenedWindowNote)
+    }
+
+    /// And when the window really does widen, the note no longer names a
+    /// domain: the ladder and the basis line describe the same sessions again
+    /// (#182 needed the qualifier only while they did not).
+    func testTheWidenedWindowNoteNamesNoDomain() async {
+        cache.summaries = [
+            Self.workout(daysAgo: 40),
+            Self.workout(daysAgo: 45, title: "Long Run", source: .strava, kind: .run),
+        ]
+        await streamer.setText("ok")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.window.weeks, 8)
+        XCTAssertEqual(
+            sut.context?.widenedWindowNote,
+            "This analysis covered 8 weeks — its most recent 4 held no sessions."
+        )
+    }
+
+    /// The domain follows the normalized sport, not the connector (ADR-012):
+    /// a Strava `WeightTraining` session is named under Strava on the line and
+    /// counted as strength in the warning.
+    func testTheDomainSplitFollowsTheSportAndNotTheSource() async {
+        cache.summaries = [
+            Self.workout(daysAgo: 2),
+            Self.workout(daysAgo: 3, title: "Gym", source: .strava, kind: .strength),
+            Self.workout(daysAgo: 4, title: "Morning Run", source: .strava, kind: .run),
+        ]
+        await streamer.setText("ok")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.context?.sessionCounts, [.hevy: 1, .strava: 2])
+        XCTAssertEqual(sut.context?.domainCounts, [.strength: 2, .endurance: 1])
+    }
+
+    /// A cache holding nothing but runs used to be "no training data",
+    /// because the prompt could not describe a run. #183 gives it an endurance
+    /// section, so it is an analysis like any other.
+    func testACacheOfOnlyStravaSessionsIsAnalysed() async {
+        cache.summaries = [Self.workout(daysAgo: 2, title: "Morning Run", source: .strava, kind: .run)]
+        await streamer.setText("ok")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertNotEqual(sut.state, .error(.noTrainingData))
+        XCTAssertEqual(sut.context?.analysedCounts, [.endurance: 1])
+        let user = await streamer.userPrompt
+        XCTAssertEqual(user?.contains("## Endurance, last 4 weeks"), true)
+        XCTAssertEqual(user?.contains("## Last 4 weeks"), false)
     }
 
     /// After a widened window the count has to follow it: the sessions the
@@ -1249,7 +1679,10 @@ extension AnalysisViewModelTests {
         XCTAssertEqual(stored.text, "Your bench volume is rising.")
         XCTAssertEqual(stored.generatedAt, Self.reference)
         // Two sessions in the default window, from the `setUp` cache.
-        XCTAssertEqual(stored.context, AnalysisContext(sessionCount: 2, window: .default))
+        XCTAssertEqual(
+            stored.context,
+            AnalysisContext(sessionCount: 2, window: .default, analysisProfile: .strength)
+        )
         XCTAssertEqual(sut.generatedAt, Self.reference)
         XCTAssertEqual(sut.resultAge, "just now")
     }

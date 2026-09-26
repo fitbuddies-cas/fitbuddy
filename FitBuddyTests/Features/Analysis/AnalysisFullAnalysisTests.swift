@@ -35,6 +35,16 @@ final class AnalysisFullAnalysisTests: XCTestCase {
         ]))
     }
 
+    /// The generic cards of #186 are actionable too: a figure to move and two
+    /// domains to separate are both something to do.
+    func testStartsCollapsedWithAMetricCard() {
+        XCTAssertFalse(AnalysisFullAnalysis.startsExpanded(for: [AnalysisReportSamples.weeklyDistanceCard]))
+    }
+
+    func testStartsCollapsedWithAnInterferenceCard() {
+        XCTAssertFalse(AnalysisFullAnalysis.startsExpanded(for: [AnalysisReportSamples.interferenceCard]))
+    }
+
     func testEveryKindButTheNoteIsActionable() {
         XCTAssertEqual(AnalysisFullAnalysis.actionableKinds, Set(AnalysisCard.Kind.allCases).subtracting([.note]))
     }

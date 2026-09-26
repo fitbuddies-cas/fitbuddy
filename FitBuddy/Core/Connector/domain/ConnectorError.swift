@@ -12,6 +12,13 @@ enum ConnectorError: Error, Equatable, Sendable {
     case rateLimited(retryAfter: TimeInterval?)
     /// No network path to the provider.
     case networkUnavailable
+    /// The provider answered, but its certificate chain failed the pinned-CA
+    /// check (`NSPinnedDomains`, #153) or system trust evaluation — usually
+    /// something on the network intercepting TLS, sometimes a device clock
+    /// far enough off that every certificate looks expired. Kept apart from
+    /// `.networkUnavailable`: "no connection" would send the user looking for
+    /// reception when they should check the clock or leave the network.
+    case untrustedConnection
     /// The provider is down or erroring server-side (e.g. HTTP 5xx).
     case serviceUnavailable
     /// The response did not match the shape the connector expects.

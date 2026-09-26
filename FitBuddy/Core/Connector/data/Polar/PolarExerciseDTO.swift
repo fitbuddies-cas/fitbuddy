@@ -70,14 +70,22 @@ struct PolarExerciseDTO: Decodable, Equatable, Sendable {
         guard let start = resolvedStartTime() else { return nil }
         let seconds = duration.flatMap(PolarDuration.seconds(from:))
 
-        let metrics = ActivityMetrics(
+        // Polar reports no sets, so distance and duration travel in the
+        // cardio block rather than on an `ActivityExerciseSet`. Average speed
+        // is derived here — Polar sends neither speed nor pace at session
+        // level, and the pair it does send determines it.
+        let cardio = CardioMetrics(
             averageHeartRate: averageHeartRate,
-            maximumHeartRate: maximumHeartRate,
+            maxHeartRate: maximumHeartRate,
+            averageSpeedMetersPerSecond: Self.averageSpeed(meters: distanceMeters, seconds: seconds),
             activeCalories: calories,
-            distanceMeters: distanceMeters,
-            durationSeconds: seconds.map(Int.init),
-            trainingLoad: trainingLoad,
-            sport: detailedSportInfo ?? sport
+            // Zero means "not logged" for both, as it does for average speed
+            // above: an indoor session Polar never measured spatially sends
+            // `distance: 0.0`, and "0 m" on the dashboard row would read as a
+            // bug where the duration belongs.
+            distanceMeters: distanceMeters.flatMap { $0 > 0 ? $0 : nil },
+            durationSeconds: seconds.flatMap { $0 > 0 ? Int($0) : nil },
+            trainingLoad: trainingLoad
         )
 
         return Activity(
@@ -86,8 +94,9 @@ struct PolarExerciseDTO: Decodable, Equatable, Sendable {
             startTime: start,
             endTime: seconds.map { start.addingTimeInterval($0) },
             source: .polar,
+            kind: Self.kind(sport: sport, detailed: detailedSportInfo),
             exercises: [],
-            metrics: metrics.isEmpty ? nil : metrics
+            cardio: cardio.nonEmpty
         )
     }
 
@@ -97,6 +106,44 @@ struct PolarExerciseDTO: Decodable, Equatable, Sendable {
         guard let local = PolarDate.localFormatter.date(from: startTime) else { return nil }
         guard let offsetMinutes = startTimeUTCOffsetMinutes else { return local }
         return local.addingTimeInterval(TimeInterval(-offsetMinutes * 60))
+    }
+
+    /// Maps Polar's sport vocabulary onto `ActivityKind` — the only place it
+    /// happens (#180).
+    ///
+    /// Both labels are consulted, the finer one first: `detailed_sport_info`
+    /// is more specific than `sport`, but it is also the one Polar keeps
+    /// extending, and an unrecognised `FUNCTIONAL_TRAINING` must not drop a
+    /// session whose `sport` plainly says `STRENGTH_TRAINING` out of the
+    /// strength domain. So `.other` from the detailed label means "ask the
+    /// coarse one", not "unclassified".
+    static func kind(sport: String?, detailed: String?) -> ActivityKind {
+        let fromDetailed = kind(label: detailed)
+        return fromDetailed == .other ? kind(label: sport) : fromDetailed
+    }
+
+    /// One Polar sport label.
+    ///
+    /// Matched on a substring of the upper-case label, because Polar composes
+    /// its sports the other way round from Strava: the discipline sits at the
+    /// end (`TREADMILL_RUNNING`, `OPEN_WATER_SWIMMING`) or the start
+    /// (`RUNNING_INDOOR`). Anything else — `OTHER_INDOOR`, `YOGA` — is
+    /// `.other`.
+    private static func kind(label: String?) -> ActivityKind {
+        let raw = (label ?? "").uppercased()
+        if raw.contains("STRENGTH") { return .strength }
+        if raw.contains("RUNNING") || raw.contains("JOGGING") { return .run }
+        if raw.contains("CYCLING") || raw.contains("BIKING") { return .ride }
+        if raw.contains("SWIMMING") { return .swim }
+        if raw.contains("HIKING") { return .hike }
+        if raw.contains("WALKING") { return .walk }
+        return .other
+    }
+
+    /// Metres per second over the session, when Polar reported both figures.
+    private static func averageSpeed(meters: Double?, seconds: TimeInterval?) -> Double? {
+        guard let meters, let seconds, meters > 0, seconds > 0 else { return nil }
+        return meters / seconds
     }
 
     /// A readable session title from Polar's sport labels — `RUNNING` →

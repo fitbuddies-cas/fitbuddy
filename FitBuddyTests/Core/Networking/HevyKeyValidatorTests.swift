@@ -70,6 +70,14 @@ final class HevyKeyValidatorTests: XCTestCase {
         await assertValidateThrows("hv_live_abc", expected: .transport)
     }
 
+    /// A failed certificate check (pinning, #153) must not read as offline.
+    func testCertificateFailureThrowsUntrustedConnection() async {
+        StubURLProtocol.handler = { _ in
+            throw URLError(.serverCertificateUntrusted)
+        }
+        await assertValidateThrows("hv_live_abc", expected: .untrustedConnection)
+    }
+
     private func assertValidateThrows(
         _ key: String,
         expected: HevyKeyValidationError,

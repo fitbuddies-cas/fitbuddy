@@ -18,7 +18,9 @@ struct SeededApp {
     /// - Parameters:
     ///   - profile: Which bundled history to seed — `person-a` trains five
     ///     times a week, `person-b` twice, `progression-ready` and
-    ///     `overreached` reproduce US-14 AC2 and AC4 (#179).
+    ///     `overreached` reproduce US-14 AC2 and AC4 (#179), and `runner`,
+    ///     `mixed` and `overreached-mixed` the cross-source windows of US-15
+    ///     (#188).
     ///   - analysisReport: Also stores an analysis with this report
     ///     (`LaunchArgument.Report`), so the analysis tab opens on its cards
     ///     (#177). `nil` stores none.
@@ -124,12 +126,48 @@ struct SeededApp {
         app.descendants(matching: .any)[AccessibilityID.Analysis.headline]
     }
 
+    /// The segmented control on the intro screen. Present only where the
+    /// window gives the user a choice — a Hevy-only or an endurance-only cache
+    /// shows none (US-15 AC1, #188).
+    ///
+    /// Addressed by element type, not by identifier. A SwiftUI `Picker` in the
+    /// segmented style renders a `UISegmentedControl`, and whether an
+    /// identifier put on the `Picker` lands on that control or is propagated to
+    /// each of its segments is not something this suite has ever established —
+    /// a descendant query on the identifier would be ambiguous in the second
+    /// case. The intro screen has exactly one segmented control, so its type
+    /// identifies it without the guess.
+    var analysisProfilePicker: XCUIElement {
+        app.segmentedControls.firstMatch
+    }
+
+    /// One segment of that control, by the label the picker renders
+    /// (`AnalysisProfile.displayName`).
+    func analysisProfileSegment(_ name: String) -> XCUIElement {
+        analysisProfilePicker.buttons[name]
+    }
+
+    /// The data-basis line over the result. One accessibility element, so its
+    /// label carries the whole basis: the per-source counts, the period, the
+    /// profile and any thin-data warning.
+    var analysisContext: XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.Analysis.context]
+    }
+
     var progressionCards: XCUIElementQuery {
         app.descendants(matching: .any).matching(identifier: AccessibilityID.Analysis.progressionCard)
     }
 
     var recoveryCards: XCUIElementQuery {
         app.descendants(matching: .any).matching(identifier: AccessibilityID.Analysis.recoveryCard)
+    }
+
+    var metricCards: XCUIElementQuery {
+        app.descendants(matching: .any).matching(identifier: AccessibilityID.Analysis.metricCard)
+    }
+
+    var interferenceCards: XCUIElementQuery {
+        app.descendants(matching: .any).matching(identifier: AccessibilityID.Analysis.interferenceCard)
     }
 
     var analysisLead: XCUIElement {

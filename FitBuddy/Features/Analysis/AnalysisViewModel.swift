@@ -63,6 +63,20 @@ final class AnalysisViewModel: ObservableObject {
     /// worth opening (US-3 AC11, #117). With a single one the screen already
     /// shows it, and a link to a list of exactly that would be a detour.
     @Published private(set) var hasHistory = false
+    /// Which analysis profiles this cache is worth offering, and which one is
+    /// preselected (US-15 AC1, #185). Refreshed by `prepareProfileSelection()`
+    /// every time the intro screen appears, so a sync that has just brought in
+    /// the first run changes what the picker offers.
+    @Published private(set) var profileOptions = AnalysisProfileOptions(domainCounts: [:])
+    /// The profile the next run will use — the user's tap, their last choice,
+    /// or the default this cache suggests, in that order.
+    ///
+    /// "Overall load" until `prepareProfileSelection()` has read the cache:
+    /// before anything is known about the window, everything in it is the only
+    /// honest scope, and it is also the value that leaves the prompt and the
+    /// context exactly as #183/#184 built them. Starting on "Strength" would
+    /// silently narrow a run begun before the first read returned.
+    @Published private(set) var selectedProfile: AnalysisProfile = .overallLoad
 
     /// Whether tapping "Analyse" can start a run right now: whenever no run is
     /// in flight.
@@ -94,6 +108,11 @@ final class AnalysisViewModel: ObservableObject {
     /// whenever nothing persisted is showing — a preview without a store, or a
     /// run whose write failed.
     private var currentResultID: UUID?
+    /// What the user picked on this screen, held in memory so a refresh of the
+    /// options cannot undo their tap while the write to `AnalysisProfileStore`
+    /// is still in flight. `nil` until they touch the picker, where the
+    /// remembered choice from the store decides instead.
+    private var chosenProfile: AnalysisProfile?
     /// Guards `restore()` against overlapping itself: the view's `.task` and
     /// `dismissFailure()` can both ask for a restore, and the store read
     /// between them releases the main actor.
@@ -105,6 +124,7 @@ final class AnalysisViewModel: ObservableObject {
     private let inference: AnalysisStreaming
     private let resultStore: (any AnalysisResultStoring)?
     private let trainingProfile: TrainingProfileStore
+    private let analysisProfiles: AnalysisProfileStore
     private let calendar: Calendar
     private let now: () -> Date
     private let slowThreshold: TimeInterval
@@ -133,6 +153,9 @@ final class AnalysisViewModel: ObservableObject {
     ///   - trainingProfile: Where the user's goal and experience live
     ///     (US-13). Read at the start of every run, not once at init: the
     ///     Settings screen changes it while this view model lives on (#191).
+    ///   - analysisProfiles: Where the last analysis profile is remembered
+    ///     (US-15 AC1, #185), so the next run starts on the one the user
+    ///     chose rather than on the default their data suggests.
     ///   - now: Injectable clock, so windows and the result age are testable.
     ///   - slowThreshold: Injectable, so tests do not wait 30 real seconds.
     ///   - tickInterval: How often `trackResultAge()` re-renders the
@@ -145,6 +168,7 @@ final class AnalysisViewModel: ObservableObject {
         inference: AnalysisStreaming,
         resultStore: (any AnalysisResultStoring)? = nil,
         trainingProfile: TrainingProfileStore = TrainingProfileStore(),
+        analysisProfiles: AnalysisProfileStore = AnalysisProfileStore(),
         calendar: Calendar = .current,
         now: @escaping () -> Date = Date.init,
         slowThreshold: TimeInterval = AnalysisViewModel.defaultSlowThreshold,
@@ -156,10 +180,78 @@ final class AnalysisViewModel: ObservableObject {
         self.inference = inference
         self.resultStore = resultStore
         self.trainingProfile = trainingProfile
+        self.analysisProfiles = analysisProfiles
         self.calendar = calendar
         self.now = now
         self.slowThreshold = slowThreshold
         self.tickInterval = tickInterval
+    }
+
+    // MARK: - Profile (US-15 AC1, #185)
+
+    /// The user picked a profile on the intro screen.
+    ///
+    /// Remembered straight away rather than when the run starts: the choice is
+    /// the user's standing preference, and someone who switches to "Endurance"
+    /// and then leaves the screen without analysing still meant it. Ignored
+    /// for a profile this cache has no data for, so a stale tap cannot start a
+    /// run over an empty half.
+    func select(_ profile: AnalysisProfile) async {
+        guard profileOptions.available.contains(profile) else { return }
+        // Published before the write, so the segmented control moves under the
+        // finger rather than after a store round trip.
+        chosenProfile = profile
+        selectedProfile = profile
+        await analysisProfiles.save(profile)
+    }
+
+    /// Works out which profiles this cache is worth offering and which one
+    /// starts selected — the intro screen's `.task`.
+    ///
+    /// Reads the cache rather than waiting for the run: US-15 AC1 asks for a
+    /// choice *before* the analysis, and which options are honest depends on
+    /// what the window holds. The same read, window ladder and per-domain
+    /// count as `buildPrompt()`, so the picker and the context line cannot
+    /// disagree about what is in the window.
+    ///
+    /// A failing read leaves the options as they are: the user came for the
+    /// analysis screen, and the run itself reports a cache it cannot read.
+    ///
+    /// The remembered choice is read **after** the cache, immediately before
+    /// the write. The cache read releases the main actor for as long as
+    /// SwiftData needs, and a tap landing in that window would otherwise be
+    /// overwritten by the value that was current before it: the segmented
+    /// control would snap back under the finger, and the run would use the
+    /// profile the user had just moved away from.
+    func prepareProfileSelection() async {
+        guard !state.isRunning else { return }
+        let reference = now()
+        let cached: [WorkoutSummary]
+        do {
+            cached = try await cache.workoutSummaries(
+                since: AnalysisWindow.widest.start(endingAt: reference, calendar: calendar)
+            )
+        } catch {
+            logger.error("Analysis profiles not resolved: \(error, privacy: .public)")
+            return
+        }
+        guard !Task.isCancelled else { return }
+        var domains: [AnalysisDomain: Int] = [:]
+        if let window = AnalysisWindow.resolve(for: cached, endingAt: reference, calendar: calendar) {
+            let start = window.start(endingAt: reference, calendar: calendar)
+            domains = Self.sessionCounts(in: cached, from: start).domains
+        }
+        var remembered = chosenProfile
+        if remembered == nil {
+            let stored = await analysisProfiles.profile
+            // Re-read afterwards for the same reason: the store read is a
+            // second hop off this actor, and a tap inside it has to win over a
+            // value written before it.
+            remembered = chosenProfile ?? stored
+        }
+        let options = AnalysisProfileOptions(domainCounts: domains, remembered: remembered)
+        profileOptions = options
+        selectedProfile = options.preselected
     }
 
     // MARK: - Run
@@ -438,7 +530,9 @@ final class AnalysisViewModel: ObservableObject {
             details: reads.details ?? [],
             window: reads.window,
             now: reads.now,
-            calendar: calendar
+            calendar: calendar,
+            analysisProfile: reads.analysisProfile,
+            promptDetail: reads.promptDetail
         )
         return AnalysisOutcome(validated: AnalysisReportValidator.validate(report, against: evidence))
     }
@@ -454,15 +548,14 @@ final class AnalysisViewModel: ObservableObject {
             // Read wide enough for the widest rung of the ladder and its
             // comparison window; the cache returns what it has, and the
             // resolved window decides what of it is actually analysed.
-            // Strava sessions are dropped right here, so the window ladder,
-            // the context line and the prompt all describe the same strength
-            // history (US-6 AC1) — a cache holding nothing but runs is "no
-            // training data" for the analysis, not a window to widen.
-            let summaries = AnalysisPromptBuilder.strengthSessions(
-                in: try await cache.workoutSummaries(
-                    since: AnalysisWindow.widest.previousStart(endingAt: reference, calendar: calendar)
-                )
+            let cached = try await cache.workoutSummaries(
+                since: AnalysisWindow.widest.previousStart(endingAt: reference, calendar: calendar)
             )
+            // The ladder, the prompt and the context line all see the same
+            // sessions since #183: the prompt is sectioned by domain, so an
+            // endurance session is analysed rather than dropped, and a cache
+            // holding nothing but runs is a window to widen instead of "no
+            // training data" (US-15 AC2/AC4).
             guard !Task.isCancelled else { return nil }
 
             // The comparison window may well be empty — that is a break, and
@@ -472,7 +565,7 @@ final class AnalysisViewModel: ObservableObject {
             // widest window at all is "no training data", and paying a provider
             // to say so would be waste.
             guard let window = AnalysisWindow.resolve(
-                for: summaries,
+                for: cached,
                 endingAt: reference,
                 calendar: calendar
             ) else {
@@ -480,12 +573,29 @@ final class AnalysisViewModel: ObservableObject {
                 return nil
             }
             let start = window.start(endingAt: reference, calendar: calendar)
+            // The profile the user chose, unless this window holds nothing it
+            // covers — a sync can land between the moment the picker was
+            // filled and the moment they tapped (US-15 AC1, #185). Resolved
+            // here as well as in the builder so the prompt and the context
+            // line describe the same analysis.
+            let analysisProfile = selectedProfile.resolved(
+                for: cached.filter { $0.startTime >= start }
+            )
             // Read before the context is published: a read that fails here
             // fails the run, and a failed run must not leave a data basis on
             // screen.
-            let exercises = try await readExercises(since: start)
+            //
+            // Skipped entirely where the profile does not cover strength: the
+            // prompt then carries no Exercises section, so the movements would
+            // cost up to eleven store reads for a section nobody is shown —
+            // and, worse, a progression card the model invented without ever
+            // being given an exercise name would validate against them
+            // (#175).
+            let exercises = analysisProfile.covers(.strength)
+                ? try await readExercises(since: start)
+                : (summaries: [ExerciseSummary](), progressions: [String: ExerciseProgression]())
             guard !Task.isCancelled else { return nil }
-            let details = await readRecentDetails(in: summaries, now: reference)
+            let details = await readRecentDetails(in: cached, now: reference)
             guard !Task.isCancelled else { return nil }
 
             // Read here, per run: what the user changed in Settings a minute
@@ -496,18 +606,30 @@ final class AnalysisViewModel: ObservableObject {
             // returned: the cache was read wide enough for the widest rung and
             // its comparison window, and reporting those sessions as the data
             // basis would overstate it by a factor of six.
+            let counts = Self.sessionCounts(in: cached, from: start)
+            // The thin-data verdict is about what the model was shown, and
+            // since #185 that is what the profile covers: the line keeps the
+            // honest count of everything the app read, while the warning
+            // speaks only about the domains this analysis was asked to judge
+            // (US-6 AC2, US-15 AC4). Fourteen Hevy sessions and one run under
+            // "Strength" therefore warn about nothing — the run was logged and
+            // counted, and no recommendation here is about it.
             context = AnalysisContext(
-                sessionCount: summaries.filter { $0.startTime >= start }.count,
+                sessionCounts: counts.sources,
+                domainCounts: counts.domains,
+                analysedCounts: counts.domains.filter { analysisProfile.covers($0.key) },
                 window: window,
+                analysisProfile: analysisProfile,
                 profile: profile
             )
-            let reads = AnalysisRunReads(
-                summaries: summaries,
+            var reads = AnalysisRunReads(
+                summaries: cached,
                 exercises: exercises.summaries,
                 progressions: exercises.progressions,
                 details: details,
                 window: window,
-                now: reference
+                now: reference,
+                analysisProfile: analysisProfile
             )
             let prompt = AnalysisPromptBuilder.make(
                 summaries: reads.summaries,
@@ -516,14 +638,54 @@ final class AnalysisViewModel: ObservableObject {
                 window: reads.window,
                 now: reads.now,
                 calendar: calendar,
-                profile: profile
+                profile: profile,
+                analysisProfile: analysisProfile
             )
+            // Which rung the token budget settled on is only known once the
+            // prompt exists, and the validation has to be checked against that
+            // rung rather than against the full read (#187).
+            reads.promptDetail = prompt.detail
             return (prompt, reads)
         } catch {
             guard !Task.isCancelled, !error.isCancellation else { return nil }
             state = .error(.cacheUnavailable)
             return nil
         }
+    }
+
+    /// The sessions of the resolved window, counted per source for the context
+    /// line and per domain for the thin-data warning (US-15 AC4, #182).
+    ///
+    /// One pass over the same sessions, so the two breakdowns cannot disagree
+    /// about how many there were. They do differ in *where* a session lands:
+    /// the source is where it came from, the domain is what was trained
+    /// (`ActivityKind.isEndurance`, ADR-012 — not `isCardio`, which is how
+    /// the row is displayed), and a Strava strength session is named under
+    /// Strava and counted as strength.
+    ///
+    /// Counted from `start`, not over everything the read returned: the cache
+    /// is read wide enough for the widest rung of the ladder and its comparison
+    /// window, and reporting those sessions as the data basis would overstate
+    /// it by a factor of six.
+    ///
+    /// A source with nothing in the window never enters the dictionary, so a
+    /// connector the user has linked but not used stays out of the line.
+    ///
+    /// `nonisolated` and visible to the feature since #188: `MockAnalysisSeeder`
+    /// builds a seeded report's context line from the same cache a run would
+    /// have read, off the main actor, and a second copy of this loop would let
+    /// a UI test assert a breakdown the app itself never computes.
+    nonisolated static func sessionCounts(
+        in summaries: [WorkoutSummary],
+        from start: Date
+    ) -> (sources: [ConnectorSource: Int], domains: [AnalysisDomain: Int]) {
+        var sources: [ConnectorSource: Int] = [:]
+        var domains: [AnalysisDomain: Int] = [:]
+        for summary in summaries where summary.startTime >= start {
+            sources[summary.source, default: 0] += 1
+            domains[AnalysisDomain(summary: summary), default: 0] += 1
+        }
+        return (sources, domains)
     }
 
     /// The full workouts of the last seven days, for the mean RPE of the
@@ -536,12 +698,21 @@ final class AnalysisViewModel: ObservableObject {
     /// as does a session a sync has removed since the summaries were read.
     /// A mean over the part of the week that happened to be readable would
     /// read as the week's.
+    ///
+    /// The **strength** sessions of the week, deliberately, although #184 counts
+    /// every session towards the training days: only a strength set can carry
+    /// an RPE, so reading a run's detail would cost a round trip for nothing —
+    /// and, worse, an unreadable run would drop the RPE of the whole week.
     private func readRecentDetails(
         in summaries: [WorkoutSummary],
         now reference: Date
     ) async -> [WorkoutDetail]? {
         guard let detailCache else { return nil }
-        let sessions = RecoveryMetrics.lastSevenDaysSessions(in: summaries, now: reference, calendar: calendar)
+        let sessions = RecoveryMetrics.lastSevenDaysStrengthSessions(
+            in: summaries,
+            now: reference,
+            calendar: calendar
+        )
         var details: [WorkoutDetail] = []
         do {
             for session in sessions {
@@ -568,6 +739,11 @@ final class AnalysisViewModel: ObservableObject {
     /// would rank by lifts the user may have long moved away from. Progressions
     /// are read only for the movements `AnalysisPromptBuilder` will list, so a
     /// window with forty exercises costs ten reads, not forty.
+    ///
+    /// At the full cap, deliberately: the token budget's rung is decided from
+    /// the prompt these reads produce (#187), so it is not known yet, and a
+    /// read of ten movements the prompt then lists six of costs four reads and
+    /// changes nothing the model or the validator sees.
     private func readExercises(
         since start: Date
     ) async throws -> (summaries: [ExerciseSummary], progressions: [String: ExerciseProgression]) {

@@ -9,4 +9,11 @@ struct AnalysisPrompt: Equatable, Sendable {
     let system: String
     /// The user's own training data plus the request — the single user turn.
     let user: String
+    /// The rung of the degradation ladder this turn was built at (#187).
+    ///
+    /// Defaulted, so every call site that builds a prompt by hand — a preview,
+    /// a fixture — still describes the untouched prompt. It travels with the
+    /// prompt because the report validation has to know which exercises the
+    /// model was actually shown: see `AnalysisPromptDetail`.
+    var detail: AnalysisPromptDetail = .full
 }

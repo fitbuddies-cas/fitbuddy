@@ -22,16 +22,15 @@ enum SetMetricFormatter {
         return CountFormatter.labelled(reps, singular: "rep")
     }
 
-    /// `800` → `"800 m"`, `5000` → `"5.0 km"`.
+    /// `800` → `"800 m"`, `5_000` → `"5 km"`, `5_400` → `"5.4 km"`.
     ///
-    /// Switches to kilometres at 1 km, where metres stop being the unit
-    /// anybody reads a run in.
+    /// The unit rules are `DistanceFormatter`'s since #181, so a distance
+    /// logged as a set and the same distance on an endurance card read the
+    /// same. What stays here is the optional: a set without a logged distance
+    /// shows no distance, which is a different statement from `"0 m"`.
     static func distance(_ meters: Double?) -> String? {
         guard let meters else { return nil }
-        guard meters >= 1_000 else {
-            return meters.formatted(.number.precision(.fractionLength(0))) + " m"
-        }
-        return (meters / 1_000).formatted(.number.precision(.fractionLength(1))) + " km"
+        return DistanceFormatter.display(meters)
     }
 
     /// `90` → `"1:30"`, `45` → `"0:45"`, `3_725` → `"1:02:05"`.

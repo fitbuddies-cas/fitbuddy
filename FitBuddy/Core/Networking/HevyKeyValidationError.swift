@@ -6,6 +6,9 @@ enum HevyKeyValidationError: Error, Equatable {
     case invalidKey
     /// The request never produced an HTTP response (offline, timeout, DNS…).
     case transport
+    /// Hevy answered with a certificate FitBuddy must not trust (failed
+    /// pinning, #153).
+    case untrustedConnection
     /// Hevy answered with an unexpected status code (5xx, rate limit…).
     case unexpectedStatus(Int)
 }

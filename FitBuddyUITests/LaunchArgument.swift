@@ -39,6 +39,11 @@ enum LaunchArgument {
         static let personB = "person-b"
         static let progressionReady = "progression-ready"
         static let overreached = "overreached"
+        /// The cross-source profiles of US-15 (#188): Strava only, Hevy plus
+        /// Strava, and six of seven days across all three sources.
+        static let runner = "runner"
+        static let mixed = "mixed"
+        static let overreachedMixed = "overreached-mixed"
     }
 
     /// The reports `seedAnalysis` can store (`MockAnalysisSeeder.reports`).
@@ -47,5 +52,8 @@ enum LaunchArgument {
         static let recover = "recover"
         static let hold = "hold"
         static let thin = "thin"
+        /// Design 3.4c / 3.4d, the generic cards of #186.
+        static let endurance = "endurance"
+        static let overallLoad = "overall"
     }
 }

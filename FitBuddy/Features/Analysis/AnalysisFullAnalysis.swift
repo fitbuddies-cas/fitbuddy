@@ -9,8 +9,12 @@ enum AnalysisFullAnalysis {
     static let hideTitle = "Hide full analysis"
 
     /// Card kinds that tell the user what to do: a load change, a rest, a
-    /// group to even out. A note is not one — it is prose in a card.
-    static let actionableKinds: Set<AnalysisCard.Kind> = [.progression, .recovery, .imbalance]
+    /// group to even out, a figure to move, two domains to separate (#186). A
+    /// note is not one — it is prose in a card.
+    static let actionableKinds: Set<AnalysisCard.Kind> = [
+        .progression,
+        .repProgression, .recovery, .imbalance, .metric, .interference,
+    ]
 
     /// Open when no card is actionable: with thin data the full analysis is
     /// the answer, and hiding it would leave a headline over one short lead.

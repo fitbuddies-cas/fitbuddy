@@ -14,6 +14,15 @@ struct AnalysisReportCardView: View {
                 toKg: toKg,
                 reasoning: reasoning
             )
+        case let .repProgression(exercise, muscleGroup, weightKg, fromReps, toReps, reasoning):
+            RepProgressionCardView(
+                exercise: exercise,
+                muscleGroup: muscleGroup,
+                weightKg: weightKg,
+                fromReps: fromReps,
+                toReps: toReps,
+                reasoning: reasoning
+            )
         case let .recovery(reasoning, metrics):
             RecoveryCardView(reasoning: reasoning, metrics: metrics)
         case let .imbalance(groupA, perWeekA, groupB, perWeekB, reasoning):
@@ -24,6 +33,17 @@ struct AnalysisReportCardView: View {
                 perWeekB: perWeekB,
                 reasoning: reasoning
             )
+        case let .metric(label, from, to, unit, reasoning, source):
+            MetricCardView(
+                label: label,
+                from: from,
+                to: to,
+                unit: unit,
+                reasoning: reasoning,
+                source: source
+            )
+        case let .interference(metrics, reasoning):
+            InterferenceCardView(metrics: metrics, reasoning: reasoning)
         case let .note(title, text):
             NoteCardView(title: title, text: text)
         }
@@ -37,7 +57,10 @@ struct AnalysisReportCardView: View {
             ForEach(Array(AnalysisReportSamples.progress.cards.enumerated()), id: \.offset) { item in
                 AnalysisReportCardView(card: item.element)
             }
+            AnalysisReportCardView(card: AnalysisReportSamples.repProgressionCard)
             AnalysisReportCardView(card: AnalysisReportSamples.recoveryCard)
+            AnalysisReportCardView(card: AnalysisReportSamples.weeklyDistanceCard)
+            AnalysisReportCardView(card: AnalysisReportSamples.interferenceCard)
             AnalysisReportCardView(card: AnalysisReportSamples.noteCard)
         }
         .padding(16)

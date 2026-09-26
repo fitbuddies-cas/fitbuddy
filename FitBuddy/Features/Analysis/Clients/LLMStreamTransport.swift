@@ -26,6 +26,7 @@ enum LLMStreamTransport {
             // A cancelled call (user tapped cancel) is not a connectivity
             // problem and must not surface as one — nor trigger a fallback.
             if error.isCancellation { throw error }
+            if error.isUntrustedConnection { throw InferenceServiceError.untrustedConnection }
             throw InferenceServiceError.networkUnavailable
         }
         guard let http = response as? HTTPURLResponse else {

@@ -7,7 +7,8 @@ import Foundation
 /// model was shown, read before the call — not against a second read the
 /// cache may have changed under while the provider was answering.
 struct AnalysisRunReads: Sendable {
-    /// Strength sessions of the wide read.
+    /// The sessions of the wide read, both domains (#183). The sections and
+    /// the validation select what they need from them by `AnalysisDomain`.
     let summaries: [WorkoutSummary]
     /// The movements of the resolved window.
     let exercises: [ExerciseSummary]
@@ -22,4 +23,20 @@ struct AnalysisRunReads: Sendable {
     let window: AnalysisWindow
     /// The reference the prompt was built with.
     let now: Date
+    /// The profile the run was made under (US-15 AC1, #185) — the resolved
+    /// one, i.e. what the prompt was actually built from.
+    ///
+    /// Travels with the reads for the same reason the window does: the report
+    /// that comes back has to be checked against what the model was shown, and
+    /// under a profile that left strength out it was shown no exercise to
+    /// progress.
+    var analysisProfile: AnalysisProfile = .overallLoad
+    /// The rung of the token budget's ladder the prompt was built at (#187).
+    ///
+    /// Travels for the same reason the profile does: a prompt trimmed to six
+    /// exercises has to be validated against six, or a progression card could
+    /// be checked against a movement the model was never shown. Defaulted, so
+    /// a fixture written before the budget existed describes the untouched
+    /// prompt.
+    var promptDetail: AnalysisPromptDetail = .full
 }

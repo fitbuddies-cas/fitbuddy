@@ -22,12 +22,22 @@ struct Activity: Identifiable, Equatable, Codable, Sendable {
     /// side, the cache needs it to replace one source's window without
     /// dropping the other's, and the dashboard needs it to say which is which.
     var source: ConnectorSource
+    /// What kind of training this was (#180) — the normalized sport, so the
+    /// prompt builder and the cards do not have to read it out of the title.
+    var kind: ActivityKind
     var exercises: [ActivityExercise]
-    /// Session-level endurance metrics (heart rate, calories, load) when the
-    /// source provides them. `nil` for a strength source like Hevy; set for a
-    /// Polar exercise (ADR-11). Additive — the dashboard and AI prompt builder
-    /// stay valid without reading it.
-    var metrics: ActivityMetrics?
+    /// Session-level endurance metrics (heart rate, elevation, speed, effort)
+    /// when the source provides them. `nil` for a strength source like Hevy;
+    /// set for a Strava activity (ADR-10) or a Polar exercise (ADR-11).
+    /// Additive — the dashboard stays valid without reading it.
+    var cardio: CardioMetrics?
+    /// The source's id of the routine this session was logged against
+    /// (Hevy's `routine_id`, #240); `nil` for a freely logged workout and for
+    /// sources without the concept.
+    var routineID: String?
+    /// The routine's `updated_at` at the time of the sync — a snapshot, since
+    /// the targets on the sets were taken from that state of the routine.
+    var routineUpdatedAt: Date?
 
     /// - Parameter source: Defaults to Hevy, the only source before #141, so
     ///   the mapping and every fixture written against it stay valid. The
@@ -35,6 +45,8 @@ struct Activity: Identifiable, Equatable, Codable, Sendable {
     ///   requires the `source` key, so JSON without it does not decode —
     ///   nothing decodes `Activity` from JSON today, and a fixture that does
     ///   has to carry the key.
+    /// - Parameter kind: Defaults to strength, which is what every Hevy
+    ///   workout is and what the model held implicitly before #180.
     init(
         id: String,
         title: String,
@@ -43,8 +55,11 @@ struct Activity: Identifiable, Equatable, Codable, Sendable {
         endTime: Date? = nil,
         updatedAt: Date? = nil,
         source: ConnectorSource = .hevy,
+        kind: ActivityKind = .strength,
         exercises: [ActivityExercise] = [],
-        metrics: ActivityMetrics? = nil
+        cardio: CardioMetrics? = nil,
+        routineID: String? = nil,
+        routineUpdatedAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -53,7 +68,10 @@ struct Activity: Identifiable, Equatable, Codable, Sendable {
         self.endTime = endTime
         self.updatedAt = updatedAt
         self.source = source
+        self.kind = kind
         self.exercises = exercises
-        self.metrics = metrics
+        self.cardio = cardio
+        self.routineID = routineID
+        self.routineUpdatedAt = routineUpdatedAt
     }
 }

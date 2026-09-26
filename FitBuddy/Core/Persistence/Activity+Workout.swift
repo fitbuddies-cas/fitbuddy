@@ -18,7 +18,11 @@ extension Activity {
             endTime: endTime,
             updatedAt: updatedAt,
             source: source,
-            exercises: exercises.map { $0.makeExercise() }
+            kind: kind,
+            exercises: exercises.map { $0.makeExercise() },
+            cardio: cardio,
+            routineID: routineID,
+            routineUpdatedAt: routineUpdatedAt
         )
     }
 }
@@ -45,7 +49,8 @@ extension ActivityExerciseSet {
             reps: reps,
             distanceMeters: distanceMeters,
             durationSeconds: durationSeconds,
-            rpe: rpe
+            rpe: rpe,
+            targetReps: targetReps
         )
     }
 }
