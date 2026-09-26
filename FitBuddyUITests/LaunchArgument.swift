@@ -52,6 +52,8 @@ enum LaunchArgument {
         static let recover = "recover"
         static let hold = "hold"
         static let thin = "thin"
+        /// The fourth verdict class of #227 / ADR-014: no verdict, one note.
+        static let insufficientData = "insufficient"
         /// Design 3.4c / 3.4d, the generic cards of #186.
         static let endurance = "endurance"
         static let overallLoad = "overall"

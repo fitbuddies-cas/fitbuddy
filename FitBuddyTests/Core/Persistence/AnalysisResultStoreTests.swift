@@ -95,6 +95,91 @@ final class AnalysisResultStoreTests: XCTestCase {
         XCTAssertEqual(row.providerRawValue, "gemini")
     }
 
+    /// The validation log travels with the analysis it describes (#228):
+    /// written as a blob next to the report, read back typed.
+    func testValidationLogIsStoredWithTheAnalysis() async throws {
+        let log = AnalysisValidationLog(
+            provider: .gemini,
+            model: "gemini-3.6-flash",
+            modelVerdict: .progress,
+            appVerdict: .hold,
+            verdictReason: .plateauMajority,
+            interventions: [
+                AnalysisIntervention(
+                    subject: .progression,
+                    action: .downgraded,
+                    reason: .aboveRange,
+                    figure: AnalysisInterventionFigure(proposed: 70, app: 60, allowed: 62.5...65, unit: .kilograms)
+                ),
+                AnalysisIntervention(subject: .verdict, action: .replaced, reason: .verdictOverridden),
+            ]
+        )
+        try await sut.save(
+            text: "Hold.",
+            report: AnalysisReportFactory.validated(.hold),
+            provider: .gemini,
+            validationLog: log,
+            generatedAt: Self.reference,
+            context: Self.context()
+        )
+
+        let latest = try await sut.latest()
+        XCTAssertEqual(latest?.validationLog, log)
+        let row = try XCTUnwrap(ModelContext(container).fetch(FetchDescriptor<AnalysisResult>()).first)
+        XCTAssertNotNil(row.validationLogJSON)
+    }
+
+    /// A clean run stores an empty log, and that is not the same as none:
+    /// "nothing rejected" is a result #229 counts, "not recorded" is not.
+    func testAnEmptyLogIsStoredAsEmptyNotAsMissing() async throws {
+        let clean = AnalysisValidationLog(
+            modelVerdict: .hold,
+            appVerdict: .hold,
+            verdictReason: .noNewBest,
+            interventions: []
+        )
+        try await sut.save(
+            text: "Hold.",
+            report: AnalysisReportFactory.validated(.hold),
+            provider: .claude,
+            validationLog: clean,
+            generatedAt: Self.reference,
+            context: Self.context()
+        )
+        try await sut.save(
+            text: "Prose.",
+            report: nil,
+            provider: .claude,
+            generatedAt: Self.reference.addingTimeInterval(60),
+            context: Self.context()
+        )
+
+        let recent = try await sut.recent(limit: 2)
+        XCTAssertEqual(recent.map(\.validationLog), [nil, clean])
+    }
+
+    /// A log this build cannot read leaves the analysis itself readable.
+    func testUnreadableValidationLogReadsAsNotRecorded() async throws {
+        let report = AnalysisReportFactory.validated(.hold)
+        let context = ModelContext(container)
+        context.insert(
+            AnalysisResult(
+                text: report.summary,
+                generatedAt: Self.reference,
+                windowWeeks: 4,
+                sessionCount: 12,
+                reportJSON: AnalysisReportFormat.encode(report).json,
+                reportVersion: AnalysisReportFormat.encode(report).version,
+                validationLogJSON: Data("{\"modelVerdict\": 1".utf8)
+            )
+        )
+        try context.save()
+
+        let latest = try await sut.latest()
+        XCTAssertEqual(latest?.report, report)
+        XCTAssertNil(latest?.validationLog)
+    }
+
     func testProseIsStoredWithoutAReport() async throws {
         try await sut.save(
             text: "Add 2.5 kg on bench next session.",

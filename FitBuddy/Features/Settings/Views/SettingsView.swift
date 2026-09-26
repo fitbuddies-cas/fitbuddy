@@ -155,6 +155,9 @@ struct SettingsView: View {
             trainingProfileSection
             privacySection
             dangerSection
+            #if DEBUG
+            AnalysisValidationLogSection()
+            #endif
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)

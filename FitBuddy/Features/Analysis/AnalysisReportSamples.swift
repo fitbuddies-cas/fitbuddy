@@ -62,6 +62,27 @@ enum AnalysisReportSamples {
             """
     )
 
+    /// The fourth verdict class (#227, ADR-014 §6): the app's headline, the
+    /// app's lead and the note naming the condition that fired — the same
+    /// shape as design 3.4b, which the mock draws with a `hold`.
+    static let insufficientData = ValidatedAnalysisReport(
+        headline: AnalysisReportValidator.insufficientDataHeadline,
+        verdict: .insufficientData,
+        lead: AnalysisReportValidator.insufficientDataLead,
+        cards: [noVerdictNoteCard],
+        summary: """
+            You logged three sessions in the last four weeks. Bench press and \
+            rows appear twice each, at the same weights — too little to tell a \
+            plateau from a session that simply went well.
+            """
+    )
+
+    /// The note the app writes above an `insufficientData` report.
+    static let noVerdictNoteCard = AnalysisReportCard.note(
+        title: AnalysisReportValidator.insufficientDataNoteTitle,
+        text: "This analysis covers 3 of the 4 sessions the app needs before it reads a trend."
+    )
+
     static let progressionCard = AnalysisReportCard.progression(
         exercise: "Bench Press (Barbell)",
         muscleGroup: .chest,

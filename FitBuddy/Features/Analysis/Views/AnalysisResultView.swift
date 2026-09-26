@@ -226,6 +226,21 @@ private let previewContext = AnalysisContext(sessionCount: 14, window: .default)
     .background(Color.fbBackground)
 }
 
+/// #227 / ADR-014 §6: the app found no verdict, says so, and shows the one
+/// note naming why. No progression and no recovery card sit under it.
+#Preview("Report · no verdict") {
+    ScrollView {
+        AnalysisResultView(
+            outcome: .report(AnalysisReportSamples.insufficientData),
+            context: AnalysisContext(sessionCount: 3, window: .default),
+            attribution: AnalysisAttribution(first: .claude),
+            age: "just now"
+        )
+        .padding(16)
+    }
+    .background(Color.fbBackground)
+}
+
 /// US-14 AC5: the answer was not a report, and looks as it did before #177.
 #Preview("Prose fallback") {
     ScrollView {

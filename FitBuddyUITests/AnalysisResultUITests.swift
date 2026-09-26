@@ -61,6 +61,27 @@ final class AnalysisResultUITests: XCTestCase {
         XCTAssertFalse(sut.analysisProse.exists)
     }
 
+    /// The fourth verdict class (#227, ADR-014 §6): the app's headline, the
+    /// note naming why there is no verdict, and neither a progression nor a
+    /// recovery card under it.
+    @MainActor
+    func testASeededReportWithoutAVerdictNamesWhyThereIsNone() {
+        let sut = SeededApp(
+            profile: LaunchArgument.Profile.personB,
+            analysisReport: LaunchArgument.Report.insufficientData
+        ).launch()
+
+        openResult(in: sut)
+
+        XCTAssertEqual(sut.analysisHeadline.label, "Not enough data to judge.")
+        sut.assertAppears(sut.analysisLead)
+        sut.assertAppears(sut.fullAnalysisToggle)
+        sut.assertAppears(sut.fullAnalysis)
+        XCTAssertEqual(sut.progressionCards.count, 0)
+        XCTAssertEqual(sut.recoveryCards.count, 0)
+        XCTAssertFalse(sut.analysisProse.exists)
+    }
+
     /// A stored recovery report renders as its own headline and the recovery
     /// card, with no progression card and no prose.
     ///
