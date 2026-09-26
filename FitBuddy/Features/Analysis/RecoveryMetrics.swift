@@ -11,7 +11,7 @@ import Foundation
 /// Since #184 the figures span **every** source and both domains: a week of
 /// four bench sessions and three runs is seven days of training, not four.
 /// Strength and endurance draw on the same recovery, which is what US-15 AC3
-/// states and what the system prompt's rule 8 already tells the model.
+/// states and what the system prompt's rule 9 already tells the model.
 ///
 /// The individual figures stay data-dependent (US-15 AC7): a mean nobody
 /// recorded is `nil` and its cell is left out, never shown as `0` or `"—"`.
@@ -31,9 +31,11 @@ struct RecoveryMetrics: Codable, Equatable, Sendable {
     /// placeholder would read as a measurement.
     ///
     /// Deliberately strength-only across the split. Strava's Relative Effort
-    /// (`CardioMetrics.perceivedEffort`) is a provider-specific score, not a
-    /// 1–10 RPE, and averaging the two into one number would invent a
-    /// measurement neither source made.
+    /// (`CardioMetrics.relativeEffort`) is a provider-specific, heart-rate-based
+    /// score, not a 1–10 RPE, and averaging the two into one number would
+    /// invent a measurement neither source made. Where the analysis reads it
+    /// (#245, #246), it stands on its own as a trend within Strava
+    /// (ADR-015, #242) — never averaged with RPE.
     let averageRPE: Double?
     /// Mean heart rate in bpm over the sessions of the week that recorded one,
     /// or `nil` when none did — a strength session has no strap, and an indoor

@@ -123,6 +123,15 @@ final class AnalysisValidationLogViewModelTests: XCTestCase {
         XCTAssertEqual(AnalysisValidationLogViewModel.verdictLine(of: Self.clean), "hold (noNewBest)")
     }
 
+    /// The effort cap of #246 names its own stage.
+    func testTheVerdictLineNamesAnEffortCap() {
+        let capped = AnalysisValidationLog(
+            modelVerdict: .progress, appVerdict: .hold, verdictReason: .effortRising, interventions: []
+        )
+
+        XCTAssertEqual(AnalysisValidationLogViewModel.verdictLine(of: capped), "progress → hold (effortRising)")
+    }
+
     func testAnInterventionReadsAsPartActionAndReasonWithItsFigures() {
         let intervention = Self.overridden.interventions[0]
 

@@ -1,10 +1,10 @@
 import Foundation
 import SwiftData
 
-/// The current `Workout` model — see `FitBuddySchemaV7`.
-typealias Workout = FitBuddySchemaV7.Workout
+/// The current `Workout` model — see `FitBuddySchemaV8`.
+typealias Workout = FitBuddySchemaV8.Workout
 
-extension FitBuddySchemaV7 {
+extension FitBuddySchemaV8 {
     /// A cached training session — the root of the `Workout → Exercise →
     /// ExerciseSet` hierarchy that backs the offline dashboard (US-2 AC2).
     ///
@@ -65,11 +65,25 @@ extension FitBuddySchemaV7 {
         var cardioElevationGainMeters: Double?
         var cardioAverageSpeedMetersPerSecond: Double?
         var cardioEnergyKilojoules: Double?
-        var cardioPerceivedEffort: Double?
+        /// Strava's Relative Effort — see `CardioMetrics.relativeEffort`.
+        /// Named `cardioPerceivedEffort` up to V7; `originalName` lets the
+        /// V7 → V8 stage carry the stored values over (#243).
+        @Attribute(originalName: "cardioPerceivedEffort")
+        var cardioRelativeEffort: Double?
         var cardioActiveCalories: Int?
         var cardioDistanceMeters: Double?
         var cardioDurationSeconds: Int?
         var cardioTrainingLoad: Double?
+        /// Polar's Training Load Pro values (#244) — see the fields of the
+        /// same name on `CardioMetrics`. `nil` for every other source, for a
+        /// device without Training Load Pro, and for every row written before
+        /// V8.
+        var cardioLoad: Double?
+        var cardioMuscleLoad: Double?
+        var cardioPerceivedLoad: Double?
+        /// `PolarUserRPE.rawValue` — read it through `cardio`, which reads an
+        /// unknown label as `.unknown`.
+        var cardioUserRPERawValue: String?
 
         /// Deleting a workout deletes its exercises (and, transitively, their sets).
         @Relationship(deleteRule: .cascade, inverse: \Exercise.workout)
@@ -101,11 +115,15 @@ extension FitBuddySchemaV7 {
                 elevationGainMeters: cardioElevationGainMeters,
                 averageSpeedMetersPerSecond: cardioAverageSpeedMetersPerSecond,
                 energyKilojoules: cardioEnergyKilojoules,
-                perceivedEffort: cardioPerceivedEffort,
+                relativeEffort: cardioRelativeEffort,
                 activeCalories: cardioActiveCalories,
                 distanceMeters: cardioDistanceMeters,
                 durationSeconds: cardioDurationSeconds,
-                trainingLoad: cardioTrainingLoad
+                trainingLoad: cardioTrainingLoad,
+                cardioLoad: cardioLoad,
+                muscleLoad: cardioMuscleLoad,
+                perceivedLoad: cardioPerceivedLoad,
+                userRPE: cardioUserRPERawValue.map(PolarUserRPE.init(polarValue:))
             ).nonEmpty
         }
 
@@ -139,11 +157,15 @@ extension FitBuddySchemaV7 {
             self.cardioElevationGainMeters = cardio?.elevationGainMeters
             self.cardioAverageSpeedMetersPerSecond = cardio?.averageSpeedMetersPerSecond
             self.cardioEnergyKilojoules = cardio?.energyKilojoules
-            self.cardioPerceivedEffort = cardio?.perceivedEffort
+            self.cardioRelativeEffort = cardio?.relativeEffort
             self.cardioActiveCalories = cardio?.activeCalories
             self.cardioDistanceMeters = cardio?.distanceMeters
             self.cardioDurationSeconds = cardio?.durationSeconds
             self.cardioTrainingLoad = cardio?.trainingLoad
+            self.cardioLoad = cardio?.cardioLoad
+            self.cardioMuscleLoad = cardio?.muscleLoad
+            self.cardioPerceivedLoad = cardio?.perceivedLoad
+            self.cardioUserRPERawValue = cardio?.userRPE?.rawValue
         }
     }
 }

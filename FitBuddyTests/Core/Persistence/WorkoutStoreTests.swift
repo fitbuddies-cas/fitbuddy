@@ -167,11 +167,15 @@ final class WorkoutStoreTests: XCTestCase {
         XCTAssertEqual(cardio.elevationGainMeters, 412.5)
         XCTAssertEqual(cardio.averageSpeedMetersPerSecond, 2.78)
         XCTAssertEqual(cardio.energyKilojoules, 920)
-        XCTAssertEqual(cardio.perceivedEffort, 64)
+        XCTAssertEqual(cardio.relativeEffort, 64)
         XCTAssertEqual(cardio.activeCalories, 530)
         XCTAssertEqual(cardio.distanceMeters, 10_400)
         XCTAssertEqual(cardio.durationSeconds, 3742)
         XCTAssertEqual(cardio.trainingLoad, 143.22)
+        XCTAssertEqual(cardio.cardioLoad, 151.3)
+        XCTAssertEqual(cardio.muscleLoad, 62.5)
+        XCTAssertEqual(cardio.perceivedLoad, 525)
+        XCTAssertEqual(cardio.userRPE, .hard)
 
         let summary = WorkoutSummary(workout: workout)
         XCTAssertEqual(summary.kind, .run)
@@ -181,6 +185,52 @@ final class WorkoutStoreTests: XCTestCase {
         XCTAssertEqual(summary.distanceMeters, 10_400)
         XCTAssertEqual(summary.durationSeconds, 3742)
         XCTAssertTrue(summary.isCardio)
+    }
+
+    /// A Polar session from an older watch carries only the legacy load: the
+    /// Training Load Pro columns stay empty and read back as `nil`, not as a
+    /// zero load or a default rating (#244).
+    func testAPolarSessionWithoutTrainingLoadProCachesEveryProValueAsNil() async throws {
+        try await sut.replaceCachedWorkouts(from: .polar, with: [
+            ActivityFactory.cardioActivity(
+                id: "polar-1",
+                start: Date(timeIntervalSince1970: 1_750_000_000),
+                source: .polar,
+                kind: .ride,
+                cardio: CardioMetrics(averageHeartRate: 138, trainingLoad: 112)
+            ),
+        ])
+
+        let workout = try XCTUnwrap(try ModelContext(container).fetch(FetchDescriptor<Workout>()).first)
+        XCTAssertNil(workout.cardioLoad)
+        XCTAssertNil(workout.cardioMuscleLoad)
+        XCTAssertNil(workout.cardioPerceivedLoad)
+        XCTAssertNil(workout.cardioUserRPERawValue)
+        let cardio = try XCTUnwrap(workout.cardio)
+        XCTAssertEqual(cardio.trainingLoad, 112)
+        XCTAssertNil(cardio.userRPE)
+    }
+
+    /// The rating is stored as Polar's label. A label this build cannot name
+    /// — written by a newer one — reads back as `.unknown`, never as a crash
+    /// or as a neighbouring rating.
+    func testAStoredUserRPELabelThisBuildDoesNotKnowReadsAsUnknown() async throws {
+        try await sut.replaceCachedWorkouts(from: .polar, with: [
+            ActivityFactory.cardioActivity(
+                id: "polar-1",
+                start: Date(timeIntervalSince1970: 1_750_000_000),
+                source: .polar,
+                kind: .ride
+            ),
+        ])
+        let context = ModelContext(container)
+        let workout = try XCTUnwrap(try context.fetch(FetchDescriptor<Workout>()).first)
+        XCTAssertEqual(workout.cardioUserRPERawValue, "RPE_HARD")
+
+        workout.cardioUserRPERawValue = "RPE_FROM_A_NEWER_BUILD"
+        try context.save()
+
+        XCTAssertEqual(workout.cardio?.userRPE, .unknown)
     }
 
     /// A row written before V5 has no sport recorded. It must not read as

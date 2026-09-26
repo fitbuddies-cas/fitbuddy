@@ -332,6 +332,22 @@ final class AnalysisValidationLogCaptureTests: XCTestCase {
         XCTAssertEqual(log.interventions.last?.subject, .lead)
     }
 
+    /// ADR-014 stage 5 (#246): the effort cap is logged as the stage that
+    /// produced the app's verdict, next to the model's `progress`.
+    func testAnEffortCapIsLoggedAsItsOwnReason() {
+        let rising = EffortSeries(scale: .hevyRPE, valuesByWeek: [0: [9], 1: [6], 2: [6]])
+        let evidence = evidence(
+            exercises: [Self.benchPressListed(latestIsWindowBest: true)],
+            effort: [rising]
+        )
+
+        let log = log([], verdict: .progress, evidence: evidence)
+
+        XCTAssertEqual(log.modelVerdict, .progress)
+        XCTAssertEqual(log.appVerdict, .hold)
+        XCTAssertEqual(log.verdictReason, .effortRising)
+    }
+
     // MARK: - Helpers
 
     private func report(_ cards: [AnalysisCard], verdict: AnalysisVerdict = .hold) -> AnalysisReport {
@@ -382,7 +398,8 @@ final class AnalysisValidationLogCaptureTests: XCTestCase {
         interference: InterferenceMetrics = InterferenceMetrics(strengthDays: 4, cardioDays: 4, overlapDays: 3),
         weeklyMetrics: [MetricUnit: Double] = [:],
         analysisProfile: AnalysisProfile = .overallLoad,
-        sessionsInWindow: Int = 12
+        sessionsInWindow: Int = 12,
+        effort: [EffortSeries] = []
     ) -> AnalysisReportEvidence {
         AnalysisReportEvidence(
             exercises: exercises,
@@ -393,7 +410,8 @@ final class AnalysisValidationLogCaptureTests: XCTestCase {
             interference: interference,
             weeklyMetrics: weeklyMetrics,
             sessionsInWindow: sessionsInWindow,
-            sessionsInLastSevenDays: 3
+            sessionsInLastSevenDays: 3,
+            effort: effort
         )
     }
 }

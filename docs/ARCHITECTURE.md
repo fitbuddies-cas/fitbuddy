@@ -2,7 +2,7 @@
 
 > *Getrennt geführt: Ziele, Personas, Risiken → [README.md](../README.md) · User Stories, NFRs → [REQUIREMENTS.md](REQUIREMENTS.md) · Architekturentscheide (Detail) → [adr/](adr/)*
 >
-> **Dokumentationsstand:** Stand nach US-16 «Reproduzierbare Empfehlung bei gleicher Datenlage» (Issue #224) auf Basis von US-15 (#171) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, Verdict aus der App statt vom Modell, SwiftData-Schema V7, ADR-001 bis ADR-014.
+> **Dokumentationsstand:** Stand nach US-16 «Reproduzierbare Empfehlung bei gleicher Datenlage» (Issue #224) auf Basis von US-15 (#171) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, Verdict aus der App statt vom Modell, Anstrengung je Skala getrennt (US-18, #241), SwiftData-Schema V8, ADR-001 bis ADR-015.
 
 ---
 
@@ -209,7 +209,8 @@ Der SwiftData-Store ist versioniert (`VersionedSchema`, ADR-001). `FitBuddyMigra
 | V4 | `AnalysisResult.reportJSON` · `.providerRawValue` · `.reportVersion` | #176 |
 | V5 | `Workout.kindRawValue` + zehn flache Cardio-Spalten · `AnalysisResult.sessionCountsJSON` · `.analysisProfileRawValue` | #180 · #182 · #185 |
 | V6 | `Workout.routineID` · `.routineUpdatedAt` · `ExerciseSet.targetReps` | #240 |
-| **V7** | `AnalysisResult.validationLogJSON` | #228 |
+| V7 | `AnalysisResult.validationLogJSON` | #228 |
+| **V8** | `Workout.cardioPerceivedEffort` → `.cardioRelativeEffort` (`originalName`) · `.cardioLoad` · `.cardioMuscleLoad` · `.cardioPerceivedLoad` · `.cardioUserRPERawValue` | #243 · #244 |
 
 **V5 (US-15)** persistiert, was [ADR-012](adr/ADR-012-activitykind-und-cardiometrics.md) normalisiert hat:
 
@@ -226,6 +227,8 @@ Alle neuen Spalten sind optional, V4 → V5 ist entsprechend leichtgewichtig: `n
 «Kein Ziel» ist ein modellierter Zustand, kein Fehler: frei geloggte Workouts, gelöschte Routinen und Sätze ohne Wiederholungsziel tragen `nil`, und die 2-for-2-Regel liest das als «nicht prüfbar», nie als «erfüllt». V5 → V6 ist leichtgewichtig; für jede bestehende Zeile ist `nil` die Wahrheit, der nächste Sync füllt die Spalten.
 
 **V7 (US-16, #228)** speichert pro Analyse das [Protokoll der Eingriffe](#protokoll-der-eingriffe-228): `AnalysisResult.validationLogJSON` ist ein optionaler JSON-Blob, gelesen und geschrieben nur über `AnalysisValidationLogFormat`. V6 → V7 ist leichtgewichtig; für jede bestehende Zeile ist `nil` die Wahrheit — «nicht erfasst», nicht «nichts verworfen».
+
+**V8 (US-18, #243, #244)** benennt Stravas `suffer_score` richtig — `cardioRelativeEffort`, übernommen per `@Attribute(originalName: "cardioPerceivedEffort")`, damit gecachte Werte die Migration überleben — und speichert Polars Training Load Pro in vier optionalen Spalten. Fehlt der Block (ältere Uhr), bleiben sie `nil`. V7 → V8 ist leichtgewichtig. Die Skalen bleiben getrennt ([ADR-015](adr/ADR-015-anstrengungsskalen-getrennt.md)).
 
 > **V7 darf nur wachsen, bis es `develop` erreicht.** V6 war mit US-17 auf `develop` angekommen, also musste #228 eine neue Version aufmachen. Danach ist die nächste Änderung V8: Ein Store, der von einem anderen V7 geschrieben wurde, gilt als «unknown model version» und fällt still auf einen leeren In-Memory-Container zurück.
 
@@ -457,6 +460,7 @@ Alle asynchronen Zugriffe folgen drei fixen Ausführungskontexten — gilt schic
 | [ADR-012](adr/ADR-012-activitykind-und-cardiometrics.md) | `ActivityKind` und `CardioMetrics` — normalisierte Sportart und ein Kennzahlen-Block für alle Quellen, persistiert in Schema V5 | Accepted |
 | [ADR-013](adr/ADR-013-progressionsband-je-muskelgruppe.md) | Progressionsband je Muskelgruppe — erlaubte Spanne statt Zielwert, konditional auf 2-for-2 (US-17) | Accepted |
 | [ADR-014](adr/ADR-014-verdict-regel-der-app.md) | Verdict-Regel der App — Reihenfolge, Schwellen und die vierte Klasse «zu dünne Datenbasis» (US-16) | Accepted |
+| [ADR-015](adr/ADR-015-anstrengungsskalen-getrennt.md) | Anstrengungsskalen getrennt halten — Verrechnungsverbot, Quell-Labels im Prompt, Strava `perceived_exertion` und Polars Tages-Cardio-Load nicht in v0 (US-18) | Accepted |
 
 ---
 

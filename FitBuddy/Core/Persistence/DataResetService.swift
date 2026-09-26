@@ -8,8 +8,9 @@ import OSLog
 /// Wipes all Keychain items (every API key, the Strava credentials *and* the
 /// consent metadata, so consent is asked for again per US-4 AC5), the
 /// SwiftData workout cache, the whole analysis history, the sync timestamp,
-/// the LLM priority order, the step-3 skip marker, the training profile and
-/// the legacy timestamp of the removed analysis lock. The connectors' in-memory
+/// the LLM priority order, the step-3 skip marker, the training profile, the
+/// remembered analysis profile, the shown-flag of the one-time effort hint
+/// (#245) and the legacy timestamp of the removed analysis lock. The connectors' in-memory
 /// copies of the keys are not reachable from here; `WorkoutSyncService` drops them on the next sync
 /// when it finds the stored ones gone.
 ///
@@ -29,6 +30,7 @@ actor DataResetService {
     private let skip: LLMKeysSkipStore
     private let trainingProfile: TrainingProfileStore
     private let analysisProfile: AnalysisProfileStore
+    private let effortHint: EffortHintStore
     private let defaults: UserDefaults
 
     private let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "DataReset")
@@ -42,6 +44,7 @@ actor DataResetService {
         skip: LLMKeysSkipStore = LLMKeysSkipStore(),
         trainingProfile: TrainingProfileStore = TrainingProfileStore(),
         analysisProfile: AnalysisProfileStore = AnalysisProfileStore(),
+        effortHint: EffortHintStore = EffortHintStore(),
         defaults: UserDefaults = .standard
     ) {
         self.keychain = keychain
@@ -52,6 +55,7 @@ actor DataResetService {
         self.skip = skip
         self.trainingProfile = trainingProfile
         self.analysisProfile = analysisProfile
+        self.effortHint = effortHint
         self.defaults = defaults
     }
 
@@ -92,5 +96,8 @@ actor DataResetService {
         // The remembered analysis profile goes with the training it was chosen
         // for (#185): the next run starts from the default its data suggests.
         await analysisProfile.clear()
+        // The effort hint was shown about data that is gone: a fresh start
+        // may show it once more (#245).
+        await effortHint.clear()
     }
 }

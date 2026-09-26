@@ -203,7 +203,7 @@ final class StravaConnectorTests: XCTestCase {
         XCTAssertEqual(cardio.elevationGainMeters, 412.5)
         XCTAssertEqual(cardio.averageSpeedMetersPerSecond, 2.78)
         XCTAssertEqual(cardio.energyKilojoules, 920)
-        XCTAssertEqual(cardio.perceivedEffort, 64)
+        XCTAssertEqual(cardio.relativeEffort, 64)
         // Distance and moving time stay on the set, where the dashboard reads
         // them — the block must not double-count them.
         XCTAssertNil(cardio.distanceMeters)

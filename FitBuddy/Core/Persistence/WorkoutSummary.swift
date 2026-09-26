@@ -40,6 +40,12 @@ struct WorkoutSummary: Hashable, Identifiable, Sendable {
     /// rate, elevation, speed, effort. `nil` for a strength session and for
     /// any session cached before V5.
     let cardio: CardioMetrics?
+    /// Mean RPE over the counted sets that logged one, or `nil` when none did
+    /// (#246) — Hevy logs an RPE only where the user entered it, and a stand-in
+    /// would read as a measurement. One value per session: the Hevy RPE series
+    /// of the effort cap (`EffortScale.hevyRPE`, ADR-014 §3) is built from it.
+    /// Warm-ups are excluded, as in `RecoveryMetrics.averageRPE`.
+    let averageRPE: Double?
 
     /// - Parameters:
     ///   - source: Defaults to Hevy, so a fixture written before #141 still
@@ -61,7 +67,8 @@ struct WorkoutSummary: Hashable, Identifiable, Sendable {
         muscleLoads: [MuscleLoad] = [],
         distanceMeters: Double? = nil,
         durationSeconds: Int? = nil,
-        cardio: CardioMetrics? = nil
+        cardio: CardioMetrics? = nil,
+        averageRPE: Double? = nil
     ) {
         self.id = id
         self.title = title
@@ -75,6 +82,7 @@ struct WorkoutSummary: Hashable, Identifiable, Sendable {
         self.distanceMeters = distanceMeters
         self.durationSeconds = durationSeconds
         self.cardio = cardio
+        self.averageRPE = averageRPE
     }
 
     /// Whether the row is better described by distance and time than by kg.
@@ -135,6 +143,7 @@ extension WorkoutSummary {
 
         let distance = countedSets.compactMap(\.distanceMeters).reduce(0, +)
         let duration = countedSets.compactMap(\.durationSeconds).reduce(0, +)
+        let rpes = countedSets.compactMap(\.rpe)
 
         self.init(
             id: workout.id,
@@ -155,7 +164,8 @@ extension WorkoutSummary {
             // same two figures whichever source wrote the session.
             distanceMeters: distance > 0 ? distance : workout.cardio?.distanceMeters,
             durationSeconds: duration > 0 ? duration : workout.cardio?.durationSeconds,
-            cardio: workout.cardio
+            cardio: workout.cardio,
+            averageRPE: rpes.isEmpty ? nil : rpes.reduce(0, +) / Double(rpes.count)
         )
     }
 }

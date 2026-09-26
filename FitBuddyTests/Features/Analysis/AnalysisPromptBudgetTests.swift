@@ -73,20 +73,28 @@ final class AnalysisPromptBudgetTests: XCTestCase {
         XCTAssertTrue(prompt.user.contains("## Endurance per week"))
         XCTAssertTrue(prompt.user.contains("## Week structure"))
         XCTAssertTrue(prompt.user.contains("## Exercises (last 13 weeks)"))
+        // And every session carries its effort values (#245).
+        XCTAssertTrue(prompt.user.contains("## Endurance effort (newest first)"))
+        XCTAssertTrue(prompt.user.contains(", mean RPE 7.5"))
+        XCTAssertFalse(prompt.user.contains("older values omitted"))
     }
 
     /// Room to spare, not a near miss: the worst case has to leave enough
     /// headroom that a cache of unusually long session and exercise titles
     /// still fits, which is the only thing the ladder exists for.
     ///
-    /// Two thirds rather than a half, because the budget was set at roughly
-    /// twice this prompt on purpose — the figure is around 4 050 estimated
-    /// tokens, and a test pinning it any tighter would fail on a reworded
-    /// section rather than on a prompt that grew.
+    /// Three quarters since #245. The budget was set at roughly twice this
+    /// prompt (about 4 050 estimated tokens); the effort values of US-18 —
+    /// here on every one of 182 sessions, every Polar session carrying all
+    /// four Training Load Pro values — plus rule 8 raised it to about 5 350.
+    /// Still inside the budget without the ladder (see the test above), and
+    /// the three-quarter mark keeps a 2 000-token margin for long titles; a
+    /// test pinning it any tighter would fail on a reworded section rather
+    /// than on a prompt that grew.
     func testTheWorstCaseLeavesHeadroom() {
         let estimate = AnalysisPromptBudget.estimatedTokens(of: make(WorstCase(calendar: calendar, reference: reference)))
 
-        XCTAssertLessThan(estimate, AnalysisPromptBudget.maxPromptTokens * 2 / 3)
+        XCTAssertLessThan(estimate, AnalysisPromptBudget.maxPromptTokens * 3 / 4)
     }
 
     /// The three profiles differ in bulk (AC1, #185) and none of them is the
@@ -147,6 +155,50 @@ final class AnalysisPromptBudgetTests: XCTestCase {
             XCTAssertTrue(weeks.contains("Weeks without sessions are not listed"), header)
             XCTAssertTrue(weeks.contains("9 earlier ones omitted"), header)
             XCTAssertTrue(weeks.contains("the totals above cover all 13 weeks"), header)
+        }
+    }
+
+    /// Effort sits on the highest rung (#245): at rung 4 every other list has
+    /// been cut — the strength session list down to 10 — and the endurance
+    /// effort lines are still whole, all 26 values of every scale.
+    func testTheEffortLinesSurviveEveryRungButTheLast() throws {
+        let cache = WorstCase(calendar: calendar, reference: reference)
+        let full = make(cache)
+        let trimmed = make(cache, budgetTokens: rungBudget(cache, rung: 4))
+
+        XCTAssertEqual(trimmed.detail, AnalysisPromptDetail.ladder[4])
+        XCTAssertEqual(trimmed.detail.listedSessions, 10)
+        XCTAssertEqual(
+            try section(trimmed, "## Sessions (newest first)").components(separatedBy: "\n- ").count - 1,
+            10
+        )
+        XCTAssertNil(trimmed.detail.listedEffortValues)
+        let header = "## Endurance effort"
+        let effort = try section(trimmed, header)
+        XCTAssertEqual(try section(full, header), effort)
+        let lines = effort.split(separator: "\n").filter { $0.hasPrefix("- ") }
+        XCTAssertEqual(lines.count, 5)
+        for line in lines {
+            XCTAssertEqual(line.components(separatedBy: " (2025-").count - 1, 26, String(line))
+        }
+    }
+
+    /// Rung 5 — the last, and #245's: only when everything else is cut does
+    /// each effort line drop to its 20 most recent values, and it says so.
+    func testTheLastRungCapsTheEffortLines() throws {
+        let cache = WorstCase(calendar: calendar, reference: reference)
+
+        let prompt = make(cache, budgetTokens: rungBudget(cache, rung: 5))
+
+        XCTAssertEqual(prompt.detail, AnalysisPromptDetail.ladder[5])
+        XCTAssertEqual(prompt.detail, AnalysisPromptDetail.ladder.last)
+        XCTAssertEqual(prompt.detail.listedEffortValues, 20)
+        let effort = try section(prompt, "## Endurance effort")
+        let lines = effort.split(separator: "\n").filter { $0.hasPrefix("- ") }
+        XCTAssertEqual(lines.count, 5)
+        for line in lines {
+            XCTAssertEqual(line.components(separatedBy: " (2025-").count - 1, 20, String(line))
+            XCTAssertTrue(line.hasSuffix("(6 older values omitted)"), String(line))
         }
     }
 
@@ -453,17 +505,24 @@ final class AnalysisPromptBudgetTests: XCTestCase {
                             muscleLoads: groups.map {
                                 MuscleLoad(group: $0, volumeKg: 1_200, setCount: 6)
                             },
-                            durationSeconds: 4_800
+                            durationSeconds: 4_800,
+                            // Every session rated (#245): the effort values
+                            // are part of the largest prompt the app builds.
+                            averageRPE: 7.5
                         )
                     )
                 }
                 if dayIndex % 7 >= 3 {
+                    // Every endurance session carries effort (#245), half of
+                    // them Polar's full Training Load Pro block — the longest
+                    // effort row there is.
+                    let isPolar = dayIndex % 2 == 0
                     summaries.append(
                         WorkoutSummary(
-                            id: "strava:\(dayIndex)",
+                            id: "\(isPolar ? "polar" : "strava"):\(dayIndex)",
                             title: "Evening Trail Run in the Jura\(padding)",
                             startTime: day(dayIndex).addingTimeInterval(7_200),
-                            source: .strava,
+                            source: isPolar ? .polar : .strava,
                             kind: sports[dayIndex % sports.count],
                             volumeKg: 0,
                             exerciseCount: 0,
@@ -474,7 +533,12 @@ final class AnalysisPromptBudgetTests: XCTestCase {
                                 averageHeartRate: 148,
                                 maxHeartRate: 176,
                                 elevationGainMeters: 340,
-                                averageSpeedMetersPerSecond: 3.2
+                                averageSpeedMetersPerSecond: 3.2,
+                                relativeEffort: isPolar ? nil : 118,
+                                cardioLoad: isPolar ? 142.7 : nil,
+                                muscleLoad: isPolar ? 36.4 : nil,
+                                perceivedLoad: isPolar ? 128.5 : nil,
+                                userRPE: isPolar ? .veryHard : nil
                             )
                         )
                     )

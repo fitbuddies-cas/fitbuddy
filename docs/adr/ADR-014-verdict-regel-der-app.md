@@ -54,7 +54,7 @@ Die Stufen laufen in dieser Reihenfolge. Die erste greifende Stufe bestimmt das 
 | **3 — Plateau-Mehrheit** | **mehr als die Hälfte** der entscheidbaren Übungen ist plateauiert | `hold` |
 | **4 — Bestleistung** | mindestens eine entscheidbare, nicht plateauierte Übung hat ihre Fenster-Bestleistung in der jüngsten Session gesetzt | `progress` |
 | **Rest** | keine der obigen | `hold` |
-| **5 — Anstrengungs-Deckel** (ab #246) | mindestens eine qualifizierte Quelle zeigt steigende Anstrengung | `progress` → `hold`; ein `recover` aus Stufe 0 bleibt `recover`; `insufficientData` bleibt `insufficientData` |
+| **5 — Anstrengungs-Deckel** (ab #246) | mindestens eine qualifizierte Quelle zeigt steigende Anstrengung | `progress` → `hold`; ein `recover` aus Stufe 0 bleibt `recover`; ein `insufficientData` aus Stufe 1 oder 2 bleibt `insufficientData`, nur das `insufficientData` unter `.endurance`, das allein aus den fehlenden Stufen 2–4 folgt, wird zu `hold` (siehe 5.) |
 
 **Zu Stufe 0.** Sie bleibt an erster Stelle, weil US-3 AC6 eine Must-Anforderung ist und weil die Aussage in sich vollständig ist: An 6 von 7 Tagen trainiert heisst, es gab höchstens einen Ruhetag. Das ist wahr, ohne dass eine Intensität bekannt sein müsste. Die Schwelle wird deshalb **weder gesenkt noch erweitert noch in die Gegenrichtung angewendet** — sie kann `recover` erzwingen, nie `progress` erlauben. Headline und Lead sagen weiterhin genau das, was gemessen wurde («You trained on 6 of the last 7 days»), nicht «deine Belastung ist zu hoch». Eine Änderung dieser Schwelle ist eine Anforderungsänderung, kein Regel-Tuning.
 

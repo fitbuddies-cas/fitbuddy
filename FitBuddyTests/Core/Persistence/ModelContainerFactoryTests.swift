@@ -30,8 +30,8 @@ final class ModelContainerFactoryTests: XCTestCase {
     /// written by the build before #141 (schema V1, no `sourceRawValue`) has to
     /// open under the current schema with every workout and analysis intact,
     /// and every migrated workout has to read as Hevy — the only source that
-    /// build knew. Since #228 this runs six stages in turn,
-    /// V1 → V2 → V3 → V4 → V5 → V6 → V7.
+    /// build knew. Since #243 this runs seven stages in turn,
+    /// V1 → V2 → V3 → V4 → V5 → V6 → V7 → V8.
     /// A fresh store would prove nothing; it never had a version to come from.
     func testV1StoreMigratesToTheCurrentSchemaWithEveryWorkoutReadingAsHevy() throws {
         let storeURL = try makeTemporaryStoreURL()
@@ -192,6 +192,107 @@ final class ModelContainerFactoryTests: XCTestCase {
         XCTAssertEqual(latest?.report, report)
         XCTAssertEqual(latest?.provider, .claude)
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<AnalysisResult>()), 2)
+    }
+
+    /// The V7 → V8 stage of #243: a store written before the rename (schema
+    /// V7, the Relative Effort still in `cardioPerceivedEffort`) has to open
+    /// under V8 with the stored score arriving under its new name — a plain
+    /// drop-and-add of the column would open without error and silently lose
+    /// every cached score. Everything else survives as it was.
+    func testV7StoreMigratesToV8CarryingTheEffortScoreOverToItsNewName() async throws {
+        let storeURL = try makeTemporaryStoreURL()
+        try writeV7Store(at: storeURL)
+
+        let container = try ModelContainerFactory.makePersistent(storeURL: storeURL)
+        let context = ModelContext(container)
+
+        let workouts = try context.fetch(FetchDescriptor<Workout>(sortBy: [SortDescriptor(\.id)]))
+        XCTAssertEqual(workouts.map(\.id), ["strava:9", "w-1"])
+        XCTAssertEqual(workouts.map(\.cardioRelativeEffort), [82, nil])
+        XCTAssertEqual(workouts.first?.cardio?.relativeEffort, 82)
+        XCTAssertEqual(workouts.first?.cardio?.averageHeartRate, 148)
+        // The Training Load Pro columns (#244) come back empty: no build
+        // before V8 decoded the block.
+        XCTAssertEqual(workouts.map(\.cardioLoad), [nil, nil])
+        XCTAssertEqual(workouts.map(\.cardioUserRPERawValue), [nil, nil])
+        XCTAssertNil(workouts.first?.cardio?.userRPE)
+        XCTAssertEqual(workouts.map(\.routineID), [nil, "r-1"])
+        let sets = try context.fetch(FetchDescriptor<ExerciseSet>())
+        XCTAssertEqual(sets.map(\.targetReps), [8])
+
+        let analyses = try context.fetch(FetchDescriptor<AnalysisResult>())
+        XCTAssertEqual(analyses.map(\.validationLogJSON), [Data(#"{"stub":true}"#.utf8)])
+        XCTAssertEqual(analyses.map(\.provider), [.claude])
+
+        // And the migrated store accepts a score written under the new name.
+        let store = WorkoutStore(modelContainer: container)
+        try await store.replaceCachedWorkouts(from: .strava, with: [
+            Activity(
+                id: "strava:10",
+                title: "Tempo Run",
+                startTime: Date(timeIntervalSince1970: 1_750_300_000),
+                source: .strava,
+                kind: .run,
+                cardio: CardioMetrics(relativeEffort: 120)
+            ),
+        ])
+        let cached = try context.fetch(FetchDescriptor<Workout>(sortBy: [SortDescriptor(\.id)]))
+        XCTAssertEqual(cached.map(\.id), ["strava:10", "w-1"])
+        XCTAssertEqual(cached.first?.cardio?.relativeEffort, 120)
+    }
+
+    /// Writes a Hevy workout logged against a routine, a Strava run carrying
+    /// a Relative Effort score and one analysis with a validation log under
+    /// `FitBuddySchemaV7`, exactly as the build before #243 would have, and
+    /// lets the container go out of scope again.
+    private func writeV7Store(at storeURL: URL) throws {
+        let schema = Schema(versionedSchema: FitBuddySchemaV7.self)
+        let container = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, url: storeURL, cloudKitDatabase: .none)
+        )
+        let context = ModelContext(container)
+        context.insert(
+            FitBuddySchemaV7.Workout(
+                id: "w-1",
+                title: "Morning Workout",
+                startTime: Date(timeIntervalSince1970: 1_750_000_000),
+                kindRawValue: ActivityKind.strength.rawValue,
+                routineID: "r-1",
+                routineUpdatedAt: Date(timeIntervalSince1970: 1_749_000_000),
+                exercises: [
+                    FitBuddySchemaV7.Exercise(index: 0, title: "Squat (Barbell)", sets: [
+                        FitBuddySchemaV7.ExerciseSet(
+                            index: 0, typeRawValue: "normal", weightKg: 100, reps: 5, targetReps: 8
+                        ),
+                    ]),
+                ]
+            )
+        )
+        context.insert(
+            FitBuddySchemaV7.Workout(
+                id: "strava:9",
+                title: "Morning Run",
+                startTime: Date(timeIntervalSince1970: 1_750_100_000),
+                sourceRawValue: ConnectorSource.strava.rawValue,
+                kindRawValue: ActivityKind.run.rawValue,
+                cardioAverageHeartRate: 148,
+                cardioPerceivedEffort: 82
+            )
+        )
+        context.insert(
+            FitBuddySchemaV7.AnalysisResult(
+                text: "Hold.",
+                generatedAt: Date(timeIntervalSince1970: 1_788_000_000),
+                windowWeeks: 4,
+                sessionCount: 12,
+                providerRawValue: LLMProvider.claude.rawValue,
+                // Opaque bytes: the stage must carry the blob over untouched,
+                // whatever it holds.
+                validationLogJSON: Data(#"{"stub":true}"#.utf8)
+            )
+        )
+        try context.save()
     }
 
     /// The V6 → V7 stage of #228: a store written with the routine columns

@@ -613,7 +613,85 @@ final class AnalysisMockProfileTests: XCTestCase {
         XCTAssertFalse(context.isThin)
     }
 
+    // MARK: - Effort cap (ADR-014 stage 5, #246)
+
+    /// What stage 5 reads from each mock profile under "Overall load", scale
+    /// by scale: the weeks with a value and the trend, `nil` where the scale
+    /// does not qualify.
+    ///
+    /// Pinned so a change to a fixture that would start capping a verdict is
+    /// seen here first. Today every qualified scale is stable, so no mock
+    /// verdict moved with #246 — `progression-ready` and `mixed` still reach
+    /// `progress`, and `overreached` rises from RPE 7.5 to 8.5 (113 %), under
+    /// the 130 % of ADR-014 §3.4.
+    func testTheMockProfilesCarryNoRisingEffortScale() async throws {
+        let expected: [MockWorkoutProfile: [String]] = [
+            .personA: ["hevyRPE: 4 weeks, stable"],
+            .personB: ["hevyRPE: 4 weeks, stable"],
+            .progressionReady: ["hevyRPE: 4 weeks, stable"],
+            .overreached: ["hevyRPE: 4 weeks, stable"],
+            .plateau: ["hevyRPE: 4 weeks, stable"],
+            .runner: ["stravaRelativeEffort: 4 weeks, stable"],
+            .mixed: ["hevyRPE: 4 weeks, stable", "stravaRelativeEffort: 4 weeks, stable"],
+            .overreachedMixed: [
+                "hevyRPE: 4 weeks, stable",
+                "stravaRelativeEffort: 1 weeks, not qualified",
+                "polarCardioLoad: 2 weeks, not qualified",
+                "polarPerceivedLoad: 2 weeks, not qualified",
+                "polarMuscleLoad: 2 weeks, not qualified",
+            ],
+        ]
+        for profile in MockWorkoutProfile.allCases {
+            let actual = try await effort(profile)
+            XCTAssertEqual(actual, expected[profile], profile.rawValue)
+        }
+    }
+
+    /// Polar's Training Load Pro sits on the two newest rides of
+    /// `overreached-mixed` only. Cardio Load rises from 114 to 151 there —
+    /// 132 %, over the threshold — but two weeks are not the three a scale
+    /// needs, so it is ignored rather than read (ADR-014 §3.3).
+    func testTwoPolarRidesDoNotQualifyTheirScale() async throws {
+        try await seed(.overreachedMixed, now: Self.morning)
+        let evidence = try await evidence(analysisProfile: .overallLoad)
+        let cardioLoad = try XCTUnwrap(evidence.effort.first { $0.scale == .polarCardioLoad })
+
+        XCTAssertEqual(cardioLoad.lastSevenDaysMean, 151)
+        XCTAssertEqual(cardioLoad.precedingWeeksMean, 114)
+        XCTAssertNil(AnalysisVerdictRule.trend(of: cardioLoad))
+    }
+
     // MARK: - Helpers
+
+    /// "hevyRPE: 4 weeks, stable" per scale stage 5 reads from `profile`.
+    private func effort(_ profile: MockWorkoutProfile) async throws -> [String] {
+        try await store.replaceCachedWorkouts(from: .hevy, with: [])
+        try await store.replaceCachedWorkouts(from: .strava, with: [])
+        try await store.replaceCachedWorkouts(from: .polar, with: [])
+        try await seed(profile, now: Self.morning)
+        return try await evidence(analysisProfile: .overallLoad).effort.map { series in
+            let trend = AnalysisVerdictRule.trend(of: series).map(\.rawValue) ?? "not qualified"
+            return "\(series.scale.rawValue): \(series.weeksWithValues) weeks, \(trend)"
+        }
+    }
+
+    /// The evidence over the cache, the way `AnalysisViewModel` builds it,
+    /// without the exercise reads stage 5 does not need.
+    private func evidence(analysisProfile: AnalysisProfile) async throws -> AnalysisReportEvidence {
+        let now = Self.morning
+        let summaries = try await store.workoutSummaries(since: .distantPast)
+        let window = try XCTUnwrap(AnalysisWindow.resolve(for: summaries, endingAt: now, calendar: Self.calendar))
+        return AnalysisReportEvidence(
+            summaries: summaries,
+            exercises: [],
+            progressions: [:],
+            details: [],
+            window: window,
+            now: now,
+            calendar: Self.calendar,
+            analysisProfile: analysisProfile
+        )
+    }
 
     /// Caches `profile` as of `now` and runs one analysis that `answer`
     /// completes.

@@ -2,7 +2,7 @@
 *Strukturierte Zusammenfassung für CAS ADAI 2026, Modul 3.
 Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 
-> **Dokumentationsstand:** Stand nach US-16 «Reproduzierbare Empfehlung bei gleicher Datenlage» (Issue #224) und US-17 «Steigerungsempfehlung passt zur Übung und zur Last» (Issue #225, Task-Kette #231–#240) und US-18 «Anstrengung fliesst in die Analyse ein» (Issue #241, Task-Kette #242–#247) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, SwiftData-Schema V7, ADR-001 bis ADR-015.
+> **Dokumentationsstand:** Stand nach US-16 «Reproduzierbare Empfehlung bei gleicher Datenlage» (Issue #224) und US-17 «Steigerungsempfehlung passt zur Übung und zur Last» (Issue #225, Task-Kette #231–#240) und US-18 «Anstrengung fliesst in die Analyse ein» (Issue #241, Task-Kette #242–#247) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, SwiftData-Schema V8, ADR-001 bis ADR-015.
 
 
 # 1. User Stories mit Acceptance Criteria
