@@ -313,7 +313,66 @@ final class AnalysisVerdictRuleEffortTests: XCTestCase {
         )
     }
 
+    // MARK: - The lead of a capped report
+
+    /// A strength report the cap turned from `progress` into `hold` gets the
+    /// effort-cap lead, not the weights-only `holdLead` (#246, PO decision).
+    func testAStrengthCapShowsTheEffortCapLead() {
+        let validated = AnalysisReportValidator.validate(
+            modelReport(verdict: .progress),
+            against: evidence(effort: [series(.hevyRPE, recent: 13.1)])
+        )
+
+        XCTAssertEqual(validated.verdict, .hold)
+        XCTAssertEqual(validated.headline, AnalysisReportValidator.holdHeadline)
+        XCTAssertEqual(validated.lead, AnalysisReportValidator.effortCapLead)
+    }
+
+    /// A runner under "Endurance" gets the same lead — `holdLead` speaks of
+    /// weights they never lifted.
+    func testAnEnduranceCapShowsTheEffortCapLead() {
+        let validated = AnalysisReportValidator.validate(
+            modelReport(verdict: .progress),
+            against: evidence(
+                analysisProfile: .endurance,
+                exercises: [],
+                effort: [series(.stravaRelativeEffort, recent: 13.1)]
+            )
+        )
+
+        XCTAssertEqual(validated.verdict, .hold)
+        XCTAssertEqual(validated.headline, AnalysisReportValidator.holdHeadline)
+        XCTAssertEqual(validated.lead, AnalysisReportValidator.effortCapLead)
+    }
+
+    /// A hold from the plateau majority keeps `holdLead`, even with a rising
+    /// scale in the evidence: the effort-cap lead belongs to stage 5 only.
+    func testAPlateauHoldKeepsTheHoldLead() {
+        let validated = AnalysisReportValidator.validate(
+            modelReport(verdict: .progress),
+            against: evidence(
+                exercises: [exercise(isPlateaued: true)],
+                effort: [series(.hevyRPE, recent: 30)]
+            )
+        )
+
+        XCTAssertEqual(validated.verdict, .hold)
+        XCTAssertEqual(validated.lead, AnalysisReportValidator.holdLead)
+    }
+
+    func testTheEffortCapLeadIsTheProductOwnersText() {
+        XCTAssertEqual(
+            AnalysisReportValidator.effortCapLead,
+            "Your recorded effort has risen against your own earlier weeks. "
+                + "Hold your current training before adding more."
+        )
+    }
+
     // MARK: - Fixtures
+
+    private func modelReport(verdict: AnalysisVerdict) -> AnalysisReport {
+        AnalysisReport(headline: "Headline", verdict: verdict, lead: "Lead", cards: [], summary: "Summary")
+    }
 
     /// A qualified series: 10 in weeks 1 and 2, `recent` in the last seven
     /// days.
