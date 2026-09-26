@@ -258,6 +258,13 @@ enum AnalysisPromptBuilder {
     /// including their numbers, which `AnalysisReportValidator` refers to by
     /// number.
     ///
+    /// Rule 8 was added in #245, next to rule 7 which it extends: the effort
+    /// values of US-18 come from scales with no documented conversion, and
+    /// the rule forbids the model to add, average or compare them across
+    /// labels (ADR-015 §1/§2). The Week structure rule moved from 8 to 9;
+    /// rules 1 to 7, which the validator and the schema refer to, kept their
+    /// numbers.
+    ///
     /// **The reasoning requirement stays per kind**, in one closing sentence
     /// rather than five repetitions. A first attempt front-loaded it as "each
     /// card with its reasoning in one sentence", which the schema contradicts
@@ -341,7 +348,16 @@ enum AnalysisPromptBuilder {
     given neither their maximum heart rate nor the model any zone scheme \
     rests on. Say "easier" or "harder" where you would have named a zone.
 
-    8. The Week structure section is about both domains at once: strength and \
+    8. Effort values are named by their source: "RPE" is the person's own \
+    rating of their sets; "Strava Relative Effort", "Polar Cardio Load", \
+    "Polar Muscle Load", "Polar Perceived Load" and "Polar RPE" are each that \
+    provider's own scale. Values under different names are not comparable: \
+    never add, average or compare them against each other, and never convert \
+    or combine them into one effort figure. Read each only as a trend within \
+    its own name. A session without an effort value recorded none: \
+    unrecorded, not easy.
+
+    9. The Week structure section is about both domains at once: strength and \
     endurance draw on the same recovery, so training days, days carrying \
     both, and consecutive training days are judged over them together rather \
     than per domain. Its "Last 7 days" line counts a day on which any \
