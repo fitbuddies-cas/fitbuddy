@@ -158,6 +158,61 @@ final class PolarExerciseDTOTests: XCTestCase {
         }
     }
 
+    /// A pro value of an unexpected type drops that value only: the session
+    /// still decodes, and so does the rest of the list the client decodes as
+    /// `[PolarExerciseDTO]`.
+    func testAMistypedTrainingLoadProValueIsNilAndDoesNotFailTheList() throws {
+        let json = Data(#"""
+        [
+          {
+            "id": "a",
+            "start_time": "2020-01-01T12:00:00",
+            "training_load_pro": {
+              "cardio-load": "high",
+              "muscle-load": 62.5,
+              "perceived-load": true,
+              "user-rpe": 7
+            }
+          },
+          {
+            "id": "b",
+            "start_time": "2020-01-02T12:00:00",
+            "training_load_pro": { "cardio-load": 80.0 }
+          }
+        ]
+        """#.utf8)
+
+        let dtos = try JSONDecoder().decode([PolarExerciseDTO].self, from: json)
+
+        XCTAssertEqual(dtos.map(\.id), ["a", "b"])
+        XCTAssertNil(dtos[0].cardioLoad)
+        XCTAssertEqual(dtos[0].muscleLoad, 62.5)
+        XCTAssertNil(dtos[0].perceivedLoad)
+        XCTAssertNil(dtos[0].userRPE)
+        XCTAssertEqual(dtos[1].cardioLoad, 80.0)
+    }
+
+    /// A `training_load_pro` that is not an object leaves every pro value
+    /// `nil` rather than failing the session.
+    func testANonObjectTrainingLoadProLeavesEveryProValueNil() throws {
+        for block in [#""n/a""#, "42", "[1, 2]", "null"] {
+            let json = Data(#"""
+            {
+              "id": "x",
+              "start_time": "2020-01-01T12:00:00",
+              "training_load_pro": \#(block)
+            }
+            """#.utf8)
+
+            let dto = try JSONDecoder().decode(PolarExerciseDTO.self, from: json)
+
+            XCTAssertNil(dto.cardioLoad, block)
+            XCTAssertNil(dto.muscleLoad, block)
+            XCTAssertNil(dto.perceivedLoad, block)
+            XCTAssertNil(dto.userRPE, block)
+        }
+    }
+
     func testDropsAnExerciseThatHasNoParseableStartTime() throws {
         let json = Data(#"{ "id": "x", "start_time": "not-a-date" }"#.utf8)
 

@@ -39,7 +39,9 @@ enum EffortPromptFigures {
     /// the prompt writes it.
     static func values(of summary: WorkoutSummary) -> [(label: String, text: String)] {
         var values: [(label: String, text: String)] = []
-        if let rpe = summary.averageRPE, rpe.isFinite {
+        // Zero is "not measured", as for the provider scores below and as in
+        // `EffortScale.value` — so prompt, AC6 hint and rule read it alike.
+        if let rpe = summary.averageRPE, rpe.isFinite, rpe > 0 {
             values.append((hevyRPELabel, PlainWeightFormatter.string(rpe, decimals: 1)))
         }
         guard let cardio = summary.cardio else { return values }
