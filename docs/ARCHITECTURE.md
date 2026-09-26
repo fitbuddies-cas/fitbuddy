@@ -2,7 +2,7 @@
 
 > *Getrennt geführt: Ziele, Personas, Risiken → [README.md](../README.md) · User Stories, NFRs → [REQUIREMENTS.md](REQUIREMENTS.md) · Architekturentscheide (Detail) → [adr/](adr/)*
 >
-> **Dokumentationsstand:** Stand nach US-16 «Reproduzierbare Empfehlung bei gleicher Datenlage» (Issue #224) auf Basis von US-15 (#171) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, Verdict aus der App statt vom Modell, SwiftData-Schema V7, ADR-001 bis ADR-014.
+> **Dokumentationsstand:** Stand nach US-16 «Reproduzierbare Empfehlung bei gleicher Datenlage» (Issue #224) auf Basis von US-15 (#171) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, Verdict aus der App statt vom Modell, SwiftData-Schema V7, ADR-001 bis ADR-015.
 
 ---
 
@@ -457,6 +457,7 @@ Alle asynchronen Zugriffe folgen drei fixen Ausführungskontexten — gilt schic
 | [ADR-012](adr/ADR-012-activitykind-und-cardiometrics.md) | `ActivityKind` und `CardioMetrics` — normalisierte Sportart und ein Kennzahlen-Block für alle Quellen, persistiert in Schema V5 | Accepted |
 | [ADR-013](adr/ADR-013-progressionsband-je-muskelgruppe.md) | Progressionsband je Muskelgruppe — erlaubte Spanne statt Zielwert, konditional auf 2-for-2 (US-17) | Accepted |
 | [ADR-014](adr/ADR-014-verdict-regel-der-app.md) | Verdict-Regel der App — Reihenfolge, Schwellen und die vierte Klasse «zu dünne Datenbasis» (US-16) | Accepted |
+| [ADR-015](adr/ADR-015-anstrengungsskalen-getrennt.md) | Anstrengungsskalen getrennt halten — Verrechnungsverbot, Quell-Labels im Prompt, Strava `perceived_exertion` und Polars Tages-Cardio-Load nicht in v0 (US-18) | Accepted |
 
 ---
 
