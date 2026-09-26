@@ -151,5 +151,8 @@ enum AccessibilityID {
         static let fullAnalysisToggle = "analysis.fullAnalysisToggle"
         /// The report's summary, present only while the disclosure is open.
         static let fullAnalysis = "analysis.fullAnalysis"
+        /// The one-time hint that effort values make the analysis more precise
+        /// (#245, US-18 AC6).
+        static let effortHint = "analysis.effortHint"
     }
 }

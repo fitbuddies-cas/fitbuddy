@@ -21,7 +21,7 @@ import Foundation
 ///
 /// | #187's step | Here |
 /// |---|---|
-/// | 1. cardio session list → weekly aggregate | already so: `EndurancePromptSection` lists no session, only window totals, per-sport rows and per-week rows (#183) |
+/// | 1. cardio session list → weekly aggregate | already so: `EndurancePromptSection` lists no session, only window totals, per-sport rows and per-week rows (#183); the effort lines of #245 are one line of dated values per scale, cut at rung 4 |
 /// | 2. strength session list capped at 20 | rung 1 |
 /// | 3. Exercises section capped at 6 | rung 2 |
 /// | 4. comparison window headline figures only | already so: `comparisonSection` in both domains is four lines (#183) |
@@ -32,6 +32,12 @@ import Foundation
 /// are capped. It keeps the most recent weeks **that recorded training**, not
 /// the most recent weeks — on a widened window those are two very different
 /// sets, and `weekRows(in:isEmpty:)` explains why.
+///
+/// Rungs 4 and 5 came with the effort values of #245. Effort is the last
+/// thing the prompt gives up, so before it is cut at all, rung 4 halves the
+/// strength session list once more — the list whose user-written titles are
+/// what makes a prompt outgrow the budget. Only rung 5, the last, caps each
+/// endurance effort line at its 20 most recent values.
 ///
 /// ## Why the exercise cap travels with the prompt
 ///
@@ -56,6 +62,21 @@ struct AnalysisPromptDetail: Equatable, Sendable {
     /// Counted in weeks **that recorded a session**, not in calendar weeks
     /// from the reference day — see `weekRows(in:isEmpty:)`.
     let listedWeeks: Int?
+
+    /// How many values each endurance effort line renders, newest first, or
+    /// `nil` for every value the window recorded on that scale (#245).
+    ///
+    /// Effort is the point of US-18, not garnish, so it sits on the highest
+    /// rung: every other list is cut before it is. Strength effort travels in
+    /// the strength session rows instead and goes with them.
+    let listedEffortValues: Int?
+
+    init(listedSessions: Int, listedExercises: Int, listedWeeks: Int?, listedEffortValues: Int? = nil) {
+        self.listedSessions = listedSessions
+        self.listedExercises = listedExercises
+        self.listedWeeks = listedWeeks
+        self.listedEffortValues = listedEffortValues
+    }
 
     /// The prompt as #173 to #186 built it: nothing is given up.
     static let full = AnalysisPromptDetail(
@@ -89,6 +110,17 @@ struct AnalysisPromptDetail: Equatable, Sendable {
             listedSessions: min(20, full.listedSessions),
             listedExercises: min(6, full.listedExercises),
             listedWeeks: 4
+        ),
+        AnalysisPromptDetail(
+            listedSessions: min(10, full.listedSessions),
+            listedExercises: min(6, full.listedExercises),
+            listedWeeks: 4
+        ),
+        AnalysisPromptDetail(
+            listedSessions: min(10, full.listedSessions),
+            listedExercises: min(6, full.listedExercises),
+            listedWeeks: 4,
+            listedEffortValues: 20
         ),
     ]
 

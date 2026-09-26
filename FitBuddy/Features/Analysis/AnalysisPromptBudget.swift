@@ -33,11 +33,13 @@ import Foundation
 /// 3. a prompt is not free and detail past a point stops being signal. The
 ///    largest prompt this app can build — a full 13-week cache of both
 ///    domains, four strength and four endurance sessions a week, 40 exercises
-///    — measures about 16 200 characters, i.e. roughly 4 050 estimated tokens
-///    (`AnalysisPromptBudgetTests.testTheWorstCaseLeavesHeadroom`).
+///    — measured about 16 200 characters, i.e. roughly 4 050 estimated tokens
+///    (`AnalysisPromptBudgetTests.testTheWorstCaseLeavesHeadroom`). With the
+///    effort values of #245 on every session and rule 8 it is about 5 350.
 ///
 /// `maxPromptTokens` is a sixteenth of the smallest window, 8 000 tokens:
-/// roughly twice the largest prompt the app can build today, which leaves the
+/// roughly one and a half times the largest prompt the app can build today
+/// (twice, before #245 added effort), which leaves the
 /// degradation ladder as a guard against a cache full of unusually long
 /// user-written session and exercise titles rather than as something an
 /// ordinary analysis runs into. **A provider with a smaller window than

@@ -11,7 +11,7 @@ import Foundation
 /// Since #184 the figures span **every** source and both domains: a week of
 /// four bench sessions and three runs is seven days of training, not four.
 /// Strength and endurance draw on the same recovery, which is what US-15 AC3
-/// states and what the system prompt's rule 8 already tells the model.
+/// states and what the system prompt's rule 9 already tells the model.
 ///
 /// The individual figures stay data-dependent (US-15 AC7): a mean nobody
 /// recorded is `nil` and its cell is left out, never shown as `0` or `"—"`.
