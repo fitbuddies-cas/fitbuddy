@@ -13,7 +13,8 @@ actor AnalysisResultStore {
     /// `text` is stored whether or not a `report` comes with it: it is what
     /// renders when the report cannot be read back (US-14 AC6, #176).
     /// `provider` is the one that wrote the answer — the last of the fallback
-    /// chain.
+    /// chain. `confirmation` is what the user agreed to before the run (#268);
+    /// only the mock seeder stores a row without one.
     ///
     /// Insert and trim share one `save()`, so a failing write leaves the
     /// history exactly as it was rather than half-pruned.
@@ -23,7 +24,8 @@ actor AnalysisResultStore {
         report: ValidatedAnalysisReport? = nil,
         provider: LLMProvider? = nil,
         generatedAt: Date,
-        context: AnalysisContext
+        context: AnalysisContext,
+        confirmation: AnalysisSendConfirmation? = nil
     ) throws -> UUID {
         let encoded = AnalysisReportFormat.encode(report)
         let result = AnalysisResult(
@@ -37,7 +39,8 @@ actor AnalysisResultStore {
             experience: context.profile.experience?.rawValue,
             reportJSON: encoded.json,
             reportVersion: encoded.version,
-            providerRawValue: provider?.rawValue
+            providerRawValue: provider?.rawValue,
+            sendConfirmationJSON: AnalysisSendConfirmationFormat.encode(confirmation)
         )
         modelContext.insert(result)
         try trimToLimit()
@@ -121,7 +124,8 @@ actor AnalysisResultStore {
             generatedAt: result.generatedAt,
             context: context(of: result),
             report: AnalysisReportFormat.decode(result.reportJSON, version: result.reportVersion),
-            provider: result.provider
+            provider: result.provider,
+            confirmation: AnalysisSendConfirmationFormat.decode(result.sendConfirmationJSON)
         )
     }
 

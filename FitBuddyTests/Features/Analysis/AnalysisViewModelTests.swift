@@ -100,7 +100,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("Your bench volume is rising.")
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.state, .result(.prose("Your bench volume is rising.")))
         XCTAssertFalse(sut.isTakingLong)
@@ -148,7 +148,7 @@ final class AnalysisViewModelTests: XCTestCase {
         // governs the app code.
         let subscription = sut.$state.sink { published.append($0) }
 
-        await sut.start()
+        await sut.startConfirmed()
         subscription.cancel()
 
         XCTAssertEqual(published.count, 3, "published \(published)")
@@ -166,7 +166,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setReport(AnalysisReportFactory.progress)
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.state, .result(.prose(AnalysisReportFactory.progress.summary)))
         XCTAssertFalse(sut.isTakingLong)
@@ -190,7 +190,7 @@ final class AnalysisViewModelTests: XCTestCase {
         ))
         let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache())
 
-        await sut.start()
+        await sut.startConfirmed()
 
         let expected = ValidatedAnalysisReport(
             headline: AnalysisReportValidator.holdHeadline,
@@ -226,7 +226,7 @@ final class AnalysisViewModelTests: XCTestCase {
         ))
         let sut = makeSUT(exerciseCache: exercises)
 
-        await sut.start()
+        await sut.startConfirmed()
 
         let report = try XCTUnwrap(sut.state.outcome?.report)
         XCTAssertEqual(report.cards, [
@@ -252,7 +252,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setReport(Self.noteOnlyReport)
         let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache(), detailCache: details)
 
-        await sut.start()
+        await sut.startConfirmed()
 
         let report = try XCTUnwrap(sut.state.outcome?.report)
         XCTAssertEqual(report.verdict, .recover)
@@ -281,7 +281,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setReport(Self.noteOnlyReport)
         let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache(), detailCache: details)
 
-        await sut.start()
+        await sut.startConfirmed()
 
         let report = try XCTUnwrap(sut.state.outcome?.report)
         XCTAssertEqual(report.verdict, .recover)
@@ -301,7 +301,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setReport(Self.noteOnlyReport)
         let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache(), detailCache: details)
 
-        await sut.start()
+        await sut.startConfirmed()
 
         let report = try XCTUnwrap(sut.state.outcome?.report)
         XCTAssertEqual(report.cards.first, .recovery(
@@ -321,7 +321,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setReport(Self.noteOnlyReport)
         let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache(), detailCache: details)
 
-        await sut.start()
+        await sut.startConfirmed()
 
         let report = try XCTUnwrap(sut.state.outcome?.report)
         XCTAssertEqual(report.cards.first, .recovery(
@@ -341,7 +341,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setReport(Self.noteOnlyReport)
         let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache(), detailCache: details)
 
-        let run = Task { await sut.start() }
+        let run = Task { await sut.startConfirmed() }
         await details.waitForCall()
         let calls = await streamer.callCount
         XCTAssertEqual(calls, 0)
@@ -363,7 +363,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setReport(Self.noteOnlyReport)
         let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache(), detailCache: details)
 
-        let run = Task { await sut.start() }
+        let run = Task { await sut.startConfirmed() }
         await details.waitForCall()
         sut.cancel()
         details.release()
@@ -383,7 +383,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("Give legs a second slot.", from: .mistral)
         let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache())
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.state, .result(.prose("Give legs a second slot.")))
         let latest = try await results.latest()
@@ -398,7 +398,7 @@ final class AnalysisViewModelTests: XCTestCase {
     func testTheValidatedReportIsStoredAndRestored() async throws {
         await streamer.setReport(AnalysisReportFactory.progress, from: .gemini)
         let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache())
-        await sut.start()
+        await sut.startConfirmed()
         let shown = try XCTUnwrap(sut.state.outcome?.report)
 
         let latest = try await results.latest()
@@ -451,7 +451,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("ok")
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         let system = await streamer.systemPrompt
         let user = await streamer.userPrompt
@@ -478,7 +478,7 @@ final class AnalysisViewModelTests: XCTestCase {
         exercises.progressions = [bench.id: Self.progression(bench, weightKg: 60, reps: 5, daysAgo: 2)]
         let sut = makeSUT(exerciseCache: exercises)
 
-        await sut.start()
+        await sut.startConfirmed()
 
         let user = await streamer.userPrompt
         XCTAssertEqual(user?.contains("## Exercises (last 4 weeks)"), true)
@@ -494,7 +494,7 @@ final class AnalysisViewModelTests: XCTestCase {
         exercises.exercises = [bench]
         let sut = makeSUT(exerciseCache: exercises)
 
-        await sut.start()
+        await sut.startConfirmed()
 
         let start = AnalysisWindow.default.start(endingAt: Self.reference, calendar: Self.calendar)
         XCTAssertEqual(exercises.requestedSummariesSince, start)
@@ -508,7 +508,7 @@ final class AnalysisViewModelTests: XCTestCase {
         exercises.exercises = (1...14).map { Self.exercise("Lift \($0)", volume: Double($0) * 100) }
         let sut = makeSUT(exerciseCache: exercises)
 
-        await sut.start()
+        await sut.startConfirmed()
 
         let expected = AnalysisPromptBuilder.promptedExercises(from: exercises.exercises).map(\.id)
         XCTAssertEqual(exercises.requestedProgressionIDs, expected)
@@ -523,7 +523,7 @@ final class AnalysisViewModelTests: XCTestCase {
         exercises.error = StubAnalysisExerciseCache.Failure()
         let sut = makeSUT(exerciseCache: exercises)
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.state, .error(.cacheUnavailable))
         XCTAssertNil(sut.context)
@@ -537,7 +537,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("ok")
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         let user = await streamer.userPrompt
         XCTAssertEqual(user?.contains("No exercise-level data is available"), true)
@@ -600,7 +600,7 @@ final class AnalysisViewModelTests: XCTestCase {
         let profile = TrainingProfile(goal: .buildMuscle, experience: .overThreeYears)
         await TrainingProfileStore(defaults: defaults).save(profile)
 
-        await sut.start()
+        await sut.startConfirmed()
 
         let user = await streamer.userPrompt
         XCTAssertEqual(user?.contains("## Profile"), true)
@@ -612,7 +612,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("ok")
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         let user = await streamer.userPrompt
         XCTAssertEqual(user?.contains("Profile"), false)
@@ -635,7 +635,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("ok")
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.context?.window, .default)
         XCTAssertEqual(sut.context?.sessionCount, 2)
@@ -647,7 +647,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("ok")
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.context?.sessionCounts, [.hevy: 2])
         XCTAssertEqual(sut.context?.basisDescription, "2 Hevy sessions")
@@ -669,7 +669,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("ok")
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.context?.sessionCounts, [.hevy: 2, .strava: 2, .polar: 1])
         XCTAssertEqual(sut.context?.sessionCount, 5)
@@ -689,7 +689,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("ok")
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.context?.window, .default)
         XCTAssertEqual(sut.context?.sessionCounts, [.hevy: 1, .strava: 1])
@@ -705,7 +705,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("ok")
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.context?.basisDescription, "3 Hevy · 3 Strava sessions")
         XCTAssertEqual(sut.context?.domainCounts, [.strength: 6])
@@ -726,7 +726,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("ok")
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.context?.basisDescription, "14 Hevy · 1 Strava sessions")
         XCTAssertEqual(sut.context?.analysedDomains, [.strength, .endurance])
@@ -818,7 +818,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await sut.prepareProfileSelection()
         await sut.select(.strength)
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.context?.basisDescription, "14 Hevy · 1 Strava sessions")
         XCTAssertEqual(sut.context?.domainCounts, [.strength: 14, .endurance: 1])
@@ -837,7 +837,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await sut.prepareProfileSelection()
         await sut.select(.overallLoad)
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(
             sut.context?.thinDataWarning,
@@ -872,7 +872,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("ok")
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.context?.basisDescription, "13 Hevy sessions")
         XCTAssertEqual(sut.context?.analysedCounts, [.strength: 12, .endurance: 1])
@@ -894,7 +894,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await sut.prepareProfileSelection()
         await sut.select(.strength)
 
-        await sut.start()
+        await sut.startConfirmed()
 
         let prompt = await streamer.userPrompt ?? ""
         XCTAssertFalse(prompt.contains("## Endurance"))
@@ -910,7 +910,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await sut.prepareProfileSelection()
         await sut.select(.endurance)
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.context?.analysisProfile, .endurance)
     }
@@ -924,7 +924,7 @@ final class AnalysisViewModelTests: XCTestCase {
         let sut = makeSUT()
         await sut.prepareProfileSelection()
         await sut.select(.strength)
-        await sut.start()
+        await sut.startConfirmed()
 
         let restored = makeSUT()
         await restored.restore()
@@ -997,7 +997,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("ok")
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.context?.window, .default)
         XCTAssertEqual(sut.context?.basisDescription, "12 Strava sessions")
@@ -1015,7 +1015,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("ok")
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.context?.window.weeks, 8)
         XCTAssertEqual(
@@ -1036,7 +1036,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("ok")
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.context?.sessionCounts, [.hevy: 1, .strava: 2])
         XCTAssertEqual(sut.context?.domainCounts, [.strength: 2, .endurance: 1])
@@ -1050,7 +1050,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("ok")
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertNotEqual(sut.state, .error(.noTrainingData))
         XCTAssertEqual(sut.context?.analysedCounts, [.endurance: 1])
@@ -1066,7 +1066,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("ok")
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.context?.window.weeks, 8)
         XCTAssertEqual(sut.context?.sessionCount, 2)
@@ -1080,13 +1080,13 @@ final class AnalysisViewModelTests: XCTestCase {
         let sut = makeSUT(clock: clock)
         XCTAssertNil(sut.context)
 
-        await sut.start()
+        await sut.startConfirmed()
         XCTAssertNotNil(sut.context)
 
         // Later, on a cache that no rung can serve.
         clock.advance(by: 7 * 3_600)
         cache.summaries = []
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.state, .error(.noTrainingData))
         XCTAssertNil(sut.context)
@@ -1100,7 +1100,7 @@ final class AnalysisViewModelTests: XCTestCase {
         let clock = TestClock(Self.reference)
         let sut = makeSUT(clock: clock)
 
-        await sut.start()
+        await sut.startConfirmed()
         XCTAssertNotNil(sut.context)
 
         // Later, second run held inside the cache read — after
@@ -1109,7 +1109,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("second")
         cache.gatesFirstCall = true
         cache.gatedCall = 2
-        let run = Task { await sut.start() }
+        let run = Task { await sut.startConfirmed() }
         await cache.waitForFirstCall()
 
         XCTAssertEqual(sut.state, .running)
@@ -1127,13 +1127,130 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("done")
         let sut = makeSUT()
 
-        let run = Task { await sut.start() }
+        let run = Task { await sut.startConfirmed() }
         await streamer.waitForCall()
         XCTAssertEqual(sut.state, .running)
 
         await streamer.release()
         await run.value
         XCTAssertEqual(sut.state, .result(.prose("done")))
+    }
+
+    // MARK: - Send confirmation (US-3 AC12, #268)
+
+    /// "Analyze with AI" opens the sheet and sends nothing: the screen stays
+    /// on the intro until the user confirms.
+    func testRequestStartOpensTheSheetWithoutStartingARun() async {
+        await streamer.setText("never sent")
+        let sut = makeSUT()
+
+        sut.requestStart()
+
+        XCTAssertNotNil(sut.sendConfirmation)
+        XCTAssertEqual(sut.state, .idle)
+        let calls = await streamer.callCount
+        XCTAssertEqual(calls, 0)
+    }
+
+    /// The checkbox is empty on every opening — there is no "don't ask
+    /// again", and a second sheet is a new instance, not the ticked one.
+    func testTheSheetOpensWithAnEmptyCheckboxEveryTime() async throws {
+        let sut = makeSUT()
+
+        sut.requestStart()
+        let first = try XCTUnwrap(sut.sendConfirmation)
+        first.hasConfirmedCheckbox = true
+        sut.cancelSendConfirmation()
+        sut.requestStart()
+        let second = try XCTUnwrap(sut.sendConfirmation)
+
+        XCTAssertFalse(second === first)
+        XCTAssertFalse(second.hasConfirmedCheckbox)
+    }
+
+    /// Cancel closes the sheet and leaves the intro exactly as it was.
+    func testCancellingTheSheetSendsNothing() async {
+        await streamer.setText("never sent")
+        let sut = makeSUT()
+
+        sut.requestStart()
+        sut.cancelSendConfirmation()
+
+        XCTAssertNil(sut.sendConfirmation)
+        XCTAssertEqual(sut.state, .idle)
+        XCTAssertTrue(sut.canStartAnalysis)
+        let calls = await streamer.callCount
+        XCTAssertEqual(calls, 0)
+    }
+
+    /// "Send & analyze" without the box ticked does nothing — the button is
+    /// disabled, and the view model enforces it independently.
+    func testConfirmingWithoutTheCheckboxSendsNothing() async {
+        await streamer.setText("never sent")
+        let sut = makeSUT()
+
+        sut.requestStart()
+        await sut.confirmSend()
+
+        XCTAssertNotNil(sut.sendConfirmation)
+        XCTAssertEqual(sut.state, .idle)
+        let calls = await streamer.callCount
+        XCTAssertEqual(calls, 0)
+    }
+
+    /// The ticked box starts the run and closes the sheet.
+    func testConfirmingWithTheCheckboxStartsTheRun() async {
+        await streamer.setText("Your bench volume is rising.")
+        let sut = makeSUT()
+
+        sut.requestStart()
+        sut.sendConfirmation?.hasConfirmedCheckbox = true
+        await sut.confirmSend()
+
+        XCTAssertNil(sut.sendConfirmation)
+        XCTAssertEqual(sut.state, .result(.prose("Your bench volume is rising.")))
+        let calls = await streamer.callCount
+        XCTAssertEqual(calls, 1)
+    }
+
+    /// A second tap while the sheet is open, or while a run is in flight,
+    /// opens no second sheet.
+    func testTheSheetIsNotOpenedTwice() async throws {
+        await streamer.gateCall()
+        await streamer.setText("done")
+        let sut = makeSUT()
+
+        sut.requestStart()
+        let sheet = try XCTUnwrap(sut.sendConfirmation)
+        sut.requestStart()
+        XCTAssertTrue(sut.sendConfirmation === sheet)
+
+        sheet.hasConfirmedCheckbox = true
+        let run = Task { await sut.confirmSend() }
+        await streamer.waitForCall()
+        sut.requestStart()
+        XCTAssertNil(sut.sendConfirmation, "No sheet over a running analysis")
+
+        await streamer.release()
+        await run.value
+    }
+
+    /// The proof is stored with the result: when, which consent, which
+    /// providers — read back from the row the run wrote.
+    func testTheConfirmationIsPersistedWithTheResult() async throws {
+        await streamer.setText("Your bench volume is rising.")
+        let clock = TestClock(Self.reference)
+        let sut = makeSUT(clock: clock)
+
+        sut.requestStart()
+        sut.sendConfirmation?.hasConfirmedCheckbox = true
+        await sut.confirmSend()
+
+        let storedRead = try await results.latest()
+        let stored = try XCTUnwrap(storedRead)
+        let confirmation = try XCTUnwrap(stored.confirmation)
+        XCTAssertEqual(confirmation.confirmedAt, Self.reference)
+        XCTAssertEqual(confirmation.consentVersion, ConsentViewModel.currentVersion)
     }
 
     // MARK: - Guards
@@ -1145,7 +1262,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("Back after a break.")
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.state, .result(.prose("Back after a break.")))
         XCTAssertEqual(sut.context?.window.weeks, 8)
@@ -1158,7 +1275,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("ok")
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.state, .result(.prose("ok")))
         XCTAssertEqual(sut.context?.window.weeks, 13)
@@ -1170,7 +1287,7 @@ final class AnalysisViewModelTests: XCTestCase {
         cache.summaries = []
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.state, .error(.noTrainingData))
         let calls = await streamer.callCount
@@ -1184,7 +1301,7 @@ final class AnalysisViewModelTests: XCTestCase {
         cache.summaries = [Self.workout(daysAgo: 120)]
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.state, .error(.noTrainingData))
         let calls = await streamer.callCount
@@ -1199,14 +1316,14 @@ final class AnalysisViewModelTests: XCTestCase {
         let clock = TestClock(Self.reference)
         let sut = makeSUT(clock: clock)
 
-        await sut.start()
+        await sut.startConfirmed()
         XCTAssertEqual(sut.context?.window.weeks, 8)
 
         // Later, with recent training in the cache this time.
         clock.advance(by: 7 * 3_600)
         cache.summaries = [Self.workout(daysAgo: 2)]
         await streamer.setText("second")
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.context?.window, .default)
     }
@@ -1215,7 +1332,7 @@ final class AnalysisViewModelTests: XCTestCase {
         cache.error = StubWorkoutCache.Failure()
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.state, .error(.cacheUnavailable))
         let calls = await streamer.callCount
@@ -1227,13 +1344,13 @@ final class AnalysisViewModelTests: XCTestCase {
     func testANewRunStartsRightAfterAFinishedOne() async {
         await streamer.setText("first")
         let sut = makeSUT()
-        await sut.start()
+        await sut.startConfirmed()
         XCTAssertEqual(sut.state, .result(.prose("first")))
         XCTAssertTrue(sut.canStartAnalysis)
 
         await streamer.setText("second")
         sut.reset()
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.state, .result(.prose("second")))
         let calls = await streamer.callCount
@@ -1244,12 +1361,12 @@ final class AnalysisViewModelTests: XCTestCase {
     func testARetryAfterAFailureReachesTheProvider() async {
         await streamer.setStartError(InferenceServiceError.networkUnavailable)
         let sut = makeSUT()
-        await sut.start()
+        await sut.startConfirmed()
         XCTAssertEqual(sut.state, .error(.offline(nil)))
 
         await streamer.setStartError(nil)
         await streamer.setText("done")
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.state, .result(.prose("done")))
         let calls = await streamer.callCount
@@ -1262,10 +1379,10 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("done")
         let sut = makeSUT()
 
-        let run = Task { await sut.start() }
+        let run = Task { await sut.startConfirmed() }
         await streamer.waitForCall()
         XCTAssertFalse(sut.canStartAnalysis)
-        await sut.start()
+        await sut.startConfirmed()
 
         await streamer.release()
         await run.value
@@ -1279,8 +1396,8 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("done")
         let sut = makeSUT()
 
-        async let first: Void = sut.start()
-        async let second: Void = sut.start()
+        async let first: Void = sut.startConfirmed()
+        async let second: Void = sut.startConfirmed()
         _ = await (first, second)
 
         let calls = await streamer.callCount
@@ -1294,7 +1411,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("never rendered")
         let sut = makeSUT()
 
-        let run = Task { await sut.start() }
+        let run = Task { await sut.startConfirmed() }
         await Task.yield()
         sut.cancel()
         await run.value
@@ -1310,7 +1427,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setStartError(InferenceServiceError.missingAPIKey)
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.state, .error(.missingAPIKey))
     }
@@ -1321,7 +1438,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("Recommendation", from: .gemini)
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.attribution?.provider, .gemini)
         XCTAssertEqual(sut.attribution?.attempted, [.gemini])
@@ -1336,7 +1453,7 @@ final class AnalysisViewModelTests: XCTestCase {
         ])
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.attribution?.attempted, [.claude, .gemini])
         XCTAssertEqual(sut.attribution?.didFallBack, true)
@@ -1353,7 +1470,7 @@ final class AnalysisViewModelTests: XCTestCase {
         ])
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         let latest = try await results.latest()
         XCTAssertEqual(latest?.text, "Recommendation")
@@ -1371,7 +1488,7 @@ final class AnalysisViewModelTests: XCTestCase {
         ])
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.state, .result(.prose("A complete Gemini answer.")))
     }
@@ -1384,7 +1501,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setStreamError(InferenceServiceError.serviceUnavailable)
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.state, .error(.serviceUnavailable(.mistral)))
         XCTAssertEqual(sut.attribution?.attempted, [.claude, .mistral])
@@ -1397,7 +1514,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setStreamError(InferenceServiceError.unauthorized)
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.state, .error(.unauthorized(.gemini)))
     }
@@ -1408,7 +1525,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setStartError(InferenceServiceError.missingAPIKey)
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertNil(sut.attribution)
         XCTAssertEqual(sut.state, .error(.missingAPIKey))
@@ -1419,11 +1536,11 @@ final class AnalysisViewModelTests: XCTestCase {
     func testANewRunDoesNotInheritThePreviousRunsAttribution() async {
         await streamer.setEvents([.attempting(.claude), .attempting(.gemini), .text("Recommendation")])
         let sut = makeSUT()
-        await sut.start()
+        await sut.startConfirmed()
         XCTAssertEqual(sut.attribution?.attempted, [.claude, .gemini])
 
         await streamer.setEvents([.attempting(.mistral), .text("Another")])
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.attribution?.attempted, [.mistral])
     }
@@ -1431,7 +1548,7 @@ final class AnalysisViewModelTests: XCTestCase {
     func testResetClearsTheAttribution() async {
         await streamer.setText("Recommendation")
         let sut = makeSUT()
-        await sut.start()
+        await sut.startConfirmed()
         XCTAssertNotNil(sut.attribution)
 
         sut.reset()
@@ -1445,7 +1562,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setStreamError(InferenceServiceError.streamInterrupted(message: "overloaded"))
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.state, .error(.serviceUnavailable(.claude)))
     }
@@ -1454,7 +1571,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setEvents([.attempting(.claude)])
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertEqual(sut.state, .error(.unreadableResponse(.claude)))
     }
@@ -1464,7 +1581,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setStartError(InferenceServiceError.networkUnavailable)
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertFalse(sut.state.isRunning)
         XCTAssertTrue(sut.canStartAnalysis)
@@ -1477,7 +1594,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("never rendered")
         let sut = makeSUT()
 
-        let run = Task { await sut.start() }
+        let run = Task { await sut.startConfirmed() }
         await streamer.waitForCall()
         sut.cancel()
         XCTAssertEqual(sut.state, .idle)
@@ -1493,7 +1610,7 @@ final class AnalysisViewModelTests: XCTestCase {
     func testCancelWithoutARunningCallDoesNothing() async {
         await streamer.setText("done")
         let sut = makeSUT()
-        await sut.start()
+        await sut.startConfirmed()
 
         sut.cancel()
 
@@ -1503,7 +1620,7 @@ final class AnalysisViewModelTests: XCTestCase {
     func testResetClearsAFinishedRun() async {
         await streamer.setText("done")
         let sut = makeSUT()
-        await sut.start()
+        await sut.startConfirmed()
 
         sut.reset()
 
@@ -1516,7 +1633,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.gateCall()
         let sut = makeSUT()
 
-        let run = Task { await sut.start() }
+        let run = Task { await sut.startConfirmed() }
         await streamer.waitForCall()
         run.cancel()
         await streamer.release()
@@ -1532,7 +1649,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.gateCall()
         let sut = makeSUT(slowThreshold: 0.05)
 
-        let run = Task { await sut.start() }
+        let run = Task { await sut.startConfirmed() }
         await streamer.waitForCall()
         await waitUntil("the slow hint appears") { sut.isTakingLong }
 
@@ -1555,7 +1672,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.holdOpenAfterEvents()
         let sut = makeSUT(slowThreshold: 0.05)
 
-        let run = Task { await sut.start() }
+        let run = Task { await sut.startConfirmed() }
         await waitUntil("the slow hint returns for the provider that took over") { sut.isTakingLong }
 
         XCTAssertEqual(sut.state, .running)
@@ -1572,7 +1689,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.holdOpenAfterEvents()
         let sut = makeSUT(slowThreshold: 0.05)
 
-        let run = Task { await sut.start() }
+        let run = Task { await sut.startConfirmed() }
         await waitUntil("the slow hint appears for the first provider") { sut.isTakingLong }
 
         await streamer.resumeEvents()
@@ -1588,7 +1705,7 @@ final class AnalysisViewModelTests: XCTestCase {
         await streamer.setText("done")
         let sut = makeSUT(slowThreshold: 60)
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertFalse(sut.isTakingLong)
     }
@@ -1672,7 +1789,7 @@ extension AnalysisViewModelTests {
         await streamer.setText("Your bench volume is rising.")
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         let latest = try await results.latest()
         let stored = try XCTUnwrap(latest)
@@ -1694,7 +1811,7 @@ extension AnalysisViewModelTests {
         await streamer.setText("Back after a break.")
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         let stored = try await results.latest()
         XCTAssertEqual(stored?.context.window.weeks, 8)
@@ -1709,7 +1826,7 @@ extension AnalysisViewModelTests {
         await streamer.setText("never rendered")
         let sut = makeSUT()
 
-        let run = Task { await sut.start() }
+        let run = Task { await sut.startConfirmed() }
         await streamer.waitForCall()
         sut.cancel()
         await streamer.release()
@@ -1724,7 +1841,7 @@ extension AnalysisViewModelTests {
         await streamer.setStartError(.networkUnavailable)
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         let stored = try await results.latest()
         XCTAssertEqual(stored?.text, "Add 2.5 kg on bench next session.")
@@ -1737,7 +1854,7 @@ extension AnalysisViewModelTests {
         await streamer.setEvents([.attempting(.claude)])
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         let stored = try await results.latest()
         XCTAssertEqual(stored?.text, "Add 2.5 kg on bench next session.")
@@ -1824,7 +1941,7 @@ extension AnalysisViewModelTests {
         await streamer.setText("Fresh advice.")
         let sut = makeSUT()
 
-        await sut.start()
+        await sut.startConfirmed()
 
         XCTAssertTrue(sut.hasHistory)
     }
@@ -1886,7 +2003,7 @@ extension AnalysisViewModelTests {
         await streamer.setText("Fresh advice.")
         let sut = makeSUT()
 
-        let run = Task { await sut.start() }
+        let run = Task { await sut.startConfirmed() }
         await streamer.waitForCall()
         await sut.restore()
         XCTAssertEqual(sut.state, .running)
@@ -1919,7 +2036,7 @@ extension AnalysisViewModelTests {
         await sut.restore()
         sut.reset()
 
-        await sut.start()
+        await sut.startConfirmed()
         XCTAssertEqual(sut.state, .error(.missingAPIKey))
         await sut.dismissFailure()
 
@@ -1936,14 +2053,14 @@ extension AnalysisViewModelTests {
         await streamer.setText("done")
         let sut = makeSUT(resultStore: gate)
 
-        let run = Task { await sut.start() }
+        let run = Task { await sut.startConfirmed() }
         await streamer.waitForCall()
         await streamer.release()
 
         await gate.waitForSave()
         XCTAssertEqual(sut.state, .running, "The run must still read as in flight while it persists")
         XCTAssertFalse(sut.canStartAnalysis)
-        await sut.start()
+        await sut.startConfirmed()
         let callsDuringSave = await streamer.callCount
         XCTAssertEqual(callsDuringSave, 1, "A tap during the write must not start a second run")
 
@@ -1958,7 +2075,7 @@ extension AnalysisViewModelTests {
     func testDismissFailureWithoutAStoredRecommendationLeavesTheIntroScreen() async {
         await streamer.setStartError(InferenceServiceError.missingAPIKey)
         let sut = makeSUT()
-        await sut.start()
+        await sut.startConfirmed()
 
         await sut.dismissFailure()
 
@@ -1977,7 +2094,7 @@ extension AnalysisViewModelTests {
         // Both run concurrently, the way a tap on "Analyze" lands while the
         // view's restore task is still in flight.
         async let restored: Void = sut.restore()
-        async let run: Void = sut.start()
+        async let run: Void = sut.startConfirmed()
         _ = await (restored, run)
 
         XCTAssertEqual(sut.state, .result(.prose("Fresh advice.")))

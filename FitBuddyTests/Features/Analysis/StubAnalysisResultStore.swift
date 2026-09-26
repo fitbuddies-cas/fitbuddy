@@ -31,7 +31,8 @@ actor StubAnalysisResultStore: AnalysisResultStoring {
         report: ValidatedAnalysisReport?,
         provider: LLMProvider?,
         generatedAt: Date,
-        context: AnalysisContext
+        context: AnalysisContext,
+        confirmation: AnalysisSendConfirmation?
     ) throws -> UUID {
         let entry = AnalysisResultSnapshot(
             id: UUID(),
@@ -39,7 +40,8 @@ actor StubAnalysisResultStore: AnalysisResultStoring {
             generatedAt: generatedAt,
             context: context,
             report: report,
-            provider: provider
+            provider: provider,
+            confirmation: confirmation
         )
         entries.append(entry)
         entries.sort { $0.generatedAt > $1.generatedAt }

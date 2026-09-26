@@ -2,7 +2,7 @@
 
 > *Getrennt geführt: Ziele, Personas, Risiken → [README.md](../README.md) · User Stories, NFRs → [REQUIREMENTS.md](REQUIREMENTS.md) · Architekturentscheide (Detail) → [adr/](adr/)*
 >
-> **Dokumentationsstand:** Stand nach US-15 «Quellenübergreifende AI-Analyse» (Issue #171, Task-Kette #180–#188) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, SwiftData-Schema V6, ADR-001 bis ADR-013.
+> **Dokumentationsstand:** Stand nach US-15 «Quellenübergreifende AI-Analyse» (Issue #171, Task-Kette #180–#188) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, SwiftData-Schema V7, ADR-001 bis ADR-013.
 
 ---
 
@@ -208,7 +208,8 @@ Der SwiftData-Store ist versioniert (`VersionedSchema`, ADR-001). `FitBuddyMigra
 | V3 | `AnalysisResult.goal` · `.experience` | #192 |
 | V4 | `AnalysisResult.reportJSON` · `.providerRawValue` · `.reportVersion` | #176 |
 | V5 | `Workout.kindRawValue` + zehn flache Cardio-Spalten · `AnalysisResult.sessionCountsJSON` · `.analysisProfileRawValue` | #180 · #182 · #185 |
-| **V6** | `Workout.routineID` · `.routineUpdatedAt` · `ExerciseSet.targetReps` | #240 |
+| V6 | `Workout.routineID` · `.routineUpdatedAt` · `ExerciseSet.targetReps` | #240 |
+| **V7** | `AnalysisResult.sendConfirmationJSON` | #268 |
 
 **V5 (US-15)** persistiert, was [ADR-012](adr/ADR-012-activitykind-und-cardiometrics.md) normalisiert hat:
 
@@ -224,7 +225,14 @@ Alle neuen Spalten sind optional, V4 → V5 ist entsprechend leichtgewichtig: `n
 
 «Kein Ziel» ist ein modellierter Zustand, kein Fehler: frei geloggte Workouts, gelöschte Routinen und Sätze ohne Wiederholungsziel tragen `nil`, und die 2-for-2-Regel liest das als «nicht prüfbar», nie als «erfüllt». V5 → V6 ist leichtgewichtig; für jede bestehende Zeile ist `nil` die Wahrheit, der nächste Sync füllt die Spalten.
 
-> **V6 darf nur wachsen, bis es `develop` erreicht.** V5 war mit US-15 auf `develop` angekommen, also musste #240 eine neue Version aufmachen. Danach ist die nächste Änderung V7: Ein Store, der von einem anderen V6 geschrieben wurde, gilt als «unknown model version» und fällt still auf einen leeren In-Memory-Container zurück.
+**V7 (US-3 AC12, #268)** hält pro gespeicherter Empfehlung den Nachweis der Bestätigung, die der User vor der Übertragung gegeben hat:
+
+- `AnalysisResult.sendConfirmationJSON` ist ein JSON-Blob (`AnalysisSendConfirmationFormat`) mit Zeitstempel, `ConsentViewModel.currentVersion` und der Liste der im Sheet angezeigten Anbieter in Fallback-Reihenfolge. Ein Blob statt drei Spalten, weil die drei Werte nur zusammen etwas bedeuten — ein Zeitstempel ohne die Liste, die er bestätigt, ist kein Nachweis. Gespeichert in der Ergebniszeile statt in einer eigenen Tabelle: Der Nachweis gehört zu genau dieser Übertragung und verschwindet mit der Zeile (Swipe-Delete, History-Limit, Daten-Reset).
+- Der Sheet-Zustand liegt in `AnalysisViewModel` (`requestStart()` → `AnalysisSendConfirmationViewModel` → `confirmSend()`); `start(_:)` ist privat, sodass kein Pfad in der App — Intro-Button, «Try again», Deep-Link — die Übertragung ohne Bestätigung auslösen kann. Die Empfängerliste des Sheets und die Fallback-Kette des `InferenceService` laufen über dieselbe Funktion `LLMProvider.fallbackOrder(from:)`, damit der User nie eine andere Liste bestätigt, als der Lauf verwendet.
+
+V6 → V7 ist leichtgewichtig: `nil` ist für jede bestehende Zeile die Wahrheit — vor dieser Version gab es kein Sheet, und das History-Detail zeigt für solche Zeilen keine Bestätigungszeile, statt eine zu erfinden.
+
+> **V7 darf nur wachsen, bis es `develop` erreicht.** V6 war mit US-17 auf `develop` angekommen, also musste #268 eine neue Version aufmachen. Danach ist die nächste Änderung V8: Ein Store, der von einem anderen V7 geschrieben wurde, gilt als «unknown model version» und fällt still auf einen leeren In-Memory-Container zurück.
 
 ---
 

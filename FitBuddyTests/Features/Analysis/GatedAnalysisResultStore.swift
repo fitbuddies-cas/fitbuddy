@@ -36,7 +36,8 @@ actor GatedAnalysisResultStore: AnalysisResultStoring {
         report: ValidatedAnalysisReport?,
         provider: LLMProvider?,
         generatedAt: Date,
-        context: AnalysisContext
+        context: AnalysisContext,
+        confirmation: AnalysisSendConfirmation?
     ) async throws -> UUID {
         didEnter = true
         entered?.resume()
@@ -49,7 +50,8 @@ actor GatedAnalysisResultStore: AnalysisResultStoring {
             report: report,
             provider: provider,
             generatedAt: generatedAt,
-            context: context
+            context: context,
+            confirmation: confirmation
         )
     }
 

@@ -44,9 +44,15 @@ import SwiftData
 /// checkable rather than as met. The next sync replaces the window and fills
 /// the columns for real.
 ///
+/// V6 → V7 is lightweight as well (#268): `AnalysisResult` gains
+/// `sendConfirmationJSON`, optional. `nil` is the truth for an existing row:
+/// no build before this version asked the user to confirm a transfer, so no
+/// stored recommendation has a confirmation to show. The history detail then
+/// shows no confirmation line for it rather than inventing one.
+///
 /// A store from an older version runs the stages in turn; the migration tests
-/// write a V1, a V2, a V3, a V4 and a V5 store and open each under the current
-/// version.
+/// write a V1, a V2, a V3, a V4, a V5 and a V6 store and open each under the
+/// current version.
 enum FitBuddyMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [
@@ -56,11 +62,12 @@ enum FitBuddyMigrationPlan: SchemaMigrationPlan {
             FitBuddySchemaV4.self,
             FitBuddySchemaV5.self,
             FitBuddySchemaV6.self,
+            FitBuddySchemaV7.self,
         ]
     }
 
     static var stages: [MigrationStage] {
-        [migrateV1toV2, migrateV2toV3, migrateV3toV4, migrateV4toV5, migrateV5toV6]
+        [migrateV1toV2, migrateV2toV3, migrateV3toV4, migrateV4toV5, migrateV5toV6, migrateV6toV7]
     }
 
     private static let migrateV1toV2 = MigrationStage.lightweight(
@@ -86,5 +93,10 @@ enum FitBuddyMigrationPlan: SchemaMigrationPlan {
     private static let migrateV5toV6 = MigrationStage.lightweight(
         fromVersion: FitBuddySchemaV5.self,
         toVersion: FitBuddySchemaV6.self
+    )
+
+    private static let migrateV6toV7 = MigrationStage.lightweight(
+        fromVersion: FitBuddySchemaV6.self,
+        toVersion: FitBuddySchemaV7.self
     )
 }

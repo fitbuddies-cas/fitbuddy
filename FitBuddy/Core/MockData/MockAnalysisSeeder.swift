@@ -145,7 +145,11 @@ enum MockAnalysisSeeder {
                     container: container,
                     launchArguments: launchArguments,
                     now: reference
-                )
+                ),
+                // No confirmation: nothing was sent for a seeded row, and a
+                // made-up one would be shown as evidence in the history
+                // detail (#268).
+                confirmation: nil
             )
             logger.debug("Seeded a stored analysis")
         } catch {

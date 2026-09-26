@@ -11,6 +11,10 @@ import SwiftUI
 /// Switching tabs does not cancel a running stream: in a tab bar, tapping
 /// away is not leaving the screen, and the tokens are spent either way. The
 /// cancel button in the progress view is the only way to abort.
+///
+/// "Analyze with AI" and "Try again" open the confirmation sheet, never a run
+/// (US-3 AC12, #268): the view model owns the sheet's state, and the run
+/// starts only from the sheet's "Send & analyze".
 struct AnalysisView: View {
     /// Observed, not owned: the view model belongs to `MainTabView`, which
     /// keeps it alive across tab switches so a run survives them.
@@ -59,6 +63,25 @@ struct AnalysisView: View {
         // rather than in `DashboardView`, whose `reloadToken` path drops
         // exactly this state when the Hevy key changes (#91).
         .task { await viewModel.restore() }
+        // `item:` rather than `isPresented:`: the sheet's view model is the
+        // item, so SwiftUI builds the sheet's content once per opening and a
+        // swipe down reaches `cancelSendConfirmation()` like the button does.
+        .sheet(item: sendConfirmation) { sheet in
+            AnalysisSendConfirmationView(
+                viewModel: sheet,
+                onConfirm: { Task { await viewModel.confirmSend() } },
+                onCancel: { viewModel.cancelSendConfirmation() }
+            )
+        }
+    }
+
+    /// The view model's sheet state as a binding: setting it to `nil` — the
+    /// swipe down — is a cancel. Nothing else is ever set through it.
+    private var sendConfirmation: Binding<AnalysisSendConfirmationViewModel?> {
+        Binding(
+            get: { viewModel.sendConfirmation },
+            set: { if $0 == nil { viewModel.cancelSendConfirmation() } }
+        )
     }
 
     /// The way into the saved analyses — shown only once there is more than
@@ -83,7 +106,7 @@ struct AnalysisView: View {
                 options: viewModel.profileOptions,
                 selection: viewModel.selectedProfile,
                 onSelect: { profile in Task { await viewModel.select(profile) } },
-                onStart: start
+                onStart: { viewModel.requestStart() }
             )
             // On the intro's own appearance rather than the screen's: which
             // profiles are worth offering depends on what the cache holds, and
@@ -114,7 +137,8 @@ struct AnalysisView: View {
             AnalysisErrorView(
                 failure: failure,
                 attribution: viewModel.attribution,
-                onRetry: failure.isRetryable ? start : nil,
+                // A retry is a new transfer, and confirmed like the first one.
+                onRetry: failure.isRetryable ? { viewModel.requestStart() } : nil,
                 onOpenSettings: failure.leadsToSettings ? openSettings : nil,
                 // Not a bare `reset()`: leaving the error screen must be
                 // able to put the last stored recommendation back, so the
@@ -122,10 +146,6 @@ struct AnalysisView: View {
                 onBack: { Task { await viewModel.dismissFailure() } }
             )
         }
-    }
-
-    private func start() {
-        Task { await viewModel.start() }
     }
 
     /// Leaves the error screen on the way out, so that coming back after

@@ -25,6 +25,10 @@ struct AnalysisResultSnapshot: Equatable, Sendable, Identifiable {
     /// The provider that wrote the answer (#176), or `nil` when the row did
     /// not record one — the badge then stays a bare "AI".
     let provider: LLMProvider?
+    /// The user's confirmation of the transfer behind this row (US-3 AC12,
+    /// #268), or `nil` for a row written before the sheet existed — the
+    /// history detail then shows no confirmation line.
+    let confirmation: AnalysisSendConfirmation?
 
     init(
         id: UUID,
@@ -32,7 +36,8 @@ struct AnalysisResultSnapshot: Equatable, Sendable, Identifiable {
         generatedAt: Date,
         context: AnalysisContext,
         report: ValidatedAnalysisReport? = nil,
-        provider: LLMProvider? = nil
+        provider: LLMProvider? = nil,
+        confirmation: AnalysisSendConfirmation? = nil
     ) {
         self.id = id
         self.text = text
@@ -40,5 +45,6 @@ struct AnalysisResultSnapshot: Equatable, Sendable, Identifiable {
         self.context = context
         self.report = report
         self.provider = provider
+        self.confirmation = confirmation
     }
 }

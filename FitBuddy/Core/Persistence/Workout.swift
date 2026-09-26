@@ -1,10 +1,10 @@
 import Foundation
 import SwiftData
 
-/// The current `Workout` model — see `FitBuddySchemaV6`.
-typealias Workout = FitBuddySchemaV6.Workout
+/// The current `Workout` model — see `FitBuddySchemaV7`.
+typealias Workout = FitBuddySchemaV7.Workout
 
-extension FitBuddySchemaV6 {
+extension FitBuddySchemaV7 {
     /// A cached training session — the root of the `Workout → Exercise →
     /// ExerciseSet` hierarchy that backs the offline dashboard (US-2 AC2).
     ///

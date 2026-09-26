@@ -19,6 +19,63 @@ enum LLMProvider: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    /// The company behind the model, as the consent text and the privacy
+    /// policy name it (US-4 AC4). The recipient of the data is the company,
+    /// not the model — "Claude" is what answers, "Anthropic" is who receives.
+    var vendorName: String {
+        switch self {
+        case .claude: return "Anthropic"
+        case .gemini: return "Google"
+        case .mistral: return "Mistral AI"
+        }
+    }
+
+    /// `"Anthropic (Claude)"` — how the send-confirmation sheet and the
+    /// history detail name a recipient (#268): the company that receives the
+    /// data, and the model the user knows it by.
+    var recipientName: String {
+        "\(vendorName) (\(displayName))"
+    }
+
+    /// Where the provider processes the data, as the consent text states it
+    /// (US-4 AC4): the USA for Anthropic and Google, the EU for Mistral AI.
+    var processingRegion: String {
+        switch self {
+        case .claude, .gemini: return "USA"
+        case .mistral: return "EU"
+        }
+    }
+
+    /// The entity the user's own API contract is with, where it differs from
+    /// the company that processes the data. Only Anthropic: a Swiss user
+    /// contracts with Anthropic Ireland, Limited, while Anthropic PBC does the
+    /// processing in the USA (US-4 AC4, ADR-005). `nil` where contract and
+    /// processing sit with the same entity.
+    var contractingEntity: String? {
+        switch self {
+        case .claude: return "Anthropic Ireland, Limited"
+        case .gemini, .mistral: return nil
+        }
+    }
+
+    /// The order the fallback chain tries providers in: the stored priority
+    /// first, then every provider it does not name (#78, #268).
+    ///
+    /// Providers the order does not name are appended rather than dropped,
+    /// exactly as the settings list repairs itself: a stored key outside the
+    /// order is otherwise unreachable, and the analysis reports "no API key"
+    /// while the user can see their key in Settings. That happens whenever
+    /// the Keychain outlives `UserDefaults` — a reinstall keeps the keys but
+    /// wipes the order — and on an install whose single key predates the
+    /// multi-provider step (#78), which had no stored order at all.
+    ///
+    /// Shared by `InferenceService`, which walks it, and by the
+    /// send-confirmation sheet, which shows it: the two must agree, or the
+    /// user confirms a list that is not the one the run uses.
+    static func fallbackOrder(from order: [LLMProvider]) -> [LLMProvider] {
+        order + allCases.filter { !order.contains($0) }
+    }
+
     /// Text-field placeholder hinting at the provider's key format. Mistral
     /// keys have no recognizable prefix, so a generic hint is shown instead.
     /// AI Studio issues `AQ.…` keys since 2026; older ones start with `AIza`

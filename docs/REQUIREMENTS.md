@@ -32,7 +32,7 @@ Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 
 | # | Given | When | Then |
 |---|---|---|---|
-| AC1 | Mindestens 2 Wochen Trainingsdaten vorhanden | User tippt auf «Analysieren» | Spinner erscheint sofort; Empfehlung wird angezeigt sobald Claude antwortet; nach 30 s ohne Antwort erscheint Cancel-Button «Analysis is taking longer than expected — tap to cancel» |
+| AC1 | Mindestens 2 Wochen Trainingsdaten vorhanden | User tippt auf «Analysieren» und bestätigt die Übertragung (AC12) | Spinner erscheint sofort; Empfehlung wird angezeigt sobald Claude antwortet; nach 30 s ohne Antwort erscheint Cancel-Button «Analysis is taking longer than expected — tap to cancel» |
 | AC2 | Analyse ist abgeschlossen | User liest die Empfehlung | Empfehlung enthält eine konkrete Handlung («Erhöhe Kniebeuge-Gewicht um 2.5 kg»), nicht nur allgemeine Aussagen |
 | AC3 | Analyse wird ausgeführt | LLM-Prompt wird zusammengestellt | Prompt enthält ausschliesslich Daten des eingeloggten Users — keine Benchmarks oder Normwerte fremder Nutzer |
 | AC4 | User hat in 4 Wochen Beine, Oberkörper und Rücken trainiert | Empfehlung wird angezeigt | Geht auf mindestens 2 verschiedene Muskelgruppen ein |
@@ -43,6 +43,7 @@ Konsolidiert aus `PROJECT.md`, `REQUIREMENTS.md` und `ARCHITECTURE.md`.*
 | ~~AC9~~ | — | — | *Entfernt:* «Helpful» / «Not helpful»-Buttons. Die Bewertung blieb nur lokal, wurde nicht ausgewertet und floss in keinen Prompt ein — kein Nutzen für User oder Team. Nummer bleibt frei, damit AC10/AC11 stabil referenzierbar bleiben. |
 | AC10 | Eine Analyse wurde abgeschlossen | User öffnet die App später erneut | Die neueste Empfehlung wird wieder angezeigt, mit Zeitstempel oben links auf der Karte |
 | AC11 | Mehrere Analysen wurden durchgeführt | User öffnet den History-Screen | Alle gespeicherten Analysen erscheinen chronologisch absteigend (max. 20); jede lässt sich per Swipe einzeln löschen |
+| AC12 | Trainingsdaten sind im Cache | User tippt auf «Analyze with AI» (auch «Try again» nach einem Fehler) | Bestätigungs-Sheet erscheint mit Datenkategorien (Trainings der letzten 8 Wochen mit Datum/Dauer, Übungen mit Sätzen/Wiederholungen/Gewichten, Herzfrequenz-/Cardio-Kennzahlen falls Strava/Polar verbunden, Trainingsprofil; explizit kein Name, keine E-Mail, keine Account-IDs), Empfängern (nur Anbieter mit hinterlegtem Key, in Fallback-Reihenfolge, mit Verarbeitungsort USA/EU; Anthropic Ireland Ltd als Vertragspartner), Hinweis auf den eigenen API-Vertrag, Haftungsausschluss und Link zur Datenschutzerklärung; «Send & analyze» ist erst nach gesetzter Checkbox aktiv; Abbrechen sendet nichts; die Checkbox ist bei jedem Öffnen leer (kein «Don't ask again»); die Bestätigung (Zeitstempel, Consent-Version, angezeigte Anbieter) wird mit dem Ergebnis gespeichert, im History-Detail als «Confirmed on … · sent to …» angezeigt und beim Daten-Reset (US-4) mitgelöscht |
 
 > **Hinweis:** US-3 ist als Epic geführt und vor Sprint-Planung in Child Stories aufzuteilen (Prompt-Design, UI, Error-Handling, Disclaimer).
 

@@ -29,6 +29,12 @@ import OSLog
 /// The prompt is built from the cache only: an analysis never triggers a Hevy
 /// sync, so a tap here cannot fail on connectivity the dashboard already
 /// handles.
+///
+/// No run starts without the user's confirmation (US-3 AC12, #268): every
+/// path — the intro button, "Try again" on an error, "New analysis" followed
+/// by the button — goes through `requestStart()`, which opens the
+/// confirmation sheet, and only `confirmSend()` reaches the private
+/// `start(_:)`. The confirmation is stored with the result.
 @MainActor
 final class AnalysisViewModel: ObservableObject {
     /// How long a run may go without an answer before the screen offers to
@@ -77,9 +83,13 @@ final class AnalysisViewModel: ObservableObject {
     /// context exactly as #183/#184 built them. Starting on "Strength" would
     /// silently narrow a run begun before the first read returned.
     @Published private(set) var selectedProfile: AnalysisProfile = .overallLoad
+    /// The confirmation sheet, while it is open (US-3 AC12, #268). A fresh
+    /// view model per opening, so the checkbox is never pre-ticked; `nil`
+    /// whenever the sheet is closed — cancelled, confirmed, or never opened.
+    @Published private(set) var sendConfirmation: AnalysisSendConfirmationViewModel?
 
-    /// Whether tapping "Analyse" can start a run right now: whenever no run is
-    /// in flight.
+    /// Whether tapping "Analyse" can open the confirmation right now: whenever
+    /// no run is in flight.
     var canStartAnalysis: Bool {
         !state.isRunning
     }
@@ -117,6 +127,9 @@ final class AnalysisViewModel: ObservableObject {
     /// `dismissFailure()` can both ask for a restore, and the store read
     /// between them releases the main actor.
     private var isRestoring = false
+    /// The confirmation the run in flight was started with, kept until its
+    /// result is persisted with it (#268). `nil` at rest.
+    private var runConfirmation: AnalysisSendConfirmation?
 
     private let cache: WorkoutSummaryReading
     private let exerciseCache: (any ExerciseSummaryReading & ExerciseProgressionReading)?
@@ -125,6 +138,8 @@ final class AnalysisViewModel: ObservableObject {
     private let resultStore: (any AnalysisResultStoring)?
     private let trainingProfile: TrainingProfileStore
     private let analysisProfiles: AnalysisProfileStore
+    private let keychain: any KeychainStoring
+    private let priority: LLMPriorityStore
     private let calendar: Calendar
     private let now: () -> Date
     private let slowThreshold: TimeInterval
@@ -156,6 +171,11 @@ final class AnalysisViewModel: ObservableObject {
     ///   - analysisProfiles: Where the last analysis profile is remembered
     ///     (US-15 AC1, #185), so the next run starts on the one the user
     ///     chose rather than on the default their data suggests.
+    ///   - keychain: Read by the confirmation sheet to list the providers
+    ///     with a stored key (#268). Only `read`, never a key's value beyond
+    ///     "is there one" — the run itself reads keys in `InferenceService`.
+    ///   - priority: The fallback order the sheet lists the recipients in —
+    ///     the same store `InferenceService` walks, so the two agree.
     ///   - now: Injectable clock, so windows and the result age are testable.
     ///   - slowThreshold: Injectable, so tests do not wait 30 real seconds.
     ///   - tickInterval: How often `trackResultAge()` re-renders the
@@ -169,6 +189,8 @@ final class AnalysisViewModel: ObservableObject {
         resultStore: (any AnalysisResultStoring)? = nil,
         trainingProfile: TrainingProfileStore = TrainingProfileStore(),
         analysisProfiles: AnalysisProfileStore = AnalysisProfileStore(),
+        keychain: any KeychainStoring = KeychainService(),
+        priority: LLMPriorityStore = LLMPriorityStore(),
         calendar: Calendar = .current,
         now: @escaping () -> Date = Date.init,
         slowThreshold: TimeInterval = AnalysisViewModel.defaultSlowThreshold,
@@ -181,6 +203,8 @@ final class AnalysisViewModel: ObservableObject {
         self.resultStore = resultStore
         self.trainingProfile = trainingProfile
         self.analysisProfiles = analysisProfiles
+        self.keychain = keychain
+        self.priority = priority
         self.calendar = calendar
         self.now = now
         self.slowThreshold = slowThreshold
@@ -254,22 +278,68 @@ final class AnalysisViewModel: ObservableObject {
         selectedProfile = options.preselected
     }
 
+    // MARK: - Send confirmation (US-3 AC12, #268)
+
+    /// "Analyze with AI", "Try again": opens the confirmation sheet instead
+    /// of a run.
+    ///
+    /// A fresh `AnalysisSendConfirmationViewModel` on every call, never a
+    /// reused one: the checkbox must be empty each time the sheet opens, and
+    /// the recipient list is read afresh because a key added or removed in
+    /// Settings changes it. There is deliberately no "don't ask again" — a
+    /// confirmation covers exactly the list it was shown with, and the list
+    /// can differ from one run to the next.
+    ///
+    /// Ignored while a run is in flight or the sheet is already open, so a
+    /// double tap opens one sheet, not two.
+    func requestStart() {
+        guard !state.isRunning, sendConfirmation == nil else { return }
+        sendConfirmation = AnalysisSendConfirmationViewModel(
+            keychain: keychain,
+            priority: priority,
+            now: now
+        )
+    }
+
+    /// "Cancel" on the sheet, or the swipe down: closes it and leaves the
+    /// screen exactly as it was — nothing was sent, nothing changes.
+    func cancelSendConfirmation() {
+        sendConfirmation = nil
+    }
+
+    /// "Send & analyze": the only way into a run.
+    ///
+    /// Does nothing without a ticked box — the button is disabled then, and
+    /// this guard is what makes that a rule rather than a rendering detail.
+    /// The sheet closes before the run claims its slot, so the spinner is
+    /// what the user sees next.
+    func confirmSend() async {
+        guard let sheet = sendConfirmation, let confirmation = sheet.confirm() else { return }
+        sendConfirmation = nil
+        await start(confirmation)
+    }
+
     // MARK: - Run
 
     /// Runs one analysis: cache read → prompt → complete answer → validation →
     /// result.
+    ///
+    /// Private on purpose (#268): reachable only through `confirmSend()`, so
+    /// no path in the app — the intro button, a retry, a deep link — can
+    /// send the user's data without the confirmation `confirmation` records.
     ///
     /// Never throws. Every failure lands in `state`, so the screen always has
     /// something to show and the button always comes back (#31 AC1). A second
     /// call while one is running is ignored rather than queued — the user
     /// tapping twice must not buy two analyses. Once a run has ended, the next
     /// one may start straight away: there is no cooldown.
-    func start() async {
+    private func start(_ confirmation: AnalysisSendConfirmation) async {
         guard !state.isRunning else { return }
         // Claim the slot before the first await: an await releases the main
         // actor, so two taps landing in that window would otherwise both pass
         // the guard above and start a run each.
         state = .running
+        runConfirmation = confirmation
         // The providers of the previous run have nothing to do with this one.
         attribution = nil
         // The run the user asked for is under way, so a failure of it has to
@@ -768,6 +838,10 @@ final class AnalysisViewModel: ObservableObject {
     /// A failing write is logged, not surfaced: the recommendation is on screen
     /// and readable, and an error banner over it would be about the next
     /// launch, not about anything the user can act on now.
+    ///
+    /// The confirmation the run started with is stored in the same row (#268):
+    /// it is the proof for exactly this transfer, and it goes when the row
+    /// goes — swipe-delete, the history cap, the data reset.
     private func persist(_ outcome: AnalysisOutcome) async {
         let timestamp = now()
         generatedAt = timestamp
@@ -788,7 +862,8 @@ final class AnalysisViewModel: ObservableObject {
                 report: outcome.report,
                 provider: attribution?.provider,
                 generatedAt: timestamp,
-                context: context
+                context: context,
+                confirmation: runConfirmation
             )
             // This run's own recommendation is now the newest, so anything that
             // was there before it is history.
@@ -805,6 +880,7 @@ final class AnalysisViewModel: ObservableObject {
         guard id == runID else { return }
         stopSlowTimer()
         runTask = nil
+        runConfirmation = nil
         // A run cancelled from outside — SwiftUI tearing down the `.task` that
         // called `start()` — never went through `cancel()`, so nothing has
         // published a resting state yet. Without this the screen would come

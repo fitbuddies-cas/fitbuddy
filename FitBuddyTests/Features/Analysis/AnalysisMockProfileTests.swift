@@ -615,7 +615,7 @@ final class AnalysisMockProfileTests: XCTestCase {
         if let analysisProfile {
             await sut.select(analysisProfile)
         }
-        await sut.start()
+        await sut.startConfirmed()
 
         let userPrompt = await streamer.userPrompt
         let prompt = try XCTUnwrap(userPrompt, "The analysis never reached the provider")

@@ -488,7 +488,8 @@ final class AnalysisResultStoreTests: XCTestCase {
         reportJSON: Data? = nil,
         reportVersion: Int = AnalysisReportFormat.prose,
         providerRawValue: String? = nil,
-        analysisProfileRawValue: String? = nil
+        analysisProfileRawValue: String? = nil,
+        sendConfirmationJSON: Data? = nil
     ) throws {
         let context = ModelContext(container)
         context.insert(
@@ -501,7 +502,8 @@ final class AnalysisResultStoreTests: XCTestCase {
                 analysisProfileRawValue: analysisProfileRawValue,
                 reportJSON: reportJSON,
                 reportVersion: reportVersion,
-                providerRawValue: providerRawValue
+                providerRawValue: providerRawValue,
+                sendConfirmationJSON: sendConfirmationJSON
             )
         )
         try context.save()
@@ -509,5 +511,61 @@ final class AnalysisResultStoreTests: XCTestCase {
 
     private static func context(sessions: Int = 12, weeks: Int = 4) -> AnalysisContext {
         AnalysisContext(sessionCount: sessions, window: AnalysisWindow(weeks: weeks))
+    }
+}
+
+// MARK: - Send confirmation (US-3 AC12, #268)
+
+extension AnalysisResultStoreTests {
+    /// The proof travels with the row and comes back as it went in: the
+    /// moment, the consent version and the recipients in the order shown.
+    func testTheSendConfirmationIsStoredWithTheRowAndReadBack() async throws {
+        let confirmation = AnalysisSendConfirmation(
+            confirmedAt: Self.reference.addingTimeInterval(-42),
+            consentVersion: "2026-09-16",
+            providers: [.gemini, .claude]
+        )
+
+        try await sut.save(
+            text: "Add a set.",
+            generatedAt: Self.reference,
+            context: Self.context(),
+            confirmation: confirmation
+        )
+
+        let storedRead = try await sut.latest()
+        let stored = try XCTUnwrap(storedRead)
+        XCTAssertEqual(stored.confirmation, confirmation)
+    }
+
+    /// A row written before the sheet existed carries none — and says so,
+    /// rather than reading as a confirmation of nothing.
+    func testARowWithoutAConfirmationReadsAsNone() async throws {
+        try await insertRow(text: "From before #268")
+
+        let storedRead = try await sut.latest()
+        let stored = try XCTUnwrap(storedRead)
+        XCTAssertNil(stored.confirmation)
+    }
+
+    /// Bytes this build cannot read leave the row readable, minus the line.
+    func testAnUnreadableConfirmationLeavesTheRowReadable() async throws {
+        try await insertRow(text: "Add a set.", sendConfirmationJSON: Data("not json".utf8))
+
+        let storedRead = try await sut.latest()
+        let stored = try XCTUnwrap(storedRead)
+        XCTAssertEqual(stored.text, "Add a set.")
+        XCTAssertNil(stored.confirmation)
+    }
+
+    /// A provider a newer build wrote is nothing this one can name: the
+    /// whole confirmation is withheld rather than shown one recipient short.
+    func testAConfirmationNamingAnUnknownProviderIsNotShown() async throws {
+        let json = Data(#"{"confirmedAt":"2026-09-26T12:00:00Z","consentVersion":"2026-09-16","providers":["claude","llama"]}"#.utf8)
+        try await insertRow(text: "Add a set.", sendConfirmationJSON: json)
+
+        let storedRead = try await sut.latest()
+        let stored = try XCTUnwrap(storedRead)
+        XCTAssertNil(stored.confirmation)
     }
 }

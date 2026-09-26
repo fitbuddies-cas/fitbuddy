@@ -77,6 +77,7 @@ Open `index.html` directly in a modern browser. No build step, no install. All d
 | US-15 AC5 (Profil «Endurance»: Ausdauer-Einheiten, keine Kilogramm) | 3.4c — drei Metrik-Karten in km und min/km, kein kg auf dem Screen |
 | US-15 AC7 (fehlende Kennzahl: Zelle entfällt, kein «—») | 3.5 ohne Ø RPE · 3.4c ohne `source`-Label, wo die Quelle fehlt |
 | US-9 AC1–AC3 (Progressionskurve, Plateau-Label, Session-Historie) | noch kein Mock — Screen ist mit #42/#163 dazugekommen |
+| US-3 AC12 (Bestätigungs-Sheet vor jeder Übertragung) | noch kein Mock — das Sheet (#268) folgt dem Stil des Consent-Screens: `FBCard` mit `FBInfoRow`-Abschnitten, Toggle in Accent-Farbe, `FBButton` accent «Send & analyze», bis zur Checkbox deaktiviert |
 
 ---
 

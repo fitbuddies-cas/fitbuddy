@@ -49,7 +49,7 @@ enum AnalysisFailure: Equatable {
     ///   the fallback chain tried. `nil` when the run failed before any
     ///   provider was picked, or when the cache, not a provider, failed.
     ///
-    /// `.alreadyInProgress` has no case of its own: `AnalysisViewModel.start()`
+    /// `.alreadyInProgress` has no case of its own: `AnalysisViewModel.confirmSend()`
     /// claims its slot synchronously, so a double tap cannot reach the service
     /// twice, and the actor's guard firing would mean two ViewModels share one
     /// service — a wiring bug, not something to tell the user about. It reads

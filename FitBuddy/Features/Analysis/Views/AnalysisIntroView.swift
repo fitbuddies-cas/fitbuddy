@@ -38,9 +38,12 @@ struct AnalysisIntroView: View {
                 profilePicker
             }
 
+            // Opens the confirmation sheet, not a run (US-3 AC12, #268): what
+            // is sent and to whom is shown there, at the moment it matters.
             Button("Analyze with AI", action: onStart)
                 .buttonStyle(.fb(.accent))
                 .disabled(!canStart)
+                .accessibilityIdentifier(AccessibilityID.Analysis.startButton)
         }
     }
 

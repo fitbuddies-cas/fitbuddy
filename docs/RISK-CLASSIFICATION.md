@@ -89,7 +89,7 @@ Auf diesem Level ist eine Ausnahme eine Entscheidung mit Namen dran — keine Ko
 
 | Pflicht | Umsetzung in FitBuddy (v0) |
 |---|---|
-| AI-Offenlegung gegenüber dem User (EU AI Act, Art. 50) | Consent-Screen im Onboarding (US-4 AC4) |
+| AI-Offenlegung gegenüber dem User (EU AI Act, Art. 50) | Consent-Screen im Onboarding (US-4 AC4) und Bestätigungs-Sheet vor jeder Übertragung (US-3 AC12, #268): nennt die Empfänger in Fallback-Reihenfolge mit Verarbeitungsort, den eigenen API-Vertrag als Rechtsgrundlage und den Haftungsausschluss; kein «Don't ask again» |
 | Interaktion dokumentiert | Analyse-Zusammenfassung mit Quellen & Zeitraum (US-6 AC1) |
 | Personendaten im Prompt dokumentiert (DSGVO/nDSG) | Datenschutzerklärung-Screen: bearbeitete Daten, Zweck, Empfänger |
 | Sicherheitsrelevante Ereignisse geloggt | 401-Handling mit aktiver Benachrichtigung (US-1 AC3, US-8 AC2) |
@@ -97,7 +97,7 @@ Auf diesem Level ist eine Ausnahme eine Entscheidung mit Namen dran — keine Ko
 | Least-Privilege-Zugriff auf Tools und Daten | Hevy-Key nur lesend genutzt; Strava nur mit dem Scope `activity:read_all`, Polar nur mit `accesslink.read_all` (beide ohne Schreib-Scope, ADR-010/011); Keys, Client-Credentials und Tokens nur im Keychain (`ThisDeviceOnly`), nur in Services |
 | Zahlungsdaten erreichen das Modell nie (PCI) | Nicht anwendbar — FitBuddy verarbeitet keine Zahlungsdaten |
 | DPIA / FRIA abgeschlossen | Für v0 durch diese Notiz abgedeckt (siehe oben); vollständige DSFA vor kommerziellem Launch (v1) |
-| Mensch bestätigt die Aktion | App: AI-Analyse nur auf Knopfdruck (US-3), Empfehlungen werden nie automatisch umgesetzt. Prozess: kein Merge ohne Human Review |
+| Mensch bestätigt die Aktion | App: AI-Analyse nur auf Knopfdruck (US-3) und erst nach aktiver Bestätigung per Checkbox im Sheet (US-3 AC12); jede Übertragung wird einzeln quittiert und der Nachweis (Zeitstempel, Consent-Version, Anbieter) mit dem Ergebnis gespeichert. Empfehlungen werden nie automatisch umgesetzt. Prozess: kein Merge ohne Human Review |
 
 ### Verantwortlichkeiten
 
@@ -113,7 +113,7 @@ Auf diesem Level ist eine Ausnahme eine Entscheidung mit Namen dran — keine Ko
 
 Das Tier **Critical** ist in beiden Fällen kein Blocker, sondern die ehrliche Beschreibung der Ausgangslage:
 
-* **Produkt:** Die Red Line «Gesundheitsdaten an ein externes Modell» ist die inhärente Eigenschaft des Produkts (AI-Analyse von Trainingsdaten), nicht ein vermeidbarer Implementierungsfehler. Die Rechtsgrundlage ist im BYO-Key-Modell der API-Vertrag des eigenen Accounts beim jeweiligen Anbieter — bei Anthropic der DPA inkl. SCCs + Swiss Addendum, bei Google und Mistral die entsprechenden API-Bedingungen (ADR-007); Transparenz und Einwilligung sind über den Consent-Screen abgedeckt (US-4 AC4).
+* **Produkt:** Die Red Line «Gesundheitsdaten an ein externes Modell» ist die inhärente Eigenschaft des Produkts (AI-Analyse von Trainingsdaten), nicht ein vermeidbarer Implementierungsfehler. Die Rechtsgrundlage ist im BYO-Key-Modell der API-Vertrag des eigenen Accounts beim jeweiligen Anbieter — bei Anthropic der DPA inkl. SCCs + Swiss Addendum, bei Google und Mistral die entsprechenden API-Bedingungen (ADR-007); Transparenz und Einwilligung sind über den Consent-Screen abgedeckt (US-4 AC4) — und seit #268 zusätzlich am Ort der Auslösung: Vor jeder Übertragung listet ein Bestätigungs-Sheet die Datenkategorien und die tatsächlichen Empfänger (nur Anbieter mit Key, in Fallback-Reihenfolge, mit Verarbeitungsort) und verlangt eine aktive Checkbox (US-3 AC12). Die Massnahme adressiert genau die Red Line: Der User weiss im Moment des Tippens, dass Gesundheitsdaten das Gerät verlassen, an wen, und dass wegen der Fallback-Kette (ADR-007) mehrere Anbieter dieselben Daten erhalten können.
 * **Entwicklungsprozess:** Das Tier folgt aus der Natur eines Coding-Agenten. Die Antwort ist nicht «abschalten», sondern Human-in-the-Loop an jeder Stelle, an der etwas Wirkung entfaltet: der User entscheidet über jede Trainingsempfehlung, das Team über jeden Merge.
 
 Details: `docs/REQUIREMENTS.md` (Kap. 5, Security & Privacy) und `docs/adr/ADR-005-claude-api-usa-with-dpa.md`.

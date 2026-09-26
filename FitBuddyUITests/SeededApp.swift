@@ -194,6 +194,38 @@ struct SeededApp {
         app.navigationBars.buttons.firstMatch
     }
 
+    // MARK: - Send confirmation (US-3 AC12, #268)
+
+    /// "Analyze with AI" on the intro screen — opens the sheet.
+    var analysisStartButton: XCUIElement {
+        app.buttons[AccessibilityID.Analysis.startButton]
+    }
+
+    var sendConfirmationSheet: XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.SendConfirmation.sheet]
+    }
+
+    var sendConfirmationRecipients: XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.SendConfirmation.recipients]
+    }
+
+    var sendConfirmationPrivacyLink: XCUIElement {
+        app.descendants(matching: .any)[AccessibilityID.SendConfirmation.privacyLink]
+    }
+
+    /// The "I understand …" switch — a SwiftUI `Toggle` renders as one.
+    var sendConfirmationCheckbox: XCUIElement {
+        app.switches[AccessibilityID.SendConfirmation.checkbox]
+    }
+
+    var sendButton: XCUIElement {
+        app.buttons[AccessibilityID.SendConfirmation.sendButton]
+    }
+
+    var sendConfirmationCancelButton: XCUIElement {
+        app.buttons[AccessibilityID.SendConfirmation.cancelButton]
+    }
+
     // MARK: - Settings (#191)
 
     var settingsTab: XCUIElement {
@@ -312,7 +344,62 @@ struct SeededApp {
         )
     }
 
+    /// Ticks a switch and makes sure it stayed ticked — the same lesson as
+    /// `OnboardingApp.switchOn`: a tap landing while the sheet is still
+    /// sliding up is swallowed, and the failure would surface one step later
+    /// as "the send button stayed disabled".
+    func switchOn(
+        _ element: XCUIElement,
+        attempts: Int = 3,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        assertAppears(element, file: file, line: line)
+        for _ in 0..<attempts {
+            guard element.value as? String != "1" else { return }
+            element.tap()
+            _ = element.waitForExistence(timeout: 1)
+        }
+        XCTAssertEqual(
+            element.value as? String,
+            "1",
+            "\(element.identifier) did not switch on",
+            file: file,
+            line: line
+        )
+    }
+
     // MARK: - Assertions
+
+    /// Blocks until the element is gone — a dismissed sheet, a screen the
+    /// run has replaced.
+    func assertDisappears(
+        _ element: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let gone = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: element
+        )
+        let result = XCTWaiter().wait(for: [gone], timeout: Self.timeout)
+        XCTAssertEqual(result, .completed, "\(element.identifier) never disappeared", file: file, line: line)
+    }
+
+    /// Blocks until the element is enabled — the send button once the
+    /// switch's change has reached the view model.
+    func assertEnabled(
+        _ element: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let enabled = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isEnabled == true"),
+            object: element
+        )
+        let result = XCTWaiter().wait(for: [enabled], timeout: Self.timeout)
+        XCTAssertEqual(result, .completed, "\(element.identifier) never became enabled", file: file, line: line)
+    }
 
     func assertAppears(
         _ element: XCUIElement,

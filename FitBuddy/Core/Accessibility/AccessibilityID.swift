@@ -150,5 +150,24 @@ enum AccessibilityID {
         static let fullAnalysisToggle = "analysis.fullAnalysisToggle"
         /// The report's summary, present only while the disclosure is open.
         static let fullAnalysis = "analysis.fullAnalysis"
+        /// "Analyze with AI" on the intro screen — opens the send
+        /// confirmation, never a run directly (#268).
+        static let startButton = "analysis.startButton"
+        /// The "Confirmed on … · sent to …" line under a stored analysis
+        /// (#268) — present only on rows that carry a confirmation.
+        static let confirmation = "analysis.confirmation"
+    }
+
+    /// The confirmation sheet between "Analyze with AI" and the transfer
+    /// (US-3 AC12, #268).
+    enum SendConfirmation {
+        static let sheet = "analysis.sendConfirmation.sheet"
+        /// The recipients section — one element, so its label carries the
+        /// whole list.
+        static let recipients = "analysis.sendConfirmation.recipients"
+        static let privacyLink = "analysis.sendConfirmation.privacyLink"
+        static let checkbox = "analysis.sendConfirmation.checkbox"
+        static let sendButton = "analysis.sendConfirmation.sendButton"
+        static let cancelButton = "analysis.sendConfirmation.cancelButton"
     }
 }

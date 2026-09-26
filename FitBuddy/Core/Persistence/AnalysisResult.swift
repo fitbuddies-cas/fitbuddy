@@ -1,10 +1,10 @@
 import Foundation
 import SwiftData
 
-/// The current `AnalysisResult` model — see `FitBuddySchemaV6`.
-typealias AnalysisResult = FitBuddySchemaV6.AnalysisResult
+/// The current `AnalysisResult` model — see `FitBuddySchemaV7`.
+typealias AnalysisResult = FitBuddySchemaV7.AnalysisResult
 
-extension FitBuddySchemaV6 {
+extension FitBuddySchemaV7 {
     /// One AI recommendation, kept so it survives an app restart and stays
     /// readable next to the ones before it (US-3 AC10/AC11, #97/#117).
     ///
@@ -95,6 +95,18 @@ extension FitBuddySchemaV6 {
         /// last one of the fallback chain (#176), read it through `provider`.
         /// `nil` on rows written before V4, which did not record it.
         var providerRawValue: String?
+        /// The user's confirmation of the transfer that produced this row,
+        /// JSON-encoded (US-3 AC12, #268): when they confirmed, under which
+        /// consent version, and which providers the sheet listed — read it
+        /// through `AnalysisResultSnapshot.confirmation`, never directly.
+        /// `nil` on every row written before V7, where it means "never asked"
+        /// and not "declined": no build before this version had a sheet.
+        ///
+        /// Stored with the recommendation rather than in its own table: the
+        /// confirmation is about exactly this transfer, it goes when the row
+        /// goes (swipe-delete, the history cap, the data reset), and there is
+        /// nothing to look it up by except the row.
+        var sendConfirmationJSON: Data?
         /// Unused: held the "Helpful" / "Not helpful" verdict until those
         /// buttons were removed. Kept so installed stores open without a
         /// migration — nothing writes it since, and neither V3 nor V4 spent a
@@ -128,7 +140,8 @@ extension FitBuddySchemaV6 {
             experience: String? = nil,
             reportJSON: Data? = nil,
             reportVersion: Int = AnalysisReportFormat.prose,
-            providerRawValue: String? = nil
+            providerRawValue: String? = nil,
+            sendConfirmationJSON: Data? = nil
         ) {
             self.id = id
             self.text = text
@@ -142,6 +155,7 @@ extension FitBuddySchemaV6 {
             self.reportJSON = reportJSON
             self.reportVersion = reportVersion
             self.providerRawValue = providerRawValue
+            self.sendConfirmationJSON = sendConfirmationJSON
         }
     }
 }

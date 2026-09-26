@@ -3,8 +3,10 @@ import SwiftUI
 /// One stored analysis in full, pushed from the history list (US-3 AC11,
 /// #117).
 ///
-/// The recommendation and the basis it rests on, and nothing else: no "New
-/// analysis" — a new run belongs to the analysis screen, not to an old text.
+/// The recommendation and the basis it rests on, and — where the row has
+/// one — the confirmation the user gave before it was sent (US-3 AC12,
+/// #268). No "New analysis": a new run belongs to the analysis screen, not
+/// to an old text.
 struct AnalysisHistoryDetailView: View {
     let entry: AnalysisResultSnapshot
     /// The instant the list rendered against, so the age here matches the row
@@ -25,6 +27,9 @@ struct AnalysisHistoryDetailView: View {
                     attribution: entry.provider.map(AnalysisAttribution.init(first:)),
                     age: SyncTimeFormatter.relative(since: entry.generatedAt, now: now)
                 )
+                if let confirmation = entry.confirmation {
+                    confirmationLine(confirmation)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
@@ -33,6 +38,33 @@ struct AnalysisHistoryDetailView: View {
         .background(Color.fbBackground)
         .navigationTitle("Analysis")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// `"Confirmed on 26 Sep 2026, 14:03 · sent to Anthropic (Claude), Google
+    /// (Gemini)"` — the proof stored with the row. Absent on rows written
+    /// before the sheet existed: nothing was confirmed, so nothing is claimed.
+    private func confirmationLine(_ confirmation: AnalysisSendConfirmation) -> some View {
+        Text(Self.confirmationText(confirmation))
+            .font(.caption)
+            .foregroundStyle(Color.fbMuted)
+            .padding(.leading, 12)
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(Color.fbBorder)
+                    .frame(width: 2)
+            }
+            .accessibilityIdentifier(AccessibilityID.Analysis.confirmation)
+    }
+
+    /// Shared with its test: the line is a sentence, and a test that
+    /// rebuilds the sentence from its parts would pass over a wrong one.
+    static func confirmationText(_ confirmation: AnalysisSendConfirmation) -> String {
+        let date = confirmation.confirmedAt.formatted(date: .abbreviated, time: .shortened)
+        guard !confirmation.providers.isEmpty else {
+            return "Confirmed on \(date) · no provider was connected"
+        }
+        let recipients = confirmation.providers.map(\.recipientName).joined(separator: ", ")
+        return "Confirmed on \(date) · sent to \(recipients)"
     }
 }
 
@@ -47,7 +79,12 @@ struct AnalysisHistoryDetailView: View {
                 generatedAt: .now.addingTimeInterval(-3 * 86_400),
                 context: AnalysisContext(sessionCount: 12, window: .default),
                 report: AnalysisReportSamples.progress,
-                provider: .claude
+                provider: .claude,
+                confirmation: AnalysisSendConfirmation(
+                    confirmedAt: .now.addingTimeInterval(-3 * 86_400 - 20),
+                    consentVersion: ConsentViewModel.currentVersion,
+                    providers: [.claude, .gemini]
+                )
             ),
             now: .now
         )

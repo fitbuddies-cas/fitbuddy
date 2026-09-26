@@ -19,7 +19,8 @@ actor PreviewAnalysisResultStore: AnalysisResultStoring {
         report: ValidatedAnalysisReport?,
         provider: LLMProvider?,
         generatedAt: Date,
-        context: AnalysisContext
+        context: AnalysisContext,
+        confirmation: AnalysisSendConfirmation?
     ) throws -> UUID {
         let entry = AnalysisResultSnapshot(
             id: UUID(),
@@ -27,7 +28,8 @@ actor PreviewAnalysisResultStore: AnalysisResultStoring {
             generatedAt: generatedAt,
             context: context,
             report: report,
-            provider: provider
+            provider: provider,
+            confirmation: confirmation
         )
         entries.insert(entry, at: 0)
         return entry.id

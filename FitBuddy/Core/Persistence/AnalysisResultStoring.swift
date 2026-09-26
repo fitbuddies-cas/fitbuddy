@@ -11,14 +11,16 @@ protocol AnalysisResultStoring: Sendable {
     ///
     /// `text` is always the prose fallback; `report` is the validated report
     /// the user saw, if any, and `provider` the one that wrote the answer
-    /// (#176).
+    /// (#176). `confirmation` is the user's go-ahead for the transfer that
+    /// produced the answer (US-3 AC12, #268); `nil` only for a seeded row.
     @discardableResult
     func save(
         text: String,
         report: ValidatedAnalysisReport?,
         provider: LLMProvider?,
         generatedAt: Date,
-        context: AnalysisContext
+        context: AnalysisContext,
+        confirmation: AnalysisSendConfirmation?
     ) async throws -> UUID
     func latest() async throws -> AnalysisResultSnapshot?
     /// The newest `limit` recommendations, newest first.

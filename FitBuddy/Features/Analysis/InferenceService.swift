@@ -177,15 +177,10 @@ actor InferenceService {
     /// A provider without a stored key is skipped rather than counted as a
     /// failure: it was never configured, so it has nothing to fall back from.
     private func resolveCandidates() async throws -> [Candidate] {
-        let order = await priority.order
-        // Providers the order does not name are appended rather than dropped,
-        // exactly as the settings list repairs itself: a stored key outside the
-        // order is otherwise unreachable, and the analysis reports "no API key"
-        // while the user can see their key in Settings. That happens whenever
-        // the Keychain outlives `UserDefaults` — a reinstall keeps the keys but
-        // wipes the order — and on an install whose single key predates the
-        // multi-provider step (#78), which had no stored order at all.
-        let providers = order + LLMProvider.allCases.filter { !order.contains($0) }
+        // The same order the send-confirmation sheet showed the user (#268):
+        // a provider the order does not name is appended, not dropped — see
+        // `LLMProvider.fallbackOrder(from:)`.
+        let providers = LLMProvider.fallbackOrder(from: await priority.order)
 
         var candidates: [Candidate] = []
         for provider in providers {
