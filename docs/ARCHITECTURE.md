@@ -267,7 +267,7 @@ Das Modell-Verdict bleibt im Antwortschema, wird überschrieben und als `modelVe
 angezeigt wird es nie. `insufficientData` wird dem Modell nicht angeboten; ein solcher Wert wird
 beim Decodieren auf `hold` normalisiert. Die Eingriffe des Validators werden je Analyse
 protokolliert ([Protokoll der Eingriffe](#protokoll-der-eingriffe-228)). Die verbleibende Streuung über mehrere Läufe misst
-[messung-verdict-streuung.md](messung-verdict-streuung.md) (#229).
+[VERDICT-SPREAD-MEASUREMENT.md](VERDICT-SPREAD-MEASUREMENT.md) (#229).
 
 > **Grenze:** Das Verdict hängt an der Übungsliste des Prompts (Top 6 nach Volumen, auf einer
 > tieferen Budget-Stufe weniger, #187). Dieselbe Historie kann deshalb auf einer anderen
