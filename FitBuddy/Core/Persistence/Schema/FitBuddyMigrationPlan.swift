@@ -55,6 +55,11 @@ import SwiftData
 /// `originalName`, so SwiftData moves the stored values over instead of
 /// dropping the column and adding an empty one. Nothing is transformed — the
 /// value was Strava's Relative Effort all along; only the name was wrong.
+/// The same stage adds Polar's Training Load Pro columns (#244) —
+/// `cardioLoad`, `cardioMuscleLoad`, `cardioPerceivedLoad` and
+/// `cardioUserRPERawValue`, all optional. `nil` is the truth for an existing
+/// row: no build before this version decoded `training_load_pro`, and the
+/// next sync replaces the window and fills the columns for real.
 ///
 /// A store from an older version runs the stages in turn; the migration tests
 /// write a V1, a V2, a V3, a V4, a V5, a V6 and a V7 store and open each under

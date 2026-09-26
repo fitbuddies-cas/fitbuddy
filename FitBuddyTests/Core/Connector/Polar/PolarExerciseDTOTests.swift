@@ -52,6 +52,112 @@ final class PolarExerciseDTOTests: XCTestCase {
         XCTAssertEqual(activity.kind, .run)
     }
 
+    // MARK: - Training Load Pro (#244)
+
+    /// A session from a watch with Training Load Pro, shaped like a real
+    /// AccessLink response: the exercise uses underscore keys, the block
+    /// inside it hyphenated ones — in the same object.
+    private static let trainingLoadProExercise = Data(#"""
+    {
+      "id": "bQlD94",
+      "upload_time": "2026-09-12T14:05:11Z",
+      "polar_user": "https://www.polaraccesslink.com/v3/users/1",
+      "device": "Polar Vantage V3",
+      "start_time": "2026-09-12T12:00:00",
+      "start_time_utc_offset": 120,
+      "duration": "PT1H15M0S",
+      "distance": 38000.0,
+      "heart_rate": { "average": 149, "maximum": 172 },
+      "training_load": 148.0,
+      "calories": 980,
+      "sport": "CYCLING",
+      "detailed_sport_info": "ROAD_CYCLING",
+      "has_route": true,
+      "training_load_pro": {
+        "date": "2026-09-12",
+        "cardio-load": 151.3,
+        "muscle-load": 62.5,
+        "perceived-load": 525.0,
+        "cardio-load-interpretation": "HIGH",
+        "muscle-load-interpretation": "MODERATE",
+        "perceived-load-interpretation": "HIGH",
+        "user-rpe": "RPE_HARD"
+      }
+    }
+    """#.utf8)
+
+    func testDecodesTheHyphenatedTrainingLoadProKeysInsideTheUnderscoredExercise() throws {
+        let dto = try JSONDecoder().decode(PolarExerciseDTO.self, from: Self.trainingLoadProExercise)
+
+        XCTAssertEqual(dto.cardioLoad, 151.3)
+        XCTAssertEqual(dto.muscleLoad, 62.5)
+        XCTAssertEqual(dto.perceivedLoad, 525.0)
+        XCTAssertEqual(dto.userRPE, .hard)
+
+        let cardio = try XCTUnwrap(dto.makeActivity()?.cardio)
+        XCTAssertEqual(cardio.cardioLoad, 151.3)
+        XCTAssertEqual(cardio.muscleLoad, 62.5)
+        XCTAssertEqual(cardio.perceivedLoad, 525.0)
+        XCTAssertEqual(cardio.userRPE, .hard)
+        // The legacy figure stays where it was, next to the new ones.
+        XCTAssertEqual(cardio.trainingLoad, 148.0)
+        XCTAssertEqual(cardio.averageHeartRate, 149)
+    }
+
+    /// An older watch sends no `training_load_pro` at all. That is not an
+    /// error: the session decodes, keeps its legacy load, and every Training
+    /// Load Pro value is `nil`.
+    func testASessionWithoutTrainingLoadProDecodesWithEveryProValueNil() throws {
+        let dto = try JSONDecoder().decode(PolarExerciseDTO.self, from: Self.fullExercise)
+
+        let cardio = try XCTUnwrap(dto.makeActivity()?.cardio)
+        XCTAssertEqual(cardio.trainingLoad, 143.22)
+        XCTAssertNil(cardio.cardioLoad)
+        XCTAssertNil(cardio.muscleLoad)
+        XCTAssertNil(cardio.perceivedLoad)
+        XCTAssertNil(cardio.userRPE)
+    }
+
+    /// A block Polar filled only partly — no power meter, no rating — keeps
+    /// what it has and leaves the rest `nil`.
+    func testAPartialTrainingLoadProBlockKeepsWhatItHas() throws {
+        let json = Data(#"""
+        {
+          "id": "x",
+          "start_time": "2020-01-01T12:00:00",
+          "training_load_pro": { "cardio-load": 80.0, "cardio-load-interpretation": "MODERATE" }
+        }
+        """#.utf8)
+
+        let cardio = try XCTUnwrap(
+            try JSONDecoder().decode(PolarExerciseDTO.self, from: json).makeActivity()?.cardio
+        )
+
+        XCTAssertEqual(cardio.cardioLoad, 80.0)
+        XCTAssertNil(cardio.muscleLoad)
+        XCTAssertNil(cardio.perceivedLoad)
+        XCTAssertNil(cardio.userRPE)
+    }
+
+    /// A rating label this build does not know must not fail the session: it
+    /// reads as `.unknown`, and so does Polar's own `UNKNOWN`.
+    func testAnUnknownUserRPELabelReadsAsUnknown() throws {
+        for label in ["RPE_SOMETHING_NEW", "UNKNOWN"] {
+            let json = Data(#"""
+            {
+              "id": "x",
+              "start_time": "2020-01-01T12:00:00",
+              "training_load_pro": { "cardio-load": 80.0, "user-rpe": "\#(label)" }
+            }
+            """#.utf8)
+
+            let dto = try JSONDecoder().decode(PolarExerciseDTO.self, from: json)
+
+            XCTAssertEqual(dto.userRPE, .unknown, label)
+            XCTAssertEqual(dto.cardioLoad, 80.0, label)
+        }
+    }
+
     func testDropsAnExerciseThatHasNoParseableStartTime() throws {
         let json = Data(#"{ "id": "x", "start_time": "not-a-date" }"#.utf8)
 

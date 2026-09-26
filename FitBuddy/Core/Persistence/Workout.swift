@@ -74,6 +74,16 @@ extension FitBuddySchemaV8 {
         var cardioDistanceMeters: Double?
         var cardioDurationSeconds: Int?
         var cardioTrainingLoad: Double?
+        /// Polar's Training Load Pro values (#244) — see the fields of the
+        /// same name on `CardioMetrics`. `nil` for every other source, for a
+        /// device without Training Load Pro, and for every row written before
+        /// V8.
+        var cardioLoad: Double?
+        var cardioMuscleLoad: Double?
+        var cardioPerceivedLoad: Double?
+        /// `PolarUserRPE.rawValue` — read it through `cardio`, which reads an
+        /// unknown label as `.unknown`.
+        var cardioUserRPERawValue: String?
 
         /// Deleting a workout deletes its exercises (and, transitively, their sets).
         @Relationship(deleteRule: .cascade, inverse: \Exercise.workout)
@@ -109,7 +119,11 @@ extension FitBuddySchemaV8 {
                 activeCalories: cardioActiveCalories,
                 distanceMeters: cardioDistanceMeters,
                 durationSeconds: cardioDurationSeconds,
-                trainingLoad: cardioTrainingLoad
+                trainingLoad: cardioTrainingLoad,
+                cardioLoad: cardioLoad,
+                muscleLoad: cardioMuscleLoad,
+                perceivedLoad: cardioPerceivedLoad,
+                userRPE: cardioUserRPERawValue.map(PolarUserRPE.init(polarValue:))
             ).nonEmpty
         }
 
@@ -148,6 +162,10 @@ extension FitBuddySchemaV8 {
             self.cardioDistanceMeters = cardio?.distanceMeters
             self.cardioDurationSeconds = cardio?.durationSeconds
             self.cardioTrainingLoad = cardio?.trainingLoad
+            self.cardioLoad = cardio?.cardioLoad
+            self.cardioMuscleLoad = cardio?.muscleLoad
+            self.cardioPerceivedLoad = cardio?.perceivedLoad
+            self.cardioUserRPERawValue = cardio?.userRPE?.rawValue
         }
     }
 }

@@ -8,6 +8,10 @@ import SwiftData
 /// (#241) rules out. The rename keeps the stored values through
 /// `@Attribute(originalName:)`, so the V7 → V8 stage stays lightweight.
 ///
+/// Grown by #244 before reaching `develop`: `Workout` also gains Polar's
+/// Training Load Pro values — `cardioLoad`, `cardioMuscleLoad`,
+/// `cardioPerceivedLoad` and `cardioUserRPERawValue`, all optional.
+///
 /// The model classes live in their own files as extensions of this enum
 /// (`Workout.swift`, `Exercise.swift`, …), each with a top-level typealias so
 /// the rest of the app keeps naming them `Workout` and not
