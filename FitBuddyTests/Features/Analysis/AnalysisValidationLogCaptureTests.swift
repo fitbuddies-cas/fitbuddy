@@ -260,6 +260,38 @@ final class AnalysisValidationLogCaptureTests: XCTestCase {
         ])
     }
 
+    /// A progression downgraded to a note and then cut by the cap is logged
+    /// under the kind the model sent — not as a note the model wrote.
+    func testACappedDowngradedCardKeepsItsOriginalKind() {
+        let notes = (1...4).map { AnalysisCard.note(title: "Note \($0)", text: "Text \($0)") }
+
+        XCTAssertEqual(log(notes + [benchPress(from: 60, to: 70)]).interventions, [
+            AnalysisIntervention(
+                subject: .progression,
+                action: .downgraded,
+                reason: .aboveRange,
+                figure: AnalysisInterventionFigure(proposed: 70, app: 60, allowed: 62.5...65, unit: .kilograms)
+            ),
+            AnalysisIntervention(subject: .progression, action: .dropped, reason: .overCardLimit),
+        ])
+    }
+
+    /// The same cap over a note the model did write stays a note, even with a
+    /// downgraded card next to it.
+    func testACappedModelNoteStaysANote() {
+        let notes = (1...4).map { AnalysisCard.note(title: "Note \($0)", text: "Text \($0)") }
+
+        XCTAssertEqual(log([benchPress(from: 60, to: 70)] + notes).interventions, [
+            AnalysisIntervention(
+                subject: .progression,
+                action: .downgraded,
+                reason: .aboveRange,
+                figure: AnalysisInterventionFigure(proposed: 70, app: 60, allowed: 62.5...65, unit: .kilograms)
+            ),
+            AnalysisIntervention(subject: .note, action: .dropped, reason: .overCardLimit),
+        ])
+    }
+
     /// ADR-014 §6: under `insufficientData` a valid progression is demoted to
     /// a note, and the log says so next to the verdict the app put over the
     /// model's.

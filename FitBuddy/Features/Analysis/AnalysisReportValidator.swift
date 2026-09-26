@@ -164,10 +164,10 @@ enum AnalysisReportValidator {
         against evidence: AnalysisReportEvidence
     ) -> (report: ValidatedAnalysisReport, log: AnalysisValidationLog) {
         var interventions: [AnalysisIntervention] = []
-        var cards: [AnalysisReportCard] = []
+        var cards: [TrackedCard] = []
         for card in report.cards {
             let checked = validateLogged(card, against: evidence)
-            if let valid = checked.card { cards.append(valid) }
+            if let valid = checked.card { cards.append(TrackedCard(card: valid, sentAs: card.kind)) }
             if let intervention = checked.intervention { interventions.append(intervention) }
         }
         let outcome = AnalysisVerdictRule.outcome(for: evidence)
@@ -182,16 +182,14 @@ enum AnalysisReportValidator {
         // recovery card always survives at that count, so a missing one means
         // the model left it out. This is the card side of ADR-014 stage 0;
         // the verdict side is in the rule.
-        if evidence.recovery.needsRecovery, !cards.contains(where: { $0.kind == .recovery }) {
-            cards.insert(
-                .recovery(
-                    reasoning: insertedRecoveryReasoning(
-                        countingUnanalysedTraining: evidence.recoveryCountsUnanalysedTraining
-                    ),
-                    metrics: evidence.recovery
+        if evidence.recovery.needsRecovery, !cards.contains(where: { $0.card.kind == .recovery }) {
+            let inserted = AnalysisReportCard.recovery(
+                reasoning: insertedRecoveryReasoning(
+                    countingUnanalysedTraining: evidence.recoveryCountsUnanalysedTraining
                 ),
-                at: 0
+                metrics: evidence.recovery
             )
+            cards.insert(TrackedCard(card: inserted, sentAs: .recovery), at: 0)
             interventions.append(
                 AnalysisIntervention(subject: .recovery, action: .inserted, reason: .recoveryMissing)
             )
@@ -206,26 +204,29 @@ enum AnalysisReportValidator {
         // The card checks of ADR-013 run first and are untouched by this:
         // a card they struck is already a note (ADR-014 §7).
         if verdict == .insufficientData {
-            cards = cards.compactMap { card in
-                let demoted = withoutAVerdict(card)
-                if demoted != card {
+            cards = cards.compactMap { tracked in
+                let demoted = withoutAVerdict(tracked.card)
+                if demoted != tracked.card {
                     interventions.append(AnalysisIntervention(
-                        subject: AnalysisInterventionSubject(card.kind),
+                        subject: AnalysisInterventionSubject(tracked.card.kind),
                         action: demoted == nil ? .dropped : .downgraded,
                         reason: .noVerdict
                     ))
                 }
-                return demoted
+                return demoted.map { TrackedCard(card: $0, sentAs: tracked.sentAs) }
             }
             if let note = insufficientDataNote(reason: outcome.reason, evidence: evidence) {
-                cards.insert(note, at: 0)
+                cards.insert(TrackedCard(card: note, sentAs: .note), at: 0)
             }
         }
 
+        // A cut card is logged under the kind the model sent it as: a
+        // progression already downgraded to a note reads "progression
+        // dropped", not like a note the model wrote itself.
         let capped = capped(cards)
-        let kept = capped.kept
+        let kept = capped.kept.map(\.card)
         interventions += capped.dropped.map {
-            AnalysisIntervention(subject: AnalysisInterventionSubject($0.kind), action: .dropped, reason: .overCardLimit)
+            AnalysisIntervention(subject: AnalysisInterventionSubject($0.sentAs), action: .dropped, reason: .overCardLimit)
         }
 
         // Where the app's verdict differs from the model's, the model's
@@ -888,17 +889,26 @@ enum AnalysisReportValidator {
     /// Returns the cut cards too, in the order they were cut, so the log can
     /// name them (#228).
     private static func capped(
-        _ cards: [AnalysisReportCard]
-    ) -> (kept: [AnalysisReportCard], dropped: [AnalysisReportCard]) {
+        _ cards: [TrackedCard]
+    ) -> (kept: [TrackedCard], dropped: [TrackedCard]) {
         var cards = cards
-        var dropped: [AnalysisReportCard] = []
+        var dropped: [TrackedCard] = []
         while cards.count > maxCards {
-            let index = cards.lastIndex { $0.kind == .note }
-                ?? cards.lastIndex { $0.kind != .recovery }
+            let index = cards.lastIndex { $0.card.kind == .note }
+                ?? cards.lastIndex { $0.card.kind != .recovery }
                 ?? cards.count - 1
             dropped.append(cards.remove(at: index))
         }
         return (cards, dropped)
+    }
+
+    /// A card on its way through `validateLogged(_:against:)`, with the kind
+    /// the model sent it as — a note after a downgrade still remembers it was
+    /// a progression, so the cap can log it as one (#228). A card the app
+    /// added itself counts as sent as its own kind.
+    private struct TrackedCard {
+        let card: AnalysisReportCard
+        let sentAs: AnalysisCard.Kind
     }
 
     // MARK: - Helpers
