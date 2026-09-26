@@ -2,7 +2,7 @@
 
 > *Getrennt geführt: Ziele, Personas, Risiken → [README.md](../README.md) · User Stories, NFRs → [REQUIREMENTS.md](REQUIREMENTS.md) · Architekturentscheide (Detail) → [adr/](adr/)*
 >
-> **Dokumentationsstand:** Stand nach US-15 «Quellenübergreifende AI-Analyse» (Issue #171, Task-Kette #180–#188) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, SwiftData-Schema V6, ADR-001 bis ADR-013.
+> **Dokumentationsstand:** Stand nach US-16 «Reproduzierbare Empfehlung bei gleicher Datenlage» (Issue #224; #228 und #229 noch offen) auf Basis von US-15 (#171) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, Verdict aus der App statt vom Modell, SwiftData-Schema V6, ADR-001 bis ADR-014.
 
 ---
 
@@ -240,8 +240,35 @@ Alle neuen Spalten sind optional, V4 → V5 ist entsprechend leichtgewichtig: `n
 [5] Prompt-Build       → Domänen-Sektionen serialisieren (max_tokens serverseitig gedeckelt)
 [6] HTTPS POST (SSE)   → Provider 1 (api.anthropic.com / generativelanguage.googleapis.com /
                           api.mistral.ai), Streaming; jeder Fehler → Provider 2, dann 3 (#79)
-[7] @MainActor Update  → SwiftUI rendert die Antwort am Stück (#178) + Provider-Badge
+[7] Validierung       → AnalysisReportValidator: Karten gegen den Cache, Verdict aus der App (#227)
+[8] @MainActor Update  → SwiftUI rendert die Antwort am Stück (#178) + Provider-Badge
 ```
+
+**Schritt 7 — Verdict aus der App (US-16).** Das Verdict ist seit #227 keine Modellwahl mehr:
+`AnalysisVerdictRule` leitet es aus den Kennzahlen der App ab (Stufen, Schwellen und deren
+Herkunft: [ADR-014](adr/ADR-014-verdict-regel-der-app.md) — hier bewusst nicht wiederholt).
+`AnalysisReportValidator` arbeitet in fester Reihenfolge:
+
+1. Jede Karte einzeln prüfen — Zahlen aus dem Cache, Band und 2-for-2 ([ADR-013](adr/ADR-013-progressionsband-je-muskelgruppe.md)).
+2. Recovery-Karte einfügen, wenn an ≥ 6 von 7 Tagen trainiert wurde und das Modell keine lieferte (US-3 AC6).
+3. Bei `insufficientData` (US-16 AC6): `progression`-, `repProgression`-, `recovery`- und
+   `metric`-Karten werden zu Notes herabgestuft (`imbalance`, `interference` bleiben); an erster Stelle steht die Note «Why there's no
+   verdict», die die greifende Bedingung nennt. Headline «Not enough data to judge.» und Lead
+   sind App-Text. Bleibt keine Karte, zeigt der Screen null Karten.
+4. Auf höchstens vier Karten deckeln.
+5. Weicht das App-Verdict vom Modell-Verdict ab, ersetzt App-Text Headline und Lead.
+6. Progress-Lead-Schutz: Stützt keine verbleibende Karte einen Schritt (`repProgression` zählt
+   mit), ersetzt `progressLead` den Lead.
+
+Das Modell-Verdict bleibt im Antwortschema, wird überschrieben und als `modelVerdict` behalten —
+angezeigt wird es nie. `insufficientData` wird dem Modell nicht angeboten; ein solcher Wert wird
+beim Decodieren auf `hold` normalisiert. Die Eingriffe des Validators werden je Analyse
+protokolliert (Protokoll der Eingriffe, #228). Die verbleibende Streuung über mehrere Läufe misst
+[messung-verdict-streuung.md](messung-verdict-streuung.md) (folgt mit #229).
+
+> **Grenze:** Das Verdict hängt an der Übungsliste des Prompts (Top 6 nach Volumen, auf einer
+> tieferen Budget-Stufe weniger, #187). Dieselbe Historie kann deshalb auf einer anderen
+> Budget-Stufe ein anderes Verdict ergeben.
 
 Eine Sperre nach dem Durchlauf gibt es nicht mehr: Die 60-s-Doppeltipp-Sperre (#117) ist entfernt,
 der «Analysieren»-Button ist nur während eines laufenden Calls deaktiviert. Das harte Kostenlimit
@@ -305,7 +332,8 @@ Systemweite Regel: Ein LLM wird nur dort eingesetzt, wo deterministischer Code k
 
 | Bereich | AI? | Begründung |
 |---|---|---|
-| Progressions-Empfehlung | Ja (LLM) | Interpretation von Trainingsdaten erfordert Kontext-Verständnis |
+| Formulierung der Empfehlung (Headline, Kurzfazit, Karten, Übungswahl) | Ja (LLM) | Interpretation von Trainingsdaten erfordert Kontext-Verständnis |
+| Verdict (`progress` · `hold` · `recover` · `insufficientData`) | Nein | App-Regel aus eigenen Kennzahlen (US-16, [ADR-014](adr/ADR-014-verdict-regel-der-app.md)) |
 | Datenabruf (Hevy, Strava, Polar) | Nein | Klassische App-Logik |
 | Aggregation & Visualisierung | Nein | Deterministisch, kein AI-Mehrwert |
 | Key-Speicherung | Nein | iOS Keychain ist die richtige Lösung |
@@ -315,6 +343,17 @@ Systemweite Regel: Ein LLM wird nur dort eingesetzt, wo deterministischer Code k
 System-Prompt definiert: Verbotene Termini (Fachjargon), Ausgabeformat («1 Satz Lage · 1 konkrete Aktion · 1 optionaler Hinweis»), medizinischen Disclaimer, English-only output.
 
 > **RPE-Nutzung:** `ExerciseSet.rpe` (6–10) gibt Claude Aufschluss über subjektive Anstrengung — ermöglicht Empfehlungen wie *"Your RPE has been consistently at 9+ for squats — consider a deload week."*
+
+**Was das Modell entscheidet (US-16).** Das Modell wählt, welche Übung es anspricht, welche
+Karten es vorschlägt und wie es Headline, Kurzfazit und Karten formuliert. Es entscheidet **nicht**
+mehr über das Verdict (App-Regel, ADR-014) und nie über Zahlen (Validator, US-14 AC3).
+
+**Determinismus-Parameter (#226).** An einer Stelle, `LLMSampling`: gesetzt wird nur ein fester
+Seed (Gemini `seed`, Mistral `random_seed`). Die Temperatur bleibt bewusst auf dem
+Provider-Default — die Stabilität des Verdicts kommt aus der App-Regel, Temperatur 0 ist hinter
+einer öffentlichen API nicht deterministisch, und Reasoning-Modelle verlieren bei tiefer Temperatur
+an Qualität (Google empfiehlt für Gemini 3 den Default 1.0, Mistral ~0.7). Claude bekommt keinen
+Sampling-Parameter: Opus 5 lehnt `temperature` mit HTTP 400 ab und kennt keinen Seed.
 
 **Karten (US-14 / US-15).** Die Antwort kommt als JSON-Schema-Report und wird von
 `AnalysisReportValidator` gegen den Cache geprüft, bevor eine Karte gerendert wird
