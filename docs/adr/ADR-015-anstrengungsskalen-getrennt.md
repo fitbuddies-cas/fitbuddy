@@ -140,7 +140,7 @@ Die Beschreibung der Polar-Werte (`training_load_pro` mit `cardio-load`, `muscle
 
 | Task | Muss |
 |---|---|
-| #243 | `CardioMetrics.perceivedEffort` → `relativeEffort`, Persistenzspalte mitziehen, Doc-Kommentar: objektiver, Strava-spezifischer Score, keine Selbsteinschätzung. Kommentar in `RecoveryMetrics` anpassen: kein Mittel mit RPE bleibt richtig, «wird nicht gelesen» nicht mehr. |
+| #243 | `CardioMetrics.perceivedEffort` → `relativeEffort`, Persistenzspalte mitziehen, Doc-Kommentar: objektiver, Strava-spezifischer Score, keine Selbsteinschätzung. Kommentar zu `RecoveryMetrics.averageRPE` auf den neuen Feldnamen umstellen; die Begründung «kein Mittel mit RPE» bleibt richtig. |
 | #244 | `training_load_pro` dekodieren (Bindestrich-Schlüssel innerhalb, Unterstrich aussen), vier Werte optional in `CardioMetrics`, `user-rpe` als Enum mit `unknown`-Fallback und ohne Zahl. Fehlender Block ist kein Fehler, per Test. Legacy-`training_load` bleibt unverändert. |
 | #245 | Werte nur mit den Labels aus Entscheidung 2 in den Prompt, fehlende weglassen, Prompt-Regel gegen das Verrechnen ergänzen, kein `training_load` im Prompt. Kein UI- oder Prompt-Text behauptet Validierung. |
 | #246 | Evidence führt Anstrengung **je Skala** getrennt, nie ein gemeinsames Feld. Die Regel liest nur die Richtung innerhalb einer Skala (ADR-014 §3), kein Ersatzwert (§4), `Polar RPE` nicht in der Trendrechnung. Der Pfad ohne jede Anstrengung ist getestet. |
