@@ -238,7 +238,10 @@ final class MistralClientTests: LLMClientTestCase {
         XCTAssertFalse(keys.contains("temperature"), "Mistral runs at its default temperature (#226)")
     }
 
-    /// The point of the seed is that it does not move between runs.
+    /// The point of the seed is that it does not move between runs. Guards
+    /// against a rework that draws it per request (e.g. a computed
+    /// `Int.random`). Overlaps with `testRequestCarriesTheSharedSeed`, but
+    /// states the property itself rather than a value.
     func testTheSeedIsTheSameOnEveryRun() async throws {
         stub(body: MistralSSEFactory.body(textChunks: ["Hi"]))
         _ = try await collect(try await stream())
@@ -252,21 +255,5 @@ final class MistralClientTests: LLMClientTestCase {
         // both sides would be `nil`, so the equality alone would still pass.
         let firstSeed = try XCTUnwrap(first["random_seed"] as? Int)
         XCTAssertEqual(firstSeed, second["random_seed"] as? Int)
-    }
-
-    /// Every dictionary key in `value`, at any depth.
-    private static func allKeys(in value: Any) -> Set<String> {
-        switch value {
-        case let dictionary as [String: Any]:
-            return dictionary.reduce(into: Set(dictionary.keys)) { keys, entry in
-                keys.formUnion(allKeys(in: entry.value))
-            }
-        case let array as [Any]:
-            return array.reduce(into: Set<String>()) { keys, element in
-                keys.formUnion(allKeys(in: element))
-            }
-        default:
-            return []
-        }
     }
 }

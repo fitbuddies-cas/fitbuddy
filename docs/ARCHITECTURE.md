@@ -2,7 +2,7 @@
 
 > *Getrennt geführt: Ziele, Personas, Risiken → [README.md](../README.md) · User Stories, NFRs → [REQUIREMENTS.md](REQUIREMENTS.md) · Architekturentscheide (Detail) → [adr/](adr/)*
 >
-> **Dokumentationsstand:** Stand nach US-16 «Reproduzierbare Empfehlung bei gleicher Datenlage» (Issue #224) auf Basis von US-15 (#171) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, Verdict aus der App statt vom Modell, SwiftData-Schema V7, ADR-001 bis ADR-015.
+> **Dokumentationsstand:** Stand nach US-16 «Reproduzierbare Empfehlung bei gleicher Datenlage» (Issue #224) auf Basis von US-15 (#171) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, Verdict aus der App statt vom Modell, SwiftData-Schema V7, ADR-001 bis ADR-015 (ADR-015 vorgezogen aus US-18).
 
 ---
 
