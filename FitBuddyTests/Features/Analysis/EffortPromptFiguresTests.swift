@@ -35,6 +35,37 @@ final class EffortPromptFiguresTests: XCTestCase {
         ])
     }
 
+    /// The six labels of ADR-015 §2, as exact strings in one place: renaming
+    /// one in code must fail here rather than drift silently from the ADR.
+    /// Five are `EffortScale` labels; "Polar RPE" is the level label that has
+    /// no scale (ADR-015 §5).
+    func testTheLabelsAreExactlyThoseOfADR015() {
+        XCTAssertEqual(EffortScale.allCases.map(\.label), [
+            "RPE",
+            "Strava Relative Effort",
+            "Polar Cardio Load",
+            "Polar Perceived Load",
+            "Polar Muscle Load",
+        ])
+
+        let labels = EffortPromptFigures.values(of: summary(rpe: 8, cardio: CardioMetrics(
+            relativeEffort: 45,
+            cardioLoad: 30,
+            muscleLoad: 12,
+            perceivedLoad: 70,
+            userRPE: .hard
+        ))).map(\.label)
+
+        XCTAssertEqual(labels, [
+            "mean RPE",
+            "Strava Relative Effort",
+            "Polar Cardio Load",
+            "Polar Muscle Load",
+            "Polar Perceived Load",
+            "Polar RPE",
+        ])
+    }
+
     /// AC2: two scales on one session are listed side by side — two labelled
     /// values, never one combined figure.
     func testTwoScalesOnOneSessionStayTwoSeparateValues() {
