@@ -76,7 +76,7 @@ enum MockAnalysisSeeder {
     /// profile asserts the cross-source line of US-15 AC4 — "12 Hevy · 12
     /// Strava sessions" — as the app computes it, not as a fixture spells it.
     /// The counting, the window ladder and the preselected profile are the
-    /// view model's own (`AnalysisViewModel.sessionCounts(in:from:)`,
+    /// ones a real run uses (`AnalysisContext.counts(in:from:)`,
     /// `AnalysisProfileOptions`), so the seeded line and a real run's cannot
     /// drift apart.
     ///
@@ -91,7 +91,7 @@ enum MockAnalysisSeeder {
         guard let window = AnalysisWindow.resolve(for: summaries, endingAt: now, calendar: calendar)
         else { return context(forReportNamed: name) }
         let start = window.start(endingAt: now, calendar: calendar)
-        let counts = AnalysisViewModel.sessionCounts(in: summaries, from: start)
+        let counts = AnalysisContext.counts(in: summaries, from: start)
         let profile = AnalysisProfileOptions(domainCounts: counts.domains).preselected
         return AnalysisContext(
             sessionCounts: counts.sources,

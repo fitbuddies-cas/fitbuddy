@@ -1024,24 +1024,6 @@ final class AnalysisViewModelTests: XCTestCase {
         )
     }
 
-    /// The domain follows the normalized sport, not the connector (ADR-012):
-    /// a Strava `WeightTraining` session is named under Strava on the line and
-    /// counted as strength in the warning.
-    func testTheDomainSplitFollowsTheSportAndNotTheSource() async {
-        cache.summaries = [
-            Self.workout(daysAgo: 2),
-            Self.workout(daysAgo: 3, title: "Gym", source: .strava, kind: .strength),
-            Self.workout(daysAgo: 4, title: "Morning Run", source: .strava, kind: .run),
-        ]
-        await streamer.setText("ok")
-        let sut = makeSUT()
-
-        await sut.start()
-
-        XCTAssertEqual(sut.context?.sessionCounts, [.hevy: 1, .strava: 2])
-        XCTAssertEqual(sut.context?.domainCounts, [.strength: 2, .endurance: 1])
-    }
-
     /// A cache holding nothing but runs used to be "no training data",
     /// because the prompt could not describe a run. #183 gives it an endurance
     /// section, so it is an analysis like any other.

@@ -245,6 +245,47 @@ final class AnalysisContextTests: XCTestCase {
         XCTAssertEqual(context([:]).sessionCount, 0)
     }
 
+    // MARK: - Counting (US-15 AC4, #182)
+
+    private static let reference = Date(timeIntervalSince1970: 1_788_000_000)
+
+    private static func summary(
+        daysAgo: Int,
+        source: ConnectorSource = .hevy,
+        kind: ActivityKind = .strength
+    ) -> WorkoutSummary {
+        WorkoutSummary(
+            id: "w-\(daysAgo)",
+            title: "Session",
+            startTime: reference.addingTimeInterval(-Double(daysAgo) * 86_400),
+            source: source,
+            kind: kind,
+            volumeKg: source == .hevy ? 4_200 : 0,
+            exerciseCount: 5,
+            countedSetCount: 18,
+            distanceMeters: source.isEnduranceSource ? 8_400 : nil
+        )
+    }
+
+    /// The domain follows the normalized sport, not the connector (ADR-012):
+    /// a Strava `WeightTraining` session is named under Strava on the line and
+    /// counted as strength in the warning.
+    func testTheDomainSplitFollowsTheSportAndNotTheSource() {
+        let summaries = [
+            Self.summary(daysAgo: 2),
+            Self.summary(daysAgo: 3, source: .strava, kind: .strength),
+            Self.summary(daysAgo: 4, source: .strava, kind: .run),
+        ]
+
+        let counts = AnalysisContext.counts(
+            in: summaries,
+            from: Self.reference.addingTimeInterval(-28 * 86_400)
+        )
+
+        XCTAssertEqual(counts.sources, [.hevy: 1, .strava: 2])
+        XCTAssertEqual(counts.domains, [.strength: 2, .endurance: 1])
+    }
+
     // MARK: - Totals
 
     /// `sessionCount` stays the sum, so everything written against it before
