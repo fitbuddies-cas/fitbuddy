@@ -71,7 +71,7 @@ Das Verrechnungsverbot aus #242 gilt hier unverändert: Anstrengungswerte werden
 Daraus folgt für die Regel:
 
 1. **Nur Richtung, nie Niveau.** Die Regel liest «steigt diese Quelle gegen sich selbst», nie «RPE 8 ist hart». Ein Niveau wäre ein Anker von aussen und verletzt Regel 2 des System-Prompts.
-2. **Getrennt pro Quelle.** Jede Quelle wird für sich ausgewertet. Steigt eine, greift die Deckelung; die anderen werden nicht dagegen aufgerechnet.
+2. **Getrennt pro Quelle.** Jede Quelle wird für sich ausgewertet. Steigt eine, greift die Deckelung; die anderen werden nicht dagegen aufgerechnet. Präzisiert durch [ADR-015](ADR-015-anstrengungsskalen-getrennt.md): getrennt je Skala, nicht je Quelle; Polar kann mehrere Reihen beitragen.
 3. **Qualifiziert ist eine Quelle**, wenn sie in mindestens **3** Wochen des Fensters *und* in den letzten 7 Tagen einen Wert trägt. Darunter wird sie ignoriert, nicht ergänzt.
 4. **Steigend** heisst: Mittel der letzten 7 Tage über **130 %** des Mittels der vorangehenden Wochen derselben Quelle. **Fallend**: unter **80 %**. Dazwischen: stabil.
 5. **Anstrengung kann nur deckeln, nie befördern.** Steigende Anstrengung senkt `progress` auf `hold`. Sie erzeugt **kein** `recover` für sich allein — dafür braucht es zusätzlich Stufe 0. Fallende oder stabile Anstrengung erzeugt gar nichts.
@@ -96,8 +96,8 @@ Fehlende Anstrengung allein ist aber **kein** Auslöser für `insufficientData`:
 | Profil | Stufe 0 | Stufe 1 | Stufen 2–4 | Stufe 5 |
 |---|---|---|---|---|
 | `.strength` | Ruhetage über **alle** Quellen und beide Domänen (#184) | Kraft-Sessions | ja | nur Hevy-RPE |
-| `.endurance` | wie oben | Ausdauer-Sessions | **entfallen** | Strava / Polar, je Quelle getrennt |
-| `.overallLoad` | wie oben | alle Sessions | auf der Kraft-Hälfte | alle Quellen, je Quelle getrennt |
+| `.endurance` | wie oben | Ausdauer-Sessions | **entfallen** | Strava / Polar, je Skala getrennt (ADR-015) |
+| `.overallLoad` | wie oben | alle Sessions | auf der Kraft-Hälfte | alle Quellen, je Skala getrennt (ADR-015) |
 
 Unter `.endurance` gibt es weder gelistete Übungen noch eine Plateau-Aussage; ein e1RM existiert dort nicht. Die Stufen 2–4 entfallen deshalb nicht «weil der Wert 0 ist», sondern weil es die Grösse nicht gibt. Damit gilt:
 
