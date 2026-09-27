@@ -19,7 +19,7 @@ enum WorkoutDurationFormatter {
     /// duration at all, which is the honest rendering of "we do not know".
     static func session(from start: Date, to end: Date?) -> String? {
         guard let end else { return nil }
-        return seconds(end.timeIntervalSince(start))
+        return duration(seconds: end.timeIntervalSince(start))
     }
 
     /// The same form from a plain duration: `6_120` → `"1 h 42 min"`,
@@ -35,7 +35,7 @@ enum WorkoutDurationFormatter {
     /// `nil` for a zero or negative duration. The output carries no grouping
     /// separator and no decimal mark, so it is already the locale-free form
     /// the prompt needs — there is no second variant of it.
-    static func seconds(_ seconds: TimeInterval) -> String? {
+    static func duration(seconds: TimeInterval) -> String? {
         guard seconds > 0 else { return nil }
 
         let minutes = Int(seconds / 60)

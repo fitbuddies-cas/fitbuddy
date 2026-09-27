@@ -11,12 +11,12 @@ struct WorkingSet: Equatable, Sendable {
     let weightKg: Double
     let reps: Int
 
-    /// The weight as the prompt writes it — see `PlainWeightFormatter`.
-    var weightText: String { PlainWeightFormatter.string(weightKg) }
+    /// The weight as the prompt writes it — see `PlainNumberFormatter`.
+    var weightText: String { PlainNumberFormatter.string(weightKg) }
 
     /// The weight at the precision the prompt states it, for comparing a
     /// figure read back from the model's answer.
-    var roundedWeightKg: Double { PlainWeightFormatter.rounded(weightKg) }
+    var roundedWeightKg: Double { PlainNumberFormatter.rounded(weightKg) }
 
     /// Whether this set is the heavier of the two: by weight, ties broken by
     /// reps. By weight rather than by Epley, because a recommendation moves

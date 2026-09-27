@@ -507,7 +507,7 @@ enum AnalysisReportValidator {
         guard toKg >= range.lowerBound - weightToleranceKg - epsilon else { return .rejected(.belowRange) }
         guard toKg <= range.upperBound + weightToleranceKg + epsilon else { return .rejected(.aboveRange) }
         let steps = ((toKg - match.workingKg) / step).rounded()
-        let onStep = PlainWeightFormatter.rounded(match.workingKg + steps * step)
+        let onStep = PlainNumberFormatter.rounded(match.workingKg + steps * step)
         guard abs(toKg - onStep) <= weightToleranceKg + epsilon else { return .rejected(.offStep) }
         return .accepted(.progression(
             exercise: match.exercise.title,
@@ -602,8 +602,8 @@ enum AnalysisReportValidator {
     private static func matchesFrequency(_ lhs: Double, _ rhs: Double) -> Bool {
         let decimals = MuscleGroupFrequency.decimals
         return abs(
-            PlainWeightFormatter.rounded(lhs, decimals: decimals)
-                - PlainWeightFormatter.rounded(rhs, decimals: decimals)
+            PlainNumberFormatter.rounded(lhs, decimals: decimals)
+                - PlainNumberFormatter.rounded(rhs, decimals: decimals)
         ) < epsilon
     }
 

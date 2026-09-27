@@ -47,21 +47,24 @@ final class WorkoutDurationFormatterTests: XCTestCase {
     /// What a connector delivers for an endurance activity is a moving time,
     /// not a pair of dates.
     func testASecondsDurationReadsLikeASession() {
-        XCTAssertEqual(WorkoutDurationFormatter.seconds(3_120), "52 min")
-        XCTAssertEqual(WorkoutDurationFormatter.seconds(6_120), "1 h 42 min")
-        XCTAssertEqual(WorkoutDurationFormatter.seconds(7_200), "2 h")
-        XCTAssertEqual(WorkoutDurationFormatter.seconds(30), "< 1 min")
+        XCTAssertEqual(WorkoutDurationFormatter.duration(seconds: 3_120), "52 min")
+        XCTAssertEqual(WorkoutDurationFormatter.duration(seconds: 6_120), "1 h 42 min")
+        XCTAssertEqual(WorkoutDurationFormatter.duration(seconds: 7_200), "2 h")
+        XCTAssertEqual(WorkoutDurationFormatter.duration(seconds: 30), "< 1 min")
     }
 
     /// A weekly endurance total stays in hours rather than rolling into days.
     func testAWeeklyTotalStaysInHours() {
-        XCTAssertEqual(WorkoutDurationFormatter.seconds(11 * 3_600), "11 h")
-        XCTAssertEqual(WorkoutDurationFormatter.seconds(26 * 3_600 + 30 * 60), "26 h 30 min")
+        XCTAssertEqual(WorkoutDurationFormatter.duration(seconds: 11 * 3_600), "11 h")
+        XCTAssertEqual(
+            WorkoutDurationFormatter.duration(seconds: 26 * 3_600 + 30 * 60),
+            "26 h 30 min"
+        )
     }
 
     func testAZeroOrNegativeDurationIsNoDuration() {
-        XCTAssertNil(WorkoutDurationFormatter.seconds(0))
-        XCTAssertNil(WorkoutDurationFormatter.seconds(-60))
+        XCTAssertNil(WorkoutDurationFormatter.duration(seconds: 0))
+        XCTAssertNil(WorkoutDurationFormatter.duration(seconds: -60))
     }
 
     private func session(after seconds: TimeInterval) -> String? {

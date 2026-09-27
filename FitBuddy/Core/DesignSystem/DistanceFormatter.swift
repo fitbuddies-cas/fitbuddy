@@ -45,11 +45,11 @@ enum DistanceFormatter {
     /// Used where a distance leaves the app as a value something else reads
     /// back — the analysis prompt — following the rule
     /// `AnalysisPromptBuilder.kg(_:)` follows for weights. Trailing zeros are
-    /// dropped by `PlainWeightFormatter`, so `5_000` is `"5 km"`: the model
+    /// dropped by `PlainNumberFormatter`, so `5_000` is `"5 km"`: the model
     /// reads a figure, not a column.
     static func plain(_ meters: Double) -> String {
         let parts = parts(meters)
-        return "\(PlainWeightFormatter.string(parts.value, decimals: parts.decimals)) \(parts.unit)"
+        return "\(PlainNumberFormatter.string(parts.value, decimals: parts.decimals)) \(parts.unit)"
     }
 
     /// The distance `display` and `plain` actually print, back in metres:
@@ -75,7 +75,7 @@ enum DistanceFormatter {
     /// The value is rounded **once**, at the precision it will be printed
     /// with, and always from the exact distance: past 100 km, handing `100.5`
     /// to both callers would leave Foundation's half-even rule to print
-    /// `"100 km"` while `PlainWeightFormatter` writes `"101 km"` from the same
+    /// `"100 km"` while `PlainNumberFormatter` writes `"101 km"` from the same
     /// distance. The threshold is tested on a copy rounded to a tenth, so
     /// `99.96 km` reads `"100 km"` rather than `"100.0 km"`, but the printed
     /// figure never passes through that tenth — rounding `123.456` to `123.5`
@@ -86,9 +86,9 @@ enum DistanceFormatter {
         let wholeMeters = meters.rounded()
         guard wholeMeters >= 1_000 else { return (wholeMeters, 0, "m") }
         let kilometers = meters / 1_000
-        guard PlainWeightFormatter.rounded(kilometers, decimals: 1) < 100 else {
-            return (PlainWeightFormatter.rounded(kilometers, decimals: 0), 0, "km")
+        guard PlainNumberFormatter.rounded(kilometers, decimals: 1) < 100 else {
+            return (PlainNumberFormatter.rounded(kilometers, decimals: 0), 0, "km")
         }
-        return (PlainWeightFormatter.rounded(kilometers, decimals: 1), 1, "km")
+        return (PlainNumberFormatter.rounded(kilometers, decimals: 1), 1, "km")
     }
 }

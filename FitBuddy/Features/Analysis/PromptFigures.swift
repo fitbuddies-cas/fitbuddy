@@ -19,7 +19,7 @@ import Foundation
 /// **Unified with #181 in #186, as that comment promised.** Every endurance
 /// figure below is now one call into `DistanceFormatter.plain`,
 /// `PaceFormatter.plain`, `HeartRateFormatter.plain` or
-/// `WorkoutDurationFormatter.seconds`, so the ranges are decided in
+/// `WorkoutDurationFormatter.duration(seconds:)`, so the ranges are decided in
 /// `Core/DesignSystem` once and a card and the prompt behind it cannot state
 /// the same session differently. What stays here is the part that is about the
 /// *prompt* rather than about a unit: the `nil` at a figure nothing recorded
@@ -36,7 +36,7 @@ enum PromptFigures {
 
     /// A 1RM change with its direction spelled out.
     static func signed(_ kilograms: Double) -> String {
-        let text = PlainWeightFormatter.string(abs(kilograms), decimals: 1)
+        let text = PlainNumberFormatter.string(abs(kilograms), decimals: 1)
         guard text != "0" else { return "no change" }
         return (kilograms > 0 ? "+" : "-") + text + " kg"
     }
@@ -62,8 +62,8 @@ enum PromptFigures {
     /// `26 h 30 min`, which is how a training log states it. `nil` at zero and
     /// below, for the same reason `distance` returns `nil` there.
     ///
-    /// `WorkoutDurationFormatter.seconds` decides the form, as the detail
-    /// header and the endurance cards do (#186). Two consequences of the one
+    /// `WorkoutDurationFormatter.duration(seconds:)` decides the form, as the
+    /// detail header and the endurance cards do (#186). Two consequences of the one
     /// rule, both deliberate: the seconds are **truncated** rather than
     /// rounded to a minute — a watch shows `1 h 29 min` for 1:29:40, and a
     /// prompt that rounded it up would state a minute the card below it does
@@ -71,7 +71,7 @@ enum PromptFigures {
     /// disappearing from the section.
     static func duration(_ seconds: Int) -> String? {
         guard seconds > 0 else { return nil }
-        return WorkoutDurationFormatter.seconds(TimeInterval(seconds))
+        return WorkoutDurationFormatter.duration(seconds: TimeInterval(seconds))
     }
 
     /// Pace per kilometre in `M:SS min/km`, the form a runner reads.
@@ -87,7 +87,7 @@ enum PromptFigures {
     /// says the same thing in a unit nobody uses for it.
     static func speed(metersPerSecond: Double) -> String? {
         guard metersPerSecond.isFinite, metersPerSecond > 0 else { return nil }
-        return "\(PlainWeightFormatter.string(metersPerSecond * 3.6, decimals: 1)) km/h"
+        return "\(PlainNumberFormatter.string(metersPerSecond * 3.6, decimals: 1)) km/h"
     }
 
     /// A heart rate in beats per minute. `nil` at or below zero — a rate
