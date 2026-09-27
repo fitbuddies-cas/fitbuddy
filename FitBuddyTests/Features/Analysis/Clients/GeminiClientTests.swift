@@ -272,20 +272,4 @@ final class GeminiClientTests: LLMClientTestCase {
         let keys = Self.allKeys(in: try jsonBody(of: try capturedRequest()))
         XCTAssertFalse(keys.contains("temperature"), "Gemini runs at its default temperature (#226)")
     }
-
-    /// Every dictionary key in `value`, at any depth.
-    private static func allKeys(in value: Any) -> Set<String> {
-        switch value {
-        case let dictionary as [String: Any]:
-            return dictionary.reduce(into: Set(dictionary.keys)) { keys, entry in
-                keys.formUnion(allKeys(in: entry.value))
-            }
-        case let array as [Any]:
-            return array.reduce(into: Set<String>()) { keys, element in
-                keys.formUnion(allKeys(in: element))
-            }
-        default:
-            return []
-        }
-    }
 }
