@@ -44,7 +44,13 @@ final class AnalysisReportEvidenceTests: XCTestCase {
                 muscleGroup: .chest,
                 workingSet: WorkingSet(weightKg: 60, reps: 6),
                 smallestStepKg: 2.5,
-                twoForTwo: .notCheckable
+                twoForTwo: .notCheckable,
+                // #227: the same three facts the prompt line states, carried
+                // for ADR-014 stages 2 to 4. Two of the three sessions
+                // project an e1RM, and the later of them is the higher.
+                progressionPoints: 2,
+                isPlateaued: false,
+                latestIsWindowBest: true
             ),
         ])
     }
@@ -331,6 +337,36 @@ final class AnalysisReportEvidenceTests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    // MARK: - The data basis of the verdict rule (#227, ADR-014 stage 1)
+
+    /// Counted over the resolved window, not over everything the cache
+    /// returned.
+    func testSessionsInWindowCountOnlyTheAnalysedWindow() {
+        let evidence = makeEvidence(summaries: [
+            summary(daysAgo: 1),
+            summary(daysAgo: 10),
+            summary(daysAgo: 25),
+            summary(daysAgo: 40),
+        ])
+
+        XCTAssertEqual(evidence.sessionsInWindow, 3, "The 40-day-old session is outside the four-week window")
+        XCTAssertEqual(evidence.sessionsInLastSevenDays, 1)
+    }
+
+    /// Only the domains the profile covers: under "Strength" a week of runs
+    /// leaves the analysis describing a pause, and the rule has to see that.
+    func testSessionsInWindowFollowTheProfile() {
+        let summaries = [summary(daysAgo: 20), summary(daysAgo: 21), ride(daysAgo: 1, id: "r-1")]
+
+        let strength = makeEvidence(summaries: summaries, analysisProfile: .strength)
+        let both = makeEvidence(summaries: summaries, analysisProfile: .overallLoad)
+
+        XCTAssertEqual(strength.sessionsInWindow, 2)
+        XCTAssertEqual(strength.sessionsInLastSevenDays, 0)
+        XCTAssertEqual(both.sessionsInWindow, 3)
+        XCTAssertEqual(both.sessionsInLastSevenDays, 1)
+    }
 
     private func makeEvidence(
         summaries: [WorkoutSummary],

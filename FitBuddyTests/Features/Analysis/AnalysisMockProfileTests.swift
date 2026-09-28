@@ -92,7 +92,8 @@ final class AnalysisMockProfileTests: XCTestCase {
                     reasoning: "3 sessions at 60 kg × 5 with RPE 7 or lower — clean overload signal."
                 ),
             ],
-            summary: AnalysisReportFactory.progressionReady.summary
+            summary: AnalysisReportFactory.progressionReady.summary,
+            modelVerdict: .progress
         ))
     }
 
@@ -134,14 +135,22 @@ final class AnalysisMockProfileTests: XCTestCase {
     /// End to end (#235): the squat step within the band survives with the
     /// cache's starting weight, the rep progression survives with the cache's
     /// weight, and the two load increases the rule holds back — not met, not
-    /// checkable — become notes. The verdict keeps the model's lead: two
-    /// cards still back it.
+    /// checkable — become notes.
+    ///
+    /// The verdict is the app's (#227): bench, lateral raise and seated row
+    /// have set no new e1RM best in their last three sessions, so three of
+    /// the four decidable exercises are plateaued — ADR-014 stage 3, `hold`.
+    /// Before the merge with #227 the model's `progress` stood here because
+    /// two cards backed it. The cards themselves are untouched by that: the
+    /// verdict does not decide over them (ADR-014 §7).
     func testPlateauKeepsTheCardsTheRuleAllowsAndNotesTheOthers() async throws {
         let outcome = try await run(.plateau, answer: AnalysisReportFactory.plateau).outcome
 
         let report = try XCTUnwrap(outcome?.report)
-        XCTAssertEqual(report.verdict, .progress)
-        XCTAssertEqual(report.lead, AnalysisReportFactory.plateau.lead)
+        XCTAssertEqual(report.verdict, .hold)
+        XCTAssertEqual(report.modelVerdict, .progress)
+        XCTAssertEqual(report.headline, AnalysisReportValidator.holdHeadline)
+        XCTAssertEqual(report.lead, AnalysisReportValidator.holdLead)
         XCTAssertEqual(report.cards, [
             .progression(
                 exercise: "Squat (Barbell)",
@@ -163,8 +172,10 @@ final class AnalysisMockProfileTests: XCTestCase {
         ])
     }
 
-    /// Over the ceiling the step is a note, and a progress verdict with no
-    /// card left behind it holds with the app's lead (#177, #233).
+    /// Over the ceiling the step is a note (#233). The report holds — no
+    /// longer because no card is left behind the model's progress (#177 is
+    /// gone as a verdict rule since #227), but because the profile is a
+    /// plateau majority (ADR-014 stage 3), exactly as with a valid answer.
     func testPlateauRejectsAStepOverTheBandAndHolds() async throws {
         let outcome = try await run(.plateau, answer: AnalysisReportFactory.plateauOvershoot).outcome
 
@@ -259,16 +270,18 @@ final class AnalysisMockProfileTests: XCTestCase {
 
     // MARK: - Thin data (#170)
 
-    /// A model that finds nothing to put on a card answers with none, and the
-    /// screen gets a report — lead and summary — rather than the prose
-    /// fallback. The disclosure then starts open.
+    /// A model answer without cards stays one. Its verdict does not: the
+    /// `progression-ready` cache carries the step, so the app's own figures
+    /// say "progress" where the model asked to hold (#227). The disclosure
+    /// still starts open, because no card here is actionable.
     func testAThinAnswerStaysAReportWithoutCards() async throws {
         let outcome = try await run(.progressionReady, answer: AnalysisReportFactory.thin).outcome
 
         let report = try XCTUnwrap(outcome?.report)
         XCTAssertTrue(report.cards.isEmpty)
-        XCTAssertEqual(report.verdict, .hold)
-        XCTAssertEqual(report.lead, AnalysisReportFactory.thin.lead)
+        XCTAssertEqual(report.verdict, .progress)
+        XCTAssertEqual(report.modelVerdict, .hold)
+        XCTAssertEqual(report.lead, AnalysisReportValidator.progressLead)
         XCTAssertEqual(report.summary, AnalysisReportFactory.thin.summary)
         XCTAssertTrue(AnalysisFullAnalysis.startsExpanded(for: report.cards))
     }
@@ -340,16 +353,22 @@ final class AnalysisMockProfileTests: XCTestCase {
         ).outcome
 
         let report = try XCTUnwrap(outcome?.report)
-        XCTAssertEqual(report.verdict, .progress)
-        XCTAssertEqual(report.cards.count, 1)
-        XCTAssertEqual(report.cards.first?.kind, .metric)
-        guard case let .metric(_, from, to, unit, _, source)? = report.cards.first else {
-            return XCTFail("The endurance answer did not survive as a metric card")
-        }
-        XCTAssertEqual(unit, .kilometers)
-        XCTAssertEqual(from, kilometers, accuracy: 0.0001)
-        XCTAssertEqual(to, AnalysisReportFactory.metricStep(from: kilometers), accuracy: 0.0001)
-        XCTAssertEqual(source, "Run")
+        // ADR-014 §5: under "Endurance" the app has no figure that could
+        // carry a verdict in v0, so this run has none — and a metric card,
+        // which states a step, cannot stand under a report without one.
+        // Before #227 the model's progress verdict and its card both stood
+        // here; what the card is checked against is unchanged and covered by
+        // `AnalysisReportValidatorTests`.
+        XCTAssertEqual(report.verdict, .insufficientData)
+        XCTAssertEqual(report.modelVerdict, .progress)
+        XCTAssertEqual(report.cards.map(\.kind), [.note, .note])
+        XCTAssertEqual(
+            report.cards.last,
+            .note(
+                title: "Weekly distance",
+                text: "Three weeks at the same distance with an unchanged easy heart rate."
+            )
+        )
     }
 
     /// The context line of a single endurance source, and no thin-data
@@ -442,6 +461,14 @@ final class AnalysisMockProfileTests: XCTestCase {
             return XCTFail("The interference card did not survive")
         }
         XCTAssertEqual(metrics, InterferenceMetrics(strengthDays: 3, cardioDays: 3, overlapDays: 2))
+        // The verdict is the app's (#227): under "Overall load" the rule reads
+        // the strength half (ADR-014 §5), where every lift but the curl and
+        // the raise set its window best in the latest session — stage 4.
+        // The model's "hold" goes with its headline and lead.
+        XCTAssertEqual(report.verdict, .progress)
+        XCTAssertEqual(report.modelVerdict, .hold)
+        XCTAssertEqual(report.headline, AnalysisHeadline.text(for: .progress))
+        XCTAssertEqual(report.lead, AnalysisReportValidator.progressLead)
     }
 
     /// Under "Strength" the endurance sessions are counted on the line — the
@@ -507,7 +534,19 @@ final class AnalysisMockProfileTests: XCTestCase {
         // card keeps the model's sentence as a note and loses its figures.
         let report = try XCTUnwrap(run.outcome?.report)
         XCTAssertFalse(report.cards.contains { $0.kind == .progression })
-        XCTAssertEqual(report.cards.map(\.kind), [.note])
+        // ADR-014 §5: under "Endurance" there is no e1RM, so the run has no
+        // verdict, and the app's note saying why comes first (#227).
+        XCTAssertEqual(report.verdict, .insufficientData)
+        XCTAssertEqual(report.cards, [
+            .note(
+                title: AnalysisReportValidator.insufficientDataNoteTitle,
+                text: "Under Endurance the app has no estimated 1RM to read a trend from — that figure exists for strength only."
+            ),
+            .note(
+                title: "Bench Press (Barbell)",
+                text: "3 sessions at 60 kg × 5 with RPE 7 or lower — clean overload signal."
+            ),
+        ])
     }
 
     /// The per-domain thin-data warning of US-15 AC4: a full lifting window

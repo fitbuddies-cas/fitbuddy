@@ -192,12 +192,21 @@ final class AnalysisViewModelTests: XCTestCase {
 
         await sut.start()
 
+        // Two sessions in the window is below ADR-014 stage 1, so the run
+        // has no verdict and says which condition produced that (#227).
+        // Before #227 this was a `hold` with the model's own lead.
         let expected = ValidatedAnalysisReport(
-            headline: AnalysisReportValidator.holdHeadline,
-            verdict: .hold,
-            lead: "Too little data for a change yet.",
-            cards: [],
-            summary: "Keep training as you do."
+            headline: AnalysisReportValidator.insufficientDataHeadline,
+            verdict: .insufficientData,
+            lead: AnalysisReportValidator.insufficientDataLead,
+            cards: [
+                .note(
+                    title: AnalysisReportValidator.insufficientDataNoteTitle,
+                    text: "This analysis covers 2 of the 4 sessions the app needs before it reads a trend."
+                ),
+            ],
+            summary: "Keep training as you do.",
+            modelVerdict: .progress
         )
         XCTAssertEqual(sut.state, .result(.report(expected)))
         let latest = try await results.latest()
@@ -212,7 +221,10 @@ final class AnalysisViewModelTests: XCTestCase {
         let bench = Self.exercise("Bench Press (Barbell)", volume: 1_000)
         let exercises = StubAnalysisExerciseCache()
         exercises.exercises = [bench]
-        exercises.progressions = [bench.id: Self.progression(bench, weightKg: 60, reps: 5, daysAgo: 2)]
+        exercises.progressions = [
+            bench.id: Self.progression(bench, weightKg: 60, reps: 5, daysAgo: 2, sessions: 5),
+        ]
+        cache.summaries = (1...4).map { Self.workout(daysAgo: $0) }
         let reasoning = "Five sessions at 60 kg with the reps held."
         await streamer.setReport(AnalysisReport(
             headline: "You're ready to progress.",
@@ -239,8 +251,11 @@ final class AnalysisViewModelTests: XCTestCase {
             ),
             .note(title: "Squat", text: "Squat is ready."),
         ])
-        XCTAssertEqual(report.verdict, .progress)
-        XCTAssertEqual(report.lead, "Bench press can go up.")
+        // Five sessions at the same weight are a plateau, so the app holds
+        // where the model wanted to progress (#227). The card validation this
+        // test is about is unchanged.
+        XCTAssertEqual(report.verdict, .hold)
+        XCTAssertEqual(report.modelVerdict, .progress)
     }
 
     /// US-14 AC4: at six training days of the last seven the app inserts the
@@ -555,14 +570,15 @@ final class AnalysisViewModelTests: XCTestCase {
         )
     }
 
-    /// Two sessions at the same weight, a week apart, each beating its
-    /// routine target by two reps — so the 2-for-2 rule of ADR-013 is met and
-    /// a progression card on the movement is one the validator can keep.
+    /// `sessions` sessions at the same weight, three days apart, each beating
+    /// its routine target by two reps — so the 2-for-2 rule of ADR-013 is met
+    /// and a progression card on the movement is one the validator can keep.
     private static func progression(
         _ summary: ExerciseSummary,
         weightKg: Double,
         reps: Int,
-        daysAgo: Int
+        daysAgo: Int,
+        sessions: Int = TwoForTwoCondition.requiredSessions
     ) -> ExerciseProgression {
         let sets = (0..<3).map { index in
             SetDetail(
@@ -576,17 +592,19 @@ final class AnalysisViewModelTests: XCTestCase {
                 targetReps: reps - TwoForTwoCondition.requiredMargin
             )
         }
-        return ExerciseProgression(
-            id: summary.id,
-            title: summary.title,
-            sessions: [daysAgo + 7, daysAgo].map { day in
-                ExerciseHistoryEntry(
-                    workoutID: "w-\(day)",
-                    sessionStart: reference.addingTimeInterval(-Double(day) * 86_400),
-                    sets: sets
-                )
-            }
-        )
+        // Oldest first, the most recent one `daysAgo` back. Two by default,
+        // the pair the 2-for-2 rule reads (#233); more only where a test
+        // needs the movement to be decidable for the verdict rule (#227):
+        // four sessions at the same weight are a plateau, which leaves the
+        // cards alone.
+        let entries = (0..<max(TwoForTwoCondition.requiredSessions, sessions)).reversed().map { index in
+            ExerciseHistoryEntry(
+                workoutID: "w-\(daysAgo + index * 3)",
+                sessionStart: reference.addingTimeInterval(-Double(daysAgo + index * 3) * 86_400),
+                sets: sets
+            )
+        }
+        return ExerciseProgression(id: summary.id, title: summary.title, sessions: entries)
     }
 
     // MARK: - Training profile (US-13 AC3/AC4, #192)

@@ -64,7 +64,7 @@ enum AnalysisReportValidator {
 
     /// The headline of a report the app turned into a recovery verdict
     /// (US-14 AC4).
-    static let recoveryHeadline = "Recover this week."
+    static let recoveryHeadline = AnalysisHeadline.text(for: .recover)
 
     /// The lead of a report the app turned into a recovery verdict (US-14 AC4,
     /// #170). Replaces the model's, which was written for the verdict the app
@@ -81,13 +81,34 @@ enum AnalysisReportValidator {
 
     /// The headline of a progress report the app turned into a hold verdict,
     /// because no progression card is left to back it (#177).
-    static let holdHeadline = "Hold steady this week."
+    static let holdHeadline = AnalysisHeadline.text(for: .hold)
 
     /// The lead of a progress report the app turned into a hold verdict after
     /// taking away at least one of its progressions (#170). The model's lead
     /// argued for a load increase no card backs.
     static let holdLead =
         "Your data doesn't back a specific load increase yet. Keep your current weights and read the full analysis below."
+
+    /// The lead of a report the app turned into a progress verdict, because
+    /// its own figures carry the step the model argued against (ADR-014 §7).
+    ///
+    /// Says only what stage 4 measured. ADR-014 spells out the text for the
+    /// fourth class but not for this case, so the wording is #227's; it was
+    /// kept to the one statement the rule actually read.
+    static let progressLead =
+        "Your most recent session set the best estimated 1RM of the analysed window on at least one exercise. Read the full analysis below before adding load."
+
+    /// The headline of a report without a verdict (ADR-014 §6). Same string
+    /// `AnalysisHeadline` renders, so the stored report and the screen cannot
+    /// say different things.
+    static let insufficientDataHeadline = AnalysisHeadline.text(for: .insufficientData)
+
+    /// The lead of a report without a verdict, word for word from ADR-014 §6.
+    static let insufficientDataLead =
+        "Your logged training doesn't yet support a recommendation for or against more load. Keep training as before — the next analysis will have more to go on."
+
+    /// Title of the note that names why there is no verdict (ADR-014 §6).
+    static let insufficientDataNoteTitle = "Why there's no verdict"
 
     /// The reasoning of a recovery card the app inserts when the model left it
     /// out, or sent it without a reason (US-14 AC4).
@@ -113,7 +134,13 @@ enum AnalysisReportValidator {
             + "this analysis left out."
     }
 
-    /// Validates every card and enforces the recovery hint.
+    /// Validates every card, and puts the app's own verdict over the model's.
+    ///
+    /// The verdict is no longer the model's since #227: `AnalysisVerdictRule`
+    /// derives it from the evidence, this method applies it — replacing
+    /// headline and lead where the two disagree, and taking away the cards a
+    /// fourth-class verdict must not show (ADR-014 §6/§7). The model's own
+    /// choice is kept on the report for #228.
     ///
     /// - Parameters:
     ///   - report: The model's answer, as decoded.
@@ -122,78 +149,66 @@ enum AnalysisReportValidator {
         _ report: AnalysisReport,
         against evidence: AnalysisReportEvidence
     ) -> ValidatedAnalysisReport {
-        // Model progressions that did not come out of their own validation as
-        // a progression — downgraded to a note, or dropped for a blank reason.
-        let rejectedProgressions = report.cards.filter { card in
-            progressKinds.contains(card.kind) && validate(card, against: evidence)?.kind != card.kind
-        }.count
         var cards = report.cards.compactMap { validate($0, against: evidence) }
-        var verdict = report.verdict
+        let outcome = AnalysisVerdictRule.outcome(for: evidence)
+        let verdict = outcome.verdict
         var headline = report.headline
         var lead = report.lead
 
         // US-3 AC6 / US-14 AC4 / US-15 AC3: at 6 of 7 days no progression is
-        // shown without the recovery hint, and the headline says so. The count
-        // spans every source and both domains since #184, so four strength
-        // sessions and two runs on six days trigger the hint just as six
-        // strength sessions do. A model recovery card always survives at that
-        // count, so a missing one means the model left it out. An overruled
-        // verdict takes the model's lead with it: that lead argues for the
-        // verdict the app just replaced (#170).
-        if evidence.recovery.needsRecovery {
-            if !cards.contains(where: { $0.kind == .recovery }) {
-                cards.insert(
-                    .recovery(
-                        reasoning: insertedRecoveryReasoning(
-                            countingUnanalysedTraining: evidence.recoveryCountsUnanalysedTraining
-                        ),
-                        metrics: evidence.recovery
+        // shown without the recovery hint. The count spans every source and
+        // both domains since #184, so four strength sessions and two runs on
+        // six days trigger the hint just as six strength sessions do. A model
+        // recovery card always survives at that count, so a missing one means
+        // the model left it out. This is the card side of ADR-014 stage 0;
+        // the verdict side is in the rule.
+        if evidence.recovery.needsRecovery, !cards.contains(where: { $0.kind == .recovery }) {
+            cards.insert(
+                .recovery(
+                    reasoning: insertedRecoveryReasoning(
+                        countingUnanalysedTraining: evidence.recoveryCountsUnanalysedTraining
                     ),
-                    at: 0
-                )
-            }
-            if verdict != .recover {
-                verdict = .recover
-                headline = recoveryHeadline
-                lead = recoveryLead(trainingDays: evidence.recovery.trainingDays)
+                    metrics: evidence.recovery
+                ),
+                at: 0
+            )
+        }
+
+        // ADR-014 §6: without a verdict there is no card that would be one.
+        // A load or rep progression *is* a verdict, a recovery card is
+        // `recover` under another name, and a metric card states a step
+        // nobody backed. They are downgraded to notes rather than dropped, as
+        // everywhere else in this file — the user paid for the sentence.
+        // Above them goes the app's own note naming the condition that fired.
+        // The card checks of ADR-013 run first and are untouched by this:
+        // a card they struck is already a note (ADR-014 §7).
+        if verdict == .insufficientData {
+            cards = cards.compactMap(withoutAVerdict)
+            if let note = insufficientDataNote(reason: outcome.reason, evidence: evidence) {
+                cards.insert(note, at: 0)
             }
         }
 
         let kept = capped(cards)
-        let cutProgressions = cards.filter(\.backsProgress).count - kept.filter(\.backsProgress).count
 
-        // "You're ready to progress." over cards that name no step forward
-        // would contradict the screen it heads (#177), so the verdict the cards
-        // support is to hold. A recovery verdict forced above is never touched.
-        // The lead is replaced only when the app took such a card away — a
-        // downgrade or the cap — because only then did the model's lead argue
-        // for a step no card backs (#170). A progress verdict over notes alone
-        // keeps the model's lead: the app overruled nothing in it.
-        //
-        // "A step forward" is `backsProgress` since #186, not "a progression
-        // card": a metric card that adds kilometres is exactly the card an
-        // endurance report puts a progress verdict on, and reading only
-        // progressions would rewrite it.
-        //
-        // Rewritten only where the app *had* a card type that could have
-        // backed the verdict, so that an absence means something (#185, #186).
-        //
-        // Under "Endurance" there is no Exercises section and a progression
-        // card is impossible by construction; reading its absence as "the
-        // cards do not back the verdict" would rewrite every endurance
-        // progress verdict over the model's own argument, which is what #185
-        // fixed. But #186 gave that profile a card that *can* back it — so as
-        // soon as a metric card survived, its failure to argue for more is
-        // evidence again, and a deload metric card under "You're ready to
-        // progress." is exactly the contradiction this rule exists to stop.
-        if verdict == .progress,
-           evidence.analysisProfile.covers(.strength) || kept.contains(where: { $0.kind == .metric }),
-           !kept.contains(where: \.backsProgress) {
-            verdict = .hold
-            headline = holdHeadline
-            if rejectedProgressions + cutProgressions > 0 {
-                lead = holdLead
-            }
+        // Where the app's verdict differs from the model's, the model's
+        // headline and lead argue for the call the app has just replaced, so
+        // they go with it (ADR-014 §7). Where the two agree, the model keeps
+        // its wording — the app overruled nothing in it.
+        if verdict != report.verdict {
+            headline = AnalysisHeadline.text(for: verdict)
+            lead = self.lead(for: verdict, evidence: evidence)
+        }
+
+        // #170, kept after #227 took the verdict away from the cards: a
+        // progress lead may only name a step that survived. The verdict is
+        // the app's either way — what this guards is the model's prose, which
+        // is otherwise taken on trust wherever the two happen to agree. A
+        // lead reading "Bench press can go up to 100 kg." over a progression
+        // the cache rejected states a figure the app has just thrown away.
+        // `progressLead` then says what stage 4 measured and nothing else.
+        if verdict == .progress, !kept.contains(where: \.backsProgress) {
+            lead = progressLead
         }
 
         return ValidatedAnalysisReport(
@@ -201,8 +216,70 @@ enum AnalysisReportValidator {
             verdict: verdict,
             lead: lead,
             cards: kept,
-            summary: report.summary
+            summary: report.summary,
+            modelVerdict: report.verdict
         )
+    }
+
+    /// The app's lead for a verdict it put over the model's (ADR-014 §7).
+    static func lead(for verdict: AnalysisVerdict, evidence: AnalysisReportEvidence) -> String {
+        switch verdict {
+        case .progress: return progressLead
+        case .recover: return recoveryLead(trainingDays: evidence.recovery.trainingDays)
+        case .hold: return holdLead
+        case .insufficientData: return insufficientDataLead
+        }
+    }
+
+    /// A validated card with whatever made it a verdict taken out of it, for
+    /// an `insufficientData` report (ADR-014 §6).
+    ///
+    /// Progression, rep progression, recovery and metric cards become notes:
+    /// the first two name a step, the recovery card is a verdict of its own,
+    /// and a metric card's `to` is a step too. Imbalance and interference
+    /// cards stay: every figure on them is one the app measured and
+    /// replaced, and neither argues for or against load.
+    private static func withoutAVerdict(_ card: AnalysisReportCard) -> AnalysisReportCard? {
+        switch card {
+        case let .progression(exercise, _, _, _, reasoning),
+             let .repProgression(exercise, _, _, _, _, reasoning):
+            return note(title: trimmed(exercise), text: reasoning)
+        case let .recovery(reasoning, _):
+            return note(title: recoveryNoteTitle, text: reasoning)
+        case let .metric(label, _, _, _, reasoning, _):
+            return note(title: trimmed(label), text: reasoning)
+        case .imbalance, .interference, .note:
+            return card
+        }
+    }
+
+    /// The one note the app puts at the top of an `insufficientData` report,
+    /// naming the condition that fired (ADR-014 §6).
+    ///
+    /// `nil` for a reason that never reaches this verdict.
+    static func insufficientDataNote(
+        reason: AnalysisVerdictRule.Reason,
+        evidence: AnalysisReportEvidence
+    ) -> AnalysisReportCard? {
+        let text: String
+        switch reason {
+        case .tooFewSessions:
+            text = "This analysis covers \(evidence.sessionsInWindow) of the "
+                + "\(AnalysisVerdictRule.minimumSessionsInWindow) sessions the app needs before it reads a trend."
+        case .noRecentSession:
+            text = "Nothing in the last 7 days belongs to this analysis, so its figures describe a break "
+                + "rather than a training week."
+        case .noStrengthDomain:
+            text = "Under \(evidence.analysisProfile.displayName) the app has no estimated 1RM to read a "
+                + "trend from — that figure exists for strength only."
+        case .plateauUndecidable:
+            text = "No exercise here has the "
+                + "\(ExerciseProgression.plateauSessionCount + 1) sessions the app needs before it can tell "
+                + "a plateau from progress."
+        case .restDays, .plateauMajority, .latestIsWindowBest, .noNewBest:
+            return nil
+        }
+        return .note(title: insufficientDataNoteTitle, text: text)
     }
 
     /// One card, validated: the app's version of it, its downgrade to a note,
@@ -625,10 +702,6 @@ enum AnalysisReportValidator {
     }
 
     // MARK: - Helpers
-
-    /// Card kinds whose card argues for adding load, and whose loss therefore
-    /// leaves a "progress" lead without anything behind it.
-    private static let progressKinds: Set<AnalysisCard.Kind> = [.progression, .repProgression, .metric]
 
     /// Absorbs floating-point noise in comparisons of figures that are equal
     /// on paper.

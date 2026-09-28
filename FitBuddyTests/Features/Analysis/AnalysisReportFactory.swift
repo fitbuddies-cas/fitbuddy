@@ -119,11 +119,16 @@ enum AnalysisReportFactory {
     )
 
     /// A model answer of each verdict.
+    ///
+    /// `insufficientData` is not one a model can send — the schema does not
+    /// offer it (ADR-014 §7) — so it maps to the thinnest answer a model does
+    /// send for such a window.
     static func report(_ verdict: AnalysisVerdict) -> AnalysisReport {
         switch verdict {
         case .progress: return progress
         case .recover: return recover
         case .hold: return hold
+        case .insufficientData: return thin
         }
     }
 
@@ -268,6 +273,7 @@ enum AnalysisReportFactory {
         case .progress: return AnalysisReportSamples.progress
         case .recover: return AnalysisReportSamples.recover
         case .hold: return AnalysisReportSamples.hold
+        case .insufficientData: return AnalysisReportSamples.insufficientData
         }
     }
 
