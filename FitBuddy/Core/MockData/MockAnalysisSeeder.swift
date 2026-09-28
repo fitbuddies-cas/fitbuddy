@@ -32,6 +32,8 @@ enum MockAnalysisSeeder {
         "hold": AnalysisReportSamples.hold,
         // Design 3.4b: no cards, the full analysis open (#170).
         "thin": AnalysisReportSamples.thin,
+        // #227: the fourth verdict class, with the app's note above it.
+        "insufficient": AnalysisReportSamples.insufficientData,
         // Design 3.4c/3.4d: the generic cards of #186 — an endurance report
         // whose figures are all in endurance units (US-15 AC5), and an
         // overall-load one led by the interference card.
@@ -42,7 +44,7 @@ enum MockAnalysisSeeder {
     /// Sessions the context line of a seeded report names. 14 as in design
     /// 3.4/3.5; the thin report rests on 2, as design 3.4b draws it.
     static let defaultSessionCount = 14
-    static let sessionCounts: [String: Int] = ["thin": 2]
+    static let sessionCounts: [String: Int] = ["thin": 2, "insufficient": 3]
 
     private static let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "MockAnalysisSeeder")
 

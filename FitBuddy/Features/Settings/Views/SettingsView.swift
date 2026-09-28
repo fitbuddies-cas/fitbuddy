@@ -157,6 +157,9 @@ struct SettingsView: View {
             llmSection
             privacySection
             dangerSection
+            #if DEBUG
+            AnalysisValidationLogSection()
+            #endif
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)

@@ -35,6 +35,7 @@ actor GatedAnalysisResultStore: AnalysisResultStoring {
         text: String,
         report: ValidatedAnalysisReport?,
         provider: LLMProvider?,
+        validationLog: AnalysisValidationLog?,
         generatedAt: Date,
         context: AnalysisContext
     ) async throws -> UUID {
@@ -48,6 +49,7 @@ actor GatedAnalysisResultStore: AnalysisResultStoring {
             text: text,
             report: report,
             provider: provider,
+            validationLog: validationLog,
             generatedAt: generatedAt,
             context: context
         )

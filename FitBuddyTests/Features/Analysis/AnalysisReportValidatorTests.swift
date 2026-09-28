@@ -14,6 +14,10 @@ final class AnalysisReportValidatorTests: XCTestCase {
         ])
     }
 
+    /// The fields the app does not touch. Headline, verdict and lead are no
+    /// longer among them since #227 — the verdict is the app's, and the other
+    /// two follow it where the two disagree. The evidence here is the one the
+    /// model's own answer matches.
     func testReportFieldsPassThroughUnchanged() {
         let report = AnalysisReport(
             headline: "You're ready to progress.",
@@ -23,7 +27,10 @@ final class AnalysisReportValidatorTests: XCTestCase {
             summary: "Bench press is ready."
         )
 
-        let validated = AnalysisReportValidator.validate(report, against: evidence())
+        let validated = AnalysisReportValidator.validate(
+            report,
+            against: evidence(exercises: [Self.listedBenchPress(latestIsWindowBest: true)])
+        )
 
         XCTAssertEqual(validated.headline, "You're ready to progress.")
         XCTAssertEqual(validated.verdict, .progress)
@@ -49,7 +56,8 @@ final class AnalysisReportValidatorTests: XCTestCase {
             verdict: .hold,
             lead: "Too little data for a change yet.",
             cards: [],
-            summary: "Two sessions are too few to judge a trend."
+            summary: "Two sessions are too few to judge a trend.",
+            modelVerdict: .hold
         ))
     }
 
@@ -86,7 +94,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
     /// figure, not the rounding.
     func testStartingWeightWithinToleranceIsReplacedByTheListedWeight() {
         let evidence = evidence(exercises: [
-            ListedExercise(
+            Self.listed(
                 title: "Row (Dumbbell)", muscleGroup: .back, workingSet: WorkingSet(weightKg: 26.25, reps: 8), smallestStepKg: 1.25, twoForTwo: .met
             ),
         ])
@@ -132,16 +140,16 @@ final class AnalysisReportValidatorTests: XCTestCase {
     /// 2.5 kg step is rejected, and logged apart from an overshoot.
     func testAnIncreaseUnderOneStepIsRejectedAsBelowTheRange() {
         XCTAssertEqual(validate([benchPress(from: 60, to: 61)]).cards, [.note(title: "Bench Press", text: "Clean overload.")])
-        XCTAssertEqual(check(benchPress(from: 60, to: 61)), .rejected(.belowRange))
-        XCTAssertEqual(check(benchPress(from: 60, to: 66)), .rejected(.aboveRange))
+        XCTAssertEqual(check(benchPress(from: 60, to: 61)), .belowRange)
+        XCTAssertEqual(check(benchPress(from: 60, to: 66)), .aboveRange)
     }
 
     /// Inside the range but off the step: 64 kg on a 2.5 kg bar is not a
     /// load anyone can put on, so it is rejected — and logged apart, since a
     /// model that lands between the plates is its own finding (#233 review).
     func testAnIncreaseOffTheStepIsRejected() {
-        XCTAssertEqual(check(benchPress(from: 60, to: 64)), .rejected(.offStep))
-        XCTAssertEqual(check(benchPress(from: 60, to: 63.75)), .rejected(.offStep))
+        XCTAssertEqual(check(benchPress(from: 60, to: 64)), .offStep)
+        XCTAssertEqual(check(benchPress(from: 60, to: 63.75)), .offStep)
         XCTAssertEqual(validate([benchPress(from: 60, to: 64)]).cards, [.note(title: "Bench Press", text: "Clean overload.")])
     }
 
@@ -165,7 +173,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
     /// 60 kg bench may take two of them.
     func testBarbellIncreaseMovesInTwoAndAHalfKilogramSteps() {
         let evidence = evidence(exercises: [
-            ListedExercise(
+            Self.listed(
                 title: "Bench Press (Barbell)",
                 muscleGroup: .chest,
                 workingSet: WorkingSet(weightKg: 60, reps: 5),
@@ -194,7 +202,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
     /// model's target — one or two more.
     func testAValidRepProgressionIsKeptWithTheCachesFigures() {
         let evidence = evidence(exercises: [
-            ListedExercise(
+            Self.listed(
                 title: "Lateral Raise (Dumbbell)",
                 muscleGroup: .shoulders,
                 workingSet: WorkingSet(weightKg: 10, reps: 12),
@@ -217,7 +225,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
     func testARepProgressionIsAllowedUnderEveryTwoForTwoVerdict() {
         for condition in [TwoForTwoCondition.met, .notMet, .notCheckable] {
             let evidence = evidence(exercises: [
-                ListedExercise(
+                Self.listed(
                     title: "Bench Press", muscleGroup: .chest, workingSet: WorkingSet(weightKg: 60, reps: 5), twoForTwo: condition
                 ),
             ])
@@ -232,23 +240,25 @@ final class AnalysisReportValidatorTests: XCTestCase {
     /// Same rule as the weight: the starting figures have to be the ones the
     /// prompt listed, and the step is bounded.
     func testARepProgressionIsCheckedAgainstTheListedWorkingSet() {
-        XCTAssertEqual(checkReps("Incline Press", weight: 60, from: 5, to: 7), .rejected(.notListed))
-        XCTAssertEqual(checkReps("Bench Press", weight: 57.5, from: 5, to: 7), .rejected(.wrongStartingWeight))
-        XCTAssertEqual(checkReps("Bench Press", weight: 60, from: 6, to: 8), .rejected(.wrongStartingReps))
-        XCTAssertEqual(checkReps("Bench Press", weight: 60, from: 5, to: 5), .rejected(.noIncrease))
-        XCTAssertEqual(checkReps("Bench Press", weight: 60, from: 5, to: 4), .rejected(.noIncrease))
-        XCTAssertEqual(checkReps("Bench Press", weight: 60, from: 5, to: 8), .rejected(.aboveRepStep))
+        XCTAssertEqual(checkReps("Incline Press", weight: 60, from: 5, to: 7), .notListed)
+        XCTAssertEqual(checkReps("Bench Press", weight: 57.5, from: 5, to: 7), .wrongStartingWeight)
+        XCTAssertEqual(checkReps("Bench Press", weight: 60, from: 6, to: 8), .wrongStartingReps)
+        XCTAssertEqual(checkReps("Bench Press", weight: 60, from: 5, to: 5), .noIncrease)
+        XCTAssertEqual(checkReps("Bench Press", weight: 60, from: 5, to: 4), .noIncrease)
+        XCTAssertEqual(checkReps("Bench Press", weight: 60, from: 5, to: 8), .aboveRepStep)
         XCTAssertEqual(
             validate([repProgression("Bench Press", weight: 60, from: 5, to: 8)]).cards,
             [.note(title: "Bench Press", text: "Reps first.")]
         )
-        let bodyweight = evidence(exercises: [ListedExercise(title: "Pull Up", muscleGroup: .back, workingSet: nil)])
-        XCTAssertEqual(checkReps("Pull Up", weight: 0, from: 8, to: 10, evidence: bodyweight), .rejected(.noWorkingWeight))
+        let bodyweight = evidence(exercises: [Self.listed(title: "Pull Up", muscleGroup: .back, workingSet: nil)])
+        XCTAssertEqual(checkReps("Pull Up", weight: 0, from: 8, to: 10, evidence: bodyweight), .noWorkingWeight)
     }
 
-    /// A progress verdict backed only by a rep progression stays a progress
-    /// verdict: more reps at the same weight is a step forward (#177).
-    func testARepProgressionBacksAProgressVerdict() {
+    /// A progress lead backed only by a rep progression stands: more reps at
+    /// the same weight is a step forward (#177, #234). Since #227 the card
+    /// no longer holds the verdict up — the app's figures do — but it still
+    /// backs the model's lead (#170), exactly as a load progression would.
+    func testARepProgressionBacksAProgressLead() {
         let report = AnalysisReport(
             headline: "You're ready to progress.",
             verdict: .progress,
@@ -257,21 +267,71 @@ final class AnalysisReportValidatorTests: XCTestCase {
             summary: "Bench press: 7 reps next time."
         )
 
-        let validated = AnalysisReportValidator.validate(report, against: evidence())
+        let validated = AnalysisReportValidator.validate(
+            report,
+            against: evidence(exercises: [Self.listedBenchPress(latestIsWindowBest: true)])
+        )
 
         XCTAssertEqual(validated.verdict, .progress)
+        XCTAssertEqual(validated.cards.map(\.kind), [.repProgression])
         XCTAssertEqual(validated.lead, "Two more reps on bench.")
     }
 
+    /// Only a rep progression that survived backs the lead: one the app
+    /// rejected (three reps, over the step) names a figure it threw away.
+    func testARejectedRepProgressionDoesNotBackAProgressLead() {
+        let report = AnalysisReport(
+            headline: "You're ready to progress.",
+            verdict: .progress,
+            lead: "Three more reps on bench.",
+            cards: [repProgression("Bench Press", weight: 60, from: 5, to: 8)],
+            summary: "Bench press: 8 reps next time."
+        )
+
+        let validated = AnalysisReportValidator.validate(
+            report,
+            against: evidence(exercises: [Self.listedBenchPress(latestIsWindowBest: true)])
+        )
+
+        XCTAssertEqual(validated.verdict, .progress)
+        XCTAssertEqual(validated.cards.map(\.kind), [.note])
+        XCTAssertEqual(validated.lead, AnalysisReportValidator.progressLead)
+    }
+
+    /// The rep progression is a step as much as a load progression, so a
+    /// report without a verdict does not show it either (ADR-014 §6).
+    func testARepProgressionBecomesANoteWithoutAVerdict() {
+        let validated = validate(
+            [repProgression("Bench Press", weight: 60, from: 5, to: 7)],
+            evidence: evidence(sessionsInWindow: 3)
+        )
+
+        XCTAssertEqual(validated.verdict, .insufficientData)
+        XCTAssertEqual(validated.cards, [
+            .note(
+                title: AnalysisReportValidator.insufficientDataNoteTitle,
+                text: "This analysis covers 3 of the 4 sessions the app needs before it reads a trend."
+            ),
+            .note(title: "Bench Press", text: "Reps first."),
+        ])
+    }
+
     /// No kilograms under "Endurance", and no reps at a kilogram weight
-    /// either: a strength card is a strength card (US-15 AC5).
+    /// either: a strength card is a strength card (US-15 AC5). The run has
+    /// no verdict there either (ADR-014 §5), so the app's note comes first.
     func testNoRepProgressionSurvivesTheEnduranceProfile() {
         let validated = validate(
             [repProgression("Bench Press", weight: 60, from: 5, to: 7)],
             evidence: evidence(analysisProfile: .endurance)
         )
 
-        XCTAssertEqual(validated.cards, [.note(title: "Bench Press", text: "Reps first.")])
+        XCTAssertEqual(validated.cards, [
+            .note(
+                title: AnalysisReportValidator.insufficientDataNoteTitle,
+                text: "Under Endurance the app has no estimated 1RM to read a trend from — that figure exists for strength only."
+            ),
+            .note(title: "Bench Press", text: "Reps first."),
+        ])
     }
 
     // MARK: - 2-for-2 (ADR-013, #233)
@@ -284,7 +344,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
             (.notCheckable, .conditionNotCheckable),
         ] {
             let evidence = evidence(exercises: [
-                ListedExercise(
+                Self.listed(
                     title: "Bench Press",
                     muscleGroup: .chest,
                     workingSet: WorkingSet(weightKg: 60, reps: 5),
@@ -298,7 +358,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
                 [.note(title: "Bench Press", text: "Clean overload.")],
                 "\(condition)"
             )
-            XCTAssertEqual(check(benchPress(from: 60, to: 62.5), evidence: evidence), .rejected(reason), "\(condition)")
+            XCTAssertEqual(check(benchPress(from: 60, to: 62.5), evidence: evidence), reason, "\(condition)")
         }
     }
 
@@ -306,7 +366,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
     /// logged for the rule, which is the finding #229 wants to count.
     func testTheConditionIsCheckedBeforeTheRange() {
         let evidence = evidence(exercises: [
-            ListedExercise(
+            Self.listed(
                 title: "Bench Press",
                 muscleGroup: .chest,
                 workingSet: WorkingSet(weightKg: 60, reps: 5),
@@ -315,19 +375,23 @@ final class AnalysisReportValidatorTests: XCTestCase {
             ),
         ])
 
-        XCTAssertEqual(check(benchPress(from: 60, to: 100), evidence: evidence), .rejected(.conditionNotCheckable))
+        XCTAssertEqual(check(benchPress(from: 60, to: 100), evidence: evidence), .conditionNotCheckable)
     }
 
-    /// A progress verdict over a card the rule struck is a hold verdict with
-    /// the app's lead, exactly as over any other rejected progression (#177).
-    func testARejectedProgressionUnderTheRuleTurnsProgressIntoHold() {
+    /// A card the 2-for-2 rule struck is downgraded, and that is all: the
+    /// verdict is the app's (ADR-014 §7, "Abgrenzung zu ADR-013"). Until
+    /// #227 the struck card turned progress into hold (#177); now the
+    /// figures carry the verdict, and only the model's lead — which named the
+    /// struck step — gives way to the app's.
+    func testARejectedProgressionUnderTheRuleLeavesTheVerdictAlone() {
         let evidence = evidence(exercises: [
-            ListedExercise(
+            Self.listed(
                 title: "Bench Press",
                 muscleGroup: .chest,
                 workingSet: WorkingSet(weightKg: 60, reps: 5),
                 smallestStepKg: 2.5,
-                twoForTwo: .notMet
+                twoForTwo: .notMet,
+                latestIsWindowBest: true
             ),
         ])
         let report = AnalysisReport(
@@ -340,24 +404,48 @@ final class AnalysisReportValidatorTests: XCTestCase {
 
         let validated = AnalysisReportValidator.validate(report, against: evidence)
 
-        XCTAssertEqual(validated.verdict, .hold)
-        XCTAssertEqual(validated.headline, AnalysisReportValidator.holdHeadline)
-        XCTAssertEqual(validated.lead, AnalysisReportValidator.holdLead)
+        XCTAssertEqual(validated.cards, [.note(title: "Bench Press", text: "Clean overload.")])
+        XCTAssertEqual(validated.verdict, .progress)
+        XCTAssertEqual(validated.headline, "You're ready to progress.")
+        XCTAssertEqual(validated.lead, AnalysisReportValidator.progressLead)
+    }
+
+    /// Nor does a verdict make a card admissible: the app's progress leaves
+    /// the rule's rejection standing, and its hold leaves a card that meets
+    /// the rule standing (ADR-014 §7).
+    func testTheVerdictDoesNotOverruleTheTwoForTwoRule() {
+        let struck = evidence(exercises: [
+            Self.listed(
+                title: "Bench Press",
+                muscleGroup: .chest,
+                workingSet: WorkingSet(weightKg: 60, reps: 5),
+                smallestStepKg: 2.5,
+                twoForTwo: .notCheckable,
+                latestIsWindowBest: true
+            ),
+        ])
+        let progress = validate([benchPress(from: 60, to: 62.5)], evidence: struck)
+        XCTAssertEqual(progress.verdict, .progress)
+        XCTAssertEqual(progress.cards.map(\.kind), [.note])
+
+        let hold = validate([benchPress(from: 60, to: 62.5)])
+        XCTAssertEqual(hold.verdict, .hold)
+        XCTAssertEqual(hold.cards.map(\.kind), [.progression])
     }
 
     func testEveryRejectionNamesItsReason() {
-        XCTAssertEqual(check(progression("Incline Press", from: 60, to: 62.5)), .rejected(.notListed))
-        XCTAssertEqual(check(benchPress(from: 57.5, to: 60)), .rejected(.wrongStartingWeight))
-        XCTAssertEqual(check(benchPress(from: 60, to: 60)), .rejected(.noIncrease))
-        XCTAssertEqual(check(benchPress(from: 60, to: 55)), .rejected(.noIncrease))
+        XCTAssertEqual(check(progression("Incline Press", from: 60, to: 62.5)), .notListed)
+        XCTAssertEqual(check(benchPress(from: 57.5, to: 60)), .wrongStartingWeight)
+        XCTAssertEqual(check(benchPress(from: 60, to: 60)), .noIncrease)
+        XCTAssertEqual(check(benchPress(from: 60, to: 55)), .noIncrease)
         let bodyweight = evidence(exercises: [
-            ListedExercise(title: "Pull Up", muscleGroup: .back, workingSet: nil, twoForTwo: .met),
+            Self.listed(title: "Pull Up", muscleGroup: .back, workingSet: nil, twoForTwo: .met),
         ])
-        XCTAssertEqual(check(progression("Pull Up", from: 0, to: 5), evidence: bodyweight), .rejected(.noWorkingWeight))
+        XCTAssertEqual(check(progression("Pull Up", from: 0, to: 5), evidence: bodyweight), .noWorkingWeight)
         let noStep = evidence(exercises: [
-            ListedExercise(title: "Lateral Raise", muscleGroup: .shoulders, workingSet: WorkingSet(weightKg: 8, reps: 12), twoForTwo: .met),
+            Self.listed(title: "Lateral Raise", muscleGroup: .shoulders, workingSet: WorkingSet(weightKg: 8, reps: 12), twoForTwo: .met),
         ])
-        XCTAssertEqual(check(progression("Lateral Raise", from: 8, to: 10), evidence: noStep), .rejected(.noLoadStep))
+        XCTAssertEqual(check(progression("Lateral Raise", from: 8, to: 10), evidence: noStep), .noLoadStep)
     }
 
     /// Any other exercise moves by the step its line lists, under the small
@@ -366,7 +454,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
     /// over the ceiling.
     func testListedStepCapsANonBarbellIncrease() {
         let evidence = evidence(exercises: [
-            ListedExercise(
+            Self.listed(
                 title: "Lateral Raise",
                 muscleGroup: .shoulders,
                 workingSet: WorkingSet(weightKg: 10, reps: 12),
@@ -397,7 +485,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
     /// rule 6 progresses reps there, even with the 2-for-2 rule met.
     func testWithoutAListedStepANonBarbellIncreaseBecomesANote() {
         let evidence = evidence(exercises: [
-            ListedExercise(
+            Self.listed(
                 title: "Lateral Raise", muscleGroup: .shoulders, workingSet: WorkingSet(weightKg: 8, reps: 12), twoForTwo: .met
             ),
         ])
@@ -422,7 +510,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
         let latest = WorkingSet(weightKg: 40, reps: 12)
         let step = AnalysisPromptBuilder.smallestStep(in: sessions, latest: latest)
         let evidence = evidence(exercises: [
-            ListedExercise(
+            Self.listed(
                 title: "Leg Extension (Machine)", muscleGroup: .legs, workingSet: latest, smallestStepKg: step, twoForTwo: .met
             ),
         ])
@@ -455,7 +543,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
 
     /// A listed bodyweight exercise has no working weight to start from.
     func testExerciseWithoutWorkingWeightBecomesANote() {
-        let evidence = evidence(exercises: [ListedExercise(title: "Pull Up", muscleGroup: .back, workingSet: nil)])
+        let evidence = evidence(exercises: [Self.listed(title: "Pull Up", muscleGroup: .back, workingSet: nil)])
         let validated = validate([
             .progression(exercise: "Pull Up", muscleGroup: "Back", fromKg: 0, toKg: 5, reasoning: "Add a belt."),
         ], evidence: evidence)
@@ -465,8 +553,8 @@ final class AnalysisReportValidatorTests: XCTestCase {
 
     func testDuplicateTitleMatchesTheEntryWhoseWeightFits() {
         let evidence = evidence(exercises: [
-            ListedExercise(title: "Curl", muscleGroup: .arms, workingSet: WorkingSet(weightKg: 12, reps: 10), smallestStepKg: 2.5, twoForTwo: .met),
-            ListedExercise(title: "curl", muscleGroup: .arms, workingSet: WorkingSet(weightKg: 30, reps: 8), smallestStepKg: 2.5, twoForTwo: .met),
+            Self.listed(title: "Curl", muscleGroup: .arms, workingSet: WorkingSet(weightKg: 12, reps: 10), smallestStepKg: 2.5, twoForTwo: .met),
+            Self.listed(title: "curl", muscleGroup: .arms, workingSet: WorkingSet(weightKg: 30, reps: 8), smallestStepKg: 2.5, twoForTwo: .met),
         ])
         let validated = validate([
             .progression(exercise: "Curl", muscleGroup: "Arms", fromKg: 30, toKg: 32.5, reasoning: "Reps held."),
@@ -702,53 +790,161 @@ final class AnalysisReportValidatorTests: XCTestCase {
         XCTAssertEqual(validated.lead, "Rest first.", "No override, so the model's lead stays")
     }
 
-    func testVerdictIsKeptBelowTheThreshold() {
+    /// #227: the model no longer sets the verdict. Its answer says
+    /// "progress", the app's own figures say "hold" — so the report says
+    /// hold, and the model's own choice is kept for #228.
+    func testTheAppsVerdictReplacesTheModels() {
         let validated = validate([benchPress(from: 60, to: 62.5)])
 
-        XCTAssertEqual(validated.verdict, .progress)
-        XCTAssertEqual(validated.headline, "Headline")
-        XCTAssertEqual(validated.lead, "Lead")
-    }
-
-    /// Every progression failed: the headline must not promise one (#177), and
-    /// the lead that argued for it goes too (#170).
-    func testProgressWithARejectedProgressionBecomesHoldWithTheAppLead() {
-        let validated = validate([benchPress(from: 99, to: 100), chestVersusLegs(3, 1)])
-
-        XCTAssertEqual(validated.cards.map(\.kind), [.note, .imbalance])
         XCTAssertEqual(validated.verdict, .hold)
+        XCTAssertEqual(validated.modelVerdict, .progress)
         XCTAssertEqual(validated.headline, AnalysisReportValidator.holdHeadline)
-        XCTAssertEqual(validated.lead, AnalysisReportValidator.holdLead, "The model's progress lead goes with its verdict")
-    }
-
-    /// A progression dropped for a blank reason is rejected just the same.
-    func testProgressWithADroppedProgressionGetsTheAppLead() {
-        let blank = AnalysisCard.progression(
-            exercise: "Bench Press", muscleGroup: "Chest", fromKg: 99, toKg: 100, reasoning: " "
-        )
-        let validated = validate([blank, chestVersusLegs(3, 1)])
-
-        XCTAssertEqual(validated.cards.map(\.kind), [.imbalance])
-        XCTAssertEqual(validated.verdict, .hold)
         XCTAssertEqual(validated.lead, AnalysisReportValidator.holdLead)
     }
 
-    /// No progression was ever sent, so the app took nothing away: the verdict
-    /// still turns to hold, but the model's lead stays.
-    func testProgressWithOnlyANoteBecomesHoldButKeepsTheModelLead() {
+    /// Where the two agree, nothing is replaced: the model wrote its headline
+    /// and lead for the verdict the app arrived at anyway.
+    func testAnAgreeingModelKeepsItsWording() {
+        let report = AnalysisReport(
+            headline: "Keep the weights.", verdict: .hold, lead: "Hold.", cards: [], summary: "Summary"
+        )
+
+        let validated = AnalysisReportValidator.validate(report, against: evidence())
+
+        XCTAssertEqual(validated.verdict, .hold)
+        XCTAssertEqual(validated.headline, "Keep the weights.")
+        XCTAssertEqual(validated.lead, "Hold.")
+    }
+
+    /// ADR-014 stage 4: the app's own figures carry the step, so the report
+    /// progresses even though the model asked to hold — and the lead that
+    /// argued for holding goes with the verdict it belonged to.
+    func testTheAppsOwnFiguresCanProduceProgress() {
+        let report = AnalysisReport(
+            headline: "Keep the weights.", verdict: .hold, lead: "Hold.", cards: [], summary: "Summary"
+        )
+
+        let validated = AnalysisReportValidator.validate(
+            report,
+            against: evidence(exercises: [Self.listedBenchPress(latestIsWindowBest: true)])
+        )
+
+        XCTAssertEqual(validated.verdict, .progress)
+        XCTAssertEqual(validated.headline, "You're ready to progress.")
+        XCTAssertEqual(validated.lead, AnalysisReportValidator.progressLead)
+        XCTAssertEqual(validated.modelVerdict, .hold)
+    }
+
+    /// A rejected card is still downgraded, but it no longer moves the
+    /// verdict: #177 read "no card backs the step" as the verdict rule, and
+    /// #227 replaced that with the app's own figures. Keeping both would let
+    /// how well the model wrote a card decide the verdict again, which is
+    /// exactly the swing US-16 AC1 is about.
+    func testARejectedProgressionNoLongerDecidesTheVerdict() {
+        let validated = validate(
+            [benchPress(from: 99, to: 100), chestVersusLegs(3, 1)],
+            evidence: evidence(exercises: [Self.listedBenchPress(latestIsWindowBest: true)])
+        )
+
+        XCTAssertEqual(validated.cards.map(\.kind), [.note, .imbalance])
+        XCTAssertEqual(validated.verdict, .progress, "The app's figures carry the step, not the card")
+    }
+
+    /// #170 survives #227 as a rule about the model's prose. Both call it
+    /// progress, so nothing diverges — but the model's lead names a step its
+    /// card just lost, and the app does not print a figure it rejected.
+    func testAProgressLeadIsReplacedWhenNoSurvivingCardBacksTheStep() {
+        let report = AnalysisReport(
+            headline: "You're ready to progress.",
+            verdict: .progress,
+            lead: "Bench press can go up to 100 kg.",
+            cards: [benchPress(from: 99, to: 100)],
+            summary: "Summary"
+        )
+
+        let validated = AnalysisReportValidator.validate(
+            report,
+            against: evidence(exercises: [Self.listedBenchPress(latestIsWindowBest: true)])
+        )
+
+        XCTAssertEqual(validated.verdict, .progress)
+        XCTAssertEqual(validated.cards.map(\.kind), [.note])
+        XCTAssertEqual(validated.lead, AnalysisReportValidator.progressLead)
+    }
+
+    /// A surviving card that states the step keeps the model's own lead: the
+    /// app rejected nothing in it.
+    func testAProgressLeadStaysWhenACardStillBacksTheStep() {
+        let report = AnalysisReport(
+            headline: "You're ready to progress.",
+            verdict: .progress,
+            lead: "Bench press can go up.",
+            cards: [benchPress(from: 60, to: 62.5)],
+            summary: "Summary"
+        )
+
+        let validated = AnalysisReportValidator.validate(
+            report,
+            against: evidence(exercises: [Self.listedBenchPress(latestIsWindowBest: true)])
+        )
+
+        XCTAssertEqual(validated.lead, "Bench press can go up.")
+    }
+
+    /// The cap counts too: a backing card cut for space is a backing card the
+    /// screen does not show.
+    func testAProgressLeadIsReplacedWhenTheCapTookTheBackingCard() {
+        let report = AnalysisReport(
+            headline: "You're ready to progress.",
+            verdict: .progress,
+            lead: "Bench press can go up.",
+            // Five cards, the progression last: the cap drops the last card
+            // that is not a recovery card, which here is the only one that
+            // states the step.
+            cards: [
+                chestVersusLegs(3, 1),
+                chestVersusLegs(3, 1),
+                chestVersusLegs(3, 1),
+                chestVersusLegs(3, 1),
+                benchPress(from: 60, to: 62.5),
+            ],
+            summary: "Summary"
+        )
+
+        let validated = AnalysisReportValidator.validate(
+            report,
+            against: evidence(exercises: [Self.listedBenchPress(latestIsWindowBest: true)])
+        )
+
+        XCTAssertEqual(validated.verdict, .progress)
+        XCTAssertFalse(validated.cards.contains { $0.backsProgress })
+        XCTAssertEqual(validated.lead, AnalysisReportValidator.progressLead)
+    }
+
+    /// A progression dropped for a blank reason is rejected just the same.
+    func testADroppedProgressionNoLongerDecidesTheVerdict() {
+        let blank = AnalysisCard.progression(
+            exercise: "Bench Press", muscleGroup: "Chest", fromKg: 99, toKg: 100, reasoning: " "
+        )
+        let validated = validate(
+            [blank, chestVersusLegs(3, 1)],
+            evidence: evidence(exercises: [Self.listedBenchPress(latestIsWindowBest: true)])
+        )
+
+        XCTAssertEqual(validated.cards.map(\.kind), [.imbalance])
+        XCTAssertEqual(validated.verdict, .progress)
+    }
+
+    /// The lead is replaced whenever the verdict was, whether or not the app
+    /// took a card away: the model wrote it for the call the app just made
+    /// differently (#170, ADR-014 §7). Before #227 it was kept where nothing
+    /// had been downgraded.
+    func testAnOverruledLeadIsReplacedEvenWithNothingDowngraded() {
         let validated = validate([.note(title: "Sleep", text: "Sleep more.")])
 
         XCTAssertEqual(validated.cards.map(\.kind), [.note])
         XCTAssertEqual(validated.verdict, .hold)
-        XCTAssertEqual(validated.headline, AnalysisReportValidator.holdHeadline)
-        XCTAssertEqual(validated.lead, "Lead", "The app overruled no progression, so the model's lead stays")
-    }
-
-    func testProgressWithASurvivingProgressionStaysProgress() {
-        let validated = validate([benchPress(from: 99, to: 100), benchPress(from: 60, to: 62.5)])
-
-        XCTAssertEqual(validated.verdict, .progress)
-        XCTAssertEqual(validated.lead, "Lead")
+        XCTAssertEqual(validated.lead, AnalysisReportValidator.holdLead)
     }
 
     /// Recovery wins over the hold downgrade, even without any progression.
@@ -779,7 +975,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
         XCTAssertEqual(validated.lead, AnalysisReportValidator.recoveryLead(trainingDays: 6))
     }
 
-    /// A model hold verdict passes through, cards or not.
+    /// A model hold verdict passes through where the app agrees, cards or not.
     func testModelHoldVerdictIsKept() {
         let report = AnalysisReport(headline: "Keep going.", verdict: .hold, lead: "Hold.", cards: [chestVersusLegs(3, 1)], summary: "Hold.")
         let validated = AnalysisReportValidator.validate(report, against: evidence())
@@ -814,10 +1010,10 @@ final class AnalysisReportValidatorTests: XCTestCase {
             [benchPress(from: 60, to: 62.5), squat, chestVersusLegs(3, 1), squat],
             evidence: evidence(
                 exercises: [
-                    ListedExercise(
+                    Self.listed(
                         title: "Bench Press", muscleGroup: .chest, workingSet: WorkingSet(weightKg: 60, reps: 5), smallestStepKg: 2.5, twoForTwo: .met
                     ),
-                    ListedExercise(
+                    Self.listed(
                         title: "Squat", muscleGroup: .legs, workingSet: WorkingSet(weightKg: 80, reps: 5), smallestStepKg: 2.5, twoForTwo: .met
                     ),
                 ],
@@ -933,12 +1129,11 @@ final class AnalysisReportValidatorTests: XCTestCase {
 
     // MARK: - Analysis profile (US-15 AC1, #185)
 
-    /// The reviewer's scenario. Under "Endurance" the prompt carries no
-    /// Exercises section, so a progression card cannot exist — and reading its
-    /// absence as "the cards do not back the verdict" put "Hold steady this
-    /// week." over the model's own argument for progressing, on every
-    /// endurance run there was.
-    func testAnEnduranceProgressVerdictSurvivesWithoutAProgressionCard() {
+    /// ADR-014 §5, the consequence the ADR names and accepts: under
+    /// "Endurance" stages 2 to 4 do not exist, because an estimated 1RM does
+    /// not. A pure runner therefore never sees "You're ready to progress." in
+    /// v0 — before #227 the model's own progress verdict stood here.
+    func testAnEnduranceRunCannotProgressInV0() {
         let report = AnalysisReport(
             headline: "You're ready to progress.",
             verdict: .progress,
@@ -952,14 +1147,14 @@ final class AnalysisReportValidatorTests: XCTestCase {
             against: evidence(exercises: [], analysisProfile: .endurance)
         )
 
-        XCTAssertEqual(validated.verdict, .progress)
-        XCTAssertEqual(validated.headline, "You're ready to progress.")
-        XCTAssertEqual(validated.lead, "Your easy weeks are paying off — add a fourth run.")
+        XCTAssertEqual(validated.verdict, .insufficientData)
+        XCTAssertEqual(validated.headline, AnalysisReportValidator.insufficientDataHeadline)
+        XCTAssertEqual(validated.lead, AnalysisReportValidator.insufficientDataLead)
     }
 
-    /// The rule is unchanged where the run did cover strength: no progression
-    /// card, no progress verdict (#177).
-    func testAStrengthProgressVerdictWithoutAProgressionCardStillHolds() {
+    /// A strength run whose figures carry no step holds, whatever the model
+    /// wrote and whatever its cards said.
+    func testAStrengthRunWithoutANewBestHolds() {
         let report = AnalysisReport(
             headline: "You're ready to progress.",
             verdict: .progress,
@@ -977,20 +1172,23 @@ final class AnalysisReportValidatorTests: XCTestCase {
         XCTAssertEqual(validated.headline, AnalysisReportValidator.holdHeadline)
     }
 
-    /// "Overall load" covers strength, so it is judged like any strength run —
-    /// the default, and what every build before #185 did.
-    func testOverallLoadKeepsTheProgressToHoldRule() {
+    /// "Overall load" is judged on its strength half (ADR-014 §5) — the
+    /// default, and what every build before #185 did.
+    func testOverallLoadIsJudgedOnItsStrengthHalf() {
         let report = AnalysisReport(
-            headline: "You're ready to progress.",
-            verdict: .progress,
-            lead: "Add load.",
+            headline: "Hold steady this week.",
+            verdict: .hold,
+            lead: "Hold.",
             cards: [.note(title: "Volume", text: "Volume rose.")],
             summary: "Summary"
         )
 
-        let validated = AnalysisReportValidator.validate(report, against: evidence())
+        let validated = AnalysisReportValidator.validate(
+            report,
+            against: evidence(exercises: [Self.listedBenchPress(latestIsWindowBest: true)])
+        )
 
-        XCTAssertEqual(validated.verdict, .hold)
+        XCTAssertEqual(validated.verdict, .progress)
     }
 
     /// The card's figures span every session whatever the profile (one body,
@@ -1198,10 +1396,11 @@ final class AnalysisReportValidatorTests: XCTestCase {
         XCTAssertEqual(validated?.kind, .note)
     }
 
-    /// A metric card that adds load is a step forward, so an endurance report
-    /// built on one keeps its progress verdict — and so does an overall-load
-    /// report whose only forward card is a metric one (#177 widened by #186).
-    func testAMetricCardBacksAProgressVerdict() {
+    /// A surviving metric card no longer lifts the verdict either. Before
+    /// #227 a card asking for +3 km was what let an endurance report keep
+    /// "progress"; ADR-014 removes that path and leaves such a run without a
+    /// verdict until #241 gives it an effort figure.
+    func testAMetricCardNoLongerBacksAProgressVerdict() {
         let report = AnalysisReport(
             headline: "You're ready to progress.",
             verdict: .progress,
@@ -1212,22 +1411,29 @@ final class AnalysisReportValidatorTests: XCTestCase {
 
         let validated = AnalysisReportValidator.validate(
             report,
-            against: evidence(weeklyMetrics: [.kilometers: 32], analysisProfile: .overallLoad)
+            against: evidence(
+                exercises: [],
+                weeklyMetrics: [.kilometers: 32],
+                analysisProfile: .endurance
+            )
         )
 
-        XCTAssertEqual(validated.verdict, .progress)
-        XCTAssertEqual(validated.headline, "You're ready to progress.")
+        XCTAssertEqual(validated.verdict, .insufficientData)
+        XCTAssertEqual(
+            validated.cards.map(\.kind),
+            [.note, .note],
+            "The app's note first, the metric card downgraded under it"
+        )
     }
 
-    /// A metric card asking for *less* is not a step forward, so it does not
-    /// hold up a progress verdict — the colour rule and the verdict rule read
-    /// the unit the same way.
-    func testAMetricCardAskingForLessDoesNotBackAProgressVerdict() {
+    /// The metric card itself is still validated against the app's figure —
+    /// only its effect on the verdict is gone.
+    func testAMetricCardIsStillCheckedAgainstTheAppsFigure() {
         let report = AnalysisReport(
-            headline: "You're ready to progress.",
-            verdict: .progress,
-            lead: "Add load.",
-            cards: [metricCard(from: 32, to: 29)],
+            headline: "Hold steady this week.",
+            verdict: .hold,
+            lead: "Hold.",
+            cards: [metricCard(from: 32, to: 35)],
             summary: "Summary"
         )
 
@@ -1236,49 +1442,8 @@ final class AnalysisReportValidatorTests: XCTestCase {
             against: evidence(weeklyMetrics: [.kilometers: 32], analysisProfile: .overallLoad)
         )
 
+        XCTAssertEqual(validated.cards.map(\.kind), [.metric])
         XCTAssertEqual(validated.verdict, .hold)
-    }
-
-    /// The stale guard #186 left behind (review finding 3). A metric card can
-    /// back progress under "Endurance" since #186, so its failure to do so is
-    /// evidence again — and "You're ready to progress." over a card asking for
-    /// a deload is the contradiction the rule exists to stop.
-    func testADeloadMetricCardUnderEnduranceHoldsTheVerdict() {
-        let report = AnalysisReport(
-            headline: "You're ready to progress.",
-            verdict: .progress,
-            lead: "Add a fourth run.",
-            cards: [metricCard(from: 32, to: 29)],
-            summary: "Summary"
-        )
-
-        let validated = AnalysisReportValidator.validate(
-            report,
-            against: evidence(weeklyMetrics: [.kilometers: 32], analysisProfile: .endurance)
-        )
-
-        XCTAssertEqual(validated.verdict, .hold)
-        XCTAssertEqual(validated.headline, AnalysisReportValidator.holdHeadline)
-    }
-
-    /// #185's finding is untouched: with no metric card either, the app had no
-    /// card type that could have backed the verdict, so its absence proves
-    /// nothing and the model's argument stands.
-    func testAnEnduranceProgressVerdictOverNotesAloneStillSurvives() {
-        let report = AnalysisReport(
-            headline: "You're ready to progress.",
-            verdict: .progress,
-            lead: "Add a fourth run.",
-            cards: [.note(title: "Volume", text: "Weekly distance rose for three weeks.")],
-            summary: "Summary"
-        )
-
-        let validated = AnalysisReportValidator.validate(
-            report,
-            against: evidence(exercises: [], analysisProfile: .endurance)
-        )
-
-        XCTAssertEqual(validated.verdict, .progress)
     }
 
     // MARK: - Interference cards (US-15 AC2, #186)
@@ -1338,6 +1503,150 @@ final class AnalysisReportValidatorTests: XCTestCase {
         XCTAssertEqual(validated?.kind, .interference)
     }
 
+    // MARK: - The fourth verdict class (#227, ADR-014 §6)
+
+    /// Headline and lead are the app's here, word for word from ADR-014 §6:
+    /// the model's lead argues for a verdict the app has just withdrawn.
+    func testAReportWithoutAVerdictGetsTheAppsHeadlineAndLead() {
+        let validated = validate([], evidence: evidence(sessionsInWindow: 3))
+
+        XCTAssertEqual(validated.verdict, .insufficientData)
+        XCTAssertEqual(validated.headline, "Not enough data to judge.")
+        XCTAssertEqual(
+            validated.lead,
+            "Your logged training doesn't yet support a recommendation for or against more load. "
+                + "Keep training as before — the next analysis will have more to go on."
+        )
+    }
+
+    /// One note, first, naming the condition that fired.
+    func testTooFewSessionsAreNamedInTheNote() {
+        let validated = validate([], evidence: evidence(sessionsInWindow: 3))
+
+        XCTAssertEqual(validated.cards, [
+            .note(
+                title: "Why there's no verdict",
+                text: "This analysis covers 3 of the 4 sessions the app needs before it reads a trend."
+            ),
+        ])
+    }
+
+    func testAWindowEndingInABreakIsNamedInTheNote() {
+        let validated = validate([], evidence: evidence(sessionsInLastSevenDays: 0))
+
+        XCTAssertEqual(validated.cards, [
+            .note(
+                title: "Why there's no verdict",
+                text: "Nothing in the last 7 days belongs to this analysis, so its figures describe a break "
+                    + "rather than a training week."
+            ),
+        ])
+    }
+
+    func testAnUndecidablePlateauIsNamedInTheNote() {
+        let validated = validate([], evidence: evidence(exercises: [Self.listedBenchPress(progressionPoints: 3)]))
+
+        XCTAssertEqual(validated.cards, [
+            .note(
+                title: "Why there's no verdict",
+                text: "No exercise here has the 4 sessions the app needs before it can tell a plateau from progress."
+            ),
+        ])
+    }
+
+    func testTheMissingEnduranceFigureIsNamedInTheNote() {
+        let validated = validate([], evidence: evidence(exercises: [], analysisProfile: .endurance))
+
+        XCTAssertEqual(validated.cards, [
+            .note(
+                title: "Why there's no verdict",
+                text: "Under Endurance the app has no estimated 1RM to read a trend from — "
+                    + "that figure exists for strength only."
+            ),
+        ])
+    }
+
+    /// A progression card *is* a verdict, so it cannot stand under a report
+    /// that has none — but its sentence still reaches the screen.
+    func testAProgressionCardIsDowngradedWithoutAVerdict() {
+        let validated = validate(
+            [benchPress(from: 60, to: 62.5)],
+            evidence: evidence(sessionsInWindow: 3)
+        )
+
+        XCTAssertEqual(validated.cards.map(\.kind), [.note, .note])
+        XCTAssertEqual(validated.cards.last, .note(title: "Bench Press", text: "Clean overload."))
+    }
+
+    /// Imbalance and interference carry nothing but figures the app measured
+    /// and replaced, so they stay (ADR-014 §6).
+    func testMeasuredCardsSurviveWithoutAVerdict() {
+        let validated = validate(
+            [chestVersusLegs(3, 1), .interference(strengthDays: 4, cardioDays: 4, overlapDays: 3, reasoning: "Split them.")],
+            evidence: evidence(sessionsInWindow: 3)
+        )
+
+        XCTAssertEqual(validated.cards.map(\.kind), [.note, .imbalance, .interference])
+    }
+
+    /// No stand-in for effort that was never logged: a week without any RPE
+    /// still decides on the e1RM stages (ADR-014 §4, US-16 AC6).
+    func testMissingEffortDataAloneIsNotAReasonToWithholdAVerdict() {
+        let validated = validate(
+            [benchPress(from: 60, to: 62.5)],
+            evidence: evidence(
+                exercises: [Self.listedBenchPress(latestIsWindowBest: true)],
+                recovery: RecoveryMetrics(sessions: 4, trainingDays: 4, averageRPE: nil)
+            )
+        )
+
+        XCTAssertEqual(validated.verdict, .progress)
+        XCTAssertNil(validated.cards.first(where: { $0.kind == .note }))
+    }
+
+    /// The rest gate comes first, so a week of six training days gets
+    /// "Recover this week." even where the data basis is otherwise too thin
+    /// to judge.
+    func testTheRestGateWinsOverAThinDataBasis() {
+        let validated = validate(
+            [],
+            evidence: evidence(
+                exercises: [],
+                recovery: RecoveryMetrics(sessions: 6, trainingDays: 6, averageRPE: nil),
+                sessionsInWindow: 1
+            )
+        )
+
+        XCTAssertEqual(validated.verdict, .recover)
+    }
+
+    /// ADR-014 §6 allows no exception: headline and lead are the app's under
+    /// the fourth class, including where a provider put `insufficientData` on
+    /// the wire itself. `AnalysisReport.offered(_:)` turns such an answer into
+    /// `hold` on decode, so it can never equal the app's verdict and can never
+    /// be recorded as a model choice.
+    func testAModelAnswerCannotClaimTheAppsFourthClass() throws {
+        let json = """
+        {
+          "headline": "No idea.",
+          "verdict": "insufficientData",
+          "lead": "The model's own words.",
+          "summary": "Summary",
+          "cards": []
+        }
+        """
+        let report = try JSONDecoder().decode(AnalysisReport.self, from: Data(json.utf8))
+
+        XCTAssertEqual(report.verdict, .hold, "Normalised at the wire boundary")
+
+        let validated = AnalysisReportValidator.validate(report, against: evidence(sessionsInWindow: 3))
+
+        XCTAssertEqual(validated.verdict, .insufficientData)
+        XCTAssertEqual(validated.headline, AnalysisReportValidator.insufficientDataHeadline)
+        XCTAssertEqual(validated.lead, AnalysisReportValidator.insufficientDataLead)
+        XCTAssertEqual(validated.modelVerdict, .hold, "Never a choice the model was not offered")
+    }
+
     // MARK: - Fixtures for the new kinds
 
     private func metricCard(
@@ -1356,22 +1665,66 @@ final class AnalysisReportValidatorTests: XCTestCase {
         )
     }
 
+    /// A listed exercise as the card tests need it: decidable, not plateaued
+    /// and without a new best in the latest session, so ADR-014 lands on
+    /// `hold` and the cards stay what the assertion is about (#227).
+    private static func listed(
+        title: String,
+        muscleGroup: MuscleGroup,
+        workingSet: WorkingSet?,
+        smallestStepKg: Double? = nil,
+        twoForTwo: TwoForTwoCondition = .notCheckable,
+        progressionPoints: Int = 5,
+        isPlateaued: Bool = false,
+        latestIsWindowBest: Bool = false
+    ) -> ListedExercise {
+        ListedExercise(
+            title: title,
+            muscleGroup: muscleGroup,
+            workingSet: workingSet,
+            smallestStepKg: smallestStepKg,
+            twoForTwo: twoForTwo,
+            progressionPoints: progressionPoints,
+            isPlateaued: isPlateaued,
+            latestIsWindowBest: latestIsWindowBest
+        )
+    }
+
+    /// The bench press line the default evidence lists, with the 2-for-2
+    /// rule met so a load progression on it can stand (#233).
+    ///
+    /// Since #227 it carries its plateau facts too, because the verdict is
+    /// derived from them: five progression points, no plateau and no new best
+    /// in the latest session, which is ADR-014's "Rest" row — `hold`. The
+    /// card tests want a verdict that changes nothing about their cards, and
+    /// that is this one.
+    private static func listedBenchPress(
+        progressionPoints: Int = 5,
+        isPlateaued: Bool = false,
+        latestIsWindowBest: Bool = false
+    ) -> ListedExercise {
+        Self.listed(
+            title: "Bench Press",
+            muscleGroup: .chest,
+            workingSet: WorkingSet(weightKg: 60, reps: 5),
+            smallestStepKg: 2.5,
+            twoForTwo: .met,
+            progressionPoints: progressionPoints,
+            isPlateaued: isPlateaued,
+            latestIsWindowBest: latestIsWindowBest
+        )
+    }
+
     private func evidence(
-        exercises: [ListedExercise] = [
-            ListedExercise(
-                title: "Bench Press",
-                muscleGroup: .chest,
-                workingSet: WorkingSet(weightKg: 60, reps: 5),
-                smallestStepKg: 2.5,
-                twoForTwo: .met
-            ),
-        ],
+        exercises: [ListedExercise] = [listedBenchPress()],
         perWeek: [MuscleGroup: Double] = [.chest: 3, .legs: 1],
         recovery: RecoveryMetrics = RecoveryMetrics(sessions: 3, trainingDays: 3, averageRPE: nil),
         interference: InterferenceMetrics = InterferenceMetrics(strengthDays: 4, cardioDays: 4, overlapDays: 3),
         weeklyMetrics: [MetricUnit: Double] = [:],
         analysisProfile: AnalysisProfile = .overallLoad,
-        countsUnanalysedTraining: Bool = false
+        countsUnanalysedTraining: Bool = false,
+        sessionsInWindow: Int = 12,
+        sessionsInLastSevenDays: Int = 3
     ) -> AnalysisReportEvidence {
         AnalysisReportEvidence(
             exercises: exercises,
@@ -1380,14 +1733,20 @@ final class AnalysisReportValidatorTests: XCTestCase {
             analysisProfile: analysisProfile,
             recoveryCountsUnanalysedTraining: countsUnanalysedTraining,
             interference: interference,
-            weeklyMetrics: weeklyMetrics
+            weeklyMetrics: weeklyMetrics,
+            sessionsInWindow: sessionsInWindow,
+            sessionsInLastSevenDays: sessionsInLastSevenDays
         )
     }
 
-    /// The check behind the card, for asserting the reason a card failed.
-    private func check(_ card: AnalysisCard, evidence: AnalysisReportEvidence? = nil) -> AnalysisReportValidator.ProgressionCheck {
+    /// The check behind the card, for asserting the reason a card failed —
+    /// `nil` when it passed. The figure the rejection carries is asserted in
+    /// `AnalysisValidationLogCaptureTests`.
+    private func check(
+        _ card: AnalysisCard, evidence: AnalysisReportEvidence? = nil
+    ) -> AnalysisReportValidator.ProgressionRejection? {
         guard case let .progression(exercise, _, fromKg, toKg, reasoning) = card else {
-            return .rejected(.notListed)
+            return .notListed
         }
         return AnalysisReportValidator.checkProgression(
             exercise: exercise,
@@ -1395,7 +1754,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
             toKg: toKg,
             reasoning: reasoning,
             listed: (evidence ?? self.evidence()).exercises
-        )
+        ).rejection
     }
 
     private func repProgression(_ exercise: String, weight: Double, from: Int, to: Int) -> AnalysisCard {
@@ -1404,7 +1763,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
 
     private func checkReps(
         _ exercise: String, weight: Double, from: Int, to: Int, evidence: AnalysisReportEvidence? = nil
-    ) -> AnalysisReportValidator.ProgressionCheck {
+    ) -> AnalysisReportValidator.ProgressionRejection? {
         AnalysisReportValidator.checkRepProgression(
             exercise: exercise,
             weightKg: weight,
@@ -1412,7 +1771,7 @@ final class AnalysisReportValidatorTests: XCTestCase {
             toReps: to,
             reasoning: "Reps first.",
             listed: (evidence ?? self.evidence()).exercises
-        )
+        ).rejection
     }
 
     private func progression(_ exercise: String, from: Double, to: Double) -> AnalysisCard {
@@ -1425,5 +1784,13 @@ final class AnalysisReportValidatorTests: XCTestCase {
 
     private func chestVersusLegs(_ chest: Double, _ legs: Double) -> AnalysisCard {
         .imbalance(groupA: "Chest", perWeekA: chest, groupB: "Legs", perWeekB: legs, reasoning: "Add a leg session.")
+    }
+}
+
+private extension AnalysisReportValidator.ProgressionCheck {
+    /// The reason the check failed, `nil` when it passed.
+    var rejection: AnalysisReportValidator.ProgressionRejection? {
+        guard case let .rejected(rejection, _) = self else { return nil }
+        return rejection
     }
 }

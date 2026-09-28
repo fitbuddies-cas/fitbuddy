@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FitBuddy — Präsentation</title>
+<style>
+  :root {
+    --bg: #F2F1ED;
+    --card: #FFFFFF;
+    --card-subtle: #F8F7F4;
+    --ink: #0E0E0E;
+    --ink2: #3C3C43;
+    --muted: #8A8A8E;
+    --border: rgba(60,60,67,0.10);
+    --divider: rgba(60,60,67,0.08);
+    --accent: oklch(0.62 0.14 150);
+    --accent-soft: oklch(0.95 0.04 150);
+    --accent-border: oklch(0.85 0.06 150);
+    --warn: oklch(0.66 0.16 55);
+    --warn-soft: oklch(0.96 0.04 65);
+    --font: -apple-system, "SF Pro Text", "SF Pro Display", system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--ink);
+    font-family: var(--font);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  .deck {
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+    transition: transform 500ms cubic-bezier(.2,.7,.3,1);
+  }
+
+  .slide {
+    flex: 0 0 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 6vh 8vw;
+    position: relative;
+    background: var(--bg);
+    color: var(--ink);
+  }
+
+  .slide.dark {
+    background: var(--ink);
+    color: #F2F1ED;
+  }
+
+  .slide-inner {
+    width: 100%;
+    max-width: 880px;
+  }
+
+  .eyebrow {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 16px 0;
+  }
+
+  .dark .eyebrow { color: rgba(242,241,237,0.55); }
+
+  h1 {
+    font-size: clamp(40px, 6vw, 72px);
+    font-weight: 700;
+    letter-spacing: -1.5px;
+    line-height: 1.05;
+    margin: 0 0 20px 0;
+  }
+
+  h2 {
+    font-size: clamp(30px, 4.2vw, 48px);
+    font-weight: 700;
+    letter-spacing: -1px;
+    line-height: 1.1;
+    margin: 0 0 28px 0;
+  }
+
+  .lede {
+    font-size: clamp(20px, 2.4vw, 28px);
+    font-weight: 500;
+    color: var(--ink2);
+    line-height: 1.35;
+    letter-spacing: -0.2px;
+    margin: 0 0 40px 0;
+    max-width: 680px;
+  }
+
+  .dark .lede { color: rgba(242,241,237,0.78); }
+
+  .points {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .point {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    font-size: clamp(18px, 1.9vw, 23px);
+    font-weight: 500;
+    letter-spacing: -0.2px;
+    color: var(--ink);
+  }
+
+  .dark .point { color: #F2F1ED; }
+
+  .subpoints {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .subpoint {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    font-size: clamp(15px, 1.5vw, 18px);
+    font-weight: 400;
+    color: var(--ink2);
+  }
+
+  .dark .subpoint { color: #C9C8C2; }
+
+  .subpoint::before {
+    content: "";
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex: 0 0 auto;
+    transform: translateY(-3px);
+  }
+
+  .subpoint strong { font-weight: 600; color: inherit; }
+
+  .point .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex: 0 0 auto;
+    transform: translateY(-4px);
+  }
+
+  .stat {
+    font-size: clamp(64px, 11vw, 140px);
+    font-weight: 700;
+    letter-spacing: -3px;
+    line-height: 1;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+
+  .stat-label {
+    font-size: clamp(18px, 2vw, 24px);
+    font-weight: 500;
+    color: var(--ink2);
+    letter-spacing: -0.2px;
+  }
+
+  .dark .stat-label { color: rgba(242,241,237,0.78); }
+
+  .pill-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 8px;
+  }
+
+  .pill {
+    background: var(--card);
+    box-shadow: inset 0 0 0 1px var(--border);
+    border-radius: 999px;
+    padding: 10px 20px;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.1px;
+    color: var(--ink);
+  }
+
+  .flow {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0;
+    margin-bottom: 36px;
+  }
+
+  .flow-step {
+    background: var(--card);
+    box-shadow: 0 0 0 1px var(--border);
+    border-radius: 14px;
+    padding: 14px 20px;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+
+  .flow-arrow {
+    color: var(--muted);
+    font-size: 20px;
+    margin: 0 10px;
+  }
+
+  .quote {
+    font-size: clamp(24px, 3vw, 34px);
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    line-height: 1.3;
+    color: var(--ink);
+    max-width: 720px;
+    margin: 0 0 20px 0;
+  }
+
+  .dark .quote { color: #F2F1ED; }
+
+  .attribution {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--muted);
+    margin-bottom: 40px;
+  }
+
+  .card-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    width: 100%;
+  }
+
+  .mini-card {
+    background: var(--card);
+    box-shadow: 0 0 0 1px var(--border);
+    border-radius: 18px;
+    padding: 22px 20px;
+  }
+
+  .mini-card .mini-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .mini-card .mini-title {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    color: var(--ink);
+    line-height: 1.3;
+  }
+
+  .brand-mark {
+    width: 72px;
+    height: 72px;
+    border-radius: 20px;
+    background: var(--accent);
+    margin-bottom: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .brand-mark svg { width: 34px; height: 34px; }
+
+  /* nav */
+  .nav {
+    position: fixed;
+    bottom: 28px;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    z-index: 10;
+  }
+
+  .nav-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: rgba(60,60,67,0.25);
+    cursor: pointer;
+    transition: background 150ms, transform 150ms;
+  }
+
+  .slide.dark ~ .nav .nav-dot,
+  body.on-dark .nav-dot { background: rgba(242,241,237,0.3); }
+
+  .nav-dot.active {
+    background: var(--accent);
+    transform: scale(1.3);
+  }
+
+  .arrow-btn {
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255,255,255,0.7);
+    box-shadow: 0 0 0 1px var(--border);
+    border: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 10;
+    transition: background 150ms, opacity 150ms;
+    opacity: 0.7;
+  }
+
+  .arrow-btn:hover { opacity: 1; }
+  .arrow-btn.prev { left: 24px; }
+  .arrow-btn.next { right: 24px; }
+  .arrow-btn:disabled { opacity: 0; pointer-events: none; }
+
+  .counter {
+    position: fixed;
+    top: 28px;
+    right: 32px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0.4px;
+    z-index: 10;
+    font-variant-numeric: tabular-nums;
+  }
+
+  body.on-dark .counter { color: rgba(242,241,237,0.5); }
+
+  @media (max-width: 680px) {
+    .card-row { grid-template-columns: 1fr; }
+    .arrow-btn { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="counter"><span id="counterCur">1</span> / <span id="counterTotal"></span></div>
+
+<div class="deck" id="deck">
+
+  <!-- 1. Title -->
+  <section class="slide dark">
+    <div class="slide-inner" style="text-align:left;">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 12h3l2-6 4 12 2-6h5" stroke="#0E2F1F" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <h1>FitBuddy</h1>
+      <p class="lede">Trainingsdaten aggregieren. KI-Empfehlungen geben.</p>
+      <div class="eyebrow" style="margin-top:8px;">CAS ADAI 2026 · BFH Biel</div>
+    </div>
+  </section>
+
+  <!-- 2. Ausgangslage -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="eyebrow">Einleitung</div>
+      <h2>Ausgangslage</h2>
+      <p class="lede"></p>
+      <div class="points">
+        <div class="point"><span class="dot"></span>
+          <div>
+            Kein Swift-Know-how im Team
+            <div class="subpoints">
+              <div class="subpoint"><strong>Nicola</strong> –  DevOps</div>
+              <div class="subpoint"><strong>Timo</strong> –  Business Analyst</div>
+              <div class="subpoint"><strong>Romeo</strong> –  Android Dev</div>
+            </div>
+          </div>
+        </div>
+        <div class="point"><span class="dot"></span>PostFinance-Projekt zu heikel</div>
+        <div class="point"><span class="dot"></span>FitBuddy: eigenständig, risikoarm</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Ziel -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="eyebrow">Einleitung</div>
+      <h2>Ziel</h2>
+      <p class="lede">Ein PoC, der Trainingsdaten bündelt und auf Knopfdruck protokolliert, einordnet und empfiehlt.</p>
+      <div class="points">
+        <div class="point"><span class="dot"></span>Hevy, Strava, Polar → ein Dashboard, eine standardisierte Schnittstelle</div>
+        <div class="point"><span class="dot"></span>KI-Coach: Analyse mit Vorgabe-Parametern</div>
+        <div class="point"><span class="dot"></span>Für Einsteiger:in und Power-User:in</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Vorgehen -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="eyebrow">Einleitung</div>
+      <h2>Markt / Bedürfnis</h2>
+      <div class="points">
+        <div class="point"><span class="dot"></span>Kraft- und Ausdauer-Training</div>
+        <div class="point"><span class="dot"></span>Personal Trainer: teuer, nicht 24/7</div>
+        <div class="point"><span class="dot"></span>KI nutzen!</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Anforderungen -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="eyebrow">1 · Anforderungen</div>
+      <div class="stat">14</div>
+      <div class="stat-label" style="margin-bottom:28px;">User Stories, MoSCoW-priorisiert</div>
+      <div class="card-row" style="margin-bottom:28px;">
+        <div class="mini-card">
+          <div class="mini-label">Must</div>
+          <div class="mini-title" style="font-size:15px;">Key speichern · Dashboard · KI-Analyse · Onboarding</div>
+        </div>
+        <div class="mini-card">
+          <div class="mini-label">Should</div>
+          <div class="mini-title" style="font-size:15px;">Zweite Quelle · Trainingsprofil · Empfehlungs-Karten</div>
+        </div>
+        <div class="mini-card">
+          <div class="mini-label">Won't</div>
+          <div class="mini-title" style="font-size:15px;">Push-Notification · Write-back nach Hevy</div>
+        </div>
+      </div>
+      <div class="points">
+        <div class="point"><span class="dot"></span>Claude als Advocatus Diaboli — findet Lücken vor dem Coden</div>
+        <div class="point"><span class="dot"></span>AI schlägt vor, das Team entscheidet</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Architektur -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="eyebrow">2 · Architektur</div>
+      <p class="quote" style="margin-bottom:8px;">„Architektur ist die Summe der Entscheidungen, die schwer rückgängig zu machen sind.“</p>
+      <div class="attribution" style="margin-bottom:28px;">— Martin Fowler</div>
+      <div class="card-row" style="margin-bottom:28px;">
+        <div class="mini-card">
+          <div class="mini-label">Entscheide</div>
+          <div class="mini-title">12 Architecture Decision Records</div>
+        </div>
+        <div class="mini-card">
+          <div class="mini-label">System</div>
+          <div class="mini-title">Kein Backend — alles läuft on-device</div>
+        </div>
+        <div class="mini-card">
+          <div class="mini-label">Schichten</div>
+          <div class="mini-title">MVVM: View → ViewModel → Service → Model</div>
+        </div>
+      </div>
+      <div class="points">
+        <div class="point"><span class="dot"></span>Security zuerst — Trainingsdaten sind Gesundheitsdaten</div>
+        <div class="point"><span class="dot"></span>Reliability — Hevy garantiert nichts, App fängt das ab</div>
+        <div class="point"><span class="dot"></span>Maintainability — neue Quelle ohne Umbau anschliessbar</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. GitHub Workflow -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="eyebrow">3 · GitHub Project</div>
+      <h2>Ein gemeinsamer Workflow</h2>
+      <div class="flow" style="margin-bottom:32px;">
+        <div class="flow-step">feature / fix</div><span class="flow-arrow">→</span>
+        <div class="flow-step">develop</div><span class="flow-arrow">→</span>
+        <div class="flow-step">main</div>
+      </div>
+      <div class="points">
+        <div class="point"><span class="dot"></span>Task-Breakdown mit Claude, Sprint-Backlog nach MoSCoW</div>
+        <div class="point"><span class="dot"></span>PR öffnen → Claude-Review → Team-Review → Merge</div>
+        <div class="point"><span class="dot"></span>develop → main wöchentlich als Bundle-PR</div>
+        <div class="point"><span class="dot"></span>CLAUDE.md als Projektgedächtnis fürs ganze Team</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. Coding & Tests -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="eyebrow">4 · Coding &amp; Tests</div>
+      <h2>Chat zum Denken. Claude Code zum Tun.</h2>
+      <div class="points">
+        <div class="point"><span class="dot"></span>Claude verifiziert sich nach jeder Änderung selbst</div>
+        <div class="point"><span class="dot"></span>Compiler → Tests → Review → Mensch entscheidet</div>
+        <div class="point"><span class="dot"></span>Agent schreibt die Masse der Tests — das Team die Wahrheit</div>
+        <div class="point"><span class="dot"></span>Permission-Modell: erst jeden Schritt einzeln freigeben, dann schneller</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9. DevOps & CI -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="eyebrow">5 · DevOps &amp; CI</div>
+      <h2>Ein Mac mini als Runner</h2>
+      <div class="points">
+        <div class="point"><span class="dot"></span>Eigener Runner statt teurer GitHub-macOS-Runner</div>
+        <div class="point"><span class="dot"></span>Unit-Tests bei jedem Pull Request</div>
+        <div class="point"><span class="dot"></span>UI-Tests laufen ebenfalls dort — nie lokal</div>
+        <div class="point"><span class="dot"></span>Rot in CI = kein Merge</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10. Live-Demo -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="eyebrow">6 · Live-Demo</div>
+      <div class="flow">
+        <div class="flow-step">Onboarding</div><span class="flow-arrow">→</span>
+        <div class="flow-step">Dashboard</div><span class="flow-arrow">→</span>
+        <div class="flow-step">AI-Analyse</div>
+      </div>
+      <h2 style="margin-bottom:0;">Jetzt live.</h2>
+    </div>
+  </section>
+
+  <!-- 11. Fazit -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="eyebrow">Fazit</div>
+      <p class="quote">Eine iOS-App gebaut, ohne vorher Swift zu können.</p>
+      <div class="points">
+        <div class="point"><span class="dot"></span>Der klare Ablauf hat getragen</div>
+        <div class="point"><span class="dot"></span>Mehr Tempo, aber weniger eigenes Lernen</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 12. Ausblick -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="eyebrow">Ausblick</div>
+      <h2>Was als Nächstes käme</h2>
+      <div class="points">
+        <div class="point"><span class="dot"></span>Quellenübergreifende Analyse (Cardio + Kraft)</div>
+        <div class="point"><span class="dot"></span>Apple Health — noch offen</div>
+        <div class="point"><span class="dot"></span>Kein automatisches Zurückschreiben nach Hevy</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 13. Thanks -->
+  <section class="slide dark">
+    <div class="slide-inner" style="text-align:left;">
+      <h1>Fragen?</h1>
+      <p class="lede">Danke fürs Zuhören.</p>
+    </div>
+  </section>
+
+</div>
+
+<button class="arrow-btn prev" id="prevBtn" aria-label="Zurück">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#0E0E0E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</button>
+<button class="arrow-btn next" id="nextBtn" aria-label="Weiter">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="#0E0E0E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</button>
+
+<div class="nav" id="nav"></div>
+
+<script>
+  const deck = document.getElementById('deck');
+  const slides = Array.from(deck.children);
+  const total = slides.length;
+  let current = 0;
+
+  document.getElementById('counterTotal').textContent = total;
+
+  const navEl = document.getElementById('nav');
+  slides.forEach((_, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'nav-dot' + (i === 0 ? ' active' : '');
+    dot.addEventListener('click', () => goTo(i));
+    navEl.appendChild(dot);
+  });
+  const dots = Array.from(navEl.children);
+
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+
+  function render() {
+    deck.style.transform = `translateX(-${current * 100}vw)`;
+    dots.forEach((d, i) => d.classList.toggle('active', i === current));
+    document.getElementById('counterCur').textContent = current + 1;
+    prevBtn.disabled = current === 0;
+    nextBtn.disabled = current === total - 1;
+    document.body.classList.toggle('on-dark', slides[current].classList.contains('dark'));
+  }
+
+  function goTo(i) {
+    current = Math.max(0, Math.min(total - 1, i));
+    render();
+  }
+
+  prevBtn.addEventListener('click', () => goTo(current - 1));
+  nextBtn.addEventListener('click', () => goTo(current + 1));
+
+  window.addEventListener('keydown', (e) => {
+    if (['ArrowRight', 'PageDown', ' '].includes(e.key)) { e.preventDefault(); goTo(current + 1); }
+    if (['ArrowLeft', 'PageUp'].includes(e.key)) { e.preventDefault(); goTo(current - 1); }
+    if (e.key === 'Home') goTo(0);
+    if (e.key === 'End') goTo(total - 1);
+  });
+
+  // basic touch swipe
+  let touchStartX = null;
+  deck.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; });
+  deck.addEventListener('touchend', (e) => {
+    if (touchStartX === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 50) goTo(current + (dx < 0 ? 1 : -1));
+    touchStartX = null;
+  });
+
+  render();
+</script>
+
+</body>
+</html>

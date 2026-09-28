@@ -106,7 +106,7 @@ struct StravaActivityDTO: Decodable, Equatable, Sendable {
             energyKilojoules: kilojoules.flatMap { $0 > 0 ? $0 : nil },
             // Zero for the same reason: a block whose only content is
             // "effort 0" is not cardio data.
-            perceivedEffort: sufferScore.flatMap { $0 > 0 ? $0 : nil }
+            relativeEffort: sufferScore.flatMap { $0 > 0 ? $0 : nil }
         ).nonEmpty
     }
 

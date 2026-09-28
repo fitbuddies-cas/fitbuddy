@@ -219,11 +219,21 @@ enum StrengthPromptSection {
     /// title: "no sets logged (Strava records whole sessions), 48 min, mean
     /// heart rate 132 bpm". Anything the source left out is left out here,
     /// like everywhere else in the prompt (US-15 AC7).
+    ///
+    /// Each row ends with the session's effort values, each under its source's
+    /// label — "mean RPE 7.5" for a Hevy session, "Strava Relative Effort 45"
+    /// for a Strava one (#245, ADR-015 §2). A session that recorded none gets
+    /// none: no `0`, no placeholder.
     private static func sessionRow(_ summary: WorkoutSummary, days: PromptDayFormatter) -> String {
         let prefix = "- \(days.string(summary.startTime)) \(summary.title): "
+        let effort = EffortPromptFigures.labelledValues(of: summary)
         guard summary.source.isEnduranceSource else {
-            return prefix + "\(PromptFigures.kg(summary.volumeKg)), "
-                + "\(summary.exerciseCount) exercises, \(summary.countedSetCount) working sets"
+            let parts = [
+                PromptFigures.kg(summary.volumeKg),
+                "\(summary.exerciseCount) exercises",
+                "\(summary.countedSetCount) working sets",
+            ] + effort
+            return prefix + parts.joined(separator: ", ")
         }
         var parts = ["no sets logged (\(summary.source.displayName) records whole sessions)"]
         if let time = summary.durationSeconds.flatMap(PromptFigures.duration) {
@@ -232,7 +242,7 @@ enum StrengthPromptSection {
         if let rate = summary.cardio?.averageHeartRate, let text = PromptFigures.heartRate(rate) {
             parts.append("mean heart rate \(text)")
         }
-        return prefix + parts.joined(separator: ", ")
+        return prefix + (parts + effort).joined(separator: ", ")
     }
 
     // MARK: - Exercises (#173)
@@ -392,7 +402,7 @@ enum StrengthPromptSection {
     /// out loud: a "no" over three sessions would claim progress nobody
     /// measured.
     private static func plateauVerdict(_ progression: ExerciseProgression) -> String {
-        guard progression.points.count > ExerciseProgression.plateauSessionCount else {
+        guard progression.isPlateauDecidable else {
             return "Plateau: too few sessions to tell"
         }
         return progression.isPlateaued
