@@ -376,6 +376,7 @@ Alle asynchronen Zugriffe folgen drei fixen Ausführungskontexten — gilt schic
 | [ADR-011](adr/ADR-011-polar-als-dritte-quelle.md) | Polar AccessLink als dritte Datenquelle — BYO-App wie Strava, `Activity` additiv um `metrics` erweitert | Accepted |
 | [ADR-012](adr/ADR-012-activitykind-und-cardiometrics.md) | `ActivityKind` und `CardioMetrics` — normalisierte Sportart und ein Kennzahlen-Block für alle Quellen, persistiert in Schema V5 | Accepted |
 | [ADR-013](adr/ADR-013-progressionsband-je-muskelgruppe.md) | Progressionsband je Muskelgruppe — erlaubte Spanne statt Zielwert, konditional auf 2-for-2 (US-17) | Accepted |
+| [ADR-014](adr/ADR-014-verdict-regel-der-app.md) | Verdict-Regel der App — Reihenfolge, Schwellen und die vierte Klasse «zu dünne Datenbasis» (US-16) | Accepted |
 
 ---
 
