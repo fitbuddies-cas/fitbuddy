@@ -285,6 +285,141 @@
 
   .brand-mark svg { width: 34px; height: 34px; }
 
+  /* ---- slides 5–9: requirements, architecture, workflow, tests, CI ---- */
+  .h2-tight { margin-bottom: 18px; }
+
+  .moscow-bar {
+    display: flex;
+    height: 14px;
+    border-radius: 999px;
+    overflow: hidden;
+    margin: 0 0 18px 0;
+    box-shadow: inset 0 0 0 1px var(--border);
+  }
+  .moscow-bar span { display: block; height: 100%; }
+  .m-must   { background: var(--accent); }
+  .m-should { background: oklch(0.74 0.11 150); }
+  .m-could  { background: oklch(0.87 0.06 150); }
+  .m-wont   { background: rgba(60,60,67,0.18); }
+
+  .card-row.four { grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .mini-card.compact { padding: 14px 14px 12px; border-radius: 14px; }
+  .mini-card.tone-must { background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent-border); }
+  .mini-card .mini-count {
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: -1px;
+    line-height: 1;
+    margin-bottom: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .story-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+  .story-list li { font-size: 13px; font-weight: 500; color: var(--ink2); line-height: 1.3; }
+  .story-list li b { color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; margin-right: 3px; }
+
+  .points.tight { gap: 8px; }
+  .points.tight .point { font-size: clamp(15px, 1.6vw, 19px); }
+
+  /* architecture: sources → iPhone → LLM providers */
+  .arch {
+    display: grid;
+    grid-template-columns: 1fr 26px 1.5fr 26px 1fr;
+    align-items: center;
+    gap: 0 4px;
+    margin-bottom: 16px;
+  }
+  .arch-col { display: flex; flex-direction: column; gap: 7px; }
+  .arch-col-label, .phone-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .arch-col-label { margin-bottom: 1px; }
+  .ext {
+    background: var(--card);
+    box-shadow: 0 0 0 1px var(--border);
+    border-radius: 12px;
+    padding: 9px 13px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.1px;
+  }
+  .ext small { display: block; font-size: 11px; font-weight: 500; color: var(--muted); margin-top: 1px; }
+  .arch-arrows { display: flex; flex-direction: column; align-items: center; gap: 14px; color: var(--muted); font-size: 18px; }
+  .phone {
+    background: var(--card);
+    box-shadow: 0 0 0 1px var(--border), 0 12px 32px rgba(0,0,0,0.06);
+    border-radius: 22px;
+    padding: 12px 14px 14px;
+  }
+  .phone-title { display: flex; justify-content: space-between; margin-bottom: 8px; }
+  .layers { display: flex; flex-direction: column; gap: 4px; }
+  .layer {
+    border-radius: 9px;
+    padding: 6px 10px;
+    font-size: 13px;
+    font-weight: 600;
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px var(--accent-border);
+    color: var(--ink);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .layer span { font-size: 11px; font-weight: 500; color: var(--ink2); text-align: right; }
+  .stores { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 7px; }
+  .store {
+    border-radius: 9px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--card-subtle);
+    box-shadow: inset 0 0 0 1px var(--border);
+  }
+  .store small { display: block; font-size: 11px; font-weight: 500; color: var(--muted); }
+
+  .qa-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px; }
+  .qa { background: var(--card); box-shadow: 0 0 0 1px var(--border); border-radius: 14px; padding: 11px 14px; }
+  .qa-name { font-size: 14px; font-weight: 700; letter-spacing: -0.2px; }
+  .qa-name .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 8px; transform: translateY(-1px); }
+  .qa-text { font-size: 13px; color: var(--ink2); margin-top: 3px; line-height: 1.35; }
+  .footnote { font-size: 14px; color: var(--muted); font-weight: 500; line-height: 1.4; }
+  .footnote em { font-style: italic; color: var(--ink2); }
+
+  /* workflow: git graph + PR pipeline */
+  .git-graph { width: 100%; height: auto; display: block; margin-bottom: 14px; }
+  .git-graph text { font-family: var(--font); }
+  .flow.small { margin-bottom: 18px; row-gap: 8px; }
+  .flow.small .flow-step { font-size: 13px; padding: 9px 13px; border-radius: 11px; }
+  .flow.small .flow-arrow { font-size: 16px; margin: 0 7px; }
+  .flow-step.ai { background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent-border); }
+  .flow-step.gate { background: var(--ink); color: #F2F1ED; }
+
+  /* tests: loop + pyramid + figures */
+  .duo { display: grid; grid-template-columns: 1.15fr 1fr; gap: 24px; align-items: stretch; margin-bottom: 14px; }
+  .panel { background: var(--card); box-shadow: 0 0 0 1px var(--border); border-radius: 18px; padding: 14px 16px 12px; }
+  .panel-label { font-size: 11px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .panel svg { width: 100%; height: auto; display: block; }
+  .panel svg text { font-family: var(--font); }
+  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+  .stat-tile { background: var(--card-subtle); box-shadow: inset 0 0 0 1px var(--border); border-radius: 12px; padding: 10px 12px; }
+  .stat-tile .n { font-size: 26px; font-weight: 700; letter-spacing: -1px; line-height: 1; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .stat-tile .l { font-size: 12px; font-weight: 500; color: var(--ink2); margin-top: 4px; }
+
+  /* CI: pipeline diagram */
+  .pipeline { width: 100%; height: auto; display: block; margin-bottom: 16px; }
+  .pipeline text { font-family: var(--font); }
+
+  @media (max-width: 680px) {
+    .card-row.four, .qa-row, .stat-row { grid-template-columns: 1fr 1fr; }
+    .arch { grid-template-columns: 1fr; }
+    .arch-arrows { flex-direction: row; }
+    .duo { grid-template-columns: 1fr; }
+  }
+
   /* nav */
   .nav {
     position: fixed;
@@ -433,25 +568,62 @@
   <section class="slide">
     <div class="slide-inner">
       <div class="eyebrow">1 · Anforderungen</div>
-      <div class="stat">14</div>
-      <div class="stat-label" style="margin-bottom:28px;">User Stories, MoSCoW-priorisiert</div>
-      <div class="card-row" style="margin-bottom:28px;">
-        <div class="mini-card">
-          <div class="mini-label">Must</div>
-          <div class="mini-title" style="font-size:15px;">Key speichern · Dashboard · KI-Analyse · Onboarding</div>
+      <h2 class="h2-tight">18 User Stories mit Acceptance Criteria</h2>
+      <div class="moscow-bar" aria-hidden="true">
+        <span class="m-must" style="width:22%"></span>
+        <span class="m-should" style="width:34%"></span>
+        <span class="m-could" style="width:33%"></span>
+        <span class="m-wont" style="width:11%"></span>
+      </div>
+      <div class="card-row four" style="margin-bottom:22px;">
+        <div class="mini-card compact tone-must">
+          <div class="mini-label">Must · PoC-Kern</div>
+          <div class="mini-count">4</div>
+          <ul class="story-list">
+            <li><b>US-1</b>Key im Keychain</li>
+            <li><b>US-2</b>90 Tage im Dashboard</li>
+            <li><b>US-3</b>KI-Analyse auf Knopfdruck</li>
+            <li><b>US-4</b>Onboarding in 3 Schritten</li>
+          </ul>
         </div>
-        <div class="mini-card">
+        <div class="mini-card compact">
           <div class="mini-label">Should</div>
-          <div class="mini-title" style="font-size:15px;">Zweite Quelle · Trainingsprofil · Empfehlungs-Karten</div>
+          <div class="mini-count">6</div>
+          <ul class="story-list">
+            <li><b>US-5</b>Strava / Polar als 2. Quelle</li>
+            <li><b>US-6</b>Analyse-Kontext transparent</li>
+            <li><b>US-7</b>Übungssuche &amp; Filter</li>
+            <li><b>US-13</b>Trainingsprofil</li>
+            <li><b>US-14</b>Empfehlung als Karten</li>
+            <li><b>US-15</b>Kraft + Cardio zusammen</li>
+          </ul>
         </div>
-        <div class="mini-card">
+        <div class="mini-card compact">
+          <div class="mini-label">Could</div>
+          <div class="mini-count">6</div>
+          <ul class="story-list">
+            <li><b>US-8</b>Quellen-Status</li>
+            <li><b>US-9</b>Progressionskurven</li>
+            <li><b>US-10</b>Pull-to-Refresh</li>
+            <li><b>US-16</b>Reproduzierbares Verdict</li>
+            <li><b>US-17</b>Steigerung passt zur Last</li>
+            <li><b>US-18</b>Anstrengung (RPE) einbeziehen</li>
+          </ul>
+        </div>
+        <div class="mini-card compact">
           <div class="mini-label">Won't</div>
-          <div class="mini-title" style="font-size:15px;">Push-Notification · Write-back nach Hevy</div>
+          <div class="mini-count">2</div>
+          <ul class="story-list">
+            <li><b>US-11</b>Push-Notification</li>
+            <li><b>US-12</b>Write-back nach Hevy</li>
+          </ul>
+          <div class="story-list" style="margin-top:8px; font-size:12px; color:var(--muted);">Risiko: falsche Empfehlung landet im echten Plan</div>
         </div>
       </div>
-      <div class="points">
-        <div class="point"><span class="dot"></span>Claude als Advocatus Diaboli — findet Lücken vor dem Coden</div>
-        <div class="point"><span class="dot"></span>AI schlägt vor, das Team entscheidet</div>
+      <div class="points tight">
+        <div class="point"><span class="dot"></span>Claude als Interview-Partner: «Als [Persona] möchte ich …», jedes AC als Given / When / Then</div>
+        <div class="point"><span class="dot"></span>REQUIREMENTS.md ⇄ GitHub Issues — eine Quelle der Wahrheit, beidseitig synchron</div>
+        <div class="point"><span class="dot"></span>Advocatus Diaboli vor dem Coden — AI schlägt vor, das Team entscheidet</div>
       </div>
     </div>
   </section>
@@ -460,27 +632,51 @@
   <section class="slide">
     <div class="slide-inner">
       <div class="eyebrow">2 · Architektur</div>
-      <p class="quote" style="margin-bottom:8px;">„Architektur ist die Summe der Entscheidungen, die schwer rückgängig zu machen sind.“</p>
-      <div class="attribution" style="margin-bottom:28px;">— Martin Fowler</div>
-      <div class="card-row" style="margin-bottom:28px;">
-        <div class="mini-card">
-          <div class="mini-label">Entscheide</div>
-          <div class="mini-title">12 Architecture Decision Records</div>
+      <h2 class="h2-tight">Kein Backend. Alles on-device.</h2>
+      <div class="arch">
+        <div class="arch-col">
+          <div class="arch-col-label">Datenquellen · REST</div>
+          <div class="ext">Hevy<small>Kraft · API-Key</small></div>
+          <div class="ext">Strava<small>Cardio · OAuth2</small></div>
+          <div class="ext">Polar AccessLink<small>Cardio · OAuth2</small></div>
         </div>
-        <div class="mini-card">
-          <div class="mini-label">System</div>
-          <div class="mini-title">Kein Backend — alles läuft on-device</div>
+        <div class="arch-arrows" aria-hidden="true"><span>→</span><span>→</span><span>→</span></div>
+        <div class="phone">
+          <div class="phone-title"><span>iPhone · iOS 26</span><span>SwiftUI · MVVM</span></div>
+          <div class="layers">
+            <div class="layer">View <span>SwiftUI, keine Logik</span></div>
+            <div class="layer">ViewModel <span>@MainActor · ObservableObject</span></div>
+            <div class="layer">Service <span>actor · InferenceService · Connectors</span></div>
+            <div class="layer">Model <span>struct Codable · normalisierte Activity</span></div>
+          </div>
+          <div class="stores">
+            <div class="store">SwiftData<small>Cache · Schema V5</small></div>
+            <div class="store">Keychain<small>Keys · OAuth-Token</small></div>
+          </div>
         </div>
-        <div class="mini-card">
-          <div class="mini-label">Schichten</div>
-          <div class="mini-title">MVVM: View → ViewModel → Service → Model</div>
+        <div class="arch-arrows" aria-hidden="true"><span>→</span><span>→</span><span>→</span></div>
+        <div class="arch-col">
+          <div class="arch-col-label">LLM · BYO-Key</div>
+          <div class="ext">Claude<small>primär</small></div>
+          <div class="ext">Gemini<small>Fallback 2</small></div>
+          <div class="ext">Mistral<small>Fallback 3</small></div>
         </div>
       </div>
-      <div class="points">
-        <div class="point"><span class="dot"></span>Security zuerst — Trainingsdaten sind Gesundheitsdaten</div>
-        <div class="point"><span class="dot"></span>Reliability — Hevy garantiert nichts, App fängt das ab</div>
-        <div class="point"><span class="dot"></span>Maintainability — neue Quelle ohne Umbau anschliessbar</div>
+      <div class="qa-row">
+        <div class="qa">
+          <div class="qa-name"><span class="dot"></span>Security &amp; Privacy</div>
+          <div class="qa-text">Trainingsdaten sind Gesundheitsdaten — Keys nur im Keychain, Consent vor dem ersten Call</div>
+        </div>
+        <div class="qa">
+          <div class="qa-name"><span class="dot"></span>Reliability</div>
+          <div class="qa-text">Hevy garantiert nichts — Timeout + Cancel, Provider-Fallback-Kette, harter Logout bei ungültigem Key</div>
+        </div>
+        <div class="qa">
+          <div class="qa-name"><span class="dot"></span>Maintainability</div>
+          <div class="qa-text"><code>FitnessConnector</code>-Protocol vor Hevy eingeführt — Strava und Polar kamen ohne Umbau dazu</div>
+        </div>
       </div>
+      <div class="footnote"><em>„Architektur ist die Summe der Entscheidungen, die schwer rückgängig zu machen sind.“</em> — Martin Fowler · 15 ADRs im Nygard-Format, C4-Modell in <code>docs/ARCHITECTURE.md</code></div>
     </div>
   </section>
 
@@ -488,17 +684,65 @@
   <section class="slide">
     <div class="slide-inner">
       <div class="eyebrow">3 · GitHub Project</div>
-      <h2>Ein gemeinsamer Workflow</h2>
-      <div class="flow" style="margin-bottom:32px;">
-        <div class="flow-step">feature / fix</div><span class="flow-arrow">→</span>
-        <div class="flow-step">develop</div><span class="flow-arrow">→</span>
-        <div class="flow-step">main</div>
+      <h2 class="h2-tight">Ein gemeinsamer Workflow</h2>
+      <svg class="git-graph" viewBox="0 0 880 200" role="img" aria-label="Git-Flow: feature-Branches per PR nach develop, develop wöchentlich nach main">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/>
+          </marker>
+        </defs>
+        <!-- lane labels -->
+        <text x="0" y="41" font-size="13" font-weight="700" fill="var(--ink)">main</text>
+        <text x="0" y="101" font-size="13" font-weight="700" fill="var(--accent)">develop</text>
+        <text x="0" y="161" font-size="13" font-weight="700" fill="var(--ink2)">feature / fix</text>
+        <!-- lanes -->
+        <line x1="110" y1="36" x2="880" y2="36" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>
+        <line x1="110" y1="96" x2="880" y2="96" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/>
+        <line x1="230" y1="156" x2="420" y2="156" stroke="var(--ink2)" stroke-width="3" stroke-linecap="round" opacity="0.55"/>
+        <line x1="500" y1="156" x2="640" y2="156" stroke="var(--ink2)" stroke-width="3" stroke-linecap="round" opacity="0.55"/>
+        <!-- branch off / merge back (feature 1) -->
+        <path d="M200 96 C215 96 215 156 230 156" fill="none" stroke="var(--ink2)" stroke-width="3" opacity="0.55"/>
+        <path d="M420 156 C443 156 440 100 461 97" fill="none" stroke="var(--ink2)" stroke-width="3" opacity="0.55" marker-end="url(#arr)"/>
+        <!-- branch off / merge back (feature 2) -->
+        <path d="M470 96 C485 96 485 156 500 156" fill="none" stroke="var(--ink2)" stroke-width="3" opacity="0.55"/>
+        <path d="M640 156 C663 156 660 100 681 97" fill="none" stroke="var(--ink2)" stroke-width="3" opacity="0.55" marker-end="url(#arr)"/>
+        <!-- develop → main bundle -->
+        <path d="M720 96 C748 96 745 40 771 37" fill="none" stroke="var(--accent)" stroke-width="3" marker-end="url(#arr)"/>
+        <!-- commits -->
+        <g fill="var(--bg)" stroke-width="3">
+          <circle cx="140" cy="36" r="6" stroke="var(--ink)"/>
+          <circle cx="780" cy="36" r="6" stroke="var(--ink)"/>
+          <circle cx="140" cy="96" r="6" stroke="var(--accent)"/>
+          <circle cx="200" cy="96" r="6" stroke="var(--accent)"/>
+          <circle cx="470" cy="96" r="6" stroke="var(--accent)"/>
+          <circle cx="690" cy="96" r="6" stroke="var(--accent)"/>
+          <circle cx="720" cy="96" r="6" stroke="var(--accent)"/>
+          <circle cx="280" cy="156" r="6" stroke="var(--ink2)"/>
+          <circle cx="340" cy="156" r="6" stroke="var(--ink2)"/>
+          <circle cx="400" cy="156" r="6" stroke="var(--ink2)"/>
+          <circle cx="540" cy="156" r="6" stroke="var(--ink2)"/>
+          <circle cx="600" cy="156" r="6" stroke="var(--ink2)"/>
+        </g>
+        <!-- annotations -->
+        <text x="325" y="186" font-size="12" font-weight="600" fill="var(--muted)" text-anchor="middle">feature/task-&lt;issue#&gt;-…</text>
+        <text x="570" y="186" font-size="12" font-weight="600" fill="var(--muted)" text-anchor="middle">fix/bug-&lt;issue#&gt;-…</text>
+        <text x="428" y="130" font-size="12" font-weight="600" fill="var(--ink2)" text-anchor="end">PR · Review · CI</text>
+        <text x="648" y="130" font-size="12" font-weight="600" fill="var(--ink2)" text-anchor="end">PR · Review · CI</text>
+        <text x="728" y="66" font-size="12" font-weight="600" fill="var(--accent)" text-anchor="end">Bundle-PR · Mi-Abend</text>
+        <text x="880" y="16" font-size="12" font-weight="600" fill="var(--muted)" text-anchor="end">nie direkt committen</text>
+      </svg>
+      <div class="flow small">
+        <div class="flow-step">Issue</div><span class="flow-arrow">→</span>
+        <div class="flow-step">Branch</div><span class="flow-arrow">→</span>
+        <div class="flow-step">Pull Request</div><span class="flow-arrow">→</span>
+        <div class="flow-step ai">/code-review (Claude)</div><span class="flow-arrow">→</span>
+        <div class="flow-step">Team-Review ≥ 1</div><span class="flow-arrow">→</span>
+        <div class="flow-step gate">CI grün → Merge</div>
       </div>
-      <div class="points">
-        <div class="point"><span class="dot"></span>Task-Breakdown mit Claude, Sprint-Backlog nach MoSCoW</div>
-        <div class="point"><span class="dot"></span>PR öffnen → Claude-Review → Team-Review → Merge</div>
-        <div class="point"><span class="dot"></span>develop → main wöchentlich als Bundle-PR</div>
-        <div class="point"><span class="dot"></span>CLAUDE.md als Projektgedächtnis fürs ganze Team</div>
+      <div class="points tight">
+        <div class="point"><span class="dot"></span>Task-Breakdown mit Claude, Sprint-Backlog nach MoSCoW — 138 Issues, 125 gemergte PRs</div>
+        <div class="point"><span class="dot"></span>CLAUDE.md als Projektgedächtnis: Stack, Konventionen, Sprachregeln, explizite Verbote</div>
+        <div class="point"><span class="dot"></span>Alle dürfen mergen — aber nur per PR mit Review, nie direkt auf develop oder main</div>
       </div>
     </div>
   </section>
@@ -507,12 +751,65 @@
   <section class="slide">
     <div class="slide-inner">
       <div class="eyebrow">4 · Coding &amp; Tests</div>
-      <h2>Chat zum Denken. Claude Code zum Tun.</h2>
-      <div class="points">
-        <div class="point"><span class="dot"></span>Claude verifiziert sich nach jeder Änderung selbst</div>
-        <div class="point"><span class="dot"></span>Compiler → Tests → Review → Mensch entscheidet</div>
-        <div class="point"><span class="dot"></span>Agent schreibt die Masse der Tests — das Team die Wahrheit</div>
-        <div class="point"><span class="dot"></span>Permission-Modell: erst jeden Schritt einzeln freigeben, dann schneller</div>
+      <h2 class="h2-tight">Chat zum Denken. Claude Code zum Tun.</h2>
+      <div class="duo">
+        <div class="panel">
+          <div class="panel-label">Der Loop</div>
+          <svg viewBox="0 0 480 180" role="img" aria-label="Loop: Spec im Chat, Claude Code implementiert und testet, Review, Fix">
+            <defs>
+              <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/>
+              </marker>
+            </defs>
+            <!-- four nodes in a cycle -->
+            <g font-size="13" font-weight="600" text-anchor="middle">
+              <rect x="10" y="20" width="130" height="50" rx="12" fill="var(--card-subtle)" stroke="var(--border)"/>
+              <text x="75" y="41" fill="var(--ink)">Chat · Spec</text>
+              <text x="75" y="58" font-size="11" font-weight="500" fill="var(--muted)">Was soll entstehen?</text>
+
+              <rect x="340" y="20" width="130" height="50" rx="12" fill="var(--accent-soft)" stroke="var(--accent-border)"/>
+              <text x="405" y="41" fill="var(--ink)">Claude Code</text>
+              <text x="405" y="58" font-size="11" font-weight="500" fill="var(--ink2)">implementiert + testet</text>
+
+              <rect x="340" y="110" width="130" height="50" rx="12" fill="var(--card-subtle)" stroke="var(--border)"/>
+              <text x="405" y="131" fill="var(--ink)">PR · Review</text>
+              <text x="405" y="148" font-size="11" font-weight="500" fill="var(--muted)">Claude + Mensch</text>
+
+              <rect x="10" y="110" width="130" height="50" rx="12" fill="var(--card-subtle)" stroke="var(--border)"/>
+              <text x="75" y="131" fill="var(--ink)">Fix</text>
+              <text x="75" y="148" font-size="11" font-weight="500" fill="var(--muted)">oder Spec schärfen</text>
+            </g>
+            <g fill="none" stroke="var(--muted)" stroke-width="2" marker-end="url(#arr2)">
+              <line x1="145" y1="45" x2="334" y2="45"/>
+              <line x1="405" y1="75" x2="405" y2="104"/>
+              <line x1="335" y1="135" x2="146" y2="135"/>
+              <line x1="75" y1="105" x2="75" y2="76"/>
+            </g>
+            <text x="240" y="36" font-size="11" font-weight="600" fill="var(--muted)" text-anchor="middle">Permission-Modell</text>
+            <text x="240" y="126" font-size="11" font-weight="600" fill="var(--muted)" text-anchor="middle">Tests selbst ausgeführt</text>
+          </svg>
+        </div>
+        <div class="panel">
+          <div class="panel-label">Prüf-Pyramide</div>
+          <svg viewBox="0 0 360 180" role="img" aria-label="Prüf-Pyramide: Compiler, Tests, Review, Mensch entscheidet">
+            <g font-size="13" font-weight="600" text-anchor="middle">
+              <path d="M112 12 L248 12 L268 50 L92 50 Z" fill="var(--accent)"/>
+              <text x="180" y="36" fill="#0E2F1F">Mensch entscheidet</text>
+              <path d="M92 54 L268 54 L288 92 L72 92 Z" fill="oklch(0.74 0.11 150)"/>
+              <text x="180" y="78" fill="#0E2F1F">Review · Claude + Team</text>
+              <path d="M72 96 L288 96 L308 134 L52 134 Z" fill="oklch(0.87 0.06 150)"/>
+              <text x="180" y="120" fill="var(--ink)">XCTest · 2 048 Unit-Tests</text>
+              <path d="M52 138 L308 138 L328 176 L32 176 Z" fill="var(--card-subtle)" stroke="var(--border)"/>
+              <text x="180" y="162" fill="var(--ink)">Compiler · Type-System · Linter</text>
+            </g>
+          </svg>
+        </div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-tile"><div class="n">363</div><div class="l">Swift-Dateien</div></div>
+        <div class="stat-tile"><div class="n">18 + 28</div><div class="l">ViewModels + Service-Actors, jeder mit Tests</div></div>
+        <div class="stat-tile"><div class="n">2 048</div><div class="l">Unit-Tests, lokal bei jeder Änderung</div></div>
+        <div class="stat-tile"><div class="n">21</div><div class="l">XCUITests, nur in CI</div></div>
       </div>
     </div>
   </section>
@@ -521,12 +818,36 @@
   <section class="slide">
     <div class="slide-inner">
       <div class="eyebrow">5 · DevOps &amp; CI</div>
-      <h2>Ein Mac mini als Runner</h2>
-      <div class="points">
-        <div class="point"><span class="dot"></span>Eigener Runner statt teurer GitHub-macOS-Runner</div>
-        <div class="point"><span class="dot"></span>Unit-Tests bei jedem Pull Request</div>
-        <div class="point"><span class="dot"></span>UI-Tests laufen ebenfalls dort — nie lokal</div>
-        <div class="point"><span class="dot"></span>Rot in CI = kein Merge</div>
+      <h2 class="h2-tight">Ein Mac mini als Runner</h2>
+      <svg class="pipeline" viewBox="0 0 880 130" role="img" aria-label="CI: Pull Request, Mac mini baut und testet, Merge-Gate">
+        <defs>
+          <marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/>
+          </marker>
+        </defs>
+        <g font-size="15" font-weight="600" text-anchor="middle">
+          <rect x="0" y="28" width="210" height="74" rx="16" fill="var(--card)" stroke="var(--border)"/>
+          <text x="105" y="60" fill="var(--ink)">Pull Request</text>
+          <text x="105" y="80" font-size="12" font-weight="500" fill="var(--muted)">git push · jeder Branch</text>
+
+          <rect x="270" y="10" width="340" height="110" rx="20" fill="var(--accent-soft)" stroke="var(--accent-border)" stroke-width="2"/>
+          <text x="440" y="38" font-size="11" font-weight="600" fill="var(--muted)" letter-spacing="0.6">MAC MINI · SELF-HOSTED RUNNER</text>
+          <text x="440" y="66" font-size="17" fill="var(--ink)">Build · Unit-Tests · Release-Build</text>
+          <text x="440" y="90" font-size="12" font-weight="500" fill="var(--ink2)">automatisch bei jedem PR · Xcode 26 · Simulator</text>
+
+          <rect x="670" y="28" width="210" height="74" rx="16" fill="var(--ink)"/>
+          <text x="775" y="60" fill="#F2F1ED">Merge-Gate</text>
+          <text x="775" y="80" font-size="12" font-weight="500" fill="rgba(242,241,237,0.65)">grün = Merge · rot = kein Merge</text>
+        </g>
+        <g fill="none" stroke="var(--muted)" stroke-width="2" marker-end="url(#arr3)">
+          <line x1="214" y1="65" x2="264" y2="65"/>
+          <line x1="614" y1="65" x2="664" y2="65"/>
+        </g>
+      </svg>
+      <div class="points tight">
+        <div class="point"><span class="dot"></span>Eigener Mac mini statt teurer GitHub-macOS-Runner (ADR-009)</div>
+        <div class="point"><span class="dot"></span>Niemand startet die Tests von Hand — sie laufen bei jedem PR von selbst</div>
+        <div class="point"><span class="dot"></span>UI-Tests nur am Release-Gate develop → main, nie lokal</div>
       </div>
     </div>
   </section>
