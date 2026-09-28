@@ -159,6 +159,36 @@ final class WorkoutSummaryMuscleLoadTests: XCTestCase {
         XCTAssertTrue(summary.isCardio)
     }
 
+    // MARK: - Mean RPE per session (#245)
+
+    /// The prompt's per-session "mean RPE": over the counted sets that logged
+    /// one — warm-ups and sets without an RPE left out, never read as 0.
+    func testTheMeanRPEIsTakenOverTheCountedSetsThatLoggedOne() throws {
+        let summary = WorkoutSummary(workout: Workout(
+            id: "w-rpe",
+            title: "Push",
+            startTime: Date(timeIntervalSince1970: 1_750_000_000),
+            exercises: [
+                Exercise(index: 0, title: "Bench Press (Barbell)", sets: [
+                    ExerciseSet(index: 0, type: .warmup, weightKg: 40, reps: 10, rpe: 5),
+                    ExerciseSet(index: 1, type: .normal, weightKg: 80, reps: 5, rpe: 7),
+                    ExerciseSet(index: 2, type: .normal, weightKg: 80, reps: 5, rpe: 8),
+                    ExerciseSet(index: 3, type: .normal, weightKg: 80, reps: 5),
+                ]),
+            ]
+        ))
+
+        XCTAssertEqual(try XCTUnwrap(summary.averageRPE), 7.5, accuracy: 0.001)
+    }
+
+    func testASessionWithoutAnyRPEHasNoMeanRPE() {
+        let summary = WorkoutSummary(workout: workout(exercises: [
+            ("Bench Press (Barbell)", [(SetType.normal, 100.0, 10)]),
+        ]))
+
+        XCTAssertNil(summary.averageRPE)
+    }
+
     private func stravaRun(distance: Double, movingTime: Int, source: ConnectorSource = .strava) -> Workout {
         Workout(
             id: "\(source.rawValue):1",

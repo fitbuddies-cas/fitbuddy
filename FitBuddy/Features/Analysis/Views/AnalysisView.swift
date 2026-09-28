@@ -106,6 +106,7 @@ struct AnalysisView: View {
                 context: viewModel.context,
                 attribution: viewModel.attribution,
                 age: viewModel.resultAge,
+                showsEffortHint: viewModel.showsEffortHint,
                 // Always offered on a finished result: there is no cooldown,
                 // and no run is in flight once a result is showing.
                 onNewAnalysis: { viewModel.reset() }

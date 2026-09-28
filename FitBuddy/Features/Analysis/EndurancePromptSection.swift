@@ -26,8 +26,10 @@ enum EndurancePromptSection {
     ///   - detail: How long the lists may be (#187). This half has no session
     ///     list to cap — #183 built it as an aggregate, which is what US-15
     ///     AC8's "cardio as a weekly aggregate" asks for, so only the per-week
-    ///     rows can still be cut, and each domain cuts at its own weeks that
-    ///     recorded a session — see `AnalysisPromptDetail.weekRows`.
+    ///     rows and the effort list can still be cut. Each domain cuts at its
+    ///     own weeks that recorded a session — see
+    ///     `AnalysisPromptDetail.weekRows` — and the effort lines are cut
+    ///     last of everything (#245).
     static func sections(
         recent: [WorkoutSummary],
         previous: [WorkoutSummary],
@@ -43,6 +45,7 @@ enum EndurancePromptSection {
         return [
             windowSection(recent, window: window, from: recentStart, to: now, calendar: calendar, days: days),
             weeklySection(recent, window: window, now: now, calendar: calendar, days: days, detail: detail),
+            effortSection(recent, days: days, detail: detail),
             comparisonSection(
                 previous,
                 window: window,
@@ -51,7 +54,7 @@ enum EndurancePromptSection {
                 calendar: calendar,
                 days: days
             ),
-        ]
+        ].compactMap { $0 }
     }
 
     // MARK: - Window
@@ -244,6 +247,49 @@ enum EndurancePromptSection {
         }
         return (["## Endurance per week"] + weeks + [rows.footer].compactMap { $0 })
             .joined(separator: "\n")
+    }
+
+    // MARK: - Effort (#245)
+
+    /// The effort values of the window's endurance sessions: one line per
+    /// scale, each value with the date of its session, newest first — or
+    /// `nil` when no session recorded one, so a window without effort data
+    /// reads exactly as it did before #245.
+    ///
+    /// One line per scale because that is the only reading ADR-015 §1 allows:
+    /// a value is a point in a trend **within its own scale**, and a line of
+    /// dated Strava Relative Effort values is exactly that trend. A line never
+    /// holds two scales, and nothing is summed or averaged — not across
+    /// scales, and not within one either, since no rule here asks for a mean.
+    ///
+    /// Dated values rather than rows per session, and no session title: the
+    /// label is written once per scale instead of once per value, the title is
+    /// user-written text of any length, and this list is the one the budget
+    /// cuts last (#187) — so it has to be the cheap one. The date ties each
+    /// value to its session and week in the sections above.
+    private static func effortSection(
+        _ summaries: [WorkoutSummary],
+        days: PromptDayFormatter,
+        detail: AnalysisPromptDetail
+    ) -> String? {
+        let newestFirst = summaries.sorted { $0.startTime > $1.startTime }
+        let scales = EffortPromptFigures.byScale(newestFirst)
+        guard !scales.isEmpty else { return nil }
+        let rows = scales.map { scale -> String in
+            let listed = detail.listedEffortValues.map { Array(scale.entries.prefix(max(0, $0))) }
+                ?? scale.entries
+            var row = "- \(scale.label): " + listed
+                .map { "\($0.text) (\(days.string($0.session.startTime)))" }
+                .joined(separator: ", ")
+            let omitted = scale.entries.count - listed.count
+            if omitted > 0 {
+                row += " (\(CountFormatter.labelled(omitted, singular: "older value")) omitted)"
+            }
+            return row
+        }
+        let legend = "One line per source scale, each value with its session's date. Values on "
+            + "different lines are different measures and are not comparable."
+        return (["## Endurance effort (newest first)", legend] + rows).joined(separator: "\n")
     }
 
     // MARK: - Comparison

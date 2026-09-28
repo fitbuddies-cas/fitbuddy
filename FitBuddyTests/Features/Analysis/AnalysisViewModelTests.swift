@@ -57,6 +57,7 @@ final class AnalysisViewModelTests: XCTestCase {
             resultStore: resultStore ?? results,
             trainingProfile: TrainingProfileStore(defaults: defaults),
             analysisProfiles: AnalysisProfileStore(defaults: defaults),
+            effortHints: EffortHintStore(defaults: defaults),
             calendar: Self.calendar,
             now: { clock.date },
             slowThreshold: slowThreshold,
@@ -126,6 +127,83 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(AnalysisOutcome.report(report).report, report)
         XCTAssertEqual(AnalysisOutcome.prose("whole").text, "whole")
         XCTAssertNil(AnalysisOutcome.prose("whole").report)
+    }
+
+    // MARK: - One-time effort hint (US-18 AC6, #245)
+
+    /// No session of the window carries an effort value from any source, and
+    /// the hint was never shown: the result carries it, and the flag is set.
+    func testTheEffortHintIsShownWhenTheWindowHoldsNoEffort() async {
+        await streamer.setText("An answer.")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.state, .result(.prose("An answer.")))
+        XCTAssertTrue(sut.showsEffortHint)
+        let shown = await EffortHintStore(defaults: defaults).hasShownHint
+        XCTAssertTrue(shown, "the hint has to be remembered as shown")
+    }
+
+    /// One effort value from any source is enough — here a Strava Relative
+    /// Effort on a run, next to Hevy sessions without RPE.
+    func testTheEffortHintIsNotShownWhenAnySessionCarriesEffort() async {
+        cache.summaries.append(WorkoutSummary(
+            id: "strava:1",
+            title: "Morning Run",
+            startTime: Self.reference.addingTimeInterval(-3 * 86_400),
+            source: .strava,
+            kind: .run,
+            volumeKg: 0,
+            exerciseCount: 0,
+            countedSetCount: 0,
+            distanceMeters: 8_400,
+            cardio: CardioMetrics(relativeEffort: 64)
+        ))
+        await streamer.setText("An answer.")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertFalse(sut.showsEffortHint)
+        let shown = await EffortHintStore(defaults: defaults).hasShownHint
+        XCTAssertFalse(shown, "a hint that was not shown must not use up the one showing")
+    }
+
+    /// Hevy's RPE counts as much as a provider's score.
+    func testAHevyRPEAloneKeepsTheEffortHintAway() async {
+        cache.summaries = [WorkoutSummary(
+            id: "w-rpe",
+            title: "Push Day",
+            startTime: Self.reference.addingTimeInterval(-2 * 86_400),
+            volumeKg: 4_200,
+            exerciseCount: 5,
+            countedSetCount: 18,
+            averageRPE: 8
+        )]
+        await streamer.setText("An answer.")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertFalse(sut.showsEffortHint)
+    }
+
+    /// Once means once: not on the next run, and not after a restart.
+    func testTheEffortHintIsNotShownTheSecondTime() async {
+        await streamer.setText("An answer.")
+        let first = makeSUT()
+        await first.start()
+        XCTAssertTrue(first.showsEffortHint)
+
+        first.reset()
+        XCTAssertFalse(first.showsEffortHint, "a new analysis starts without it")
+        await first.start()
+        XCTAssertFalse(first.showsEffortHint)
+
+        let restarted = makeSUT()
+        await restarted.start()
+        XCTAssertFalse(restarted.showsEffortHint)
     }
 
     // MARK: - Report in one step (#178)
