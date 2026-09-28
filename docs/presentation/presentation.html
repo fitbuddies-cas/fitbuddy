@@ -568,7 +568,7 @@
   <section class="slide">
     <div class="slide-inner">
       <div class="eyebrow">1 · Anforderungen</div>
-      <h2 class="h2-tight">18 User Stories, MoSCoW-priorisiert</h2>
+      <h2 class="h2-tight">18 User Stories mit Acceptance Criteria</h2>
       <div class="moscow-bar" aria-hidden="true">
         <span class="m-must" style="width:22%"></span>
         <span class="m-should" style="width:34%"></span>
@@ -577,7 +577,7 @@
       </div>
       <div class="card-row four" style="margin-bottom:22px;">
         <div class="mini-card compact tone-must">
-          <div class="mini-label">Must · v0-Kern</div>
+          <div class="mini-label">Must · PoC-Kern</div>
           <div class="mini-count">4</div>
           <ul class="story-list">
             <li><b>US-1</b>Key im Keychain</li>
@@ -621,7 +621,7 @@
         </div>
       </div>
       <div class="points tight">
-        <div class="point"><span class="dot"></span>Claude als Interview-Partner: «Als [Persona] möchte ich …» + Given / When / Then</div>
+        <div class="point"><span class="dot"></span>Claude als Interview-Partner: «Als [Persona] möchte ich …», jedes AC als Given / When / Then</div>
         <div class="point"><span class="dot"></span>REQUIREMENTS.md ⇄ GitHub Issues — eine Quelle der Wahrheit, beidseitig synchron</div>
         <div class="point"><span class="dot"></span>Advocatus Diaboli vor dem Coden — AI schlägt vor, das Team entscheidet</div>
       </div>
@@ -742,7 +742,7 @@
       <div class="points tight">
         <div class="point"><span class="dot"></span>Task-Breakdown mit Claude, Sprint-Backlog nach MoSCoW — 138 Issues, 125 gemergte PRs</div>
         <div class="point"><span class="dot"></span>CLAUDE.md als Projektgedächtnis: Stack, Konventionen, Sprachregeln, explizite Verbote</div>
-        <div class="point"><span class="dot"></span>Alle dürfen mergen — aber nie ohne Review und nie direkt auf develop oder main</div>
+        <div class="point"><span class="dot"></span>Alle dürfen mergen — aber nur per PR mit Review, nie direkt auf develop oder main</div>
       </div>
     </div>
   </section>
@@ -811,11 +811,6 @@
         <div class="stat-tile"><div class="n">2 048</div><div class="l">Unit-Tests, lokal bei jeder Änderung</div></div>
         <div class="stat-tile"><div class="n">21</div><div class="l">XCUITests, nur in CI</div></div>
       </div>
-      <div class="points tight">
-        <div class="point"><span class="dot"></span>Agent schreibt die Masse der Tests — das Team die Domänen-Invarianten</div>
-        <div class="point"><span class="dot"></span>Ein grüner Test ist ein Beweis, kein grüner Test eine Meinung</div>
-        <div class="point"><span class="dot"></span>Permission-Modell: erst jeden Schritt freigeben, dann «yes, all session» für Routine</div>
-      </div>
     </div>
   </section>
 
@@ -824,56 +819,35 @@
     <div class="slide-inner">
       <div class="eyebrow">5 · DevOps &amp; CI</div>
       <h2 class="h2-tight">Ein Mac mini als Runner</h2>
-      <svg class="pipeline" viewBox="0 0 880 250" role="img" aria-label="CI-Pipeline: Push nach GitHub, self-hosted Mac mini baut und testet, Status zurück als Merge-Gate">
+      <svg class="pipeline" viewBox="0 0 880 130" role="img" aria-label="CI: Pull Request, Mac mini baut und testet, Merge-Gate">
         <defs>
           <marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/>
           </marker>
         </defs>
-        <g font-size="13" font-weight="600" text-anchor="middle">
-          <!-- developer -->
-          <rect x="0" y="60" width="130" height="64" rx="14" fill="var(--card)" stroke="var(--border)"/>
-          <text x="65" y="88" fill="var(--ink)">Entwickler:in</text>
-          <text x="65" y="106" font-size="11" font-weight="500" fill="var(--muted)">git push · PR</text>
+        <g font-size="15" font-weight="600" text-anchor="middle">
+          <rect x="0" y="28" width="210" height="74" rx="16" fill="var(--card)" stroke="var(--border)"/>
+          <text x="105" y="60" fill="var(--ink)">Pull Request</text>
+          <text x="105" y="80" font-size="12" font-weight="500" fill="var(--muted)">git push · jeder Branch</text>
 
-          <!-- github -->
-          <rect x="190" y="60" width="140" height="64" rx="14" fill="var(--ink)"/>
-          <text x="260" y="88" fill="#F2F1ED">GitHub</text>
-          <text x="260" y="106" font-size="11" font-weight="500" fill="rgba(242,241,237,0.6)">Actions · Webhook</text>
+          <rect x="270" y="10" width="340" height="110" rx="20" fill="var(--accent-soft)" stroke="var(--accent-border)" stroke-width="2"/>
+          <text x="440" y="38" font-size="11" font-weight="600" fill="var(--muted)" letter-spacing="0.6">MAC MINI · SELF-HOSTED RUNNER</text>
+          <text x="440" y="66" font-size="17" fill="var(--ink)">Build · Unit-Tests · Release-Build</text>
+          <text x="440" y="90" font-size="12" font-weight="500" fill="var(--ink2)">automatisch bei jedem PR · Xcode 26 · Simulator</text>
 
-          <!-- mac mini -->
-          <rect x="400" y="14" width="300" height="156" rx="20" fill="var(--card)" stroke="var(--border)"/>
-          <rect x="400" y="14" width="300" height="156" rx="20" fill="none" stroke="var(--accent-border)" stroke-width="2"/>
-          <text x="550" y="38" font-size="12" font-weight="600" fill="var(--muted)" letter-spacing="0.6">MAC MINI · SELF-HOSTED · ARM64</text>
-          <rect x="416" y="50" width="268" height="36" rx="9" fill="var(--accent-soft)" stroke="var(--accent-border)"/>
-          <text x="550" y="68" fill="var(--ink)">Build &amp; Test</text>
-          <text x="550" y="80" font-size="10.5" font-weight="500" fill="var(--ink2)">xcodebuild test · Unit-Tests · Coverage · jeder PR</text>
-          <rect x="416" y="92" width="268" height="30" rx="9" fill="var(--card-subtle)" stroke="var(--border)"/>
-          <text x="550" y="107" fill="var(--ink)">Release-Build</text>
-          <text x="550" y="118" font-size="10.5" font-weight="500" fill="var(--muted)">unsigniert · Simulator</text>
-          <rect x="416" y="128" width="268" height="30" rx="9" fill="var(--card-subtle)" stroke="var(--border)"/>
-          <text x="550" y="143" fill="var(--ink)">UI-Tests</text>
-          <text x="550" y="154" font-size="10.5" font-weight="500" fill="var(--muted)">nur PR nach main · Label «ui-tests» · manuell</text>
-
-          <!-- gate -->
-          <rect x="760" y="60" width="120" height="64" rx="14" fill="var(--accent)"/>
-          <text x="820" y="88" fill="#0E2F1F">Merge-Gate</text>
-          <text x="820" y="106" font-size="11" font-weight="500" fill="#0E2F1F">rot = kein Merge</text>
+          <rect x="670" y="28" width="210" height="74" rx="16" fill="var(--ink)"/>
+          <text x="775" y="60" fill="#F2F1ED">Merge-Gate</text>
+          <text x="775" y="80" font-size="12" font-weight="500" fill="rgba(242,241,237,0.65)">grün = Merge · rot = kein Merge</text>
         </g>
         <g fill="none" stroke="var(--muted)" stroke-width="2" marker-end="url(#arr3)">
-          <line x1="134" y1="92" x2="184" y2="92"/>
-          <line x1="334" y1="92" x2="394" y2="92"/>
-          <line x1="704" y1="92" x2="754" y2="92"/>
+          <line x1="214" y1="65" x2="264" y2="65"/>
+          <line x1="614" y1="65" x2="664" y2="65"/>
         </g>
-        <!-- status back to GitHub -->
-        <path d="M550 172 L550 196 Q550 206 540 206 L270 206 Q260 206 260 196 L260 132" fill="none" stroke="var(--muted)" stroke-width="2" stroke-dasharray="5 5" marker-end="url(#arr3)"/>
-        <text x="405" y="228" font-size="12" font-weight="600" fill="var(--muted)" text-anchor="middle">Status ✓ / ✗ zurück an den PR · Test-Bundle bei Fehler</text>
-        <text x="880" y="228" font-size="11" font-weight="500" fill="var(--muted)" text-anchor="end">Xcode 26 · iPhone-17-Simulator · Timeout 30 min</text>
       </svg>
       <div class="points tight">
-        <div class="point"><span class="dot"></span>Eigener Runner statt teurer GitHub-macOS-Runner — ADR-009, bewusste Abweichung vom Kurs</div>
-        <div class="point"><span class="dot"></span>Der Verifier läuft bei jedem Push von selbst — niemand muss ihn starten</div>
-        <div class="point"><span class="dot"></span>UI-Tests kosten einen Simulator-Boot: lokal übersprungen, am Release-Gate gefahren</div>
+        <div class="point"><span class="dot"></span>Eigener Mac mini statt teurer GitHub-macOS-Runner (ADR-009)</div>
+        <div class="point"><span class="dot"></span>Niemand startet die Tests von Hand — sie laufen bei jedem PR von selbst</div>
+        <div class="point"><span class="dot"></span>UI-Tests nur am Release-Gate develop → main, nie lokal</div>
       </div>
     </div>
   </section>
