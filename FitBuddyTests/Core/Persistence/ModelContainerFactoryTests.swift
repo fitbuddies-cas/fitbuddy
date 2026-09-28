@@ -30,8 +30,8 @@ final class ModelContainerFactoryTests: XCTestCase {
     /// written by the build before #141 (schema V1, no `sourceRawValue`) has to
     /// open under the current schema with every workout and analysis intact,
     /// and every migrated workout has to read as Hevy — the only source that
-    /// build knew. Since #240 this runs five stages in turn,
-    /// V1 → V2 → V3 → V4 → V5 → V6.
+    /// build knew. Since #228 this runs six stages in turn,
+    /// V1 → V2 → V3 → V4 → V5 → V6 → V7.
     /// A fresh store would prove nothing; it never had a version to come from.
     func testV1StoreMigratesToTheCurrentSchemaWithEveryWorkoutReadingAsHevy() throws {
         let storeURL = try makeTemporaryStoreURL()
@@ -192,6 +192,97 @@ final class ModelContainerFactoryTests: XCTestCase {
         XCTAssertEqual(latest?.report, report)
         XCTAssertEqual(latest?.provider, .claude)
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<AnalysisResult>()), 2)
+    }
+
+    /// The V6 → V7 stage of #228: a store written with the routine columns
+    /// (schema V6, no validation log on `AnalysisResult`) has to open under
+    /// V7 with everything intact. The workouts, their targets and the stored
+    /// report survive, and the new column comes back empty — no analysis
+    /// before this version recorded what the validator did, and "not
+    /// recorded" must not read as "nothing rejected".
+    func testV6StoreMigratesToV7KeepingTheReportAndReadingTheLogAsNotRecorded() async throws {
+        let storeURL = try makeTemporaryStoreURL()
+        try writeV6Store(at: storeURL)
+
+        let container = try ModelContainerFactory.makePersistent(storeURL: storeURL)
+        let context = ModelContext(container)
+
+        let workouts = try context.fetch(FetchDescriptor<Workout>())
+        XCTAssertEqual(workouts.map(\.routineID), ["r-1"])
+        let sets = try context.fetch(FetchDescriptor<ExerciseSet>())
+        XCTAssertEqual(sets.map(\.targetReps), [8])
+
+        let analyses = try context.fetch(FetchDescriptor<AnalysisResult>())
+        XCTAssertEqual(analyses.map(\.validationLogJSON), [nil])
+        let store = AnalysisResultStore(modelContainer: container)
+        let restored = try await store.latest()
+        XCTAssertEqual(restored?.report, AnalysisReportFactory.validatedEveryCard)
+        XCTAssertEqual(restored?.provider, .mistral)
+        XCTAssertNil(restored?.validationLog)
+
+        // And the migrated store accepts what only V7 can write.
+        let log = AnalysisValidationLog(
+            provider: .claude,
+            model: "claude-opus-5",
+            modelVerdict: .progress,
+            appVerdict: .hold,
+            verdictReason: .noNewBest,
+            interventions: [
+                AnalysisIntervention(subject: .verdict, action: .replaced, reason: .verdictOverridden),
+            ]
+        )
+        try await store.save(
+            text: "Hold.",
+            report: AnalysisReportFactory.validated(.hold),
+            provider: .claude,
+            validationLog: log,
+            generatedAt: Date(timeIntervalSince1970: 1_789_000_000),
+            context: AnalysisContext(sessionCount: 12, window: .default)
+        )
+        let latest = try await store.latest()
+        XCTAssertEqual(latest?.validationLog, log)
+    }
+
+    /// Writes a Hevy workout logged against a routine and one analysis with a
+    /// stored report under `FitBuddySchemaV6`, exactly as the build before
+    /// #228 would have, and lets the container go out of scope again.
+    private func writeV6Store(at storeURL: URL) throws {
+        let schema = Schema(versionedSchema: FitBuddySchemaV6.self)
+        let container = try ModelContainer(
+            for: schema,
+            configurations: ModelConfiguration(schema: schema, url: storeURL, cloudKitDatabase: .none)
+        )
+        let context = ModelContext(container)
+        context.insert(
+            FitBuddySchemaV6.Workout(
+                id: "w-1",
+                title: "Morning Workout",
+                startTime: Date(timeIntervalSince1970: 1_750_000_000),
+                kindRawValue: ActivityKind.strength.rawValue,
+                routineID: "r-1",
+                routineUpdatedAt: Date(timeIntervalSince1970: 1_749_000_000),
+                exercises: [
+                    FitBuddySchemaV6.Exercise(index: 0, title: "Squat (Barbell)", sets: [
+                        FitBuddySchemaV6.ExerciseSet(
+                            index: 0, typeRawValue: "normal", weightKg: 100, reps: 5, targetReps: 8
+                        ),
+                    ]),
+                ]
+            )
+        )
+        let report = AnalysisReportFactory.validatedEveryCard
+        context.insert(
+            FitBuddySchemaV6.AnalysisResult(
+                text: report.summary,
+                generatedAt: Date(timeIntervalSince1970: 1_788_000_000),
+                windowWeeks: 4,
+                sessionCount: 12,
+                reportJSON: AnalysisReportFormat.encode(report).json,
+                reportVersion: AnalysisReportFormat.encode(report).version,
+                providerRawValue: LLMProvider.mistral.rawValue
+            )
+        )
+        try context.save()
     }
 
     /// The V5 → V6 stage of #240: a store written with the cardio columns

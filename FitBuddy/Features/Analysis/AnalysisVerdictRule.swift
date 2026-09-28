@@ -27,9 +27,9 @@ enum AnalysisVerdictRule {
     static let minimumSessionsInWindow = 4
 
     /// Why the rule answered as it did — what the `Why there's no verdict`
-    /// note names (ADR-014 §6), and what #228 will record next to the model's
+    /// note names (ADR-014 §6), and what #228 records next to the model's
     /// own choice.
-    enum Reason: String, Equatable, Sendable {
+    enum Reason: String, Codable, CaseIterable, Equatable, Sendable {
         /// Stage 0: six of the last seven days were training days.
         case restDays
         /// Stage 1: fewer than `minimumSessionsInWindow` sessions in the window.
