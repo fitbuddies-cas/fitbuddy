@@ -121,6 +121,36 @@
 
   .dark .point { color: #F2F1ED; }
 
+  .subpoints {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .subpoint {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    font-size: clamp(15px, 1.5vw, 18px);
+    font-weight: 400;
+    color: var(--ink2);
+  }
+
+  .dark .subpoint { color: #C9C8C2; }
+
+  .subpoint::before {
+    content: "";
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex: 0 0 auto;
+    transform: translateY(-3px);
+  }
+
+  .subpoint strong { font-weight: 600; color: inherit; }
+
   .point .dot {
     width: 7px;
     height: 7px;
@@ -354,9 +384,18 @@
     <div class="slide-inner">
       <div class="eyebrow">Einleitung</div>
       <h2>Ausgangslage</h2>
-      <p class="lede">Kein Swift-Know-how im Team.</p>
+      <p class="lede"></p>
       <div class="points">
-        <div class="point"><span class="dot"></span>Android-Dev, DevOps, Business Analyst</div>
+        <div class="point"><span class="dot"></span>
+          <div>
+            Kein Swift-Know-how im Team
+            <div class="subpoints">
+              <div class="subpoint"><strong>Nicola</strong> –  DevOps</div>
+              <div class="subpoint"><strong>Timo</strong> –  Business Analyst</div>
+              <div class="subpoint"><strong>Romeo</strong> –  Android Dev</div>
+            </div>
+          </div>
+        </div>
         <div class="point"><span class="dot"></span>PostFinance-Projekt zu heikel</div>
         <div class="point"><span class="dot"></span>FitBuddy: eigenständig, risikoarm</div>
       </div>
@@ -368,11 +407,11 @@
     <div class="slide-inner">
       <div class="eyebrow">Einleitung</div>
       <h2>Ziel</h2>
-      <p class="lede">Ein PoC, der Trainingsdaten bündelt und auf Knopfdruck einordnet.</p>
+      <p class="lede">Ein PoC, der Trainingsdaten bündelt und auf Knopfdruck protokolliert, einordnet und empfiehlt.</p>
       <div class="points">
-        <div class="point"><span class="dot"></span>Hevy, Strava, Polar → ein Dashboard</div>
-        <div class="point"><span class="dot"></span>KI-Analyse per Tap</div>
-        <div class="point"><span class="dot"></span>Für den Power-User und die Einsteigerin</div>
+        <div class="point"><span class="dot"></span>Hevy, Strava, Polar → ein Dashboard, eine standardisierte Schnittstelle</div>
+        <div class="point"><span class="dot"></span>KI-Coach: Analyse mit Vorgabe-Parametern</div>
+        <div class="point"><span class="dot"></span>Für Einsteiger:in und Power-User:in</div>
       </div>
     </div>
   </section>
@@ -381,17 +420,12 @@
   <section class="slide">
     <div class="slide-inner">
       <div class="eyebrow">Einleitung</div>
-      <h2>Vorgehen</h2>
-      <div class="flow">
-        <div class="flow-step">Requirements</div><span class="flow-arrow">→</span>
-        <div class="flow-step">Architektur</div><span class="flow-arrow">→</span>
-        <div class="flow-step">Planung</div><span class="flow-arrow">→</span>
-        <div class="flow-step">Coding</div><span class="flow-arrow">→</span>
-        <div class="flow-step">Tests</div><span class="flow-arrow">→</span>
-        <div class="flow-step">Doku &amp; CI</div><span class="flow-arrow">→</span>
-        <div class="flow-step">Security</div>
+      <h2>Markt / Bedürfnis</h2>
+      <div class="points">
+        <div class="point"><span class="dot"></span>Kraft- und Ausdauer-Training</div>
+        <div class="point"><span class="dot"></span>Personal Trainer: teuer, nicht 24/7</div>
+        <div class="point"><span class="dot"></span>KI nutzen!</div>
       </div>
-      <p class="lede" style="margin-bottom:0;">Claude als Partner in jeder Phase — nicht nur beim Coden.</p>
     </div>
   </section>
 
