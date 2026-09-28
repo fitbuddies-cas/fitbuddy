@@ -11,6 +11,11 @@ struct MistralChatRequest: Encodable {
     let stream: Bool
     let messages: [Message]
     let responseFormat: ResponseFormat
+    /// Seed from `LLMSampling` (#226). OpenAI-shaped here too, with one rename
+    /// to watch: the field is `random_seed`, not OpenAI's `seed`. No
+    /// `temperature`, on purpose — Mistral's default applies (see
+    /// `LLMSampling`).
+    let randomSeed: Int
 
     struct Message: Encodable {
         let role: String
@@ -46,5 +51,6 @@ struct MistralChatRequest: Encodable {
         case model, stream, messages
         case maxTokens = "max_tokens"
         case responseFormat = "response_format"
+        case randomSeed = "random_seed"
     }
 }

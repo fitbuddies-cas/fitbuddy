@@ -246,4 +246,30 @@ final class GeminiClientTests: LLMClientTestCase {
             XCTAssertEqual(error, .networkUnavailable)
         }
     }
+
+    // MARK: - Sampling (#226)
+
+    /// No `seed`, deliberately — its acceptance on `gemini-3.6-flash` is
+    /// unverified, and an unknown `generationConfig` key would be a 400 that
+    /// breaks the fallback (see `LLMSampling`). Keys at any depth.
+    func testRequestCarriesNoSeed() async throws {
+        stub(body: GeminiSSEFactory.body(textChunks: ["Hi"]))
+
+        _ = try await collect(try await stream())
+
+        let keys = Self.allKeys(in: try jsonBody(of: try capturedRequest()))
+        XCTAssertFalse(keys.contains("seed"), "Gemini seed support is unverified (#226)")
+    }
+
+    /// No temperature, deliberately — Gemini 3 stays at its default 1.0 (see
+    /// `LLMSampling`). Keys at any depth; a schema `description` may still
+    /// contain the word.
+    func testRequestCarriesNoTemperature() async throws {
+        stub(body: GeminiSSEFactory.body(textChunks: ["Hi"]))
+
+        _ = try await collect(try await stream())
+
+        let keys = Self.allKeys(in: try jsonBody(of: try capturedRequest()))
+        XCTAssertFalse(keys.contains("temperature"), "Gemini runs at its default temperature (#226)")
+    }
 }

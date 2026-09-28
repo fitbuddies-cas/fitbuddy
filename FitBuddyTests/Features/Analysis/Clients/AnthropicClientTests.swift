@@ -194,4 +194,28 @@ final class AnthropicClientTests: LLMClientTestCase {
             XCTAssertEqual(error, .untrustedConnection)
         }
     }
+
+    // MARK: - Sampling (#226)
+
+    /// Claude gets **no** sampling fields, and that is deliberate — see the
+    /// doc comment on `ClaudeMessageRequest`. `claude-opus-5` rejects
+    /// `temperature`, `top_p` and `top_k` with HTTP 400 because of its adaptive
+    /// thinking, and the Messages API has no `seed` at all. This test exists so
+    /// the omission survives the next attempt to make the three providers look
+    /// alike: whoever adds one of these fields breaks every Claude analysis,
+    /// and should fail here first.
+    func testRequestCarriesNoSamplingFields() async throws {
+        stub(body: ClaudeSSEFactory.body(textChunks: ["Hi"]))
+
+        _ = try await collect(try await stream())
+
+        let json = try jsonBody(of: try capturedRequest())
+        // Keys at any depth, not just the top level — `output_config` would
+        // take one just as badly. Keys only: a schema `description` is allowed
+        // to contain the word "temperature" without it being a parameter.
+        let keys = Self.allKeys(in: json)
+        for field in ["temperature", "top_p", "top_k", "topP", "topK", "seed"] {
+            XCTAssertFalse(keys.contains(field), "Claude rejects `\(field)` on this model (HTTP 400)")
+        }
+    }
 }
