@@ -285,6 +285,54 @@
 
   .brand-mark svg { width: 34px; height: 34px; }
 
+  /* ---- slides 2–5: team, goal, market, privacy ---- */
+  .lede.tight { margin-bottom: 18px; font-size: clamp(17px, 1.9vw, 22px); max-width: 760px; }
+  .intro-duo { grid-template-columns: 1fr 1fr; }
+  .team { display: flex; flex-direction: column; gap: 8px; }
+  .member {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--card-subtle); box-shadow: inset 0 0 0 1px var(--border);
+    border-radius: 12px; padding: 9px 12px;
+  }
+  .avatar {
+    width: 36px; height: 36px; border-radius: 50%; flex: 0 0 auto;
+    background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent-border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 700; color: var(--ink);
+  }
+  .member .name { font-size: 15px; font-weight: 600; letter-spacing: -0.1px; }
+  .member .role { font-size: 12px; font-weight: 500; color: var(--muted); margin-top: 1px; }
+  .team-note { margin-top: 12px; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 500; color: var(--ink2); }
+  .tag { display: inline-block; border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.2px; white-space: nowrap; }
+  .tag.warn { background: var(--warn-soft); color: var(--warn); }
+  .tag.ok { background: var(--accent-soft); color: var(--accent); }
+  .choice { border-radius: 12px; padding: 12px 14px; background: var(--card-subtle); box-shadow: inset 0 0 0 1px var(--border); }
+  .choice.picked { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent-border); }
+  .choice-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 15px; font-weight: 700; letter-spacing: -0.1px; }
+  .choice.rejected .choice-head span:first-child { color: var(--muted); }
+  .choice-sub { font-size: 12.5px; font-weight: 500; color: var(--ink2); margin-top: 4px; line-height: 1.35; }
+  .choice-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+  .choice-list li { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; font-weight: 500; color: var(--ink2); line-height: 1.35; }
+  .choice-list li::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); flex: 0 0 auto; transform: translateY(-2px); }
+  .choice-arrow { text-align: center; color: var(--muted); font-size: 16px; line-height: 1; margin: 6px 0; }
+
+  .compare {
+    display: grid; grid-template-columns: 1.1fr 1fr 1fr;
+    background: var(--card); box-shadow: 0 0 0 1px var(--border);
+    border-radius: 18px; overflow: hidden; margin-bottom: 16px;
+  }
+  .compare > div { padding: 11px 16px; font-size: 14px; font-weight: 500; line-height: 1.3; display: flex; align-items: center; border-bottom: 1px solid var(--divider); }
+  .compare > div:nth-last-child(-n+3) { border-bottom: none; }
+  .compare .head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); background: var(--card-subtle); }
+  .compare .crit { font-weight: 600; color: var(--ink); }
+  .compare .pt { color: var(--ink2); }
+  .compare .ki { background: var(--accent-soft); font-weight: 600; color: var(--ink); }
+  .compare .head.ki { color: var(--accent); }
+
+  @media (max-width: 680px) {
+    .intro-duo { grid-template-columns: 1fr; }
+  }
+
   /* ---- slides 5–9: requirements, architecture, workflow, tests, CI ---- */
   .h2-tight { margin-bottom: 18px; }
 
@@ -518,21 +566,33 @@
   <section class="slide">
     <div class="slide-inner">
       <div class="eyebrow">Einleitung</div>
-      <h2>Ausgangslage</h2>
-      <p class="lede"></p>
-      <div class="points">
-        <div class="point"><span class="dot"></span>
-          <div>
-            Kein Swift-Know-how im Team
-            <div class="subpoints">
-              <div class="subpoint"><strong>Nicola</strong> –  DevOps</div>
-              <div class="subpoint"><strong>Timo</strong> –  Business Analyst</div>
-              <div class="subpoint"><strong>Romeo</strong> –  Android Dev</div>
-            </div>
+      <h2 class="h2-tight">Ausgangslage</h2>
+      <p class="lede tight">Drei Leute, drei Rollen — und niemand hat je eine Zeile Swift geschrieben.</p>
+      <div class="duo intro-duo">
+        <div class="panel">
+          <div class="panel-label">Das Team</div>
+          <div class="team">
+            <div class="member"><div class="avatar">N</div><div><div class="name">Nicola</div><div class="role">DevOps</div></div></div>
+            <div class="member"><div class="avatar">T</div><div><div class="name">Timo</div><div class="role">Business Analyst</div></div></div>
+            <div class="member"><div class="avatar">R</div><div><div class="name">Romeo</div><div class="role">Android Dev</div></div></div>
           </div>
         </div>
-        <div class="point"><span class="dot"></span>PostFinance-Projekt zu heikel</div>
-        <div class="point"><span class="dot"></span>FitBuddy: eigenständig, risikoarm</div>
+        <div class="panel">
+          <div class="panel-label">Die Projektwahl</div>
+          <div class="choice rejected">
+            <div class="choice-head"><span>PostFinance-Projekt</span><span class="tag warn">zu heikel</span></div>
+            <div class="choice-sub">Firmendaten und Freigaben — kein Terrain für einen offenen PoC mit KI-Tools.</div>
+          </div>
+          <div class="choice-arrow">↓</div>
+          <div class="choice picked">
+            <div class="choice-head"><span>FitBuddy</span><span class="tag ok">gewählt</span></div>
+            <ul class="choice-list">
+              <li>Eigenständig und risikoarm</li>
+              <li>Eigene Trainingsdaten</li>
+              <li>Echte Nutzer im Team</li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -541,25 +601,164 @@
   <section class="slide">
     <div class="slide-inner">
       <div class="eyebrow">Einleitung</div>
-      <h2>Ziel</h2>
-      <p class="lede">Ein PoC, der Trainingsdaten bündelt und auf Knopfdruck protokolliert, einordnet und empfiehlt.</p>
-      <div class="points">
-        <div class="point"><span class="dot"></span>Hevy, Strava, Polar → ein Dashboard, eine standardisierte Schnittstelle</div>
-        <div class="point"><span class="dot"></span>KI-Coach: Analyse mit Vorgabe-Parametern</div>
-        <div class="point"><span class="dot"></span>Für Einsteiger:in und Power-User:in</div>
+      <h2 class="h2-tight">Ziel</h2>
+      <p class="lede tight">Ein PoC, der Trainingsdaten protokolliert, einordnet und empfiehlt.</p>
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-label">Drei Quellen · eine App · drei Ergebnisse</div>
+        <svg viewBox="0 0 880 190" role="img" aria-label="Hevy, Strava und Polar fliessen in FitBuddy; FitBuddy protokolliert, ordnet ein und empfiehlt">
+          <defs>
+            <marker id="arrZ" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/>
+            </marker>
+          </defs>
+          <g font-size="13" font-weight="600" text-anchor="middle">
+            <rect x="10" y="12" width="170" height="42" rx="11" fill="var(--card-subtle)" stroke="var(--border)"/>
+            <text x="95" y="30" fill="var(--ink)">Hevy</text>
+            <text x="95" y="46" font-size="11" font-weight="500" fill="var(--muted)">Krafttraining</text>
+            <rect x="10" y="74" width="170" height="42" rx="11" fill="var(--card-subtle)" stroke="var(--border)"/>
+            <text x="95" y="92" fill="var(--ink)">Strava</text>
+            <text x="95" y="108" font-size="11" font-weight="500" fill="var(--muted)">Laufen, Velo</text>
+            <rect x="10" y="136" width="170" height="42" rx="11" fill="var(--card-subtle)" stroke="var(--border)"/>
+            <text x="95" y="154" fill="var(--ink)">Polar</text>
+            <text x="95" y="170" font-size="11" font-weight="500" fill="var(--muted)">Herzfrequenz, Cardio</text>
+
+            <rect x="300" y="24" width="280" height="142" rx="18" fill="var(--card)" stroke="var(--accent-border)" stroke-width="1.5"/>
+            <text x="440" y="50" font-size="16" font-weight="700" fill="var(--ink)">FitBuddy</text>
+            <rect x="316" y="66" width="248" height="38" rx="9" fill="var(--accent-soft)" stroke="var(--accent-border)"/>
+            <text x="440" y="83" fill="var(--ink)">Ein Dashboard</text>
+            <text x="440" y="98" font-size="11" font-weight="500" fill="var(--ink2)">eine standardisierte Schnittstelle</text>
+            <rect x="316" y="112" width="248" height="38" rx="9" fill="var(--accent-soft)" stroke="var(--accent-border)"/>
+            <text x="440" y="129" fill="var(--ink)">KI-Coach</text>
+            <text x="440" y="144" font-size="11" font-weight="500" fill="var(--ink2)">Analyse mit Vorgabe-Parametern</text>
+
+            <rect x="700" y="12" width="170" height="42" rx="11" fill="var(--card-subtle)" stroke="var(--border)"/>
+            <text x="785" y="30" fill="var(--ink)">Protokolliert</text>
+            <text x="785" y="46" font-size="11" font-weight="500" fill="var(--muted)">was du trainierst</text>
+            <rect x="700" y="74" width="170" height="42" rx="11" fill="var(--card-subtle)" stroke="var(--border)"/>
+            <text x="785" y="92" fill="var(--ink)">Ordnet ein</text>
+            <text x="785" y="108" font-size="11" font-weight="500" fill="var(--muted)">Fortschritt, Belastung</text>
+            <rect x="700" y="136" width="170" height="42" rx="11" fill="var(--card-subtle)" stroke="var(--border)"/>
+            <text x="785" y="154" fill="var(--ink)">Empfiehlt</text>
+            <text x="785" y="170" font-size="11" font-weight="500" fill="var(--muted)">nächster Schritt</text>
+          </g>
+          <g fill="none" stroke="var(--muted)" stroke-width="2" marker-end="url(#arrZ)">
+            <path d="M182 33 C240 33 240 95 293 95"/>
+            <line x1="182" y1="95" x2="293" y2="95"/>
+            <path d="M182 157 C240 157 240 95 293 95"/>
+            <path d="M582 95 C640 95 640 33 693 33"/>
+            <line x1="582" y1="95" x2="693" y2="95"/>
+            <path d="M582 95 C640 95 640 157 693 157"/>
+          </g>
+        </svg>
       </div>
     </div>
   </section>
 
-  <!-- 4. Vorgehen -->
+  <!-- 4. Markt / Bedürfnis -->
   <section class="slide">
     <div class="slide-inner">
       <div class="eyebrow">Einleitung</div>
-      <h2>Markt / Bedürfnis</h2>
-      <div class="points">
-        <div class="point"><span class="dot"></span>Kraft- und Ausdauer-Training</div>
-        <div class="point"><span class="dot"></span>Personal Trainer: teuer, nicht 24/7</div>
-        <div class="point"><span class="dot"></span>KI nutzen!</div>
+      <h2 class="h2-tight">Markt / Bedürfnis</h2>
+      <p class="lede tight">Kraft und Ausdauer werden fleissig getrackt — ausgewertet wird das Log selten.</p>
+      <div class="compare">
+        <div class="head"></div>
+        <div class="head">Personal Trainer</div>
+        <div class="head ki">KI-Coach in FitBuddy</div>
+
+        <div class="crit">Kosten</div>
+        <div class="pt">Stundensatz, Abo</div>
+        <div class="ki">Wenige Rappen pro Analyse</div>
+
+        <div class="crit">Verfügbarkeit</div>
+        <div class="pt">Termin, Öffnungszeiten</div>
+        <div class="ki">24/7</div>
+
+        <div class="crit">Datenbasis</div>
+        <div class="pt">Was du erzählst</div>
+        <div class="ki">Komplettes Log — Kraft und Ausdauer</div>
+
+        <div class="crit">Blick aufs Ganze</div>
+        <div class="pt">Meist eine Disziplin</div>
+        <div class="ki">Hevy, Strava, Polar in einer Auswertung (und mehr in Zukunft)</div>
+      </div>
+      <div class="points tight">
+        <div class="point"><span class="dot"></span>Der Trainer bleibt für Technik und Motivation — die Auswertung übernimmt die KI.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Sicherheit & Datenschutz -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="eyebrow">Einleitung</div>
+      <h2 class="h2-tight">Sicherheit &amp; Datenschutz</h2>
+      <p class="lede tight">Trainingsdaten sind Gesundheitsdaten (nDSG Art. 5 lit. c)</p>
+      <div class="panel" style="margin-bottom:14px;">
+        <div class="panel-label">Datenfluss — kein Backend, kein Tracking</div>
+        <svg viewBox="0 0 880 236" role="img" aria-label="Datenfluss: Quellen und LLM-Provider sprechen direkt mit dem iPhone; Keys und Trainingsdaten bleiben on-device">
+          <defs>
+            <marker id="arrP" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/>
+            </marker>
+          </defs>
+          <g font-size="13" font-weight="600" text-anchor="middle">
+            <!-- sources -->
+            <text x="90" y="16" font-size="11" letter-spacing="0.6" fill="var(--muted)">QUELLEN</text>
+            <rect x="10" y="30" width="160" height="40" rx="11" fill="var(--card-subtle)" stroke="var(--border)"/>
+            <text x="90" y="47" fill="var(--ink)">Hevy</text>
+            <rect x="10" y="95" width="160" height="40" rx="11" fill="var(--card-subtle)" stroke="var(--border)"/>
+            <text x="90" y="112" fill="var(--ink)">Strava</text>
+            <rect x="10" y="160" width="160" height="40" rx="11" fill="var(--card-subtle)" stroke="var(--border)"/>
+            <text x="90" y="177" fill="var(--ink)">Polar</text>
+
+            <!-- phone -->
+            <rect x="270" y="6" width="340" height="224" rx="22" fill="var(--card)" stroke="var(--accent-border)" stroke-width="1.5"/>
+            <text x="440" y="30" font-size="11" letter-spacing="0.6" fill="var(--muted)">iPhone</text>
+            <rect x="286" y="42" width="308" height="46" rx="9" fill="var(--accent-soft)" stroke="var(--accent-border)"/>
+            <text x="440" y="61" fill="var(--ink)">Keychain: API-Keys + Consent</text>
+            <text x="440" y="77" font-size="11" font-weight="500" fill="var(--ink2)">nur iPhone · kein iCloud-Backup</text>
+            <rect x="286" y="98" width="308" height="46" rx="9" fill="var(--accent-soft)" stroke="var(--accent-border)"/>
+            <text x="440" y="117" fill="var(--ink)">SwiftData: Trainingsdaten</text>
+            <text x="440" y="133" font-size="11" font-weight="500" fill="var(--ink2)">lokal & löschbar</text>
+            <rect x="286" y="154" width="308" height="46" rx="9" fill="var(--card-subtle)" stroke="var(--border)"/>
+            <text x="440" y="173" fill="var(--ink)">Kein Backend · keine Analytics</text>
+            <text x="440" y="189" font-size="11" font-weight="500" fill="var(--muted)">nur Quelle und Provider sehen Daten</text>
+            <!--text x="440" y="219" font-size="11" font-weight="600" fill="var(--accent)">Consent-Screen vor erstem Request</text -->
+
+            <!-- providers -->
+            <text x="790" y="16" font-size="11" letter-spacing="0.6" fill="var(--muted)">LLM · BYO-KEY</text>
+            <rect x="710" y="30" width="160" height="40" rx="11" fill="var(--card-subtle)" stroke="var(--border)"/>
+            <text x="790" y="47" fill="var(--ink)">Anthropic</text>
+            <text x="790" y="62" font-size="11" font-weight="500" fill="var(--muted)">USA · DPA des Users</text>
+            <rect x="710" y="95" width="160" height="40" rx="11" fill="var(--card-subtle)" stroke="var(--border)"/>
+            <text x="790" y="112" fill="var(--ink)">Google</text>
+            <text x="790" y="127" font-size="11" font-weight="500" fill="var(--muted)">USA</text>
+            <rect x="710" y="160" width="160" height="40" rx="11" fill="var(--card-subtle)" stroke="var(--border)"/>
+            <text x="790" y="177" fill="var(--ink)">Mistral</text>
+            <text x="790" y="192" font-size="11" font-weight="500" fill="var(--muted)">EU</text>
+          </g>
+          <g fill="none" stroke="var(--muted)" stroke-width="2" marker-end="url(#arrP)">
+            <line x1="172" y1="50" x2="263" y2="50"/>
+            <line x1="172" y1="115" x2="263" y2="115"/>
+            <line x1="172" y1="180" x2="263" y2="180"/>
+          </g>
+          <g fill="none" stroke="var(--muted)" stroke-width="2" marker-start="url(#arrP)" marker-end="url(#arrP)">
+            <line x1="617" y1="50" x2="703" y2="50"/>
+            <line x1="617" y1="115" x2="703" y2="115"/>
+            <line x1="617" y1="180" x2="703" y2="180"/>
+          </g>
+          <!-- TLS labels -->
+          <g font-size="10" font-weight="700" text-anchor="middle" fill="var(--accent)">
+            <text x="217" y="214">🔒 TLS +</text>
+            <text x="217" y="227">Cert-Pinning</text>
+            <text x="660" y="214">🔒 TLS +</text>
+            <text x="660" y="227">Cert-Pinning</text>
+          </g>
+        </svg>
+      </div>
+      <div class="points tight">
+        <div class="point"><span class="dot"></span>Rechtsgrundlage BYO-Key: der User ist selbst Anthropic-Kunde (DPA inkl. SCCs + Swiss Addendum)</div>
+        <div class="point"><span class="dot"></span>EU-Hosting (Bedrock Frankfurt / Vertex Zürich) und formale DSFA</div>
       </div>
     </div>
   </section>
