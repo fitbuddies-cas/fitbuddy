@@ -54,7 +54,7 @@ Die Stufen laufen in dieser Reihenfolge. Die erste greifende Stufe bestimmt das 
 | **3 — Plateau-Mehrheit** | **mehr als die Hälfte** der entscheidbaren Übungen ist plateauiert | `hold` |
 | **4 — Bestleistung** | mindestens eine entscheidbare, nicht plateauierte Übung hat ihre Fenster-Bestleistung in der jüngsten Session gesetzt | `progress` |
 | **Rest** | keine der obigen | `hold` |
-| **5 — Anstrengungs-Deckel** (ab #246) | mindestens eine qualifizierte Quelle zeigt steigende Anstrengung | `progress` → `hold`; ein `recover` aus Stufe 0 bleibt `recover`; `insufficientData` bleibt `insufficientData` |
+| **5 — Anstrengungs-Deckel** (ab #246) | mindestens eine qualifizierte Quelle zeigt steigende Anstrengung | `progress` → `hold`; ein `recover` aus Stufe 0 bleibt `recover`; ein `insufficientData` aus Stufe 1 oder 2 bleibt `insufficientData`, nur das `insufficientData` unter `.endurance`, das allein aus den fehlenden Stufen 2–4 folgt, wird zu `hold` (siehe 5.) |
 
 **Zu Stufe 0.** Sie bleibt an erster Stelle, weil US-3 AC6 eine Must-Anforderung ist und weil die Aussage in sich vollständig ist: An 6 von 7 Tagen trainiert heisst, es gab höchstens einen Ruhetag. Das ist wahr, ohne dass eine Intensität bekannt sein müsste. Die Schwelle wird deshalb **weder gesenkt noch erweitert noch in die Gegenrichtung angewendet** — sie kann `recover` erzwingen, nie `progress` erlauben. Headline und Lead sagen weiterhin genau das, was gemessen wurde («You trained on 6 of the last 7 days»), nicht «deine Belastung ist zu hoch». Eine Änderung dieser Schwelle ist eine Anforderungsänderung, kein Regel-Tuning.
 
@@ -114,7 +114,7 @@ Nirgendwo steht eine `0` für eine Grösse, die es im Profil nicht gibt. Fehlt e
 | **Headline** (App-Text, ersetzt den Modelltext) | `Not enough data to judge.` |
 | **Lead** (App-Text, ersetzt den Modelltext) | `Your logged training doesn't yet support a recommendation for or against more load. Keep training as before — the next analysis will have more to go on.` |
 | **Karten** | Keine `progression`-, keine `repProgression`- und keine `recovery`-Karte, ebenso keine `metric`-Karte mit Zielwert (`to`). Zugelassen sind `note`-Karten und Karten, die ausschliesslich gemessene Zahlen wiedergeben (`imbalance`, `interference`). |
-| **Begründungs-Note** | Die App fügt **eine** `note` an erster Stelle ein, Titel `Why there's no verdict`, deren Text die greifende Bedingung benennt (zu wenige Sessions im Fenster / keine Session in den letzten 7 Tagen / keine Übung mit genug Sessions / keine Anstrengung erfasst). |
+| **Begründungs-Note** | Die App fügt **eine** `note` an erster Stelle ein, Titel `Why there's no verdict`, deren Text die greifende Bedingung benennt (zu wenige Sessions im Fenster / keine Session in den letzten 7 Tagen / keine Übung mit genug Sessions). Fehlende Anstrengung ist nie für sich allein eine Begründung (§4). |
 
 Headline und Lead sind hier App-Text, nicht Modelltext — dieselbe Konstruktion wie `recoveryHeadline` / `recoveryLead`. Der Grund ist derselbe: Der Modell-Lead argumentiert für ein Urteil, das die App gerade zurückgenommen hat.
 
@@ -146,7 +146,7 @@ Die Regel benutzt fünf Zahlen. Zwei davon stammen aus dem Projekt selbst, drei 
 
 **Übernommen:** Die **6 von 7 Trainingstagen** stehen als US-3 AC6 in den Anforderungen und sind seit #175 im Code; dieser ADR erfindet sie nicht, er ordnet sie nur ein. Die **4 Progressionspunkte** sind die bestehende Plateau-Definition aus US-9 AC2 (`ExerciseProgression.plateauSessionCount = 3` plus die Session, gegen die verglichen wird) — wiederverwendet, damit es im Produkt nur einen Plateau-Begriff gibt.
 
-**Gesetzt:** Die **4 Sessions** des Datenbasis-Gates sind eine Projektentscheidung; sie ist an der Plateau-Definition ausgerichtet, aber nicht aus ihr hergeleitet. Die **Mehrheit der plateauierten Übungen** (mehr als die Hälfte) ist eine Projektentscheidung. Die **Anstrengungs-Schwellen** (3 Wochen, 130 %, 80 %) sind Projektentscheidungen und zusätzlich provisorisch — sie stehen hier, damit #246 nicht ohne Vorgabe implementiert, und sind vor dem ersten Einsatz an echten Werten zu prüfen.
+**Gesetzt:** Die **4 Sessions** des Datenbasis-Gates sind eine Projektentscheidung; sie ist an der Plateau-Definition ausgerichtet, aber nicht aus ihr hergeleitet. Die **Mehrheit der plateauierten Übungen** (mehr als die Hälfte) ist eine Projektentscheidung. Die **Anstrengungs-Schwellen** (3 Wochen, 130 %, 80 %) sind Projektentscheidungen und zusätzlich provisorisch — sie stehen hier, damit #246 nicht ohne Vorgabe implementiert, und sind an echten Werten zu prüfen (siehe Offene Punkte).
 
 Keine dieser Zahlen stammt aus einer Studie, einer Norm oder einem veröffentlichten Belastungsmodell. Wo dieser ADR Literatur erwähnt — etwa die Unzuverlässigkeit von Belastungsquotienten —, ist das ein Argument *gegen* eine Kennzahl, keine Herleitung einer eigenen.
 
@@ -192,7 +192,7 @@ Ein **Volumen-Trend-Feld wird bewusst nicht ergänzt.** Die Regel benutzt keines
 
 | Frage | Priorität | Fällig |
 |---|---|---|
-| Anstrengungs-Schwellen (3 Wochen, 130 %, 80 %) an echten Werten ratifizieren oder korrigieren | Hoch | mit #246 / #229 |
+| Anstrengungs-Schwellen (3 Wochen, 130 %, 80 %) an echten Werten ratifizieren oder korrigieren. PO-Entscheid 26.09.2026: Stufe 5 geht mit diesen provisorischen Schwellen in v0; die Ratifizierung bleibt offen, bis Nutzer Anstrengung erfassen (Messung analog [VERDICT-SPREAD-MEASUREMENT.md](../VERDICT-SPREAD-MEASUREMENT.md)) | Hoch | sobald Anstrengungswerte vorliegen |
 | Ableitung eines `progress` für Ausdauer — was die App dort belegen kann, das kein Distanz-Quotient ist | Hoch | v1, nach #241 |
 | Ob `insufficientData` bei sehr dünner Datenlage häufiger erscheint, als die Nutzer es akzeptieren — Messung statt Vermutung | Mittel | mit #229 |
 | Ob die Ruhetag-Schwelle nach #241 in eine Anstrengungsaussage überführt und US-3 AC6 entsprechend geändert wird | Mittel | v1 |

@@ -66,6 +66,18 @@ struct AnalysisReportEvidence: Equatable, Sendable {
     /// but runs leaves a strength analysis describing a pause, and the rule
     /// has to be able to say so.
     var sessionsInLastSevenDays = 0
+    /// The effort values of the window, one series per scale — ADR-014
+    /// stage 5, #246.
+    ///
+    /// Source-marked and never merged (ADR-015 §1): Hevy's RPE, Strava's
+    /// Relative Effort and Polar's Cardio, Perceived and Muscle Load each
+    /// stand on their own. Only the scales the profile reads
+    /// (`EffortScale.isRead(under:)`) and only those that recorded anything
+    /// are here — a scale without a value is absent, not `0` (ADR-014 §4).
+    /// Empty by default, and empty in the ordinary case: every one of these
+    /// values needs a manual entry, a heart-rate strap or a Training Load Pro
+    /// device, so the rule has to run exactly as before without them.
+    var effort: [EffortSeries] = []
 }
 
 extension AnalysisReportEvidence {
@@ -146,7 +158,14 @@ extension AnalysisReportEvidence {
                 analysisProfile: analysisProfile
             ),
             sessionsInWindow: analysed.count,
-            sessionsInLastSevenDays: analysedWeek.count
+            sessionsInLastSevenDays: analysedWeek.count,
+            effort: EffortSeries.series(
+                in: analysed,
+                scales: EffortScale.allCases.filter { $0.isRead(under: analysisProfile) },
+                window: window,
+                now: now,
+                calendar: calendar
+            )
         )
     }
 

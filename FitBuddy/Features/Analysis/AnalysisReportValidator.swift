@@ -89,6 +89,15 @@ enum AnalysisReportValidator {
     static let holdLead =
         "Your data doesn't back a specific load increase yet. Keep your current weights and read the full analysis below."
 
+    /// The lead of a report the app turned into a hold verdict because stage 5
+    /// capped it on rising effort (`AnalysisVerdictRule.Reason.effortRising`,
+    /// product-owner decision on #246). Used under every profile: `holdLead`
+    /// speaks of weights, which says nothing to a runner under "Endurance",
+    /// and the cap is about effort, not about a missing load step. The
+    /// headline stays `holdHeadline`.
+    static let effortCapLead =
+        "Your recorded effort has risen against your own earlier weeks. Hold your current training before adding more."
+
     /// The lead of a report the app turned into a progress verdict, because
     /// its own figures carry the step the model argued against (ADR-014 §7).
     ///
@@ -238,7 +247,7 @@ enum AnalysisReportValidator {
                 AnalysisIntervention(subject: .verdict, action: .replaced, reason: .verdictOverridden)
             )
             headline = AnalysisHeadline.text(for: verdict)
-            lead = self.lead(for: verdict, evidence: evidence)
+            lead = self.lead(for: verdict, reason: outcome.reason, evidence: evidence)
             if headline != report.headline {
                 interventions.append(
                     AnalysisIntervention(subject: .headline, action: .replaced, reason: .verdictOverridden)
@@ -287,11 +296,17 @@ enum AnalysisReportValidator {
     }
 
     /// The app's lead for a verdict it put over the model's (ADR-014 §7).
-    static func lead(for verdict: AnalysisVerdict, evidence: AnalysisReportEvidence) -> String {
+    /// A hold from the effort cap gets `effortCapLead`, every other hold
+    /// `holdLead`.
+    static func lead(
+        for verdict: AnalysisVerdict,
+        reason: AnalysisVerdictRule.Reason,
+        evidence: AnalysisReportEvidence
+    ) -> String {
         switch verdict {
         case .progress: return progressLead
         case .recover: return recoveryLead(trainingDays: evidence.recovery.trainingDays)
-        case .hold: return holdLead
+        case .hold: return reason == .effortRising ? effortCapLead : holdLead
         case .insufficientData: return insufficientDataLead
         }
     }
@@ -341,7 +356,7 @@ enum AnalysisReportValidator {
             text = "No exercise here has the "
                 + "\(ExerciseProgression.plateauSessionCount + 1) sessions the app needs before it can tell "
                 + "a plateau from progress."
-        case .restDays, .plateauMajority, .latestIsWindowBest, .noNewBest:
+        case .restDays, .plateauMajority, .latestIsWindowBest, .noNewBest, .effortRising:
             return nil
         }
         return .note(title: insufficientDataNoteTitle, text: text)
