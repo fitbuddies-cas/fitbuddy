@@ -82,7 +82,7 @@ struct AnalysisContext: Equatable, Sendable {
     ///     the same empty window compare unequal. The same holds for
     ///     `domainCounts`.
     ///   - domainCounts: Counts per domain. Both breakdowns describe the same
-    ///     sessions, so their totals have to agree — `AnalysisViewModel` counts
+    ///     sessions, so their totals have to agree — `counts(in:from:)` counts
     ///     them in one pass over the window for exactly that reason.
     ///   - analysedCounts: The part of `domainCounts` that reached the prompt,
     ///     `nil` where the two are the same. Zero entries survive here, unlike
@@ -167,6 +167,42 @@ struct AnalysisContext: Equatable, Sendable {
         self.window = window
         self.analysisProfile = analysisProfile
         self.profile = profile
+    }
+
+    /// The sessions of a window, counted per source for the context line and
+    /// per domain for the thin-data warning (US-15 AC4, #182) — the two
+    /// breakdowns the main initializer takes.
+    ///
+    /// One pass over the same sessions, so the two breakdowns cannot disagree
+    /// about how many there were. They do differ in *where* a session lands:
+    /// the source is where it came from, the domain is what was trained
+    /// (`ActivityKind.isEndurance`, ADR-012 — not `isCardio`, which is how
+    /// the row is displayed), and a Strava strength session is named under
+    /// Strava and counted as strength.
+    ///
+    /// Counted from `start`, not over everything passed in: the cache is read
+    /// wide enough for the widest rung of the ladder and its comparison
+    /// window, and reporting those sessions as the data basis would overstate
+    /// it by a factor of six.
+    ///
+    /// A source with nothing in the window never enters the dictionary, so a
+    /// connector the user has linked but not used stays out of the line.
+    ///
+    /// Lives here rather than on `AnalysisViewModel` (#248): the run and
+    /// `MockAnalysisSeeder` both build a context from it, and a second copy of
+    /// this loop would let a UI test assert a breakdown the app itself never
+    /// computes.
+    static func counts(
+        in summaries: [WorkoutSummary],
+        from start: Date
+    ) -> (sources: [ConnectorSource: Int], domains: [AnalysisDomain: Int]) {
+        var sources: [ConnectorSource: Int] = [:]
+        var domains: [AnalysisDomain: Int] = [:]
+        for summary in summaries where summary.startTime >= start {
+            sources[summary.source, default: 0] += 1
+            domains[AnalysisDomain(summary: summary), default: 0] += 1
+        }
+        return (sources, domains)
     }
 
     /// Sessions in the window across all sources — the figure the thin-data

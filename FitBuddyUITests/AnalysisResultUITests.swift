@@ -136,7 +136,7 @@ final class AnalysisResultUITests: XCTestCase {
     /// (US-15 AC4, #188).
     ///
     /// The cache-to-card path the #186 version could not walk: the counts come
-    /// out of the seeded window through `AnalysisViewModel.sessionCounts`, not
+    /// out of the seeded window through `AnalysisContext.counts`, not
     /// out of a fixture.
     @MainActor
     func testAnOverallLoadReportOverTheMixedProfileNamesBothSources() {

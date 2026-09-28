@@ -250,7 +250,7 @@ final class AnalysisViewModel: ObservableObject {
         var domains: [AnalysisDomain: Int] = [:]
         if let window = AnalysisWindow.resolve(for: cached, endingAt: reference, calendar: calendar) {
             let start = window.start(endingAt: reference, calendar: calendar)
-            domains = Self.sessionCounts(in: cached, from: start).domains
+            domains = AnalysisContext.counts(in: cached, from: start).domains
         }
         var remembered = chosenProfile
         if remembered == nil {
@@ -650,7 +650,7 @@ final class AnalysisViewModel: ObservableObject {
             // returned: the cache was read wide enough for the widest rung and
             // its comparison window, and reporting those sessions as the data
             // basis would overstate it by a factor of six.
-            let counts = Self.sessionCounts(in: cached, from: start)
+            let counts = AnalysisContext.counts(in: cached, from: start)
             // The thin-data verdict is about what the model was shown, and
             // since #185 that is what the profile covers: the line keeps the
             // honest count of everything the app read, while the warning
@@ -695,41 +695,6 @@ final class AnalysisViewModel: ObservableObject {
             state = .error(.cacheUnavailable)
             return nil
         }
-    }
-
-    /// The sessions of the resolved window, counted per source for the context
-    /// line and per domain for the thin-data warning (US-15 AC4, #182).
-    ///
-    /// One pass over the same sessions, so the two breakdowns cannot disagree
-    /// about how many there were. They do differ in *where* a session lands:
-    /// the source is where it came from, the domain is what was trained
-    /// (`ActivityKind.isEndurance`, ADR-012 — not `isCardio`, which is how
-    /// the row is displayed), and a Strava strength session is named under
-    /// Strava and counted as strength.
-    ///
-    /// Counted from `start`, not over everything the read returned: the cache
-    /// is read wide enough for the widest rung of the ladder and its comparison
-    /// window, and reporting those sessions as the data basis would overstate
-    /// it by a factor of six.
-    ///
-    /// A source with nothing in the window never enters the dictionary, so a
-    /// connector the user has linked but not used stays out of the line.
-    ///
-    /// `nonisolated` and visible to the feature since #188: `MockAnalysisSeeder`
-    /// builds a seeded report's context line from the same cache a run would
-    /// have read, off the main actor, and a second copy of this loop would let
-    /// a UI test assert a breakdown the app itself never computes.
-    nonisolated static func sessionCounts(
-        in summaries: [WorkoutSummary],
-        from start: Date
-    ) -> (sources: [ConnectorSource: Int], domains: [AnalysisDomain: Int]) {
-        var sources: [ConnectorSource: Int] = [:]
-        var domains: [AnalysisDomain: Int] = [:]
-        for summary in summaries where summary.startTime >= start {
-            sources[summary.source, default: 0] += 1
-            domains[AnalysisDomain(summary: summary), default: 0] += 1
-        }
-        return (sources, domains)
     }
 
     /// The full workouts of the last seven days, for the mean RPE of the
