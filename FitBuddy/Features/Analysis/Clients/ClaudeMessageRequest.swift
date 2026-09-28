@@ -1,6 +1,14 @@
 import Foundation
 
 /// Wire body for a streaming call to Claude's `POST /v1/messages` (#29).
+///
+/// **No sampling fields here, on purpose (#226).** `claude-opus-5` rejects
+/// `temperature`, `top_p` and `top_k` with HTTP 400, and the Messages API has
+/// no `seed` — see `LLMSampling` for the full reasoning. The only knob left is
+/// `output_config.effort` below (`AnthropicClient.effort`). The spread this
+/// leaves on Claude is not closed from here; the verdict moves into the app's
+/// own metrics in #227. `AnthropicClientTests` asserts that none of these
+/// fields reaches the wire.
 struct ClaudeMessageRequest: Encodable {
     let model: String
     let maxTokens: Int

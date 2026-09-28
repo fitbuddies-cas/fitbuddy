@@ -55,7 +55,9 @@ enum AnalysisReportSchema {
             ],
             "verdict": [
                 "type": "string",
-                "enum": .array(AnalysisVerdict.allCases.map { .string($0.rawValue) }),
+                // `modelChoices`, not `allCases`: the app's fourth verdict
+                // is not on offer here (ADR-014 §7).
+                "enum": .array(AnalysisVerdict.modelChoices.map { .string($0.rawValue) }),
                 "description": "progress: the data supports adding load or reps. recover: rest comes first. hold: neither is justified yet."
             ],
             "lead": [

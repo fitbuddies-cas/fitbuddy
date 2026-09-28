@@ -18,6 +18,7 @@ actor PreviewAnalysisResultStore: AnalysisResultStoring {
         text: String,
         report: ValidatedAnalysisReport?,
         provider: LLMProvider?,
+        validationLog: AnalysisValidationLog?,
         generatedAt: Date,
         context: AnalysisContext
     ) throws -> UUID {
@@ -27,7 +28,8 @@ actor PreviewAnalysisResultStore: AnalysisResultStoring {
             generatedAt: generatedAt,
             context: context,
             report: report,
-            provider: provider
+            provider: provider,
+            validationLog: validationLog
         )
         entries.insert(entry, at: 0)
         return entry.id

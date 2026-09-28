@@ -1419,7 +1419,9 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         for kind in AnalysisCard.Kind.allCases {
             XCTAssertTrue(system.contains("\"\(kind.rawValue)\""), kind.rawValue)
         }
-        for verdict in AnalysisVerdict.allCases {
+        // The three the schema offers — the app's fourth class is not one the
+        // model may pick (ADR-014 §7).
+        for verdict in AnalysisVerdict.modelChoices {
             XCTAssertTrue(system.contains("\"\(verdict.rawValue)\""), verdict.rawValue)
         }
         XCTAssertTrue(system.contains("under 200 words"))
@@ -1853,6 +1855,127 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         XCTAssertFalse(structure.contains("Rest days: -"))
     }
 
+    // MARK: - Effort, labelled by source (US-18 AC1/AC2, #245)
+
+    /// AC1 for Hevy: the session row ends with the mean RPE of its sets,
+    /// labelled — the same "mean RPE" the Exercises section already uses.
+    func testAHevySessionRowCarriesItsMeanRPE() throws {
+        let prompt = make([
+            workout(daysAgo: 1, volume: 3_000, id: "hevy-1", title: "Push Day", rpe: 7.5),
+            workout(daysAgo: 3, volume: 2_000, id: "hevy-2", title: "Pull Day"),
+        ])
+        let sessions = try section(prompt, "## Sessions (newest first)")
+
+        XCTAssertEqual(sessions, """
+        ## Sessions (newest first)
+        - 2025-06-14 Push Day: 3000 kg, 4 exercises, 12 working sets, mean RPE 7.5
+        - 2025-06-12 Pull Day: 2000 kg, 4 exercises, 12 working sets
+        """)
+    }
+
+    /// AC1 for a set-less strength session: Strava's score under its own
+    /// name, after the figures the source recorded.
+    func testAStravaStrengthSessionRowCarriesItsRelativeEffort() throws {
+        let prompt = make([
+            workout(
+                daysAgo: 2,
+                volume: 0,
+                id: "strava:9",
+                title: "Gym",
+                source: .strava,
+                kind: .strength,
+                durationSeconds: 3_600,
+                cardio: CardioMetrics(averageHeartRate: 120, relativeEffort: 45)
+            ),
+        ])
+        let sessions = try section(prompt, "## Sessions (newest first)")
+
+        XCTAssertTrue(sessions.contains(
+            "- 2025-06-13 Gym: no sets logged (Strava records whole sessions), 1 h, "
+                + "mean heart rate 120 bpm, Strava Relative Effort 45"
+        ), sessions)
+    }
+
+    /// AC1/AC2 for endurance: one line per scale, each value dated and under
+    /// its scale's label, two scales never on one line and never combined. A
+    /// session without effort contributes nothing, and the legacy Polar
+    /// `training_load` is nowhere (ADR-015 §2).
+    func testTheEnduranceEffortListNamesEveryValueByItsSource() throws {
+        let prompt = make([
+            run(daysAgo: 1, id: "strava:1", cardio: CardioMetrics(relativeEffort: 82)),
+            run(daysAgo: 2, id: "strava:2", cardio: CardioMetrics(averageHeartRate: 140)),
+            run(
+                daysAgo: 3,
+                id: "polar:1",
+                source: .polar,
+                kind: .ride,
+                cardio: CardioMetrics(
+                    trainingLoad: 150,
+                    cardioLoad: 64.3,
+                    muscleLoad: 12,
+                    perceivedLoad: 70,
+                    userRPE: .brisk
+                )
+            ),
+            run(daysAgo: 4, id: "polar:2", source: .polar, cardio: CardioMetrics(userRPE: PolarUserRPE.none)),
+            run(daysAgo: 5, id: "strava:3", cardio: CardioMetrics(relativeEffort: 61)),
+            run(daysAgo: 6, id: "polar:3", source: .polar, cardio: CardioMetrics(cardioLoad: 0, userRPE: .easy)),
+        ])
+        let effort = try section(prompt, "## Endurance effort")
+
+        XCTAssertEqual(effort, """
+        ## Endurance effort (newest first)
+        One line per source scale, each value with its session's date. Values on different lines \
+        are different measures and are not comparable.
+        - Strava Relative Effort: 82 (2025-06-14), 61 (2025-06-10)
+        - Polar Cardio Load: 64.3 (2025-06-12)
+        - Polar Muscle Load: 12 (2025-06-12)
+        - Polar Perceived Load: 70 (2025-06-12)
+        - Polar RPE: "brisk" (2025-06-12), "easy" (2025-06-09)
+        """)
+        XCTAssertFalse(prompt.user.contains("150"), "the legacy training load must stay out")
+    }
+
+    /// Missing effort is left out, not written as zero or a placeholder: a
+    /// window without any effort reads exactly as it did before #245.
+    func testAWindowWithoutEffortHasNoEffortSectionAndNoPlaceholder() {
+        let prompt = make([
+            workout(daysAgo: 1, volume: 3_000, id: "hevy-1", title: "Push Day"),
+            run(daysAgo: 2, id: "strava:1", heartRate: 150),
+            run(daysAgo: 3, id: "polar:1", source: .polar, cardio: CardioMetrics(trainingLoad: 90, userRPE: .unknown)),
+        ])
+
+        XCTAssertFalse(prompt.user.contains("## Endurance effort"))
+        for label in ["RPE", "Relative Effort", "Cardio Load", "Muscle Load", "Perceived Load", "Effort: "] {
+            XCTAssertFalse(prompt.user.contains(label), label)
+        }
+    }
+
+    /// AC2 in the system prompt: the rule against combining scales, next to
+    /// rule 7, with the week-structure rule moved to 9.
+    func testTheSystemPromptForbidsCombiningEffortAcrossScales() throws {
+        let system = AnalysisPromptBuilder.systemPrompt
+
+        XCTAssertTrue(system.contains(
+            "Values under different names are not comparable: never add, average or compare "
+                + "them against each other, and never convert or combine them into one effort "
+                + "figure. Read each only as a trend within its own name."
+        ))
+        for label in [
+            "\"RPE\"", "\"Strava Relative Effort\"", "\"Polar Cardio Load\"",
+            "\"Polar Muscle Load\"", "\"Polar Perceived Load\"", "\"Polar RPE\"",
+        ] {
+            XCTAssertTrue(system.contains(label), label)
+        }
+        let seven = try XCTUnwrap(system.range(of: "7. In the endurance sections"))
+        let eight = try XCTUnwrap(system.range(of: "8. Effort values are named by their source"))
+        let nine = try XCTUnwrap(system.range(of: "9. The Week structure section"))
+        XCTAssertLessThan(seven.lowerBound, eight.lowerBound)
+        XCTAssertLessThan(eight.lowerBound, nine.lowerBound)
+        XCTAssertFalse(system.contains("8. The Week structure section"))
+        XCTAssertFalse(system.contains("10. "))
+    }
+
     // MARK: - Helpers
 
     private func make(
@@ -1948,7 +2071,8 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         loads: [MuscleLoad] = [],
         distanceMeters: Double? = nil,
         durationSeconds: Int? = nil,
-        cardio: CardioMetrics? = nil
+        cardio: CardioMetrics? = nil,
+        rpe: Double? = nil
     ) -> WorkoutSummary {
         WorkoutSummary(
             id: id,
@@ -1965,7 +2089,8 @@ final class AnalysisPromptBuilderTests: XCTestCase {
             muscleLoads: loads,
             distanceMeters: distanceMeters,
             durationSeconds: durationSeconds,
-            cardio: cardio
+            cardio: cardio,
+            averageRPE: rpe
         )
     }
 
@@ -1979,7 +2104,8 @@ final class AnalysisPromptBuilderTests: XCTestCase {
         kind: ActivityKind = .run,
         meters: Double? = 10_000,
         seconds: Int? = 3_000,
-        heartRate: Int? = nil
+        heartRate: Int? = nil,
+        cardio: CardioMetrics? = nil
     ) -> WorkoutSummary {
         workout(
             daysAgo: daysAgo,
@@ -1990,7 +2116,7 @@ final class AnalysisPromptBuilderTests: XCTestCase {
             kind: kind,
             distanceMeters: meters,
             durationSeconds: seconds,
-            cardio: heartRate.map { CardioMetrics(averageHeartRate: $0) }
+            cardio: cardio ?? heartRate.map { CardioMetrics(averageHeartRate: $0) }
         )
     }
 

@@ -57,6 +57,7 @@ final class AnalysisViewModelTests: XCTestCase {
             resultStore: resultStore ?? results,
             trainingProfile: TrainingProfileStore(defaults: defaults),
             analysisProfiles: AnalysisProfileStore(defaults: defaults),
+            effortHints: EffortHintStore(defaults: defaults),
             calendar: Self.calendar,
             now: { clock.date },
             slowThreshold: slowThreshold,
@@ -128,6 +129,83 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertNil(AnalysisOutcome.prose("whole").report)
     }
 
+    // MARK: - One-time effort hint (US-18 AC6, #245)
+
+    /// No session of the window carries an effort value from any source, and
+    /// the hint was never shown: the result carries it, and the flag is set.
+    func testTheEffortHintIsShownWhenTheWindowHoldsNoEffort() async {
+        await streamer.setText("An answer.")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertEqual(sut.state, .result(.prose("An answer.")))
+        XCTAssertTrue(sut.showsEffortHint)
+        let shown = await EffortHintStore(defaults: defaults).hasShownHint
+        XCTAssertTrue(shown, "the hint has to be remembered as shown")
+    }
+
+    /// One effort value from any source is enough — here a Strava Relative
+    /// Effort on a run, next to Hevy sessions without RPE.
+    func testTheEffortHintIsNotShownWhenAnySessionCarriesEffort() async {
+        cache.summaries.append(WorkoutSummary(
+            id: "strava:1",
+            title: "Morning Run",
+            startTime: Self.reference.addingTimeInterval(-3 * 86_400),
+            source: .strava,
+            kind: .run,
+            volumeKg: 0,
+            exerciseCount: 0,
+            countedSetCount: 0,
+            distanceMeters: 8_400,
+            cardio: CardioMetrics(relativeEffort: 64)
+        ))
+        await streamer.setText("An answer.")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertFalse(sut.showsEffortHint)
+        let shown = await EffortHintStore(defaults: defaults).hasShownHint
+        XCTAssertFalse(shown, "a hint that was not shown must not use up the one showing")
+    }
+
+    /// Hevy's RPE counts as much as a provider's score.
+    func testAHevyRPEAloneKeepsTheEffortHintAway() async {
+        cache.summaries = [WorkoutSummary(
+            id: "w-rpe",
+            title: "Push Day",
+            startTime: Self.reference.addingTimeInterval(-2 * 86_400),
+            volumeKg: 4_200,
+            exerciseCount: 5,
+            countedSetCount: 18,
+            averageRPE: 8
+        )]
+        await streamer.setText("An answer.")
+        let sut = makeSUT()
+
+        await sut.start()
+
+        XCTAssertFalse(sut.showsEffortHint)
+    }
+
+    /// Once means once: not on the next run, and not after a restart.
+    func testTheEffortHintIsNotShownTheSecondTime() async {
+        await streamer.setText("An answer.")
+        let first = makeSUT()
+        await first.start()
+        XCTAssertTrue(first.showsEffortHint)
+
+        first.reset()
+        XCTAssertFalse(first.showsEffortHint, "a new analysis starts without it")
+        await first.start()
+        XCTAssertFalse(first.showsEffortHint)
+
+        let restarted = makeSUT()
+        await restarted.start()
+        XCTAssertFalse(restarted.showsEffortHint)
+    }
+
     // MARK: - Report in one step (#178)
 
     /// US-14 #178 AC1/AC3: the screen goes straight from the spinner to the
@@ -192,12 +270,21 @@ final class AnalysisViewModelTests: XCTestCase {
 
         await sut.start()
 
+        // Two sessions in the window is below ADR-014 stage 1, so the run
+        // has no verdict and says which condition produced that (#227).
+        // Before #227 this was a `hold` with the model's own lead.
         let expected = ValidatedAnalysisReport(
-            headline: AnalysisReportValidator.holdHeadline,
-            verdict: .hold,
-            lead: "Too little data for a change yet.",
-            cards: [],
-            summary: "Keep training as you do."
+            headline: AnalysisReportValidator.insufficientDataHeadline,
+            verdict: .insufficientData,
+            lead: AnalysisReportValidator.insufficientDataLead,
+            cards: [
+                .note(
+                    title: AnalysisReportValidator.insufficientDataNoteTitle,
+                    text: "This analysis covers 2 of the 4 sessions the app needs before it reads a trend."
+                ),
+            ],
+            summary: "Keep training as you do.",
+            modelVerdict: .progress
         )
         XCTAssertEqual(sut.state, .result(.report(expected)))
         let latest = try await results.latest()
@@ -212,7 +299,10 @@ final class AnalysisViewModelTests: XCTestCase {
         let bench = Self.exercise("Bench Press (Barbell)", volume: 1_000)
         let exercises = StubAnalysisExerciseCache()
         exercises.exercises = [bench]
-        exercises.progressions = [bench.id: Self.progression(bench, weightKg: 60, reps: 5, daysAgo: 2)]
+        exercises.progressions = [
+            bench.id: Self.progression(bench, weightKg: 60, reps: 5, daysAgo: 2, sessions: 5),
+        ]
+        cache.summaries = (1...4).map { Self.workout(daysAgo: $0) }
         let reasoning = "Five sessions at 60 kg with the reps held."
         await streamer.setReport(AnalysisReport(
             headline: "You're ready to progress.",
@@ -239,8 +329,11 @@ final class AnalysisViewModelTests: XCTestCase {
             ),
             .note(title: "Squat", text: "Squat is ready."),
         ])
-        XCTAssertEqual(report.verdict, .progress)
-        XCTAssertEqual(report.lead, "Bench press can go up.")
+        // Five sessions at the same weight are a plateau, so the app holds
+        // where the model wanted to progress (#227). The card validation this
+        // test is about is unchanged.
+        XCTAssertEqual(report.verdict, .hold)
+        XCTAssertEqual(report.modelVerdict, .progress)
     }
 
     /// US-14 AC4: at six training days of the last seven the app inserts the
@@ -413,6 +506,36 @@ final class AnalysisViewModelTests: XCTestCase {
         XCTAssertEqual(restarted.attribution, AnalysisAttribution(first: .gemini))
     }
 
+    /// US-16 AC4 (#228): what the validator did to the answer is stored with
+    /// it, attributed to the provider that answered and the model it was
+    /// asked with.
+    func testTheValidationLogIsStoredWithTheProviderAndModelThatAnswered() async throws {
+        await streamer.setReport(AnalysisReportFactory.progress, from: .gemini)
+        let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache())
+
+        await sut.start()
+
+        let latest = try await results.latest()
+        let log = try XCTUnwrap(latest?.validationLog)
+        XCTAssertEqual(log.provider, .gemini)
+        XCTAssertEqual(log.model, GeminiClient.model)
+        XCTAssertEqual(log.modelVerdict, AnalysisReportFactory.progress.verdict)
+        XCTAssertEqual(log.appVerdict, latest?.report?.verdict)
+    }
+
+    /// Prose was not validated, so there is nothing to log — and "not
+    /// recorded" is what the row says, not an empty log.
+    func testAProseAnswerStoresNoValidationLog() async throws {
+        await streamer.setEvents([.attempting(.claude), .text("Recommendation")])
+        let sut = makeSUT(exerciseCache: StubAnalysisExerciseCache())
+
+        await sut.start()
+
+        let latest = try await results.latest()
+        XCTAssertEqual(latest?.text, "Recommendation")
+        XCTAssertNil(latest?.validationLog)
+    }
+
     /// A report with a single note, so the recovery card in the result can
     /// only have come from the app.
     private static let noteOnlyReport = AnalysisReport(
@@ -555,14 +678,15 @@ final class AnalysisViewModelTests: XCTestCase {
         )
     }
 
-    /// Two sessions at the same weight, a week apart, each beating its
-    /// routine target by two reps — so the 2-for-2 rule of ADR-013 is met and
-    /// a progression card on the movement is one the validator can keep.
+    /// `sessions` sessions at the same weight, three days apart, each beating
+    /// its routine target by two reps — so the 2-for-2 rule of ADR-013 is met
+    /// and a progression card on the movement is one the validator can keep.
     private static func progression(
         _ summary: ExerciseSummary,
         weightKg: Double,
         reps: Int,
-        daysAgo: Int
+        daysAgo: Int,
+        sessions: Int = TwoForTwoCondition.requiredSessions
     ) -> ExerciseProgression {
         let sets = (0..<3).map { index in
             SetDetail(
@@ -576,17 +700,19 @@ final class AnalysisViewModelTests: XCTestCase {
                 targetReps: reps - TwoForTwoCondition.requiredMargin
             )
         }
-        return ExerciseProgression(
-            id: summary.id,
-            title: summary.title,
-            sessions: [daysAgo + 7, daysAgo].map { day in
-                ExerciseHistoryEntry(
-                    workoutID: "w-\(day)",
-                    sessionStart: reference.addingTimeInterval(-Double(day) * 86_400),
-                    sets: sets
-                )
-            }
-        )
+        // Oldest first, the most recent one `daysAgo` back. Two by default,
+        // the pair the 2-for-2 rule reads (#233); more only where a test
+        // needs the movement to be decidable for the verdict rule (#227):
+        // four sessions at the same weight are a plateau, which leaves the
+        // cards alone.
+        let entries = (0..<max(TwoForTwoCondition.requiredSessions, sessions)).reversed().map { index in
+            ExerciseHistoryEntry(
+                workoutID: "w-\(daysAgo + index * 3)",
+                sessionStart: reference.addingTimeInterval(-Double(daysAgo + index * 3) * 86_400),
+                sets: sets
+            )
+        }
+        return ExerciseProgression(id: summary.id, title: summary.title, sessions: entries)
     }
 
     // MARK: - Training profile (US-13 AC3/AC4, #192)

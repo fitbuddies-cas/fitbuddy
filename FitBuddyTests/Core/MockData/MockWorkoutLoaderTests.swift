@@ -458,13 +458,13 @@ final class MockWorkoutLoaderTests: XCTestCase {
         XCTAssertEqual(cardio.maxHeartRate, 167)
         XCTAssertEqual(cardio.elevationGainMeters, 390)
         XCTAssertEqual(try XCTUnwrap(cardio.averageSpeedMetersPerSecond), 2.78, accuracy: 0.01)
-        XCTAssertEqual(cardio.perceivedEffort, 148)
+        XCTAssertEqual(cardio.relativeEffort, 148)
 
         // The shake-out run wore no strap: its cells have to be absent rather
         // than zero (US-15 AC7).
         let shakeOut = try XCTUnwrap(summaries.first { $0.title == "Shake-out run" })
         XCTAssertNil(shakeOut.cardio?.averageHeartRate)
-        XCTAssertNil(shakeOut.cardio?.perceivedEffort)
+        XCTAssertNil(shakeOut.cardio?.relativeEffort)
     }
 
     /// Four runs a week, never six days in seven — the runner is a dense week,
@@ -641,6 +641,23 @@ final class MockWorkoutLoaderTests: XCTestCase {
             XCTAssertGreaterThan(try XCTUnwrap(ride.distanceMeters), 0)
             XCTAssertGreaterThan(try XCTUnwrap(ride.durationSeconds), 0)
             XCTAssertNotNil(ride.cardio?.averageHeartRate)
+            XCTAssertNotNil(ride.cardio?.trainingLoad)
+        }
+    }
+
+    /// The two newest Polar rides come from a watch with Training Load Pro,
+    /// the older seven do not — so the mock data exercises both the hyphen
+    /// block and its absence without changing a single session or day (#244).
+    func testOnlyTheNewestPolarRidesCarryTrainingLoadPro() throws {
+        let rides = try summaries(of: .overreachedMixed)
+            .filter { $0.source == .polar }
+            .sorted { $0.startTime > $1.startTime }
+
+        XCTAssertEqual(rides.count, 9)
+        XCTAssertEqual(rides.map { $0.cardio?.cardioLoad != nil }, [true, true] + Array(repeating: false, count: 7))
+        XCTAssertEqual(rides.prefix(2).map { $0.cardio?.userRPE }, [.veryHard, .moderate])
+        for ride in rides.dropFirst(2) {
+            XCTAssertNil(ride.cardio?.userRPE)
             XCTAssertNotNil(ride.cardio?.trainingLoad)
         }
     }

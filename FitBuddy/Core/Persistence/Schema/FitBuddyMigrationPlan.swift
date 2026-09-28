@@ -44,9 +44,26 @@ import SwiftData
 /// checkable rather than as met. The next sync replaces the window and fills
 /// the columns for real.
 ///
+/// V6 → V7 is lightweight as well (#228): `AnalysisResult` gains
+/// `validationLogJSON`, optional. `nil` is the truth for an existing row: no
+/// build before this version recorded what the validator rejected, and
+/// `AnalysisValidationLogFormat` reads a missing log as "not recorded", never
+/// as "nothing rejected".
+///
+/// V7 → V8 is lightweight as well (#243): `Workout.cardioPerceivedEffort` is
+/// renamed to `cardioRelativeEffort`, and the attribute carries
+/// `originalName`, so SwiftData moves the stored values over instead of
+/// dropping the column and adding an empty one. Nothing is transformed — the
+/// value was Strava's Relative Effort all along; only the name was wrong.
+/// The same stage adds Polar's Training Load Pro columns (#244) —
+/// `cardioLoad`, `cardioMuscleLoad`, `cardioPerceivedLoad` and
+/// `cardioUserRPERawValue`, all optional. `nil` is the truth for an existing
+/// row: no build before this version decoded `training_load_pro`, and the
+/// next sync replaces the window and fills the columns for real.
+///
 /// A store from an older version runs the stages in turn; the migration tests
-/// write a V1, a V2, a V3, a V4 and a V5 store and open each under the current
-/// version.
+/// write a V1, a V2, a V3, a V4, a V5, a V6 and a V7 store and open each under
+/// the current version.
 enum FitBuddyMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [
@@ -56,11 +73,21 @@ enum FitBuddyMigrationPlan: SchemaMigrationPlan {
             FitBuddySchemaV4.self,
             FitBuddySchemaV5.self,
             FitBuddySchemaV6.self,
+            FitBuddySchemaV7.self,
+            FitBuddySchemaV8.self,
         ]
     }
 
     static var stages: [MigrationStage] {
-        [migrateV1toV2, migrateV2toV3, migrateV3toV4, migrateV4toV5, migrateV5toV6]
+        [
+            migrateV1toV2,
+            migrateV2toV3,
+            migrateV3toV4,
+            migrateV4toV5,
+            migrateV5toV6,
+            migrateV6toV7,
+            migrateV7toV8,
+        ]
     }
 
     private static let migrateV1toV2 = MigrationStage.lightweight(
@@ -86,5 +113,15 @@ enum FitBuddyMigrationPlan: SchemaMigrationPlan {
     private static let migrateV5toV6 = MigrationStage.lightweight(
         fromVersion: FitBuddySchemaV5.self,
         toVersion: FitBuddySchemaV6.self
+    )
+
+    private static let migrateV6toV7 = MigrationStage.lightweight(
+        fromVersion: FitBuddySchemaV6.self,
+        toVersion: FitBuddySchemaV7.self
+    )
+
+    private static let migrateV7toV8 = MigrationStage.lightweight(
+        fromVersion: FitBuddySchemaV7.self,
+        toVersion: FitBuddySchemaV8.self
     )
 }

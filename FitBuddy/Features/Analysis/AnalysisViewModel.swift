@@ -77,6 +77,12 @@ final class AnalysisViewModel: ObservableObject {
     /// context exactly as #183/#184 built them. Starting on "Strength" would
     /// silently narrow a run begun before the first read returned.
     @Published private(set) var selectedProfile: AnalysisProfile = .overallLoad
+    /// Whether the result on screen carries the one-time effort hint (#245,
+    /// US-18 AC6): the analysed window held no effort value from any source,
+    /// and the hint has never been shown on this install. Set with the result
+    /// of a run, cleared with it — and never set again once it has been shown,
+    /// which `EffortHintStore` remembers across restarts.
+    @Published private(set) var showsEffortHint = false
 
     /// Whether tapping "Analyse" can start a run right now: whenever no run is
     /// in flight.
@@ -125,6 +131,7 @@ final class AnalysisViewModel: ObservableObject {
     private let resultStore: (any AnalysisResultStoring)?
     private let trainingProfile: TrainingProfileStore
     private let analysisProfiles: AnalysisProfileStore
+    private let effortHints: EffortHintStore
     private let calendar: Calendar
     private let now: () -> Date
     private let slowThreshold: TimeInterval
@@ -156,6 +163,8 @@ final class AnalysisViewModel: ObservableObject {
     ///   - analysisProfiles: Where the last analysis profile is remembered
     ///     (US-15 AC1, #185), so the next run starts on the one the user
     ///     chose rather than on the default their data suggests.
+    ///   - effortHints: Where the one-time effort hint is remembered as shown
+    ///     (#245, US-18 AC6).
     ///   - now: Injectable clock, so windows and the result age are testable.
     ///   - slowThreshold: Injectable, so tests do not wait 30 real seconds.
     ///   - tickInterval: How often `trackResultAge()` re-renders the
@@ -169,6 +178,7 @@ final class AnalysisViewModel: ObservableObject {
         resultStore: (any AnalysisResultStoring)? = nil,
         trainingProfile: TrainingProfileStore = TrainingProfileStore(),
         analysisProfiles: AnalysisProfileStore = AnalysisProfileStore(),
+        effortHints: EffortHintStore = EffortHintStore(),
         calendar: Calendar = .current,
         now: @escaping () -> Date = Date.init,
         slowThreshold: TimeInterval = AnalysisViewModel.defaultSlowThreshold,
@@ -181,6 +191,7 @@ final class AnalysisViewModel: ObservableObject {
         self.resultStore = resultStore
         self.trainingProfile = trainingProfile
         self.analysisProfiles = analysisProfiles
+        self.effortHints = effortHints
         self.calendar = calendar
         self.now = now
         self.slowThreshold = slowThreshold
@@ -278,6 +289,7 @@ final class AnalysisViewModel: ObservableObject {
 
         currentResultID = nil
         context = nil
+        showsEffortHint = false
         // The stored recommendation stays on disk until this run replaces it:
         // a run that ends in an error must not cost the user the last answer
         // they still had. Only the screen lets go of it here.
@@ -320,6 +332,7 @@ final class AnalysisViewModel: ObservableObject {
         attribution = nil
         currentResultID = nil
         context = nil
+        showsEffortHint = false
         clearResultAge()
         state = .idle
     }
@@ -478,8 +491,9 @@ final class AnalysisViewModel: ObservableObject {
             guard !Task.isCancelled else { return finish(id) }
 
             let outcome: AnalysisOutcome
+            var validationLog: AnalysisValidationLog?
             if let report {
-                outcome = self.outcome(for: report, reads: built.reads)
+                (outcome, validationLog) = self.outcome(for: report, reads: built.reads)
             } else if !prose.isEmpty {
                 outcome = .prose(prose)
             } else {
@@ -492,12 +506,19 @@ final class AnalysisViewModel: ObservableObject {
             // Before `.result`, not after: while the write runs the state stays
             // `.running`, so "New analysis" cannot start a second run before
             // this one has stored its answer.
-            await persist(outcome)
-            // A `cancel()` during the await above already published a resting
+            await persist(outcome, validationLog: validationLog)
+            let offersEffortHint = await offersEffortHint(for: built.reads)
+            // A `cancel()` during the awaits above already published a resting
             // state; it wins over the run it stopped.
             guard !Task.isCancelled else { return finish(id) }
+            showsEffortHint = offersEffortHint
             // The whole answer in one step (#178).
             state = .result(outcome)
+            // Recorded only once the hint is actually on screen, so a run
+            // cancelled before its result cannot use up the one showing.
+            if offersEffortHint {
+                await effortHints.markShown()
+            }
         } catch {
             // A cancelled run already published `.idle` in `cancel()`; the
             // error here is only the echo of that, and must not overwrite it.
@@ -509,6 +530,24 @@ final class AnalysisViewModel: ObservableObject {
         finish(id)
     }
 
+    /// Whether this run's result gets the one-time effort hint (#245, US-18
+    /// AC6): the analysed window holds **no** effort value from any source —
+    /// no Hevy RPE, no Strava Relative Effort, no Polar Training Load Pro
+    /// value — and the hint has not been shown before.
+    ///
+    /// Over the whole resolved window, whatever the profile covers: the hint
+    /// is about whether this person records effort at all, and a Strava
+    /// Relative Effort on the runs a "Strength" analysis left out is still
+    /// effort they record. The same rule as the prompt's
+    /// (`EffortPromptFigures`), so the hint can never claim "no effort" over a
+    /// window whose prompt listed one.
+    private func offersEffortHint(for reads: AnalysisRunReads) async -> Bool {
+        let start = reads.window.start(endingAt: reads.now, calendar: calendar)
+        let analysed = reads.summaries.filter { $0.startTime >= start }
+        guard !EffortPromptFigures.containsEffort(analysed) else { return false }
+        return await !effortHints.hasShownHint
+    }
+
     /// What a report becomes on screen: validated against the reads its prompt
     /// was built from (US-14 AC3/AC4, #175).
     ///
@@ -518,9 +557,13 @@ final class AnalysisViewModel: ObservableObject {
     /// exercise data, so every progression card would be downgraded for lack
     /// of data rather than for being wrong. The report is then shown as its
     /// summary, which is what the model wrote for exactly that purpose, and
-    /// never as cards nothing has checked.
-    private func outcome(for report: AnalysisReport, reads: AnalysisRunReads) -> AnalysisOutcome {
-        guard exerciseCache != nil else { return .prose(report.summary) }
+    /// never as cards nothing has checked — and without a validation log,
+    /// because nothing was validated (#228).
+    private func outcome(
+        for report: AnalysisReport,
+        reads: AnalysisRunReads
+    ) -> (outcome: AnalysisOutcome, log: AnalysisValidationLog?) {
+        guard exerciseCache != nil else { return (.prose(report.summary), nil) }
         let evidence = AnalysisReportEvidence(
             summaries: reads.summaries,
             exercises: reads.exercises,
@@ -534,7 +577,8 @@ final class AnalysisViewModel: ObservableObject {
             analysisProfile: reads.analysisProfile,
             promptDetail: reads.promptDetail
         )
-        return AnalysisOutcome(validated: AnalysisReportValidator.validate(report, against: evidence))
+        let validated = AnalysisReportValidator.validateLogged(report, against: evidence)
+        return (AnalysisOutcome(validated: validated.report), validated.log)
     }
 
     /// Reads the window and builds the prompt, or publishes the reason it
@@ -768,7 +812,7 @@ final class AnalysisViewModel: ObservableObject {
     /// A failing write is logged, not surfaced: the recommendation is on screen
     /// and readable, and an error banner over it would be about the next
     /// launch, not about anything the user can act on now.
-    private func persist(_ outcome: AnalysisOutcome) async {
+    private func persist(_ outcome: AnalysisOutcome, validationLog: AnalysisValidationLog?) async {
         let timestamp = now()
         generatedAt = timestamp
         refreshResultAge()
@@ -782,11 +826,13 @@ final class AnalysisViewModel: ObservableObject {
             // back the same cards rather than re-validating against a cache
             // that has moved on; its summary is the row's prose fallback. The
             // provider is the one that answered, so the history badge can name
-            // it (#176).
+            // it (#176). The validation log names the same provider and the
+            // model it was asked with (#228).
             currentResultID = try await resultStore.save(
                 text: outcome.text,
                 report: outcome.report,
                 provider: attribution?.provider,
+                validationLog: validationLog?.attributed(to: attribution?.provider),
                 generatedAt: timestamp,
                 context: context
             )

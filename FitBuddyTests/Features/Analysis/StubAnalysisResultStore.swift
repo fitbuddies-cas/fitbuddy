@@ -30,6 +30,7 @@ actor StubAnalysisResultStore: AnalysisResultStoring {
         text: String,
         report: ValidatedAnalysisReport?,
         provider: LLMProvider?,
+        validationLog: AnalysisValidationLog?,
         generatedAt: Date,
         context: AnalysisContext
     ) throws -> UUID {
@@ -39,7 +40,8 @@ actor StubAnalysisResultStore: AnalysisResultStoring {
             generatedAt: generatedAt,
             context: context,
             report: report,
-            provider: provider
+            provider: provider,
+            validationLog: validationLog
         )
         entries.append(entry)
         entries.sort { $0.generatedAt > $1.generatedAt }

@@ -14,6 +14,7 @@ final class DataResetServiceTests: XCTestCase {
     private var priority: LLMPriorityStore!
     private var skip: LLMKeysSkipStore!
     private var analysisProfile: AnalysisProfileStore!
+    private var effortHint: EffortHintStore!
     private var defaults: UserDefaults!
     private var suiteName: String!
     private var sut: DataResetService!
@@ -31,6 +32,7 @@ final class DataResetServiceTests: XCTestCase {
         priority = LLMPriorityStore(defaults: defaults)
         skip = LLMKeysSkipStore(defaults: defaults)
         analysisProfile = AnalysisProfileStore(defaults: defaults)
+        effortHint = EffortHintStore(defaults: defaults)
         sut = DataResetService(
             keychain: keychain,
             workouts: workouts,
@@ -39,6 +41,7 @@ final class DataResetServiceTests: XCTestCase {
             priority: priority,
             skip: skip,
             analysisProfile: analysisProfile,
+            effortHint: effortHint,
             defaults: defaults
         )
     }
@@ -137,6 +140,16 @@ final class DataResetServiceTests: XCTestCase {
 
         let remembered = await analysisProfile.profile
         XCTAssertNil(remembered)
+    }
+
+    /// The one-time effort hint was shown about training that is gone (#245).
+    func testDeleteAllDataForgetsThatTheEffortHintWasShown() async throws {
+        await effortHint.markShown()
+
+        await sut.deleteAllData()
+
+        let shown = await effortHint.hasShownHint
+        XCTAssertFalse(shown)
     }
 
     /// The first-launch marker records the installation, not the session.

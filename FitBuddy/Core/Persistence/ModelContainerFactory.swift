@@ -15,7 +15,7 @@ enum ModelContainerFactory {
     /// `id` and `sessionCount` — rode on SwiftData's implicit lightweight
     /// migration; from `FitBuddySchemaV2` on, versions are explicit and
     /// `FitBuddyMigrationPlan` says how a store moves between them.
-    static let schema = Schema(versionedSchema: FitBuddySchemaV6.self)
+    static let schema = Schema(versionedSchema: FitBuddySchemaV8.self)
 
     private static let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "ModelContainer")
 

@@ -1,10 +1,10 @@
 import Foundation
 import SwiftData
 
-/// The current `Exercise` model — see `FitBuddySchemaV6`.
-typealias Exercise = FitBuddySchemaV6.Exercise
+/// The current `Exercise` model — see `FitBuddySchemaV8`.
+typealias Exercise = FitBuddySchemaV8.Exercise
 
-extension FitBuddySchemaV6 {
+extension FitBuddySchemaV8 {
     /// One exercise performed within a cached `Workout`, holding its logged sets.
     @Model
     final class Exercise {

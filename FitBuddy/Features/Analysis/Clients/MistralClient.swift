@@ -98,7 +98,8 @@ struct MistralClient: LLMProviderClient {
                 ],
                 responseFormat: MistralChatRequest.ResponseFormat(
                     jsonSchema: .init(name: AnalysisReportSchema.name, schema: AnalysisReportSchema.schema, strict: true)
-                )
+                ),
+                randomSeed: LLMSampling.seed
             )
         )
         return request

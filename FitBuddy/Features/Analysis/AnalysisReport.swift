@@ -37,10 +37,30 @@ extension AnalysisReport {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
             headline: try container.decode(String.self, forKey: .headline),
-            verdict: try container.decode(AnalysisVerdict.self, forKey: .verdict),
+            verdict: Self.offered(try container.decode(AnalysisVerdict.self, forKey: .verdict)),
             lead: try container.decodeIfPresent(String.self, forKey: .lead) ?? "",
             cards: try container.decode([AnalysisCard].self, forKey: .cards),
             summary: try container.decode(String.self, forKey: .summary)
         )
+    }
+
+    /// `verdict` if the model was allowed to send it, `hold` otherwise
+    /// (ADR-014 §7).
+    ///
+    /// The schema offers `AnalysisVerdict.modelChoices`, but the schema is a
+    /// request, not a guarantee: a provider without strict structured output,
+    /// or a fallback path that parses prose, can still put `insufficientData`
+    /// on the wire. Left alone it would do two kinds of damage — the app's
+    /// verdict would equal the model's, so the app text ADR-014 §6 requires
+    /// under "Not enough data to judge." would not be substituted, and the
+    /// hit rate #228 and #229 measure would record a choice the model was
+    /// never given.
+    ///
+    /// `hold` is the substitute because it is the one of the three offered
+    /// verdicts closest to what such an answer meant. This is not the app's
+    /// fourth class arriving by another route: that one is only ever set by
+    /// `AnalysisVerdictRule`.
+    static func offered(_ verdict: AnalysisVerdict) -> AnalysisVerdict {
+        AnalysisVerdict.modelChoices.contains(verdict) ? verdict : .hold
     }
 }

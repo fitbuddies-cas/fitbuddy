@@ -28,6 +28,9 @@ struct AnalysisResultView: View {
     /// point: the user has to know they are looking at yesterday's advice
     /// (US-3 AC10, #97).
     var age: String? = nil
+    /// Whether to show the one-time effort hint (#245, US-18 AC6). Decided by
+    /// `AnalysisViewModel`; `false` everywhere else, the history included.
+    var showsEffortHint = false
     /// Starts over from the intro screen. `nil` where no new run belongs, e.g.
     /// the history detail.
     var onNewAnalysis: (() -> Void)? = nil
@@ -43,6 +46,9 @@ struct AnalysisResultView: View {
                 reportBody(report)
             case .prose(let text):
                 proseBody(text)
+            }
+            if showsEffortHint {
+                effortHint
             }
             disclaimer
             if let onNewAnalysis {
@@ -150,6 +156,30 @@ struct AnalysisResultView: View {
         )
     }
 
+    /// The one-time hint of US-18 AC6: one line, no dialog, no question about
+    /// past sessions. Drawn as the design's soft hint strip (the dashboard's
+    /// imbalance hint in `design/fb-screens.jsx`), in the accent tone rather
+    /// than the warning one — nothing is wrong with the analysis above it.
+    private var effortHint: some View {
+        HStack(alignment: .center, spacing: 6) {
+            Circle()
+                .fill(Color.fbAccent)
+                .frame(width: 6, height: 6)
+                .accessibilityHidden(true)
+            Text("Analyses get more precise when your sessions carry an effort value, like RPE in Hevy.")
+                .font(.caption)
+                .foregroundStyle(Color.fbInkSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.fbAccentSoft)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(AccessibilityID.Analysis.effortHint)
+    }
+
     /// FitBuddy is not a medical product, and the recommendation is the one
     /// place in the app where a user could mistake it for one.
     private var disclaimer: some View {
@@ -226,6 +256,21 @@ private let previewContext = AnalysisContext(sessionCount: 14, window: .default)
     .background(Color.fbBackground)
 }
 
+/// #227 / ADR-014 §6: the app found no verdict, says so, and shows the one
+/// note naming why. No progression and no recovery card sit under it.
+#Preview("Report · no verdict") {
+    ScrollView {
+        AnalysisResultView(
+            outcome: .report(AnalysisReportSamples.insufficientData),
+            context: AnalysisContext(sessionCount: 3, window: .default),
+            attribution: AnalysisAttribution(first: .claude),
+            age: "just now"
+        )
+        .padding(16)
+    }
+    .background(Color.fbBackground)
+}
+
 /// US-14 AC5: the answer was not a report, and looks as it did before #177.
 #Preview("Prose fallback") {
     ScrollView {
@@ -234,6 +279,21 @@ private let previewContext = AnalysisContext(sessionCount: 14, window: .default)
             context: previewContext,
             attribution: AnalysisAttribution(first: .claude),
             age: "just now"
+        )
+        .padding(16)
+    }
+    .background(Color.fbBackground)
+}
+
+/// #245 / US-18 AC6: no effort value anywhere in the window, first time.
+#Preview("Effort hint") {
+    ScrollView {
+        AnalysisResultView(
+            outcome: .report(AnalysisReportSamples.progress),
+            context: previewContext,
+            attribution: AnalysisAttribution(first: .claude),
+            age: "just now",
+            showsEffortHint: true
         )
         .padding(16)
     }

@@ -127,11 +127,15 @@ final class ActivityTests: XCTestCase {
                 elevationGainMeters: 412.5,
                 averageSpeedMetersPerSecond: 2.78,
                 energyKilojoules: 920,
-                perceivedEffort: 64,
+                relativeEffort: 64,
                 activeCalories: 530,
                 distanceMeters: 10_400,
                 durationSeconds: 3742,
-                trainingLoad: 143.22
+                trainingLoad: 143.22,
+                cardioLoad: 151.3,
+                muscleLoad: 62.5,
+                perceivedLoad: 525,
+                userRPE: .hard
             )
         )
 
@@ -141,6 +145,8 @@ final class ActivityTests: XCTestCase {
         XCTAssertEqual(decoded, activity)
         XCTAssertEqual(decoded.kind, .run)
         XCTAssertEqual(decoded.cardio?.maxHeartRate, 172)
+        XCTAssertEqual(decoded.cardio?.cardioLoad, 151.3)
+        XCTAssertEqual(decoded.cardio?.userRPE, .hard)
     }
 
     /// A sport a newer build knows and this one does not must not fail the

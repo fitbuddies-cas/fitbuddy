@@ -2,7 +2,7 @@
 
 > *Getrennt geführt: Ziele, Personas, Risiken → [README.md](../README.md) · User Stories, NFRs → [REQUIREMENTS.md](REQUIREMENTS.md) · Architekturentscheide (Detail) → [adr/](adr/)*
 >
-> **Dokumentationsstand:** Stand nach US-15 «Quellenübergreifende AI-Analyse» (Issue #171, Task-Kette #180–#188) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, SwiftData-Schema V6, ADR-001 bis ADR-013.
+> **Dokumentationsstand:** Stand nach US-18 «Anstrengung fliesst in die Analyse ein» (Issue #241) auf Basis von US-16 (#224) und US-15 (#171) — drei Datenquellen (Hevy, Strava, Polar), drei LLM-Anbieter mit Fallback-Kette, Verdict aus der App statt vom Modell, Anstrengung je Skala getrennt (ADR-015), SwiftData-Schema V8, ADR-001 bis ADR-015.
 
 ---
 
@@ -208,11 +208,13 @@ Der SwiftData-Store ist versioniert (`VersionedSchema`, ADR-001). `FitBuddyMigra
 | V3 | `AnalysisResult.goal` · `.experience` | #192 |
 | V4 | `AnalysisResult.reportJSON` · `.providerRawValue` · `.reportVersion` | #176 |
 | V5 | `Workout.kindRawValue` + zehn flache Cardio-Spalten · `AnalysisResult.sessionCountsJSON` · `.analysisProfileRawValue` | #180 · #182 · #185 |
-| **V6** | `Workout.routineID` · `.routineUpdatedAt` · `ExerciseSet.targetReps` | #240 |
+| V6 | `Workout.routineID` · `.routineUpdatedAt` · `ExerciseSet.targetReps` | #240 |
+| V7 | `AnalysisResult.validationLogJSON` | #228 |
+| **V8** | `Workout.cardioPerceivedEffort` → `.cardioRelativeEffort` (`originalName`) · `.cardioLoad` · `.cardioMuscleLoad` · `.cardioPerceivedLoad` · `.cardioUserRPERawValue` | #243 · #244 |
 
 **V5 (US-15)** persistiert, was [ADR-012](adr/ADR-012-activitykind-und-cardiometrics.md) normalisiert hat:
 
-- `Workout.kindRawValue` hält die gemappte Sportart (`ActivityKind`), die zehn `cardio*`-Spalten halten `CardioMetrics` flach ausgeschrieben (mittlerer und maximaler Puls, Höhenmeter, Tempo, Energie, Effort, Training Load, aktive Kalorien, Distanz, Dauer) — SwiftData speichert Skalare, gelesen und geschrieben wird nur über `Workout.cardio` (#180).
+- `Workout.kindRawValue` hält die gemappte Sportart (`ActivityKind`), die `cardio*`-Spalten (zehn in V5, seit V8 vierzehn) halten `CardioMetrics` flach ausgeschrieben (mittlerer und maximaler Puls, Höhenmeter, Tempo, Energie, Effort, Training Load, aktive Kalorien, Distanz, Dauer) — SwiftData speichert Skalare, gelesen und geschrieben wird nur über `Workout.cardio` (#180).
 - `AnalysisResult.sessionCountsJSON` merkt sich, wie die Sessions eines Laufs über die Quellen verteilt waren (#182), `analysisProfileRawValue` das Profil, unter dem er entstand (#185).
 
 Alle neuen Spalten sind optional, V4 → V5 ist entsprechend leichtgewichtig: `nil` ist für eine bestehende Zeile die Wahrheit. `Workout.kind` löst eine fehlende Sportart über die Quelle auf (Hevy → `.strength`, Ausdauerquelle → `.other`), statt einen gecachten Lauf als Kraft einzusortieren; `SessionCountFormat` liest eine fehlende Aufteilung als Gesamtzahl der Zeile aus Hevy. Der nächste Sync ersetzt das Fenster und füllt die Workout-Spalten real.
@@ -224,7 +226,11 @@ Alle neuen Spalten sind optional, V4 → V5 ist entsprechend leichtgewichtig: `n
 
 «Kein Ziel» ist ein modellierter Zustand, kein Fehler: frei geloggte Workouts, gelöschte Routinen und Sätze ohne Wiederholungsziel tragen `nil`, und die 2-for-2-Regel liest das als «nicht prüfbar», nie als «erfüllt». V5 → V6 ist leichtgewichtig; für jede bestehende Zeile ist `nil` die Wahrheit, der nächste Sync füllt die Spalten.
 
-> **V6 darf nur wachsen, bis es `develop` erreicht.** V5 war mit US-15 auf `develop` angekommen, also musste #240 eine neue Version aufmachen. Danach ist die nächste Änderung V7: Ein Store, der von einem anderen V6 geschrieben wurde, gilt als «unknown model version» und fällt still auf einen leeren In-Memory-Container zurück.
+**V7 (US-16, #228)** speichert pro Analyse das [Protokoll der Eingriffe](#protokoll-der-eingriffe-228): `AnalysisResult.validationLogJSON` ist ein optionaler JSON-Blob, gelesen und geschrieben nur über `AnalysisValidationLogFormat`. V6 → V7 ist leichtgewichtig; für jede bestehende Zeile ist `nil` die Wahrheit — «nicht erfasst», nicht «nichts verworfen».
+
+**V8 (US-18, #243, #244)** benennt Stravas `suffer_score` richtig — `cardioRelativeEffort`, übernommen per `@Attribute(originalName: "cardioPerceivedEffort")`, damit gecachte Werte die Migration überleben — und speichert Polars Training Load Pro in vier optionalen Spalten. Fehlt der Block (ältere Uhr), bleiben sie `nil`. V7 → V8 ist leichtgewichtig. Die Skalen bleiben getrennt ([ADR-015](adr/ADR-015-anstrengungsskalen-getrennt.md)).
+
+> **V8 darf nur wachsen, bis es `develop` erreicht.** V8 ist die jüngste Version des Stacks (#243/#244, auf V7 aus #228). Sobald sie auf `develop` liegt, ist die nächste Änderung V9: Ein Store, der von einem anderen V8 geschrieben wurde, gilt als «unknown model version» und fällt still auf einen leeren In-Memory-Container zurück.
 
 ---
 
@@ -240,8 +246,77 @@ Alle neuen Spalten sind optional, V4 → V5 ist entsprechend leichtgewichtig: `n
 [5] Prompt-Build       → Domänen-Sektionen serialisieren (max_tokens serverseitig gedeckelt)
 [6] HTTPS POST (SSE)   → Provider 1 (api.anthropic.com / generativelanguage.googleapis.com /
                           api.mistral.ai), Streaming; jeder Fehler → Provider 2, dann 3 (#79)
-[7] @MainActor Update  → SwiftUI rendert die Antwort am Stück (#178) + Provider-Badge
+[7] Validierung       → AnalysisReportValidator: Karten gegen den Cache, Verdict aus der App (#227)
+[8] @MainActor Update  → SwiftUI rendert die Antwort am Stück (#178) + Provider-Badge
 ```
+
+**Schritt 7 — Verdict aus der App (US-16).** Das Verdict ist seit #227 keine Modellwahl mehr:
+`AnalysisVerdictRule` leitet es aus den Kennzahlen der App ab (Stufen, Schwellen und deren
+Herkunft: [ADR-014](adr/ADR-014-verdict-regel-der-app.md) — hier bewusst nicht wiederholt).
+Stufe 5, der Anstrengungs-Deckel (#246, ADR-014 §3), läuft nach der ersten greifenden Stufe und
+liest jede Skala für sich ([ADR-015](adr/ADR-015-anstrengungsskalen-getrennt.md)): Steigt eine
+qualifizierte Skala, wird `progress` zu `hold` (unter `.endurance` auch das `insufficientData`,
+das nur aus der fehlenden Kraftdomäne folgt); `recover` erzeugt sie nie.
+`AnalysisReportValidator` arbeitet in fester Reihenfolge:
+
+1. Jede Karte einzeln prüfen — Zahlen aus dem Cache, Band und 2-for-2 ([ADR-013](adr/ADR-013-progressionsband-je-muskelgruppe.md)).
+2. Recovery-Karte einfügen, wenn an ≥ 6 von 7 Tagen trainiert wurde und das Modell keine lieferte (US-3 AC6).
+3. Bei `insufficientData` (US-16 AC6): `progression`-, `repProgression`-, `recovery`- und
+   `metric`-Karten werden zu Notes herabgestuft (`imbalance`, `interference` bleiben); an erster Stelle steht die Note «Why there's no
+   verdict», die die greifende Bedingung nennt. Headline «Not enough data to judge.» und Lead
+   sind App-Text. Bleibt keine Karte, zeigt der Screen null Karten.
+4. Auf höchstens vier Karten deckeln.
+5. Weicht das App-Verdict vom Modell-Verdict ab, ersetzt App-Text Headline und Lead; ein `hold`
+   aus Stufe 5 erhält `effortCapLead` statt `holdLead`.
+6. Progress-Lead-Schutz: Stützt keine verbleibende Karte einen Schritt (`repProgression` zählt
+   mit), ersetzt `progressLead` den Lead.
+
+Das Modell-Verdict bleibt im Antwortschema, wird überschrieben und als `modelVerdict` behalten —
+angezeigt wird es nie. `insufficientData` wird dem Modell nicht angeboten; ein solcher Wert wird
+beim Decodieren auf `hold` normalisiert. Die Eingriffe des Validators werden je Analyse
+protokolliert ([Protokoll der Eingriffe](#protokoll-der-eingriffe-228)). Die verbleibende Streuung über mehrere Läufe misst
+[VERDICT-SPREAD-MEASUREMENT.md](VERDICT-SPREAD-MEASUREMENT.md) (#229).
+
+Der einmalige Anstrengungs-Hinweis (US-18 AC6, #245) erscheint auf dem Ergebnis-Screen genau einmal pro Installation, wenn das Fenster aus keiner Quelle einen Anstrengungswert enthält (dieselbe Regel wie der Prompt, `EffortPromptFigures`); `EffortHintStore` merkt sich das in `UserDefaults`, «Delete all data» (`DataResetService`) setzt es zurück.
+
+> **Grenze:** Das Verdict hängt an der Übungsliste des Prompts (Top 6 nach Volumen, auf einer
+> tieferen Budget-Stufe weniger, #187). Dieselbe Historie kann deshalb auf einer anderen
+> Budget-Stufe ein anderes Verdict ergeben.
+
+#### Protokoll der Eingriffe (#228)
+
+US-16 AC4 verlangt, dass messbar wird, was die App vom Modell nicht übernimmt. Erfasst wird an
+**einer** Stelle: `AnalysisReportValidator.validateLogged` validiert und baut dabei das Protokoll;
+`validate` ist nur noch die Variante, die das Protokoll verwirft. Die Gründe sind geschlossene
+Enums, kein Freitext, damit sich jede Rate über mehrere Läufe zählen lässt:
+
+- `AnalysisInterventionSubject` — woran eingegriffen wurde: eine Kartenart oder `verdict` /
+  `headline` / `lead`.
+- `AnalysisInterventionAction` — was die App tat: `downgraded`, `dropped`, `inserted`, `replaced`.
+- `AnalysisInterventionReason` — warum; die Progressions-Gründe spiegeln die Prüfungen des
+  Validators eins zu eins, dazu die Gründe auf Report-Ebene (`verdictOverridden`,
+  `recoveryMissing`, `overCardLimit`, `noBackingCard`, `noVerdict`).
+
+`AnalysisValidationLog` hält pro Analyse Provider, Modell (`LLMProvider.analysisModel` — die
+Konstante des jeweiligen Clients, ein geänderter Pin wird also als solcher protokolliert),
+`modelVerdict`, `appVerdict`, `verdictReason` (die Stufe von `AnalysisVerdictRule`) und die
+Eingriffe in ihrer Reihenfolge; wo es um eine Zahl geht, dazu der Modellwert neben dem der App.
+Gespeichert wird das als optionaler JSON-Blob `AnalysisResult.validationLogJSON` über
+`AnalysisValidationLogFormat` (wie `SessionCountFormat`), **keine eigene Tabelle**: Das Protokoll
+bedeutet nur zusammen mit seiner Analyse etwas und wird mit ihr gelöscht bzw. beim Kürzen der
+Historie mit entfernt. `nil` heisst «nicht erfasst» (Prosa-Antwort, Zeile vor V7), eine leere
+Liste «nichts verworfen». Nicht gespeichert werden Übungsnamen, die Begründung des Modells und
+Session-Daten — nur, was die Messung braucht.
+
+**Debug-Pfad.** Geschrieben wird das Protokoll in allen Builds, sichtbar ist es nur in
+DEBUG-Builds: In den Einstellungen erscheint dort die Sektion `AnalysisValidationLogSection` →
+`AnalysisValidationLogView` mit einer Auszählung über alle gespeicherten Analysen (Läufe ohne
+Eingriff, überstimmte Verdicts, Eingriffe je Teil und Grund) — die Trefferquote für #229.
+TestFlight-Tester sehen die Sektion nicht.
+
+> **Achtung:** Wer einen Fall von `AnalysisVerdictRule.Reason` (oder einen der Eingriffs-Enums)
+> umbenennt, bricht das Decodieren gespeicherter Protokolle. Ein unlesbarer Blob wird als `nil`
+> gelesen — die Analyse bleibt, ihr Protokoll gilt als nicht erfasst.
 
 Eine Sperre nach dem Durchlauf gibt es nicht mehr: Die 60-s-Doppeltipp-Sperre (#117) ist entfernt,
 der «Analysieren»-Button ist nur während eines laufenden Calls deaktiviert. Das harte Kostenlimit
@@ -305,7 +380,8 @@ Systemweite Regel: Ein LLM wird nur dort eingesetzt, wo deterministischer Code k
 
 | Bereich | AI? | Begründung |
 |---|---|---|
-| Progressions-Empfehlung | Ja (LLM) | Interpretation von Trainingsdaten erfordert Kontext-Verständnis |
+| Formulierung der Empfehlung (Headline, Kurzfazit, Karten, Übungswahl) | Ja (LLM) | Interpretation von Trainingsdaten erfordert Kontext-Verständnis |
+| Verdict (`progress` · `hold` · `recover` · `insufficientData`) | Nein | App-Regel aus eigenen Kennzahlen (US-16, [ADR-014](adr/ADR-014-verdict-regel-der-app.md)) |
 | Datenabruf (Hevy, Strava, Polar) | Nein | Klassische App-Logik |
 | Aggregation & Visualisierung | Nein | Deterministisch, kein AI-Mehrwert |
 | Key-Speicherung | Nein | iOS Keychain ist die richtige Lösung |
@@ -315,6 +391,20 @@ Systemweite Regel: Ein LLM wird nur dort eingesetzt, wo deterministischer Code k
 System-Prompt definiert: Verbotene Termini (Fachjargon), Ausgabeformat («1 Satz Lage · 1 konkrete Aktion · 1 optionaler Hinweis»), medizinischen Disclaimer, English-only output.
 
 > **RPE-Nutzung:** `ExerciseSet.rpe` (6–10) gibt Claude Aufschluss über subjektive Anstrengung — ermöglicht Empfehlungen wie *"Your RPE has been consistently at 9+ for squats — consider a deload week."*
+
+**Was das Modell entscheidet (US-16).** Das Modell wählt, welche Übung es anspricht, welche
+Karten es vorschlägt und wie es Headline, Kurzfazit und Karten formuliert. Es entscheidet **nicht**
+mehr über das Verdict (App-Regel, ADR-014) und nie über Zahlen (Validator, US-14 AC3).
+
+**Determinismus-Parameter (#226).** An einer Stelle, `LLMSampling`: gesetzt wird nur bei Mistral
+ein fester Seed (`random_seed`, live verifiziert: HTTP 200 am 26.09.2026). Gemini bekommt bewusst
+**keinen** Sampling-Parameter, auch keinen Seed: Ob `gemini-3.6-flash` den Seed annimmt, ist nicht
+verifiziert (der Live-Test lieferte nur HTTP 503), und ein unbekannter Schlüssel in
+`generationConfig` wäre ein HTTP 400, der die Fallback-Kette bricht. Die Temperatur bleibt bewusst auf dem
+Provider-Default — die Stabilität des Verdicts kommt aus der App-Regel, Temperatur 0 ist hinter
+einer öffentlichen API nicht deterministisch, und Reasoning-Modelle verlieren bei tiefer Temperatur
+an Qualität (Google empfiehlt für Gemini 3 den Default 1.0, Mistral ~0.7). Claude bekommt keinen
+Sampling-Parameter: Opus 5 lehnt `temperature` mit HTTP 400 ab und kennt keinen Seed.
 
 **Karten (US-14 / US-15).** Die Antwort kommt als JSON-Schema-Report und wird von
 `AnalysisReportValidator` gegen den Cache geprüft, bevor eine Karte gerendert wird
@@ -376,6 +466,8 @@ Alle asynchronen Zugriffe folgen drei fixen Ausführungskontexten — gilt schic
 | [ADR-011](adr/ADR-011-polar-als-dritte-quelle.md) | Polar AccessLink als dritte Datenquelle — BYO-App wie Strava, `Activity` additiv um `metrics` erweitert | Accepted |
 | [ADR-012](adr/ADR-012-activitykind-und-cardiometrics.md) | `ActivityKind` und `CardioMetrics` — normalisierte Sportart und ein Kennzahlen-Block für alle Quellen, persistiert in Schema V5 | Accepted |
 | [ADR-013](adr/ADR-013-progressionsband-je-muskelgruppe.md) | Progressionsband je Muskelgruppe — erlaubte Spanne statt Zielwert, konditional auf 2-for-2 (US-17) | Accepted |
+| [ADR-014](adr/ADR-014-verdict-regel-der-app.md) | Verdict-Regel der App — Reihenfolge, Schwellen und die vierte Klasse «zu dünne Datenbasis» (US-16) | Accepted |
+| [ADR-015](adr/ADR-015-anstrengungsskalen-getrennt.md) | Anstrengungsskalen getrennt halten — Verrechnungsverbot, Quell-Labels im Prompt, Strava `perceived_exertion` und Polars Tages-Cardio-Load nicht in v0 (US-18) | Accepted |
 
 ---
 
@@ -414,7 +506,9 @@ Bekannte Lücken im PoC-Design. Stand nach #153: TD-1, TD-2 und TD-4 sind geschl
 > über eine Zeichenzahl-Schätzung (vier Zeichen ≈ ein Token); die grosse Reserve bezahlt deren
 > Ungenauigkeit. `AnalysisPromptBuilder.make` baut den Prompt auf der obersten Stufe von
 > `AnalysisPromptDetail.ladder`, die unter das Budget passt: 1) Kraft-Sessionliste auf 20,
-> 2) Exercises-Sektion auf 6 Übungen, 3) Wochenzeilen beider Domänen auf die letzten 4 Wochen.
+> 2) Exercises-Sektion auf 6 Übungen, 3) Wochenzeilen beider Domänen auf die letzten 4 Wochen,
+> 4) Kraft-Sessionliste auf 10, 5) Ausdauer-Anstrengungszeilen auf die 20 jüngsten Werte je Skala (#245) —
+> Anstrengung wird zuletzt gekürzt.
 > Jede Kürzung nennt sich im Prompt selbst («N older sessions in this window omitted»), und die
 > Aggregate, gegen die `AnalysisReportValidator` die Karten prüft, bleiben auf jeder Stufe
 > unverändert — die gekürzte Übungsliste reist als `AnalysisPromptDetail` mit den Reads zur

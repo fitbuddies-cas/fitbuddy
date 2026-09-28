@@ -50,6 +50,34 @@ struct AnalysisReportEvidence: Equatable, Sendable {
     /// the last seven days (#186). A unit missing here has no figure to check
     /// a card against, and a card in it is not validated.
     var weeklyMetrics: [MetricUnit: Double] = [:]
+    /// Sessions of the resolved window that this run analyses, i.e. those in
+    /// the domains the profile covers — ADR-014 stage 1, first condition.
+    ///
+    /// Not `AnalysisContext`'s count, which is the honest total of everything
+    /// the app read; this one is what the model was shown. Zero by default, so
+    /// a fixture that predates #227 states no data basis rather than a
+    /// borrowed one.
+    var sessionsInWindow = 0
+    /// Of those, the ones in the last seven days — ADR-014 stage 1, second
+    /// condition.
+    ///
+    /// Separate from `recovery.sessions`, which counts every domain because a
+    /// rest day is domain-blind (#184). This count is not: a week of nothing
+    /// but runs leaves a strength analysis describing a pause, and the rule
+    /// has to be able to say so.
+    var sessionsInLastSevenDays = 0
+    /// The effort values of the window, one series per scale — ADR-014
+    /// stage 5, #246.
+    ///
+    /// Source-marked and never merged (ADR-015 §1): Hevy's RPE, Strava's
+    /// Relative Effort and Polar's Cardio, Perceived and Muscle Load each
+    /// stand on their own. Only the scales the profile reads
+    /// (`EffortScale.isRead(under:)`) and only those that recorded anything
+    /// are here — a scale without a value is absent, not `0` (ADR-014 §4).
+    /// Empty by default, and empty in the ordinary case: every one of these
+    /// values needs a manual entry, a heart-rate strap or a Training Load Pro
+    /// device, so the rule has to run exactly as before without them.
+    var effort: [EffortSeries] = []
 }
 
 extension AnalysisReportEvidence {
@@ -91,6 +119,13 @@ extension AnalysisReportEvidence {
         promptDetail: AnalysisPromptDetail = .full
     ) {
         let recovery = RecoveryMetrics(summaries: summaries, details: details, now: now, calendar: calendar)
+        let start = window.start(endingAt: now, calendar: calendar)
+        let analysed = summaries.filter {
+            $0.startTime >= start && analysisProfile.covers(AnalysisDomain(summary: $0))
+        }
+        let analysedWeek = RecoveryMetrics
+            .lastSevenDaysSessions(in: summaries, now: now, calendar: calendar)
+            .filter { analysisProfile.covers(AnalysisDomain(summary: $0)) }
         let unanalysed = RecoveryMetrics
             .lastSevenDaysSessions(in: summaries, now: now, calendar: calendar)
             .contains { !analysisProfile.covers(AnalysisDomain(summary: $0)) }
@@ -121,6 +156,15 @@ extension AnalysisReportEvidence {
                 now: now,
                 calendar: calendar,
                 analysisProfile: analysisProfile
+            ),
+            sessionsInWindow: analysed.count,
+            sessionsInLastSevenDays: analysedWeek.count,
+            effort: EffortSeries.series(
+                in: analysed,
+                scales: EffortScale.allCases.filter { $0.isRead(under: analysisProfile) },
+                window: window,
+                now: now,
+                calendar: calendar
             )
         )
     }

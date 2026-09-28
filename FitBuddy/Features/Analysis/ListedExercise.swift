@@ -26,18 +26,50 @@ struct ListedExercise: Equatable, Sendable {
     /// fields above by `ProgressionBand.range(for:)`.
     let twoForTwo: TwoForTwoCondition
 
+    /// How many of the movement's sessions in the window Epley could project
+    /// an e1RM from — `ExerciseProgression.points.count` over the window.
+    ///
+    /// Carried here rather than in a second list beside `exercises`: the
+    /// evidence already names these movements, and two lists over the same
+    /// rows are two chances to disagree (ADR-014, "Was #227 ergänzen muss").
+    /// `AnalysisVerdictRule` reads it for stage 2.
+    let progressionPoints: Int
+
+    /// `ExerciseProgression.isPlateaued` over the window — ADR-014 stage 3.
+    /// Meaningless on its own: only readable where `isPlateauDecidable`.
+    let isPlateaued: Bool
+
+    /// Whether `isPlateaued` is an answer rather than a shrug — ADR-014
+    /// stage 2, and the same condition `ExerciseProgression.isPlateauDecidable`
+    /// applies to the progression this line was built from. Written once, so
+    /// the rule and the series cannot come to different conclusions about the
+    /// same movement.
+    var isPlateauDecidable: Bool {
+        progressionPoints > ExerciseProgression.plateauSessionCount
+    }
+
+    /// `ExerciseProgression.latestIsWindowBest` over the window — ADR-014
+    /// stage 4.
+    let latestIsWindowBest: Bool
+
     init(
         title: String,
         muscleGroup: MuscleGroup,
         workingSet: WorkingSet?,
         smallestStepKg: Double? = nil,
-        twoForTwo: TwoForTwoCondition = .notCheckable
+        twoForTwo: TwoForTwoCondition = .notCheckable,
+        progressionPoints: Int = 0,
+        isPlateaued: Bool = false,
+        latestIsWindowBest: Bool = false
     ) {
         self.title = title
         self.muscleGroup = muscleGroup
         self.workingSet = workingSet
         self.smallestStepKg = smallestStepKg
         self.twoForTwo = twoForTwo
+        self.progressionPoints = progressionPoints
+        self.isPlateaued = isPlateaued
+        self.latestIsWindowBest = latestIsWindowBest
     }
 
     /// The listed exercise a prompt line describes, from the same listing
@@ -61,7 +93,13 @@ struct ListedExercise: Equatable, Sendable {
             smallestStepKg: working.flatMap {
                 AnalysisPromptBuilder.smallestStep(in: listing.inWindow.sessions, latest: $0)
             },
-            twoForTwo: TwoForTwoCondition.evaluate(sessions: listing.inWindow.sessions)
+            twoForTwo: TwoForTwoCondition.evaluate(sessions: listing.inWindow.sessions),
+            // The same three facts `plateauVerdict(_:)` prints into the
+            // prompt line and then throws away — ADR-014 stages 2 to 4 read
+            // them here instead of recomputing them.
+            progressionPoints: listing.inWindow.points.count,
+            isPlateaued: listing.inWindow.isPlateaued,
+            latestIsWindowBest: listing.inWindow.latestIsWindowBest
         )
     }
 }
