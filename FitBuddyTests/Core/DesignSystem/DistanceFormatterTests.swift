@@ -50,7 +50,7 @@ final class DistanceFormatterTests: XCTestCase {
 
     /// Past 100 km the value is rounded once, at the precision it is printed
     /// with — otherwise Foundation's half-even rule and
-    /// `PlainWeightFormatter`'s half-away-from-zero disagree about `100.5`.
+    /// `PlainNumberFormatter`'s half-away-from-zero disagree about `100.5`.
     func testDisplayAndPlainAgreePastAHundredKilometres() {
         for meters in [100_450.0, 102_500, 104_500] {
             XCTAssertEqual(

@@ -155,7 +155,7 @@ enum MetricUnit: String, Codable, CaseIterable, Sendable {
         case .beatsPerMinute:
             return HeartRateFormatter.display(value, locale: locale)
         case .hours:
-            return WorkoutDurationFormatter.seconds(value * 3_600)
+            return WorkoutDurationFormatter.duration(seconds: value * 3_600)
         }
     }
 
@@ -200,9 +200,8 @@ enum MetricUnit: String, Codable, CaseIterable, Sendable {
         case .beatsPerMinute:
             return sign + HeartRateFormatter.display(magnitude, locale: locale)
         case .hours:
-            guard let text = WorkoutDurationFormatter.seconds((magnitude * 3_600).rounded()) else {
-                return nil
-            }
+            let seconds = (magnitude * 3_600).rounded()
+            guard let text = WorkoutDurationFormatter.duration(seconds: seconds) else { return nil }
             return sign + text
         }
     }
@@ -229,13 +228,13 @@ enum MetricUnit: String, Codable, CaseIterable, Sendable {
     private func displayRounded(_ value: Double) -> Double {
         switch self {
         case .kilograms:
-            return PlainWeightFormatter.rounded(value)
+            return PlainNumberFormatter.rounded(value)
         case .kilometers:
             return DistanceFormatter.displayedMeters(value * 1_000) / 1_000
         case .minutesPerKilometer:
             return (value * 60).rounded() / 60
         case .beatsPerMinute:
-            return PlainWeightFormatter.rounded(value, decimals: 0)
+            return PlainNumberFormatter.rounded(value, decimals: 0)
         case .hours:
             return (value * 60).rounded(.down) / 60
         }

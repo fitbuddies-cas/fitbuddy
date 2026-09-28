@@ -27,13 +27,13 @@ enum ElevationFormatter {
     /// `AnalysisPromptBuilder.kg(_:)` follows for weights, so the prompt and
     /// the card cannot state a different climb.
     static func plain(_ meters: Double) -> String {
-        PlainWeightFormatter.string(ascent(meters), decimals: 0) + " m"
+        PlainNumberFormatter.string(ascent(meters), decimals: 0) + " m"
     }
 
     /// Whole metres of ascent, never below zero and never a value a formatter
     /// would print as `"∞"` or `"inf"`.
     private static func ascent(_ meters: Double) -> Double {
         guard meters > 0, meters.isFinite else { return 0 }
-        return PlainWeightFormatter.rounded(meters, decimals: 0)
+        return PlainNumberFormatter.rounded(meters, decimals: 0)
     }
 }

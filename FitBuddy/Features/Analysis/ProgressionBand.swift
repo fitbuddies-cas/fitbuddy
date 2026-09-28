@@ -65,20 +65,20 @@ enum ProgressionBand {
     /// one step — the behaviour before the band, which was right for those
     /// exercises.
     static func range(workingKg: Double, stepKg: Double, group: MuscleGroup) -> ClosedRange<Double> {
-        let lower = PlainWeightFormatter.rounded(workingKg + stepKg)
+        let lower = PlainNumberFormatter.rounded(workingKg + stepKg)
         let ceiling = workingKg * (1 + share(for: group))
         // A hair of tolerance, so 66 / 2.5 does not floor to 1 because of a
         // floating-point 2.3999.
         let steps = floor((ceiling - workingKg) / stepKg + 1e-9)
-        let upper = PlainWeightFormatter.rounded(workingKg + max(1, steps) * stepKg)
+        let upper = PlainNumberFormatter.rounded(workingKg + max(1, steps) * stepKg)
         return lower...max(lower, upper)
     }
 
     /// The range as the prompt writes it: "62.5–65 kg", or "12 kg" where the
     /// range is a single step.
     static func text(_ range: ClosedRange<Double>) -> String {
-        let lower = PlainWeightFormatter.string(range.lowerBound)
-        let upper = PlainWeightFormatter.string(range.upperBound)
+        let lower = PlainNumberFormatter.string(range.lowerBound)
+        let upper = PlainNumberFormatter.string(range.upperBound)
         return lower == upper ? "\(lower) kg" : "\(lower)–\(upper) kg"
     }
 }

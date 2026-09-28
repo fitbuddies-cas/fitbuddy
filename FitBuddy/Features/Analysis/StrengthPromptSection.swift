@@ -313,11 +313,11 @@ enum StrengthPromptSection {
         ]
         let points = inWindow.points
         if let first = points.first, let latest = points.last {
-            let now = PlainWeightFormatter.string(latest.estimatedOneRepMaxKg, decimals: 1)
+            let now = PlainNumberFormatter.string(latest.estimatedOneRepMaxKg, decimals: 1)
             if points.count == 1 {
                 parts.append("e1RM \(now) kg (one session, no trend yet)")
             } else {
-                let then = PlainWeightFormatter.string(first.estimatedOneRepMaxKg, decimals: 1)
+                let then = PlainNumberFormatter.string(first.estimatedOneRepMaxKg, decimals: 1)
                 let delta = latest.estimatedOneRepMaxKg - first.estimatedOneRepMaxKg
                 parts.append(
                     "e1RM \(then) kg at first session in window, \(now) kg now "
@@ -393,7 +393,7 @@ enum StrengthPromptSection {
         let rpes = counted.compactMap(\.rpe)
         if !rpes.isEmpty {
             let mean = rpes.reduce(0, +) / Double(rpes.count)
-            summary += ", mean RPE \(PlainWeightFormatter.string(mean, decimals: 1))"
+            summary += ", mean RPE \(PlainNumberFormatter.string(mean, decimals: 1))"
         }
         return summary
     }

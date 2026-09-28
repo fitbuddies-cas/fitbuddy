@@ -42,7 +42,7 @@ enum EffortPromptFigures {
         // Zero is "not measured", as for the provider scores below and as in
         // `EffortScale.value` — so prompt, AC6 hint and rule read it alike.
         if let rpe = summary.averageRPE, rpe.isFinite, rpe > 0 {
-            values.append((hevyRPELabel, PlainWeightFormatter.string(rpe, decimals: 1)))
+            values.append((hevyRPELabel, PlainNumberFormatter.string(rpe, decimals: 1)))
         }
         guard let cardio = summary.cardio else { return values }
         let scores: [(label: String, value: Double?)] = [
@@ -134,6 +134,6 @@ enum EffortPromptFigures {
     /// as the easiest session on record.
     private static func score(_ value: Double) -> String? {
         guard value.isFinite, value > 0 else { return nil }
-        return PlainWeightFormatter.string(value, decimals: 1)
+        return PlainNumberFormatter.string(value, decimals: 1)
     }
 }

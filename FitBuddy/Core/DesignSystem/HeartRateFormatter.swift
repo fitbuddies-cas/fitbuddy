@@ -15,7 +15,7 @@ enum HeartRateFormatter {
 
     /// `148` → `"148 bpm"`, `148.4` → `"148 bpm"`, `148.5` → `"149 bpm"`.
     ///
-    /// Rounded half away from zero by `PlainWeightFormatter`, the rule the
+    /// Rounded half away from zero by `PlainNumberFormatter`, the rule the
     /// analysis figures already round by, so a card and the prompt behind it
     /// never differ in the last digit. `locale`-aware like the sibling
     /// formatters, although a heart rate stays inside three digits and no
@@ -42,13 +42,13 @@ enum HeartRateFormatter {
     /// every device, no grouping separators — the rule
     /// `AnalysisPromptBuilder.kg(_:)` follows for weights.
     static func plain(_ beatsPerMinute: Double) -> String {
-        PlainWeightFormatter.string(beats(beatsPerMinute), decimals: 0) + " bpm"
+        PlainNumberFormatter.string(beats(beatsPerMinute), decimals: 0) + " bpm"
     }
 
     /// Whole beats per minute, never below zero and never a value a formatter
     /// would print as `"∞"` or `"inf"`.
     private static func beats(_ beatsPerMinute: Double) -> Double {
         guard beatsPerMinute > 0, beatsPerMinute.isFinite else { return 0 }
-        return PlainWeightFormatter.rounded(beatsPerMinute, decimals: 0)
+        return PlainNumberFormatter.rounded(beatsPerMinute, decimals: 0)
     }
 }

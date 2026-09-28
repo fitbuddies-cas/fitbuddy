@@ -31,7 +31,7 @@ enum MuscleGroupFrequency {
         window: AnalysisWindow
     ) -> [MuscleGroup: Double] {
         sessionCounts(in: sessions).mapValues { count in
-            PlainWeightFormatter.rounded(Double(count) / Double(window.weeks), decimals: decimals)
+            PlainNumberFormatter.rounded(Double(count) / Double(window.weeks), decimals: decimals)
         }
     }
 
@@ -51,6 +51,6 @@ enum MuscleGroupFrequency {
 
     /// A per-week figure as the prompt writes it: `0.8`, `3`.
     static func string(_ perWeek: Double) -> String {
-        PlainWeightFormatter.string(perWeek, decimals: decimals)
+        PlainNumberFormatter.string(perWeek, decimals: decimals)
     }
 }

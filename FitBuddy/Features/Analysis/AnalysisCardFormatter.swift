@@ -14,11 +14,11 @@ enum AnalysisCardFormatter {
     /// `+1.3 kg`. Locale-aware like those formatters, since this is display
     /// text; trailing zeros are dropped.
     ///
-    /// Rounded half away from zero by `PlainWeightFormatter` before it is
+    /// Rounded half away from zero by `PlainNumberFormatter` before it is
     /// formatted, the same rule `delta` rounds by: `62.125` reads `62.13 kg`
     /// next to `+2.13 kg`, not `62.12 kg` under Foundation's half-even rule.
     static func weight(_ kilograms: Double, locale: Locale = .current) -> String {
-        number(PlainWeightFormatter.rounded(kilograms), decimals: 0...2, locale: locale) + " kg"
+        number(PlainNumberFormatter.rounded(kilograms), decimals: 0...2, locale: locale) + " kg"
     }
 
     /// The signed step from `fromKg` to `toKg`: `"+2.5 kg"`, `"−1.25 kg"`.
@@ -27,7 +27,7 @@ enum AnalysisCardFormatter {
     /// point noise (`62.5 - 60.1`) cannot print as `2.4` next to weights that
     /// read `60.1` and `62.5`.
     static func delta(fromKg: Double, toKg: Double, locale: Locale = .current) -> String {
-        let step = PlainWeightFormatter.rounded(toKg - fromKg)
+        let step = PlainNumberFormatter.rounded(toKg - fromKg)
         let sign = step < 0 ? "\u{2212}" : "+"
         return "\(sign)\(number(abs(step), decimals: 0...2, locale: locale)) kg"
     }
@@ -39,7 +39,7 @@ enum AnalysisCardFormatter {
     static func frequency(_ perWeek: Double, locale: Locale = .current) -> String {
         let decimals = MuscleGroupFrequency.decimals
         return number(
-            PlainWeightFormatter.rounded(perWeek, decimals: decimals),
+            PlainNumberFormatter.rounded(perWeek, decimals: decimals),
             decimals: 0...decimals,
             locale: locale
         )
@@ -84,7 +84,7 @@ enum AnalysisCardFormatter {
     /// `8.25` → `"8.3"`: one decimal, as the design shows it, rounded half
     /// away from zero like the weights.
     static func rpe(_ rpe: Double, locale: Locale = .current) -> String {
-        number(PlainWeightFormatter.rounded(rpe, decimals: 1), decimals: 1...1, locale: locale)
+        number(PlainNumberFormatter.rounded(rpe, decimals: 1), decimals: 1...1, locale: locale)
     }
 
     /// `48` → `"48 h"`.
