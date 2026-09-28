@@ -211,6 +211,11 @@ final class ModelContainerFactoryTests: XCTestCase {
         XCTAssertEqual(workouts.map(\.cardioRelativeEffort), [82, nil])
         XCTAssertEqual(workouts.first?.cardio?.relativeEffort, 82)
         XCTAssertEqual(workouts.first?.cardio?.averageHeartRate, 148)
+        // The Training Load Pro columns (#244) come back empty: no build
+        // before V8 decoded the block.
+        XCTAssertEqual(workouts.map(\.cardioLoad), [nil, nil])
+        XCTAssertEqual(workouts.map(\.cardioUserRPERawValue), [nil, nil])
+        XCTAssertNil(workouts.first?.cardio?.userRPE)
         XCTAssertEqual(workouts.map(\.routineID), [nil, "r-1"])
         let sets = try context.fetch(FetchDescriptor<ExerciseSet>())
         XCTAssertEqual(sets.map(\.targetReps), [8])

@@ -77,7 +77,11 @@ enum ActivityFactory {
             activeCalories: 530,
             distanceMeters: 10_400,
             durationSeconds: 3742,
-            trainingLoad: 143.22
+            trainingLoad: 143.22,
+            cardioLoad: 151.3,
+            muscleLoad: 62.5,
+            perceivedLoad: 525,
+            userRPE: .hard
         )
     ) -> Activity {
         Activity(

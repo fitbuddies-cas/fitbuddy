@@ -20,7 +20,16 @@ struct PolarExerciseDTO: Decodable, Equatable, Sendable {
     let averageHeartRate: Int?
     let maximumHeartRate: Int?
     let calories: Int?
+    /// Legacy load, reported by older devices as well.
     let trainingLoad: Double?
+    /// `training_load_pro.cardio-load` — `nil` when the block is missing.
+    let cardioLoad: Double?
+    /// `training_load_pro.muscle-load`.
+    let muscleLoad: Double?
+    /// `training_load_pro.perceived-load`.
+    let perceivedLoad: Double?
+    /// `training_load_pro.user-rpe`.
+    let userRPE: PolarUserRPE?
     let sport: String?
     let detailedSportInfo: String?
 
@@ -33,6 +42,7 @@ struct PolarExerciseDTO: Decodable, Equatable, Sendable {
         case heartRate = "heart_rate"
         case calories
         case trainingLoad = "training_load"
+        case trainingLoadPro = "training_load_pro"
         case sport
         case detailedSportInfo = "detailed_sport_info"
     }
@@ -40,6 +50,17 @@ struct PolarExerciseDTO: Decodable, Equatable, Sendable {
     private enum HeartRateKeys: String, CodingKey {
         case average
         case maximum
+    }
+
+    /// Keys inside `training_load_pro`. Polar writes these with **hyphens**
+    /// while the exercise around them uses underscores — in the same
+    /// response. The `*-interpretation` labels are not decoded: nothing reads
+    /// them yet.
+    private enum TrainingLoadProKeys: String, CodingKey {
+        case cardioLoad = "cardio-load"
+        case muscleLoad = "muscle-load"
+        case perceivedLoad = "perceived-load"
+        case userRPE = "user-rpe"
     }
 
     init(from decoder: Decoder) throws {
@@ -60,6 +81,24 @@ struct PolarExerciseDTO: Decodable, Equatable, Sendable {
         } else {
             averageHeartRate = nil
             maximumHeartRate = nil
+        }
+
+        // Training Load Pro is device-bound: an older watch sends no block at
+        // all, and that is not an error — every value simply stays `nil`.
+        // Each field is decoded tolerantly: the block is optional enrichment,
+        // so a value of an unexpected type (or a block that is not an object)
+        // drops that value only, never the session — and with it the whole
+        // `[PolarExerciseDTO]` list the client decodes.
+        if let pro = try? container.nestedContainer(keyedBy: TrainingLoadProKeys.self, forKey: .trainingLoadPro) {
+            cardioLoad = try? pro.decodeIfPresent(Double.self, forKey: .cardioLoad)
+            muscleLoad = try? pro.decodeIfPresent(Double.self, forKey: .muscleLoad)
+            perceivedLoad = try? pro.decodeIfPresent(Double.self, forKey: .perceivedLoad)
+            userRPE = try? pro.decodeIfPresent(PolarUserRPE.self, forKey: .userRPE)
+        } else {
+            cardioLoad = nil
+            muscleLoad = nil
+            perceivedLoad = nil
+            userRPE = nil
         }
     }
 
@@ -85,7 +124,11 @@ struct PolarExerciseDTO: Decodable, Equatable, Sendable {
             // bug where the duration belongs.
             distanceMeters: distanceMeters.flatMap { $0 > 0 ? $0 : nil },
             durationSeconds: seconds.flatMap { $0 > 0 ? Int($0) : nil },
-            trainingLoad: trainingLoad
+            trainingLoad: trainingLoad,
+            cardioLoad: cardioLoad,
+            muscleLoad: muscleLoad,
+            perceivedLoad: perceivedLoad,
+            userRPE: userRPE
         )
 
         return Activity(
