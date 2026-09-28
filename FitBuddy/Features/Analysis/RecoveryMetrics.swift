@@ -31,9 +31,11 @@ struct RecoveryMetrics: Codable, Equatable, Sendable {
     /// placeholder would read as a measurement.
     ///
     /// Deliberately strength-only across the split. Strava's Relative Effort
-    /// (`CardioMetrics.perceivedEffort`) is a provider-specific score, not a
-    /// 1–10 RPE, and averaging the two into one number would invent a
-    /// measurement neither source made.
+    /// (`CardioMetrics.relativeEffort`) is a provider-specific, heart-rate-based
+    /// score, not a 1–10 RPE, and averaging the two into one number would
+    /// invent a measurement neither source made. Where the analysis reads it
+    /// (#245, #246), it stands on its own as a trend within Strava
+    /// (ADR-015, #242) — never averaged with RPE.
     let averageRPE: Double?
     /// Mean heart rate in bpm over the sessions of the week that recorded one,
     /// or `nil` when none did — a strength session has no strap, and an indoor

@@ -1,10 +1,10 @@
 import Foundation
 import SwiftData
 
-/// The current `Workout` model — see `FitBuddySchemaV7`.
-typealias Workout = FitBuddySchemaV7.Workout
+/// The current `Workout` model — see `FitBuddySchemaV8`.
+typealias Workout = FitBuddySchemaV8.Workout
 
-extension FitBuddySchemaV7 {
+extension FitBuddySchemaV8 {
     /// A cached training session — the root of the `Workout → Exercise →
     /// ExerciseSet` hierarchy that backs the offline dashboard (US-2 AC2).
     ///
@@ -65,7 +65,11 @@ extension FitBuddySchemaV7 {
         var cardioElevationGainMeters: Double?
         var cardioAverageSpeedMetersPerSecond: Double?
         var cardioEnergyKilojoules: Double?
-        var cardioPerceivedEffort: Double?
+        /// Strava's Relative Effort — see `CardioMetrics.relativeEffort`.
+        /// Named `cardioPerceivedEffort` up to V7; `originalName` lets the
+        /// V7 → V8 stage carry the stored values over (#243).
+        @Attribute(originalName: "cardioPerceivedEffort")
+        var cardioRelativeEffort: Double?
         var cardioActiveCalories: Int?
         var cardioDistanceMeters: Double?
         var cardioDurationSeconds: Int?
@@ -101,7 +105,7 @@ extension FitBuddySchemaV7 {
                 elevationGainMeters: cardioElevationGainMeters,
                 averageSpeedMetersPerSecond: cardioAverageSpeedMetersPerSecond,
                 energyKilojoules: cardioEnergyKilojoules,
-                perceivedEffort: cardioPerceivedEffort,
+                relativeEffort: cardioRelativeEffort,
                 activeCalories: cardioActiveCalories,
                 distanceMeters: cardioDistanceMeters,
                 durationSeconds: cardioDurationSeconds,
@@ -139,7 +143,7 @@ extension FitBuddySchemaV7 {
             self.cardioElevationGainMeters = cardio?.elevationGainMeters
             self.cardioAverageSpeedMetersPerSecond = cardio?.averageSpeedMetersPerSecond
             self.cardioEnergyKilojoules = cardio?.energyKilojoules
-            self.cardioPerceivedEffort = cardio?.perceivedEffort
+            self.cardioRelativeEffort = cardio?.relativeEffort
             self.cardioActiveCalories = cardio?.activeCalories
             self.cardioDistanceMeters = cardio?.distanceMeters
             self.cardioDurationSeconds = cardio?.durationSeconds
