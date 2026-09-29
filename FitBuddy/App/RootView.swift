@@ -84,6 +84,9 @@ struct RootView: View {
             // before ever reaching. Run before the seeding below, or the reset
             // would take the seeded sync timestamp with it.
             await MockDataSeeder.resetStateIfRequested()
+            // After the reset, which would clear the entry this writes; before the
+            // seeders, which read `LaunchArguments.current` (demo devices).
+            LaunchArguments.persistIfRequested()
             await MockDataSeeder.seedIfRequested(container: modelContext.container)
             await MockAnalysisSeeder.seedIfRequested(container: modelContext.container)
             #endif

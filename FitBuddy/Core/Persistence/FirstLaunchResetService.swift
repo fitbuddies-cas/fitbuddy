@@ -35,7 +35,7 @@ actor FirstLaunchResetService {
     init(
         defaults: UserDefaults = .standard,
         keychain: KeychainService = KeychainService(),
-        launchArguments: [String] = ProcessInfo.processInfo.arguments,
+        launchArguments: [String] = LaunchArguments.current,
         domainName: String? = Bundle.main.bundleIdentifier
     ) {
         self.defaults = defaults
