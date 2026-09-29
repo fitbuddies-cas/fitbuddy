@@ -24,7 +24,7 @@ enum HevyStubbing {
     /// onboarding UI tests leave it off.
     static let slowSyncLaunchArgument = "-fbSlowStubSync"
 
-    static func slowSyncIsActive(in launchArguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
+    static func slowSyncIsActive(in launchArguments: [String] = LaunchArguments.current) -> Bool {
         launchArguments.contains(slowSyncLaunchArgument)
     }
 
@@ -34,7 +34,7 @@ enum HevyStubbing {
     /// leave it off.
     static let seedMockWorkoutsLaunchArgument = "-fbSeedMockWorkouts"
 
-    static func seedsMockWorkouts(in launchArguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
+    static func seedsMockWorkouts(in launchArguments: [String] = LaunchArguments.current) -> Bool {
         launchArguments.contains(seedMockWorkoutsLaunchArgument)
     }
 
@@ -44,7 +44,7 @@ enum HevyStubbing {
     /// separately, `-fbStubHevy accpets` would stub the sync but leave the
     /// validator live — real key checks against Hevy behind a dashboard that
     /// never syncs. A typo has to leave *every* collaborator live.
-    static func isActive(in launchArguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
+    static func isActive(in launchArguments: [String] = LaunchArguments.current) -> Bool {
         verdict(in: launchArguments) != nil
     }
 
@@ -54,7 +54,7 @@ enum HevyStubbing {
     /// not stub" — a typo can then not silently turn a demo run into a stubbed
     /// one.
     static func verdict(
-        in launchArguments: [String] = ProcessInfo.processInfo.arguments
+        in launchArguments: [String] = LaunchArguments.current
     ) -> StubHevyKeyValidator.Verdict? {
         guard let flag = launchArguments.firstIndex(of: launchArgument) else { return nil }
         let value = launchArguments.index(after: flag)

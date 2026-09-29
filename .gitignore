@@ -12,3 +12,6 @@ DerivedData/
 build/
 *.xcscmblueprint
 *.xccheckout
+
+# Local simulator recordings and screenshots
+0_*

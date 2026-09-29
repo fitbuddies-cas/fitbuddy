@@ -48,7 +48,7 @@ enum MockAnalysisSeeder {
 
     private static let logger = Logger(subsystem: "ch.bfh.fitbuddy", category: "MockAnalysisSeeder")
 
-    static func isRequested(in launchArguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
+    static func isRequested(in launchArguments: [String] = LaunchArguments.current) -> Bool {
         launchArguments.contains(launchArgument)
     }
 
@@ -59,7 +59,7 @@ enum MockAnalysisSeeder {
     /// unknown profile does in `MockDataSeeder`: a typo leaves the tab empty
     /// rather than on a silently different report.
     static func requestedReport(
-        in launchArguments: [String] = ProcessInfo.processInfo.arguments
+        in launchArguments: [String] = LaunchArguments.current
     ) -> ValidatedAnalysisReport? {
         requestedReportName(in: launchArguments).flatMap { reports[$0] }
     }
@@ -125,7 +125,7 @@ enum MockAnalysisSeeder {
     /// that needed the row fails on its next assertion either way.
     static func seedIfRequested(
         container: ModelContainer,
-        launchArguments: [String] = ProcessInfo.processInfo.arguments,
+        launchArguments: [String] = LaunchArguments.current,
         now: () -> Date = Date.init
     ) async {
         guard isRequested(in: launchArguments) else { return }

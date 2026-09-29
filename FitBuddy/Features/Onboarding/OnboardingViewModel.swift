@@ -36,7 +36,7 @@ final class OnboardingViewModel: ObservableObject {
         llmKeysViewModel: LLMKeysViewModel? = nil,
         trainingProfileViewModel: TrainingProfileViewModel? = nil,
         trainingProfileStore: TrainingProfileStore = TrainingProfileStore(),
-        launchArguments: [String] = ProcessInfo.processInfo.arguments
+        launchArguments: [String] = LaunchArguments.current
     ) {
         self.trainingProfileStore = trainingProfileStore
         self.keychain = keychain

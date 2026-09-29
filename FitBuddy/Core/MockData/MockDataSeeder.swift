@@ -32,7 +32,7 @@ enum MockDataSeeder {
     /// ask for one — including for an unknown name, so a typo leaves the app
     /// on its real (empty) cache rather than on a silently different profile.
     static func requestedProfile(
-        in launchArguments: [String] = ProcessInfo.processInfo.arguments
+        in launchArguments: [String] = LaunchArguments.current
     ) -> MockWorkoutProfile? {
         guard let flag = launchArguments.firstIndex(of: launchArgument) else { return nil }
         let value = launchArguments.index(after: flag)
@@ -48,7 +48,7 @@ enum MockDataSeeder {
     /// the two arguments got a promise of a clean slate that nothing kept, and
     /// the next test to rely on it would have found out as a flake.
     static func resetStateIfRequested(
-        launchArguments: [String] = ProcessInfo.processInfo.arguments,
+        launchArguments: [String] = LaunchArguments.current,
         reset: FirstLaunchResetService = FirstLaunchResetService()
     ) async {
         guard launchArguments.contains(FirstLaunchResetService.resetLaunchArgument) else { return }
@@ -72,7 +72,7 @@ enum MockDataSeeder {
     /// fails on the next assertion either way.
     static func seedIfRequested(
         container: ModelContainer,
-        launchArguments: [String] = ProcessInfo.processInfo.arguments,
+        launchArguments: [String] = LaunchArguments.current,
         timestamps: SyncTimestampStore = SyncTimestampStore(),
         now: () -> Date = Date.init
     ) async {
