@@ -25,14 +25,12 @@ struct DashboardMetrics: Equatable, Sendable {
     /// Aggregates the cached window.
     ///
     /// - Parameters:
-    ///   - summaries: Workouts inside the window, in any order.
-    ///   - calendar: Decides where a day starts, so the training-day count
-    ///     follows the user's time zone.
-    /// - Parameters:
     ///   - summaries: The sessions inside the window, in any order.
     ///   - reference: The day the window ends on — the same clock the
     ///     ViewModel used to query the cache, so the week buckets line up
     ///     with the window boundary rather than with the first session.
+    ///   - calendar: Decides where a day starts, so the training-day count
+    ///     and the week buckets follow the user's time zone.
     init(summaries: [WorkoutSummary], endingAt reference: Date = Date(), calendar: Calendar = .current) {
         let trainingDays = Set(summaries.map { calendar.startOfDay(for: $0.startTime) })
         let windowStart = TrainingWindow.start(endingAt: reference, calendar: calendar)
