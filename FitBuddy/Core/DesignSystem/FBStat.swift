@@ -72,6 +72,8 @@ struct FBStat: View {
     var deltaKind: DeltaKind = .positive
     var size: Size = .regular
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         VStack(alignment: .leading, spacing: size.spacing) {
             Text(label.uppercased())
@@ -85,6 +87,10 @@ struct FBStat: View {
                     .font(size.valueFont)
                     .fbTabularNumbers()
                     .foregroundStyle(Color.fbInk)
+                    // A sync that moves the figure rolls the changed digits
+                    // rather than swapping the whole number (design 2.1).
+                    .contentTransition(.numericText())
+                    .animation(reduceMotion ? nil : .snappy, value: value)
                 if let unit {
                     Text(unit)
                         .font(.system(size: 15, weight: .medium))

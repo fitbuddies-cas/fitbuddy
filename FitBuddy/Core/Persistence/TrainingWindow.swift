@@ -17,6 +17,10 @@ enum TrainingWindow {
     /// Window length in weeks (exactly 13), used to average training days.
     static var weeks: Double { Double(spanDays) / 7 }
 
+    /// Number of whole-week buckets the window splits into (13), oldest first,
+    /// for the weekly volume trend on the dashboard.
+    static var weekCount: Int { (spanDays + 6) / 7 }
+
     /// Midnight, `days` days before `reference` — day-aligned so the window
     /// does not drift with the time of day the user happens to sync or open
     /// the dashboard.

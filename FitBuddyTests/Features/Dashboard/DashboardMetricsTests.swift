@@ -106,6 +106,70 @@ final class DashboardMetricsTests: XCTestCase {
         XCTAssertEqual(metrics.averageTrainingDaysPerWeek, 0)
     }
 
+    // MARK: - Weekly volume trend (dashboard sparkline)
+
+    func testWeeklyVolumesRunOldestWeekFirst() {
+        let metrics = DashboardMetrics(
+            summaries: [
+                summary(id: "boundary", daysAgo: 90, volume: 100),
+                summary(id: "last-week", daysAgo: 7, volume: 200),
+                summary(id: "this-week", daysAgo: 6, volume: 300),
+                summary(id: "today", daysAgo: 0, volume: 400),
+            ],
+            endingAt: reference,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(metrics.weeklyVolumesKg.count, TrainingWindow.weekCount)
+        XCTAssertEqual(metrics.weeklyVolumesKg.count, 13)
+        XCTAssertEqual(metrics.weeklyVolumesKg.first, 100)
+        XCTAssertEqual(metrics.weeklyVolumesKg[11], 200)
+        XCTAssertEqual(metrics.weeklyVolumesKg.last, 700)
+    }
+
+    /// A week without a session is a zero, so the trend keeps its time axis.
+    func testWeeklyVolumesKeepEmptyWeeksAsZero() {
+        let metrics = DashboardMetrics(
+            summaries: [summary(id: "only", daysAgo: 30, volume: 500)],
+            endingAt: reference,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(metrics.weeklyVolumesKg.filter { $0 == 0 }.count, 12)
+        XCTAssertEqual(metrics.weeklyVolumesKg.reduce(0, +), 500)
+    }
+
+    /// The line under the headline figure has to add up to it.
+    func testWeeklyVolumesSumToTheTotalVolume() {
+        let summaries = (0..<20).map { summary(id: "w-\($0)", daysAgo: $0 * 4, volume: Double($0) * 37.5) }
+
+        let metrics = DashboardMetrics(summaries: summaries, endingAt: reference, calendar: calendar)
+
+        XCTAssertEqual(metrics.weeklyVolumesKg.reduce(0, +), metrics.totalVolumeKg, accuracy: 0.001)
+    }
+
+    /// A session just outside the boundary lands in the nearest bucket rather
+    /// than crashing on a negative index or being dropped silently.
+    func testWeeklyVolumesClampSessionsOutsideTheWindow() {
+        let metrics = DashboardMetrics(
+            summaries: [
+                summary(id: "before", daysAgo: 95, volume: 100),
+                summary(id: "after", daysAgo: -3, volume: 200),
+            ],
+            endingAt: reference,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(metrics.weeklyVolumesKg.first, 100)
+        XCTAssertEqual(metrics.weeklyVolumesKg.last, 200)
+    }
+
+    func testEmptyWindowStillHasThirteenZeroWeeks() {
+        let metrics = DashboardMetrics(summaries: [], endingAt: reference, calendar: calendar)
+
+        XCTAssertEqual(metrics.weeklyVolumesKg, Array(repeating: 0, count: 13))
+    }
+
     // MARK: - Muscle distribution (#27)
 
     func testMuscleDistributionAggregatesEveryWorkoutHeaviestFirst() {

@@ -11,13 +11,15 @@ struct DashboardContentView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            windowLabel
             FBCard(padding: 18) {
-                FBStat(
-                    label: "Total volume",
-                    value: VolumeFormatter.full(metrics.totalVolumeKg),
-                    unit: "kg"
-                )
+                VStack(alignment: .leading, spacing: 10) {
+                    FBStat(
+                        label: "Total volume",
+                        value: VolumeFormatter.full(metrics.totalVolumeKg),
+                        unit: "kg"
+                    )
+                    VolumeSparkline(weeklyVolumesKg: metrics.weeklyVolumesKg)
+                }
             }
             HStack(spacing: 12) {
                 FBCard {
@@ -35,14 +37,6 @@ struct DashboardContentView: View {
             MuscleDistributionCard(distribution: metrics.muscleDistribution)
             RecentSessionsCard(workouts: workouts)
         }
-    }
-
-    private var windowLabel: some View {
-        Text("Last 90 days".uppercased())
-            .font(.fbLabel)
-            .tracking(0.6)
-            .foregroundStyle(Color.fbMuted)
-            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
